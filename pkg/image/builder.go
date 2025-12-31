@@ -23,11 +23,16 @@ func NewBuilder(token string) *Builder {
 
 func (b *Builder) EnsureImage(ctx context.Context, clusterName, talosVersion, schematicID, arch, serverType, location, imageURL string) error {
 	// Check if snapshot exists
+	schematicIDShort := schematicID
+	if len(schematicID) > 32 {
+		schematicIDShort = schematicID[:32]
+	}
+
 	labels := map[string]string{
 		"cluster":            clusterName,
 		"os":                 "talos",
 		"talos_version":      talosVersion,
-		"talos_schematic_id": schematicID[:32],
+		"talos_schematic_id": schematicIDShort,
 	}
 
 	var labelParts []string

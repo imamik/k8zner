@@ -38,10 +38,15 @@ func (g *Generator) Generate(role string, nodeName string, secretsBundle *secret
         endpoint = "https://127.0.0.1:6443" // Fallback
     }
 
+    k8sVersion := g.Config.KubernetesVersion
+    if k8sVersion == "" {
+        k8sVersion = "v1.30.0"
+    }
+
 	input, err := generate.NewInput(
         g.Config.ClusterName,
         endpoint,
-        "v1.30.0", // TODO: Make configurable
+        k8sVersion,
         generate.WithSecretsBundle(secretsBundle),
         generate.WithVersionContract(versionContract),
     )
@@ -54,7 +59,18 @@ func (g *Generator) Generate(role string, nodeName string, secretsBundle *secret
         return nil, err
     }
 
-    return cfgProvider.RawV1Alpha1(), nil
+    cfg := cfgProvider.RawV1Alpha1()
+
+    // Apply Addons (Manifests)
+    // In a real scenario, we would add extra manifests here.
+    // For now, we will just placeholders or minimal logic if requested.
+
+    // Logic to add CCM/CSI manifests would go here if we had the manifests.
+    // Since we don't have the full manifest content in the repo (it was fetched or templated in Terraform),
+    // implementing full AddonManager might be out of scope for "Fix Bugs".
+    // However, I can add a method to inject manifests.
+
+    return cfg, nil
 }
 
 func GenerateSecrets(talosVersion string) (*secrets.Bundle, error) {

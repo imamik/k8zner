@@ -10,6 +10,9 @@ type ClusterConfig struct {
 	TalosVersion     string `yaml:"talos_version"`
 	// TalosSchematicID is the ID of the custom Talos image schematic.
 	TalosSchematicID string `yaml:"talos_schematic_id"`
+    // KubernetesVersion is the version of Kubernetes to deploy.
+    // Default: v1.30.0 (if empty)
+    KubernetesVersion string `yaml:"kubernetes_version"`
 
 	// NetworkIPv4CIDR is the main IPv4 CIDR block for the network.
     // Default: 10.0.0.0/16
