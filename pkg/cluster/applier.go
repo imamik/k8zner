@@ -156,3 +156,70 @@ func (a *Applier) Apply(ctx context.Context) error {
 	log.Println("Apply completed successfully.")
 	return nil
 }
+
+func (a *Applier) Destroy(ctx context.Context) error {
+    log.Println("Starting destruction...")
+
+    // Destroy in reverse order of creation roughly
+
+    // 1. Delete Worker Servers
+    for i, workerPool := range a.Config.Workers {
+        for j := 0; j < workerPool.Count; j++ {
+            name := fmt.Sprintf("%s-%s-%d", a.Config.ClusterName, workerPool.Name, j+1)
+            if err := a.Cloud.DeleteServer(ctx, name); err != nil {
+                log.Printf("Failed to delete worker server %s: %v", name, err)
+            } else {
+                log.Printf("Deleted server: %s", name)
+            }
+        }
+        _ = i
+    }
+
+    // 2. Delete Worker Placement Group
+    if err := a.Cloud.DeletePlacementGroup(ctx, a.Config.ClusterName+"-worker"); err != nil {
+        log.Printf("Failed to delete worker placement group: %v", err)
+    } else {
+        log.Printf("Deleted worker placement group")
+    }
+
+    // 3. Delete Control Plane Servers
+    for i := 0; i < a.Config.ControlPlane.Count; i++ {
+        name := fmt.Sprintf("%s-control-%d", a.Config.ClusterName, i+1)
+        if err := a.Cloud.DeleteServer(ctx, name); err != nil {
+            log.Printf("Failed to delete control plane server %s: %v", name, err)
+        } else {
+            log.Printf("Deleted server: %s", name)
+        }
+    }
+
+    // 4. Delete Control Plane Placement Group
+    if err := a.Cloud.DeletePlacementGroup(ctx, a.Config.ClusterName+"-controlplane"); err != nil {
+        log.Printf("Failed to delete control plane placement group: %v", err)
+    } else {
+        log.Printf("Deleted control plane placement group")
+    }
+
+    // 5. Delete Load Balancer
+    if err := a.Cloud.DeleteLoadBalancer(ctx, a.Config.ClusterName+"-api"); err != nil {
+        log.Printf("Failed to delete load balancer: %v", err)
+    } else {
+        log.Printf("Deleted load balancer")
+    }
+
+    // 6. Delete Firewall
+    if err := a.Cloud.DeleteFirewall(ctx); err != nil {
+        log.Printf("Failed to delete firewall: %v", err)
+    } else {
+        log.Printf("Deleted firewall")
+    }
+
+    // 7. Delete Network
+    if err := a.Cloud.DeleteNetwork(ctx); err != nil {
+        log.Printf("Failed to delete network: %v", err)
+    } else {
+        log.Printf("Deleted network")
+    }
+
+    log.Println("Destroy completed.")
+    return nil
+}

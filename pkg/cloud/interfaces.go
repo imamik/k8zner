@@ -36,6 +36,7 @@ type PlacementGroupClient interface {
 	GetByName(ctx context.Context, name string) (*hcloud.PlacementGroup, *hcloud.Response, error)
 	// Create returns value, not pointer for PlacementGroupCreateResult
 	Create(ctx context.Context, opts hcloud.PlacementGroupCreateOpts) (hcloud.PlacementGroupCreateResult, *hcloud.Response, error)
+    Delete(ctx context.Context, placementGroup *hcloud.PlacementGroup) (*hcloud.Response, error)
 }
 
 // ServerClient defines the interface for interacting with Hetzner Cloud Servers.
@@ -70,4 +71,5 @@ type LoadBalancerClient interface {
     Create(ctx context.Context, opts hcloud.LoadBalancerCreateOpts) (hcloud.LoadBalancerCreateResult, *hcloud.Response, error)
     AddService(ctx context.Context, lb *hcloud.LoadBalancer, opts hcloud.LoadBalancerAddServiceOpts) (*hcloud.Action, *hcloud.Response, error)
     AddServerTarget(ctx context.Context, lb *hcloud.LoadBalancer, opts hcloud.LoadBalancerAddServerTargetOpts) (*hcloud.Action, *hcloud.Response, error)
+    Delete(ctx context.Context, lb *hcloud.LoadBalancer) (*hcloud.Response, error)
 }

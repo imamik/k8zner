@@ -75,6 +75,19 @@ func (c *Cloud) EnsureNetwork(ctx context.Context) (*hcloud.Network, error) {
 	return res, nil
 }
 
+func (c *Cloud) DeleteNetwork(ctx context.Context) error {
+	name := c.Config.ClusterName
+	network, _, err := c.Network.GetByName(ctx, name)
+	if err != nil {
+		return err
+	}
+	if network == nil {
+		return nil
+	}
+	_, err = c.Network.Delete(ctx, network)
+	return err
+}
+
 // EnsureFirewall ensures the existence of the cluster firewall with necessary rules and configured allow lists.
 func (c *Cloud) EnsureFirewall(ctx context.Context) (*hcloud.Firewall, error) {
 	name := c.Config.ClusterName
@@ -129,6 +142,19 @@ func (c *Cloud) EnsureFirewall(ctx context.Context) (*hcloud.Firewall, error) {
 	return res.Firewall, nil
 }
 
+func (c *Cloud) DeleteFirewall(ctx context.Context) error {
+	name := c.Config.ClusterName
+	fw, _, err := c.Firewall.GetByName(ctx, name)
+	if err != nil {
+		return err
+	}
+	if fw == nil {
+		return nil
+	}
+	_, err = c.Firewall.Delete(ctx, fw)
+	return err
+}
+
 // EnsurePlacementGroup ensures the existence of a placement group.
 func (c *Cloud) EnsurePlacementGroup(ctx context.Context, name string, kind hcloud.PlacementGroupType) (*hcloud.PlacementGroup, error) {
 	pg, _, err := c.PlacementGroup.GetByName(ctx, name)
@@ -147,6 +173,18 @@ func (c *Cloud) EnsurePlacementGroup(ctx context.Context, name string, kind hclo
 		return nil, fmt.Errorf("failed to create placement group: %w", err)
 	}
 	return res.PlacementGroup, nil
+}
+
+func (c *Cloud) DeletePlacementGroup(ctx context.Context, name string) error {
+	pg, _, err := c.PlacementGroup.GetByName(ctx, name)
+	if err != nil {
+		return err
+	}
+	if pg == nil {
+		return nil
+	}
+    _, err = c.PlacementGroup.Delete(ctx, pg)
+    return err
 }
 
 // EnsureServer ensures the existence of a server with the specified configuration.
@@ -187,6 +225,18 @@ func (c *Cloud) EnsureServer(ctx context.Context, name string, serverType string
 	}
 
 	return res.Server, nil
+}
+
+func (c *Cloud) DeleteServer(ctx context.Context, name string) error {
+	server, _, err := c.Server.GetByName(ctx, name)
+	if err != nil {
+		return err
+	}
+	if server == nil {
+		return nil
+	}
+	_, err = c.Server.Delete(ctx, server)
+	return err
 }
 
 func (c *Cloud) waitForAction(ctx context.Context, action *hcloud.Action) error {
@@ -242,4 +292,16 @@ func (c *Cloud) CreateLoadBalancer(ctx context.Context, name string, location st
     }
 
     return res.LoadBalancer, nil
+}
+
+func (c *Cloud) DeleteLoadBalancer(ctx context.Context, name string) error {
+    lb, _, err := c.LoadBalancer.GetByName(ctx, name)
+    if err != nil {
+        return err
+    }
+    if lb == nil {
+        return nil
+    }
+    _, err = c.LoadBalancer.Delete(ctx, lb)
+    return err
 }
