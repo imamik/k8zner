@@ -12,6 +12,7 @@ import (
 
 	"github.com/sak-d/hcloud-k8s/internal/hcloud"
 	"github.com/sak-d/hcloud-k8s/internal/image"
+	"github.com/sak-d/hcloud-k8s/internal/keygen"
 	"github.com/sak-d/hcloud-k8s/internal/ssh"
 )
 
@@ -101,8 +102,27 @@ func TestImageBuildLifecycle(t *testing.T) {
 				"arch":       tc.arch,
 			}
 
-			// We pass empty ssh keys as Talos doesn't need them for API access
-			_, err = client.CreateServer(ctx, verifyServerName, snapshotID, serverType, []string{}, verifyLabels)
+			// Create a temporary SSH key for verification to prevent root password emails
+			verifyKeyName := fmt.Sprintf("key-%s", verifyServerName)
+			verifyKeyData, err := keygen.GenerateRSAKeyPair(2048)
+			if err != nil {
+				t.Fatalf("Failed to generate key pair: %v", err)
+			}
+
+			_, err = client.CreateSSHKey(ctx, verifyKeyName, string(verifyKeyData.PublicKey))
+			if err != nil {
+				t.Fatalf("Failed to upload ssh key: %v", err)
+			}
+
+			defer func() {
+				t.Logf("Deleting SSH key %s...", verifyKeyName)
+				if err := client.DeleteSSHKey(context.Background(), verifyKeyName); err != nil {
+					t.Errorf("Failed to delete ssh key %s: %v", verifyKeyName, err)
+				}
+			}()
+
+			// We pass the ssh key to prevent password emails
+			_, err = client.CreateServer(ctx, verifyServerName, snapshotID, serverType, []string{verifyKeyName}, verifyLabels)
 			if err != nil {
 				t.Fatalf("Failed to create verification server: %v", err)
 			}
