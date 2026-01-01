@@ -37,7 +37,7 @@ func NewBuilder(client interface{}, commFact CommunicatorFactory) *Builder {
 }
 
 // Build creates a temporary server, installs Talos, creates a snapshot, and cleans up.
-func (b *Builder) Build(ctx context.Context, imageName, talosVersion, architecture string) (string, error) {
+func (b *Builder) Build(ctx context.Context, imageName, talosVersion, architecture string, labels map[string]string) (string, error) {
 	serverName := fmt.Sprintf("build-%s-%s", imageName, time.Now().Format("20060102150405"))
 
 	// 0. Setup SSH Key
@@ -75,7 +75,7 @@ func (b *Builder) Build(ctx context.Context, imageName, talosVersion, architectu
 		serverType = "cax11"
 	}
 
-	serverID, err := b.provisioner.CreateServer(ctx, serverName, "debian-12", serverType, sshKeys)
+	serverID, err := b.provisioner.CreateServer(ctx, serverName, "debian-12", serverType, sshKeys, labels)
 	if err != nil {
 		return "", fmt.Errorf("failed to create server: %w", err)
 	}

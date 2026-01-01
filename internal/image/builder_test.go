@@ -11,7 +11,7 @@ import (
 
 func TestBuild(t *testing.T) {
 	mockClient := &hcloud.MockClient{
-		CreateServerFunc: func(ctx context.Context, name, imageType, serverType string, sshKeys []string) (string, error) {
+		CreateServerFunc: func(ctx context.Context, name, imageType, serverType string, sshKeys []string, labels map[string]string) (string, error) {
 			return "123", nil
 		},
 		GetServerIPFunc: func(ctx context.Context, name string) (string, error) {
@@ -36,7 +36,7 @@ func TestBuild(t *testing.T) {
 	}
 
 	builder := image.NewBuilder(mockClient, mockSSHFactory)
-	snapshotID, err := builder.Build(context.Background(), "test-image", "v1.8.0", "amd64")
+	snapshotID, err := builder.Build(context.Background(), "test-image", "v1.8.0", "amd64", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

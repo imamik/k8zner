@@ -21,7 +21,7 @@ func NewRealClient(token string) *RealClient {
 }
 
 // CreateServer creates a new server with the given specifications.
-func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverType string, sshKeys []string) (string, error) {
+func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverType string, sshKeys []string, labels map[string]string) (string, error) {
 	serverTypeObj, _, err := c.client.ServerType.Get(ctx, serverType)
 	if err != nil {
 		return "", fmt.Errorf("failed to get server type: %w", err)
@@ -55,6 +55,7 @@ func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverTy
 		ServerType: serverTypeObj,
 		Image:      imageObj,
 		SSHKeys:    sshKeyObjs,
+		Labels:     labels,
 	}
 
 	result, _, err := c.client.Server.Create(ctx, opts)

@@ -9,7 +9,7 @@ import (
 type ServerProvisioner interface {
 	// CreateServer creates a new server with the given specifications.
 	// It should be idempotent.
-	CreateServer(ctx context.Context, name, imageType, serverType string, sshKeys []string) (string, error)
+	CreateServer(ctx context.Context, name, imageType, serverType string, sshKeys []string, labels map[string]string) (string, error)
 
 	// DeleteServer deletes the server with the given name.
 	// It should handle the case where the server does not exist.

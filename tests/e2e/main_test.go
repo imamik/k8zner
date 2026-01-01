@@ -52,7 +52,12 @@ func TestImageBuildLifecycle(t *testing.T) {
 	imageName := "e2e-test-image-" + time.Now().Format("20060102-150405")
 
 	// Using generic args for test
-	snapshotID, err := builder.Build(ctx, imageName, "v1.12.0", "amd64")
+	labels := map[string]string{
+		"type":        "e2e-test",
+		"created_by":  "hcloud-k8s-e2e",
+		"test_name":   "TestImageBuildLifecycle",
+	}
+	snapshotID, err := builder.Build(ctx, imageName, "v1.12.0", "amd64", labels)
 
 	if err != nil {
 		t.Fatalf("Build failed: %v", err)

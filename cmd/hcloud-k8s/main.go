@@ -48,7 +48,8 @@ on Hetzner Cloud using Talos Linux.`,
 
 			// We pass nil for factory so Builder uses default SSHCommunicator with generated keys
 			builder := image.NewBuilder(client, nil)
-			snapshotID, err := builder.Build(context.Background(), imageName, talosVersion, arch)
+			// Pass nil for labels for now as CLI doesn't support them yet
+			snapshotID, err := builder.Build(context.Background(), imageName, talosVersion, arch, nil)
 			if err != nil {
 				return err
 			}
