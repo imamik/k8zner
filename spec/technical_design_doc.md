@@ -12,6 +12,7 @@ This document describes the design for refactoring the current Terraform and Pac
 *   **E2E Testing:** Integrated end-to-end testing capabilities using `HCLOUD_TOKEN`.
 *   **Modular Architecture:** Clean separation of concerns for maintainability and testing.
 *   **Idempotency:** The CLI should act as a reconciler, ensuring the actual state matches the desired state without relying on a fragile local state file.
+*   **Full Feature Parity:** Support all features currently handled by Terraform, including OIDC, RBAC, Autoscaler, Backups, and advanced Network configuration.
 
 ## 3. Architecture
 
@@ -30,6 +31,7 @@ The CLI will be built using the `cobra` framework. The architecture allows for d
 │   ├── hcloud/           # Wrapper around hcloud-go (Infrastructure Provider)
 │   ├── talos/            # Wrapper around talos/pkg/machinery and client (OS Provisioner)
 │   ├── k8s/              # Kubernetes client wrapper (Addon Manager)
+│   ├── manifests/        # Logic to generate K8s manifests (RBAC, OIDC, etc.)
 │   ├── ssh/              # SSH utilities
 │   └── utils/            # Helper functions
 ├── pkg/
@@ -43,7 +45,7 @@ The CLI will be built using the `cobra` framework. The architecture allows for d
 *   **CLI Framework:** `github.com/spf13/cobra`
 *   **Hetzner Cloud:** `github.com/hetznercloud/hcloud-go/v2/hcloud`
 *   **Talos Config:** `github.com/siderolabs/talos/pkg/machinery`
-*   **Kubernetes:** `k8s.io/client-go` (for applying manifests/charts)
+*   **Kubernetes:** `k8s.io/client-go` (for applying manifests/charts), `k8s.io/api` (for types)
 *   **YAML:** `sigs.k8s.io/yaml`
 *   **SSH:** `golang.org/x/crypto/ssh`
 
@@ -54,15 +56,14 @@ Unlike Terraform, we will **not** maintain a local state file (`.tfstate`). Inst
 *   **Discovery:** Resources will be identified using deterministic labels:
     *   `cluster=<cluster_name>`
     *   `role=<control-plane|worker>`
-    *   `component=<load-balancer|firewall|network>`
+    *   `component=<load-balancer|firewall|network|placement-group>`
+    *   `nodepool=<nodepool_name>`
 *   **Reconciliation:**
     *   **Create:** Check if resource with labels exists. If not, create it.
     *   **Update:** Check if resource properties match config (e.g., Firewall rules). If not, update it.
     *   **Destroy:** List all resources with `cluster=<cluster_name>` and delete them.
 
-This approach ensures the CLI is robust and stateless (on the client side).
-
-## 4. Implementation Steps
+## 4. Implementation Steps & Feature Parity
 
 The refactoring will be executed in the following phases. Each phase includes validation steps.
 
@@ -87,11 +88,15 @@ The refactoring will be executed in the following phases. Each phase includes va
 
 *   **Logic:**
     1.  **Network:** Ensure a private network exists with the defined CIDR.
-    2.  **Firewall:** Create/Update Firewalls.
-        *   *Control Plane:* Allow API (6443), Talos API (50000), Etcd (2379-2380) within private net.
-        *   *Workers:* Allow Node ports, Cilium/VXLAN ports.
+    2.  **Firewall:** Create/Update Firewalls based on `firewall.tf` logic.
+        *   Dynamic rule generation for "current IP" (public access).
+        *   Rules for Kube API (6443), Talos API (50000).
+        *   Wireguard/Cilium ports.
     3.  **Load Balancer:** Provision LB for Control Plane (Port 6443 -> Nodes 6443).
-    4.  **Placement Groups:** Create spread groups for HA.
+    4.  **Placement Groups:** Implement the spread logic from `placement_group.tf`.
+        *   One PG for Control Plane (Spread).
+        *   Multiple PGs for Workers (1 per 10 nodes) to avoid Hetzner limits.
+    5.  **Floating IPs:** Create/Assign Floating IPs if `control_plane_public_vip_ipv4_enabled` is true.
 *   **Validation:** Verify resources exist in Hetzner via API or Console.
 
 ### Step 3: Server Provisioning & Talos Config (Replaces Server Terraform & Talos Config)
@@ -99,13 +104,16 @@ The refactoring will be executed in the following phases. Each phase includes va
 **Goal:** Create servers and generate machine configurations.
 
 *   **Logic:**
-    1.  **Config Generation:** Use `talos/pkg/machinery` to generate `controlplane.yaml` and `worker.yaml`.
-        *   Configure SANs (LB IP, Floating IPs).
-        *   Configure Cluster Discovery.
-        *   Inject secrets (generated in memory or loaded from a secure file).
+    1.  **Config Generation:** Use `talos/pkg/machinery`.
+        *   **Patches:** Apply config patches for:
+            *   Network interfaces (VIPs, Routes).
+            *   Kernel modules/args.
+            *   Kubelet extra mounts (e.g., Longhorn).
+            *   Sysctls.
+            *   Cluster Discovery (K8s vs Service).
     2.  **Provisioning:** Create servers using the Snapshots from Step 1.
-        *   Attach to Network, Firewall, and Placement Groups.
-        *   *Note:* We cannot easily inject user-data into the raw image snapshot on Hetzner for Talos to auto-consume without a config partition.
+        *   Attach to Network, Firewall, and correct Placement Group.
+        *   Generate and assign RDNS entries (reverse DNS) based on `rdns.tf` patterns.
     3.  **Bootstrap Config:**
         *   Wait for server to boot.
         *   Use `talosctl` (via Go library) to push the generated config to the node in "Maintenance Mode" (Port 50000).
@@ -122,16 +130,28 @@ The refactoring will be executed in the following phases. Each phase includes va
     4.  **Wait:** Poll `client-go` until all nodes appear in `Ready` state (or at least registered).
 *   **Validation:** `kubectl get nodes` returns the list of nodes.
 
-### Step 5: Addons & Features (Replaces Addon Terraform)
+### Step 5: Features & Addons (Replaces Addon Terraform)
 
-**Goal:** Install CCM, CNI, and other components.
+**Goal:** Install all complex components managed by Terraform.
 
 *   **Logic:**
-    1.  **Hetzner CCM:** Apply the Secret (HCloud Token) and the Deployment manifests using `client-go`.
-    2.  **CSI:** Apply the Hetzner CSI driver manifests.
-    3.  **CNI (Cilium):** Install Cilium (via Helm Charts or manifests). *Note: Ensure strict compatibility with Talos (e.g., /run/cilium/cgroupv2 mounts).*
-    4.  **CSR Approver:** Talos auto-approves Kubelet CSRs, but verify if `kubelet-serving` certs need the HCloud CCM or a separate approver.
-*   **Validation:** `kubectl get pods -A` shows all system pods running. PVC creation test for CSI.
+    1.  **RBAC:**
+        *   Generate Manifests from config (Roles/ClusterRoles).
+        *   Apply using `client-go` dynamic client.
+    2.  **OIDC:**
+        *   Configure `kube-apiserver` flags in Talos config.
+        *   Generate `ClusterRoleBinding` and `RoleBinding` manifests mapping OIDC groups to K8s roles (logic from `oidc.tf`).
+    3.  **Autoscaler:**
+        *   Generate `cluster-config` Secret containing cloud-init for new nodes.
+        *   Deploy Cluster Autoscaler Helm Chart (or Manifests).
+    4.  **Backups (Talos Backup):**
+        *   Deploy `talos-backup` CronJob, ServiceAccount, and S3 Secrets.
+        *   Inject `os:etcd:backup` role into Talos machine config.
+    5.  **Hetzner Integrations:**
+        *   **CCM:** Apply Secret (Token) and Deployment.
+        *   **CSI:** Apply CSI Driver manifests.
+    6.  **CNI (Cilium):** Install via Helm Chart.
+*   **Validation:** `kubectl get pods -A` shows all system pods running. Verify RBAC bindings exist.
 
 ### Step 6: Full E2E & Lifecycle
 
@@ -144,43 +164,71 @@ The refactoring will be executed in the following phases. Each phase includes va
         *   Call Talos Upgrade API (image update).
         *   Wait for reboot and health.
         *   Uncordon.
-*   **Validation:** Run the full suite: Create -> Validate -> Destroy.
+        *   *Edge Case:* Handle "force" upgrades or skipping health checks if configured.
+*   **Validation:** Run the full suite: Create -> Validate -> Upgrade -> Destroy.
 
 ## 5. Testing Strategy
 
 *   **Unit Tests:**
     *   Test Config generation (YAML output).
     *   Test Label selector logic.
+    *   Test RBAC/OIDC manifest generation logic.
 *   **Integration Tests:**
     *   Requires `HCLOUD_TOKEN`.
     *   **Test 1: Image Build:** Build a snapshot, verify it exists, delete it.
     *   **Test 2: Minimal Cluster:** Build 1 CP node, bootstrap, verify K8s API, destroy.
-    *   **Test 3: Full Cluster:** HA Control Plane (3 nodes), Workers, CCM/CNI, destroy.
+    *   **Test 3: Full Cluster:** HA Control Plane (3 nodes), Workers, OIDC, Autoscaler, destroy.
 
 ## 6. Configuration
 
-The CLI will accept a configuration file (YAML).
+The CLI will accept a configuration file (YAML) that maps to the Terraform variables.
 
 ```yaml
 clusterName: "talos-k8s"
 hetzner:
   region: "hel1"
   networkZone: "eu-central"
-  sshKeys:
-    - "my-key"
+  sshKeys: ["my-key"]
+  firewall:
+    apiSource: ["0.0.0.0/0"] # Replaces firewall_kube_api_source
 nodes:
   controlPlane:
     count: 3
     type: "cpx21"
     arch: "amd64"
+    floatingIp: true
   workers:
-    count: 3
-    type: "cpx21"
-    arch: "amd64"
+    nodepools:
+      - name: "worker-1"
+        count: 3
+        type: "cpx21"
+        placementGroup: true
 talos:
   version: "v1.9.0"
+  extensions: []
+  backups:
+    s3:
+      enabled: true
+      bucket: "my-backup"
+      # Secrets loaded from env vars or separate file
 kubernetes:
   version: "1.32.0"
+  oidc:
+    enabled: true
+    issuerUrl: "https://accounts.google.com"
+    clientId: "..."
+    groupsPrefix: "oidc:"
+    groupMappings:
+      - group: "devs"
+        clusterRoles: ["view"]
+  rbac:
+    roles:
+      - name: "pod-reader"
+        namespace: "default"
+        rules: ...
 cni:
   type: "cilium"
+autoscaler:
+  enabled: true
+  nodepools: ...
 ```
