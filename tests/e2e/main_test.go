@@ -52,11 +52,10 @@ func TestImageBuildLifecycle(t *testing.T) {
 	imageName := "e2e-test-image-" + time.Now().Format("20060102-150405")
 
 	// Using generic args for test
-	snapshotID, err := builder.Build(ctx, imageName, "v1.8.0", "amd64")
+	snapshotID, err := builder.Build(ctx, imageName, "v1.12.0", "amd64")
 
 	if err != nil {
-		t.Logf("Build failed: %v", err)
-		// We still want to cleanup if snapshot was created (unlikely if err, but maybe partial?)
+		t.Fatalf("Build failed: %v", err)
 	} else {
 		t.Logf("Build successful, snapshot ID: %s", snapshotID)
 

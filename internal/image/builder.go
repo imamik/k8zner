@@ -70,7 +70,12 @@ func (b *Builder) Build(ctx context.Context, imageName, talosVersion, architectu
 	// We need to pass the ssh key NAME to CreateServer.
 	sshKeys := []string{keyName}
 
-	serverID, err := b.provisioner.CreateServer(ctx, serverName, "debian-12", "cx22", sshKeys)
+	serverType := "cx23"
+	if architecture == "arm64" {
+		serverType = "cax11"
+	}
+
+	serverID, err := b.provisioner.CreateServer(ctx, serverName, "debian-12", serverType, sshKeys)
 	if err != nil {
 		return "", fmt.Errorf("failed to create server: %w", err)
 	}
@@ -119,11 +124,11 @@ func (b *Builder) Build(ctx context.Context, imageName, talosVersion, architectu
 	}
 
 	// URL generation
-	talosURL := fmt.Sprintf("https://github.com/siderolabs/talos/releases/download/%s/talos-%s-%s.raw.xz", talosVersion, architecture, architecture)
+	talosURL := fmt.Sprintf("https://github.com/siderolabs/talos/releases/download/%s/talos-%s-%s.raw.zst", talosVersion, architecture, architecture)
 	if architecture == "amd64" {
-		talosURL = fmt.Sprintf("https://github.com/siderolabs/talos/releases/download/%s/metal-%s.raw.xz", talosVersion, architecture)
+		talosURL = fmt.Sprintf("https://github.com/siderolabs/talos/releases/download/%s/metal-%s.raw.zst", talosVersion, architecture)
 	} else if architecture == "arm64" {
-		talosURL = fmt.Sprintf("https://github.com/siderolabs/talos/releases/download/%s/metal-%s.raw.xz", talosVersion, architecture)
+		talosURL = fmt.Sprintf("https://github.com/siderolabs/talos/releases/download/%s/metal-%s.raw.zst", talosVersion, architecture)
 	}
 
 	// Command to write image
@@ -132,7 +137,7 @@ func (b *Builder) Build(ctx context.Context, imageName, talosVersion, architectu
 	// For simplicity and standard Hetzner, /dev/sda is common, but /dev/vda is used on some.
 	// We can run a detection script: "DISK=$(lsblk -d -n -o NAME | grep -E '^sda|^vda' | head -n 1); ..."
 
-	installCmd := fmt.Sprintf("DISK=$(lsblk -d -n -o NAME | grep -E '^sda|^vda' | head -n 1) && if [ -z \"$DISK\" ]; then echo 'No disk found'; exit 1; fi && echo \"Writing to /dev/$DISK\" && wget -O /tmp/talos.raw.xz %s && xz -d -c /tmp/talos.raw.xz | dd of=/dev/$DISK bs=4M && sync", talosURL)
+	installCmd := fmt.Sprintf("DISK=$(lsblk -d -n -o NAME | grep -E '^sda|^vda' | head -n 1) && if [ -z \"$DISK\" ]; then echo 'No disk found'; exit 1; fi && echo \"Writing to /dev/$DISK\" && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y zstd && wget -O /tmp/talos.raw.zst %s && zstd -d -c /tmp/talos.raw.zst | dd of=/dev/$DISK bs=4M && sync", talosURL)
 
 	log.Printf("Provisioning Talos (Command: %s)...", installCmd)
 	output, err := comm.Execute(ctx, installCmd)
