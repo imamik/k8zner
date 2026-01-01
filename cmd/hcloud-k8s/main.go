@@ -1,3 +1,4 @@
+// Package main provides the entry point for the hcloud-k8s CLI.
 package main
 
 import (
@@ -35,7 +36,7 @@ on Hetzner Cloud using Talos Linux.`,
 	buildCmd := &cobra.Command{
 		Use:   "build",
 		Short: "Build a Talos disk image",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			if token == "" {
 				return fmt.Errorf("token is required")
 			}
@@ -46,9 +47,10 @@ on Hetzner Cloud using Talos Linux.`,
 
 			client := hcloud.NewRealClient(token)
 
-			// We pass nil for factory so Builder uses default SSHCommunicator with generated keys
+			// We pass nil for factory so Builder uses default SSHCommunicator with generated keys.
 			builder := image.NewBuilder(client, nil)
-			snapshotID, err := builder.Build(context.Background(), imageName, talosVersion, arch)
+			// Pass nil for labels for now as CLI doesn't support them yet.
+			snapshotID, err := builder.Build(context.Background(), imageName, talosVersion, arch, nil)
 			if err != nil {
 				return err
 			}

@@ -1,3 +1,4 @@
+// Package hcloud provides a wrapper around the Hetzner Cloud API.
 package hcloud
 
 import (
@@ -9,7 +10,7 @@ import (
 type ServerProvisioner interface {
 	// CreateServer creates a new server with the given specifications.
 	// It should be idempotent.
-	CreateServer(ctx context.Context, name, imageType, serverType string, sshKeys []string) (string, error)
+	CreateServer(ctx context.Context, name, imageType, serverType string, sshKeys []string, labels map[string]string) (string, error)
 
 	// DeleteServer deletes the server with the given name.
 	// It should handle the case where the server does not exist.
@@ -17,9 +18,6 @@ type ServerProvisioner interface {
 
 	// GetServerIP returns the public IP of the server.
 	GetServerIP(ctx context.Context, name string) (string, error)
-
-	// EnableRescue enables rescue mode for the server.
-	// sshKeyID is optional.
 	EnableRescue(ctx context.Context, serverID string, sshKeyIDs []string) (string, error)
 
 	// ResetServer resets (reboots) the server.
