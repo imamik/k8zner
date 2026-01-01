@@ -1,0 +1,18 @@
+# Binaries
+bin/
+dist/
+hcloud-k8s
+
+# Terraform (legacy)
+.terraform/
+*.tfstate
+*.tfstate.backup
+
+# IDEs
+.idea/
+.vscode/
+
+# Go
+vendor/
+go.sum
+coverage.out
