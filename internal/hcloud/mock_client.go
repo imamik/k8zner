@@ -4,8 +4,15 @@ import (
 	"context"
 )
 
-// MockClient is a mock implementation of ServerProvisioner, SnapshotManager, and SSHKeyManager.
+// MockClient is a mock implementation of InfrastructureManager, ServerProvisioner, SnapshotManager, and SSHKeyManager.
 type MockClient struct {
+	NetworkManager
+	FirewallManager
+	LoadBalancerManager
+	PlacementGroupManager
+	FloatingIPManager
+
+	// ServerProvisioner methods
 	CreateServerFunc   func(ctx context.Context, name, imageType, serverType string, sshKeys []string, labels map[string]string) (string, error)
 	DeleteServerFunc   func(ctx context.Context, name string) error
 	GetServerIPFunc    func(ctx context.Context, name string) (string, error)
@@ -19,6 +26,46 @@ type MockClient struct {
 
 	CreateSSHKeyFunc func(ctx context.Context, name, publicKey string) (string, error)
 	DeleteSSHKeyFunc func(ctx context.Context, name string) error
+}
+
+// EnsureNetwork mock.
+func (m *MockClient) EnsureNetwork(ctx context.Context, name, ipRange string, labels map[string]string) error {
+	return nil
+}
+
+// DeleteNetwork mock.
+func (m *MockClient) DeleteNetwork(ctx context.Context, name string) error {
+	return nil
+}
+
+// EnsureFirewall mock.
+func (m *MockClient) EnsureFirewall(ctx context.Context, name string, rules []FirewallRule, labels map[string]string) error {
+	return nil
+}
+
+// DeleteFirewall mock.
+func (m *MockClient) DeleteFirewall(ctx context.Context, name string) error {
+	return nil
+}
+
+// EnsureLoadBalancer mock.
+func (m *MockClient) EnsureLoadBalancer(ctx context.Context, name, networkName, ip string, labels map[string]string) error {
+	return nil
+}
+
+// DeleteLoadBalancer mock.
+func (m *MockClient) DeleteLoadBalancer(ctx context.Context, name string) error {
+	return nil
+}
+
+// EnsurePlacementGroup mock.
+func (m *MockClient) EnsurePlacementGroup(ctx context.Context, name string, labels map[string]string) error {
+	return nil
+}
+
+// EnsureFloatingIP mock.
+func (m *MockClient) EnsureFloatingIP(ctx context.Context, name string, labels map[string]string) (string, error) {
+	return "1.2.3.4", nil
 }
 
 // CreateServer mocks server creation.
