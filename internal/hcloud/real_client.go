@@ -30,10 +30,46 @@ func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverTy
 		return "", fmt.Errorf("server type not found: %s", serverType)
 	}
 
+	// Try to get image by name first
 	imageObj, _, err := c.client.Image.Get(ctx, imageType)
 	if err != nil {
 		return "", fmt.Errorf("failed to get image: %w", err)
 	}
+
+	// Check if image architecture matches server type architecture
+	if imageObj != nil && imageObj.Architecture != serverTypeObj.Architecture {
+		// Mismatch. If looking for "debian-12" (or other name) we might have picked the wrong one.
+		// Try to find one with correct architecture.
+		images, _, err := c.client.Image.List(ctx, hcloud.ImageListOpts{
+			Name:         imageType,
+			Architecture: []hcloud.Architecture{serverTypeObj.Architecture},
+		})
+		if err != nil {
+			return "", fmt.Errorf("failed to list images: %w", err)
+		}
+		if len(images) > 0 {
+			imageObj = images[0]
+		}
+		// If we didn't find one, we stick with the original and let the API fail (or we could error here)
+	}
+
+	// If not found yet (e.g. imageType was ID but Get returned nil?), try list specific for "debian-12" special handling
+	if imageObj == nil {
+		if imageType == "debian-12" {
+			// Find debian-12 for specific architecture
+			images, _, err := c.client.Image.List(ctx, hcloud.ImageListOpts{
+				Name:         "debian-12",
+				Architecture: []hcloud.Architecture{serverTypeObj.Architecture},
+			})
+			if err != nil {
+				return "", fmt.Errorf("failed to list images: %w", err)
+			}
+			if len(images) > 0 {
+				imageObj = images[0]
+			}
+		}
+	}
+
 	if imageObj == nil {
 		return "", fmt.Errorf("image not found: %s", imageType)
 	}
