@@ -76,17 +76,17 @@ func (b *Builder) Build(ctx context.Context, imageName, talosVersion, architectu
 		serverType = "cax11"
 	}
 
-	serverID, err := b.provisioner.CreateServer(ctx, serverName, "debian-12", serverType, sshKeys, labels)
-	if err != nil {
-		return "", fmt.Errorf("failed to create server: %w", err)
-	}
-
 	defer func() {
 		log.Printf("Deleting server %s...", serverName)
 		if err := b.provisioner.DeleteServer(context.Background(), serverName); err != nil {
 			log.Printf("Failed to delete server %s: %v", serverName, err)
 		}
 	}()
+
+	serverID, err := b.provisioner.CreateServer(ctx, serverName, "debian-12", serverType, sshKeys, labels)
+	if err != nil {
+		return "", fmt.Errorf("failed to create server: %w", err)
+	}
 
 	ip, err := b.provisioner.GetServerIP(ctx, serverName)
 	if err != nil {

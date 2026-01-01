@@ -121,18 +121,18 @@ func TestImageBuildLifecycle(t *testing.T) {
 				}
 			}()
 
-			// We pass the ssh key to prevent password emails
-			_, err = client.CreateServer(ctx, verifyServerName, snapshotID, serverType, []string{verifyKeyName}, verifyLabels)
-			if err != nil {
-				t.Fatalf("Failed to create verification server: %v", err)
-			}
-
 			defer func() {
 				t.Logf("Deleting verification server %s...", verifyServerName)
 				if err := client.DeleteServer(context.Background(), verifyServerName); err != nil {
 					t.Errorf("Failed to delete verification server: %v", err)
 				}
 			}()
+
+			// We pass the ssh key to prevent password emails
+			_, err = client.CreateServer(ctx, verifyServerName, snapshotID, serverType, []string{verifyKeyName}, verifyLabels)
+			if err != nil {
+				t.Fatalf("Failed to create verification server: %v", err)
+			}
 
 			ip, err := client.GetServerIP(ctx, verifyServerName)
 			if err != nil {
