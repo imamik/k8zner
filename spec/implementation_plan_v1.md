@@ -1,92 +1,106 @@
-# Implementation Plan - Iteration 1: Foundation & Image Builder
+# Implementation Plan - Iteration 1: Foundation, Image Builder & CI/CD
 
 ## 1. Overview
-This plan details the first iteration of the `hcloud-k8s` refactor. The primary goal is to establish the project skeleton, implement the configuration subsystem, and deliver the "Image Builder" functionality (equivalent to Packer). This iteration will demonstrate the end-to-end flow from CLI execution to Hetzner Cloud resource manipulation, verified by real-world testing.
+This plan details the first iteration of the `hcloud-k8s` refactor. The primary goal is to establish a production-grade project skeleton, implement the configuration subsystem, and deliver the "Image Builder" functionality. This iteration enforces **Test Driven Development (TDD)** and includes a robust CI/CD pipeline to ensure cross-platform compatibility and code quality from day one.
 
 ## 2. Goals
-1.  **Project Structure:** Establish a standard Go project layout (`cmd`, `internal`, `pkg`).
-2.  **Configuration:** Implement strict configuration parsing and validation.
-3.  **Infrastructure Provider:** Create a testable wrapper around the Hetzner Cloud API.
-4.  **Image Builder:** Implement the logic to provision a temporary server, install Talos, and create a snapshot.
-5.  **Quality Assurance:** Achieve high code coverage via unit tests and verify functionality via an E2E test using `HCLOUD_TOKEN`.
+1.  **Production-Grade Scaffolding:** complete setup with Makefiles, Linters, and CI/CD pipelines.
+2.  **Cross-Platform Compilation:** Automated builds for Linux, macOS, and Windows (amd64/arm64).
+3.  **Strict Configuration:** Type-safe configuration parsing with validation.
+4.  **Image Builder:** Logic to provision Talos on Hetzner, including snapshot creation.
+5.  **Verified Lifecycle:** E2E tests that validate both **creation** and **destruction** of resources to prevent leaks.
 
 ## 3. Architecture & Design Principles
+*   **TDD First:** Tests are written *before* implementation.
 *   **SOLID:**
-    *   **Single Responsibility:** Separate packages for `config`, `hcloud` (infra), `image` (business logic), and `ssh` (transport).
-    *   **Interface Segregation:** The `ImageBuilder` will depend on a `ServerProvisioner` interface, not the concrete HCloud client, allowing easier mocking.
-    *   **Dependency Injection:** Dependencies (Logger, Config, Client) will be injected into commands and services.
-*   **DRY:** Common logic (e.g., waiting for SSH, error handling) will be centralized in `internal/utils`.
-*   **Error Handling:** Use wrapped errors to provide context (e.g., `fmt.Errorf("failed to provision server: %w", err)`).
+    *   **Dependency Inversion:** High-level modules (Builder) depend on abstractions (ServerProvisioner), not details (HCloud Client).
+    *   **Interface Segregation:** Interfaces are small and specific.
+*   **Release Engineering:**
+    *   Use `goreleaser` for cross-platform builds.
+    *   Use `golangci-lint` for static analysis.
 
 ## 4. Implementation Steps
 
-### Step 1: Project Initialization
-*   Initialize `go.mod` with the module name.
-*   Create directory structure:
-    ```
-    cmd/hcloud-k8s/
-    internal/config/
-    internal/hcloud/
-    internal/image/
-    internal/ssh/
-    tests/e2e/
-    ```
+### Phase 1: Project Scaffolding & High-Stakes Setup
+**Goal:** robust environment for reliable development.
 
-### Step 2: Configuration Subsystem (`internal/config`)
-*   Define Go structs mirroring the configuration schema (focusing on `image` and `hcloud` sections for now).
-*   Implement `Load(path string)` function using `viper` or standard library.
-*   Implement `Validate()` method to ensure required fields (Token, Snapshot Name, Talos Version) are present.
-*   **Test:** Unit tests for loading valid/invalid configs.
+1.  **Initialization:**
+    *   `go mod init github.com/sak-d/hcloud-k8s`
+    *   Create standard layout: `cmd/`, `internal/`, `pkg/`, `deploy/` (for CI configs).
+2.  **Linter Configuration:**
+    *   Add `.golangci.yml` enabling `staticcheck`, `gosec`, `revive`, `errcheck`.
+3.  **Build System (Makefile):**
+    *   Targets: `fmt`, `lint`, `test`, `build`, `e2e`, `clean`.
+4.  **CI/CD (GitHub Actions):**
+    *   Workflow `ci.yaml`: Run lint and unit tests on PRs.
+    *   Workflow `release.yaml`: Use `goreleaser` to build binaries for Linux/Darwin/Windows (amd64/arm64) on tag push.
+5.  **GoReleaser Config:**
+    *   Create `.goreleaser.yaml` defining build matrix and binary naming.
 
-### Step 3: Infrastructure Provider (`internal/hcloud`)
-*   Define an interface `Client` that exposes necessary methods:
-    *   `CreateServer(...)`
-    *   `DeleteServer(...)`
-    *   `CreateSnapshot(...)`
-    *   `FindSnapshot(...)`
-*   Implement `RealClient` using `github.com/hetznercloud/hcloud-go`.
-*   **Test:** Unit tests using a mock implementation of the `Client` interface.
+### Phase 2: Configuration (TDD)
+**Goal:** Type-safe config loading.
 
-### Step 4: SSH Utilities (`internal/ssh`)
-*   Implement a `Client` struct that wraps `golang.org/x/crypto/ssh`.
-*   Methods: `Connect`, `RunCommand`, `CopyFile` (or pipe stream).
-*   Implement retry logic for connection attempts (waiting for Rescue Mode).
+1.  **Test (Fail):** Create `internal/config/config_test.go` asserting valid/invalid YAML parsing and validation errors.
+2.  **Implement (Pass):**
+    *   Define structs with `mapstructure` tags.
+    *   Implement `Load()` using `viper` or `gopkg.in/yaml.v3`.
+    *   Implement `Validate()` (check for empty tokens, invalid versions).
+3.  **Refactor:** Ensure error messages are clear.
 
-### Step 5: Image Builder Logic (`internal/image`)
-*   Create `Builder` struct with dependencies (`Client`, `SSHClient`, `Config`).
-*   Implement `Build()` method:
-    1.  **Check:** specific snapshot name already exists?
-    2.  **Provision:** Create a generic Debian server (lowest cost type).
-    3.  **Rescue:** Enable rescue mode and reboot (or create with rescue enabled if supported).
-    4.  **Install:**
-        *   SSH into server.
-        *   Download Talos image (using `wget` on the node or streaming from runner).
-        *   `dd` image to `/dev/sda`.
-    5.  **Snapshot:** Power off and create a snapshot with labels (version, arch).
-    6.  **Cleanup:** Delete the temporary server.
-*   **Test:** Unit test `Build` flow using mocks for Cloud and SSH.
+### Phase 3: Infrastructure Abstraction (TDD)
+**Goal:** Decouple logic from external API.
 
-### Step 6: CLI Entrypoint (`cmd/hcloud-k8s`)
-*   Setup `cobra` root command.
-*   Add `image` sub-command with `build` action.
-*   Flag parsing (`--config`, `--token`).
-*   Wire up dependencies and execute `Builder.Build()`.
+1.  **Define Interfaces (`internal/hcloud/client.go`):**
+    *   `ServerProvisioner`: `CreateServer`, `DeleteServer`.
+    *   `SnapshotManager`: `CreateSnapshot`, `FindSnapshot`, `DeleteSnapshot`.
+2.  **Test (Mock):** Create `internal/hcloud/mock_client.go` (using `mockery` or manually).
+3.  **Implement:** Create `RealClient` wrapper around `hetznercloud/hcloud-go`.
 
-### Step 7: End-to-End Test (`tests/e2e`)
-*   Create a Go test file protected by build tag `//go:build e2e`.
-*   **Test Logic:**
-    1.  Load `HCLOUD_TOKEN` from env.
-    2.  Construct a test config.
-    3.  Run the `ImageBuilder`.
-    4.  Verify the snapshot exists in Hetzner (using a separate read-only client).
-    5.  Teardown (delete the created snapshot).
+### Phase 4: SSH & Transport (TDD)
+**Goal:** Reliable command execution.
 
-## 5. Testing Plan
-*   **Unit Tests:** Run with `go test ./...`. Focus on logic and error handling.
-*   **E2E Tests:** Run with `HCLOUD_TOKEN=... go test -tags=e2e ./tests/e2e/...`. This ensures the integration with the real Hetzner API works as expected.
+1.  **Define Interface:** `Communicator` (`Connect`, `Exec`, `Copy`).
+2.  **Test:** Create tests mocking the SSH handshake and command returns.
+3.  **Implement:** `internal/ssh` using `golang.org/x/crypto/ssh` with **retry logic** (essential for waiting for rescue mode).
 
-## 6. Dependencies
-*   `github.com/spf13/cobra` (CLI)
-*   `github.com/hetznercloud/hcloud-go/v2/hcloud` (API)
-*   `golang.org/x/crypto/ssh` (Remote execution)
-*   `gopkg.in/yaml.v3` (Config parsing)
+### Phase 5: Image Builder Logic (TDD)
+**Goal:** The core business logic.
+
+1.  **Test (Fail):** Create `internal/image/builder_test.go`.
+    *   Scenario 1: Snapshot exists -> Skip.
+    *   Scenario 2: Success path (Provision -> Wait -> Install -> Snapshot -> Cleanup).
+    *   Scenario 3: Error during install -> Cleanup must still trigger.
+2.  **Implement (Pass):**
+    *   `Builder` struct injecting `ServerProvisioner`, `SnapshotManager`, `Communicator`.
+    *   Implement `Build()` method.
+    *   **Crucial:** Use `defer` for cleanup to ensure temporary servers are deleted even on panic/error.
+
+### Phase 6: CLI Entrypoint
+**Goal:** User interface.
+
+1.  Setup `cmd/hcloud-k8s/main.go` using `cobra`.
+2.  Add global flags (`--token`, `--config`, `--dry-run`).
+3.  Add `image build` command.
+4.  Wire up dependencies (Config -> Client -> Builder).
+
+### Phase 7: E2E Verification & Lifecycle (The "Real World" Test)
+**Goal:** Verify creation AND destruction in a real environment.
+
+1.  **Setup:** Create `tests/e2e/main_test.go` with `//go:build e2e`.
+2.  **Test Logic (`TestImageLifecycle`):**
+    *   **Pre-check:** Ensure clean state (no existing snapshot with test name).
+    *   **Execution:** Run `image build`.
+    *   **Verification:**
+        *   Check Snapshot exists via HCloud API.
+        *   Check Metadata (labels correct).
+        *   Check Temporary Server is **GONE**.
+    *   **Destruction (Test Phase 2):**
+        *   Invoke a cleanup function (or future `image destroy` command).
+        *   Verify Snapshot is deleted.
+3.  **Safety:** The E2E test must have a robust `defer` teardown to delete the snapshot if the test fails mid-way, preventing cost leakage.
+
+## 5. Definition of Done
+*   [ ] CI pipeline passes (Lint, Test, Build).
+*   [ ] Cross-platform binaries generated.
+*   [ ] Unit test coverage > 80%.
+*   [ ] E2E test passes with `HCLOUD_TOKEN`, verifying both creation and cleanup.
