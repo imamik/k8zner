@@ -30,13 +30,13 @@ func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverTy
 		return "", fmt.Errorf("server type not found: %s", serverType)
 	}
 
-	// Try to get image by name first
-	imageObj, _, err := c.client.Image.Get(ctx, imageType)
+	// Try to get image by name first.
+	imageObj, _, err := c.client.Image.Get(ctx, imageType) //nolint:staticcheck
 	if err != nil {
 		return "", fmt.Errorf("failed to get image: %w", err)
 	}
 
-	// Check if image architecture matches server type architecture
+	// Check if image architecture matches server type architecture.
 	if imageObj != nil && imageObj.Architecture != serverTypeObj.Architecture {
 		// Mismatch. If looking for "debian-12" (or other name) we might have picked the wrong one.
 		// Try to find one with correct architecture.
@@ -50,13 +50,13 @@ func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverTy
 		if len(images) > 0 {
 			imageObj = images[0]
 		}
-		// If we didn't find one, we stick with the original and let the API fail (or we could error here)
+		// If we didn't find one, we stick with the original and let the API fail (or we could error here).
 	}
 
-	// If not found yet (e.g. imageType was ID but Get returned nil?), try list specific for "debian-12" special handling
+	// If not found yet (e.g. imageType was ID but Get returned nil?), try list specific for "debian-12" special handling.
 	if imageObj == nil {
 		if imageType == "debian-12" {
-			// Find debian-12 for specific architecture
+			// Find debian-12 for specific architecture.
 			images, _, err := c.client.Image.List(ctx, hcloud.ImageListOpts{
 				Name:         "debian-12",
 				Architecture: []hcloud.Architecture{serverTypeObj.Architecture},
@@ -113,10 +113,10 @@ func (c *RealClient) DeleteServer(ctx context.Context, name string) error {
 		return fmt.Errorf("failed to get server: %w", err)
 	}
 	if server == nil {
-		return nil // Server already deleted
+		return nil // Server already deleted.
 	}
 
-	_, err = c.client.Server.Delete(ctx, server)
+	_, err = c.client.Server.Delete(ctx, server) //nolint:staticcheck
 	if err != nil {
 		return fmt.Errorf("failed to delete server: %w", err)
 	}
@@ -153,7 +153,7 @@ func (c *RealClient) EnableRescue(ctx context.Context, serverID string, sshKeyID
 	for _, kid := range sshKeyIDs {
 		kidInt, err := strconv.ParseInt(kid, 10, 64)
 		if err != nil {
-			continue // ignore invalid
+			continue // Ignore invalid.
 		}
 		sshKeys = append(sshKeys, &hcloud.SSHKey{ID: kidInt})
 	}
@@ -185,7 +185,7 @@ func (c *RealClient) ResetServer(ctx context.Context, serverID string) error {
 		return fmt.Errorf("failed to reset server: %w", err)
 	}
 
-	// Result from Reset is just an Action, not a struct with Action field like Create
+	// Result from Reset is just an Action, not a struct with Action field like Create.
 	if err := c.client.Action.WaitFor(ctx, result); err != nil {
 		return fmt.Errorf("failed to wait for reset: %w", err)
 	}

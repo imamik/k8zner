@@ -1,3 +1,4 @@
+// Package keygen provides utilities for generating SSH keys.
 package keygen
 
 import (
@@ -22,26 +23,26 @@ func GenerateRSAKeyPair(bits int) (*KeyPair, error) {
 		return nil, err
 	}
 
-	// Validate Private Key
+	// Validate Private Key.
 	err = privateKey.Validate()
 	if err != nil {
 		return nil, err
 	}
 
-	// Get ASN.1 DER format
+	// Get ASN.1 DER format.
 	privDER := x509.MarshalPKCS1PrivateKey(privateKey)
 
-	// pem.Block
+	// PEM block.
 	privBlock := pem.Block{
 		Type:    "RSA PRIVATE KEY",
 		Headers: nil,
 		Bytes:   privDER,
 	}
 
-	// Private Key in PEM format
+	// Private Key in PEM format.
 	privateKeyPEM := pem.EncodeToMemory(&privBlock)
 
-	// Public Key generation
+	// Public Key generation.
 	publicRsaKey, err := ssh.NewPublicKey(&privateKey.PublicKey)
 	if err != nil {
 		return nil, err

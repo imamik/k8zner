@@ -11,27 +11,27 @@ import (
 
 func TestBuild(t *testing.T) {
 	mockClient := &hcloud.MockClient{
-		CreateServerFunc: func(ctx context.Context, name, imageType, serverType string, sshKeys []string, labels map[string]string) (string, error) {
+		CreateServerFunc: func(_ context.Context, _ string, _ string, _ string, _ []string, _ map[string]string) (string, error) {
 			return "123", nil
 		},
-		GetServerIPFunc: func(ctx context.Context, name string) (string, error) {
+		GetServerIPFunc: func(_ context.Context, _ string) (string, error) {
 			return "1.2.3.4", nil
 		},
-		CreateSnapshotFunc: func(ctx context.Context, serverName, snapshotDescription string) (string, error) {
+		CreateSnapshotFunc: func(_ context.Context, _ string, _ string) (string, error) {
 			return "snap-123", nil
 		},
-		DeleteServerFunc: func(ctx context.Context, name string) error {
+		DeleteServerFunc: func(_ context.Context, _ string) error {
 			return nil
 		},
-		CreateSSHKeyFunc: func(ctx context.Context, name, publicKey string) (string, error) {
+		CreateSSHKeyFunc: func(_ context.Context, _ string, _ string) (string, error) {
 			return "key-123", nil
 		},
-		DeleteSSHKeyFunc: func(ctx context.Context, name string) error {
+		DeleteSSHKeyFunc: func(_ context.Context, _ string) error {
 			return nil
 		},
 	}
 
-	mockSSHFactory := func(host string) ssh.Communicator {
+	mockSSHFactory := func(_ string) ssh.Communicator {
 		return &MockSSH{}
 	}
 
@@ -48,10 +48,10 @@ func TestBuild(t *testing.T) {
 
 type MockSSH struct{}
 
-func (m *MockSSH) Execute(ctx context.Context, command string) (string, error) {
+func (m *MockSSH) Execute(_ context.Context, _ string) (string, error) {
 	return "ok", nil
 }
 
-func (m *MockSSH) UploadFile(ctx context.Context, localPath, remotePath string) error {
+func (m *MockSSH) UploadFile(_ context.Context, _, _ string) error {
 	return nil
 }

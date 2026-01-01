@@ -37,7 +37,7 @@ func TestImageBuildLifecycle(t *testing.T) {
 		}
 		privateKey = pk
 		commFactory = func(host string) ssh.Communicator {
-			return ssh.NewSSHCommunicator(host, "root", privateKey)
+			return ssh.NewClient(host, "root", privateKey)
 		}
 	} else {
 		// If no keys provided, we rely on the builder generating them.

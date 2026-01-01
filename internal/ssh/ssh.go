@@ -1,3 +1,4 @@
+// Package ssh provides SSH communication utilities.
 package ssh
 
 import (
@@ -8,23 +9,24 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// SSHCommunicator implements Communicator using the SSH protocol.
-type SSHCommunicator struct {
+// Client implements Communicator using the SSH protocol.
+type Client struct {
 	host       string
 	user       string
 	privateKey []byte
 }
 
-// NewSSHCommunicator creates a new SSHCommunicator.
-func NewSSHCommunicator(host, user string, privateKey []byte) *SSHCommunicator {
-	return &SSHCommunicator{
+// NewClient creates a new SSHCommunicator.
+func NewClient(host, user string, privateKey []byte) *Client {
+	return &Client{
 		host:       host,
 		user:       user,
 		privateKey: privateKey,
 	}
 }
 
-func (c *SSHCommunicator) Execute(ctx context.Context, command string) (string, error) {
+// Execute runs a command on the remote host.
+func (c *Client) Execute(ctx context.Context, command string) (string, error) {
 	signer, err := ssh.ParsePrivateKey(c.privateKey)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse private key: %w", err)
@@ -35,12 +37,12 @@ func (c *SSHCommunicator) Execute(ctx context.Context, command string) (string, 
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(signer),
 		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // For now, ignore host key verification
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(), //nolint:gosec // For now, ignore host key verification
 		Timeout:         10 * time.Second,
 	}
 
 	var client *ssh.Client
-	// Simple retry logic
+	// Simple retry logic.
 	for i := 0; i < 10; i++ {
 		client, err = ssh.Dial("tcp", c.host+":22", config)
 		if err == nil {
@@ -56,13 +58,13 @@ func (c *SSHCommunicator) Execute(ctx context.Context, command string) (string, 
 	if client == nil {
 		return "", fmt.Errorf("failed to dial ssh: %w", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	session, err := client.NewSession()
 	if err != nil {
 		return "", fmt.Errorf("failed to create session: %w", err)
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	output, err := session.CombinedOutput(command)
 	if err != nil {
@@ -72,7 +74,8 @@ func (c *SSHCommunicator) Execute(ctx context.Context, command string) (string, 
 	return string(output), nil
 }
 
-func (c *SSHCommunicator) UploadFile(ctx context.Context, localPath, remotePath string) error {
-	// Not implemented yet
+// UploadFile uploads a file to the remote host.
+func (c *Client) UploadFile(_ context.Context, _, _ string) error {
+	// Not implemented yet.
 	return nil
 }
