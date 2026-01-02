@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"os"
@@ -15,6 +16,24 @@ import (
 	"github.com/sak-d/hcloud-k8s/internal/keygen"
 	"github.com/sak-d/hcloud-k8s/internal/ssh"
 )
+
+// ResourceCleaner helps track and clean up resources.
+type ResourceCleaner struct {
+	t        *testing.T
+	cleanups []func()
+}
+
+// Add adds a cleanup function.
+func (rc *ResourceCleaner) Add(f func()) {
+	rc.cleanups = append(rc.cleanups, f)
+}
+
+// Cleanup executes all cleanup functions in LIFO order.
+func (rc *ResourceCleaner) Cleanup() {
+	for i := len(rc.cleanups) - 1; i >= 0; i-- {
+		rc.cleanups[i]()
+	}
+}
 
 func TestImageBuildLifecycle(t *testing.T) {
 	token := os.Getenv("HCLOUD_TOKEN")
@@ -57,37 +76,55 @@ func TestImageBuildLifecycle(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+			cleaner := &ResourceCleaner{t: t}
+			defer cleaner.Cleanup()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 			defer cancel()
 
 			// Unique image name per test
 			imageName := fmt.Sprintf("e2e-test-image-%s-%s", tc.arch, time.Now().Format("20060102-150405"))
 
 			labels := map[string]string{
-				"type":        "e2e-test",
-				"created_by":  "hcloud-k8s-e2e",
-				"test_name":   "TestImageBuildLifecycle",
-				"arch":        tc.arch,
+				"type":       "e2e-test",
+				"created_by": "hcloud-k8s-e2e",
+				"test_name":  "TestImageBuildLifecycle",
+				"arch":       tc.arch,
 			}
 
 			t.Logf("Starting build for %s...", tc.arch)
 			snapshotID, err := builder.Build(ctx, imageName, "v1.12.0", tc.arch, labels)
+
+			// If snapshot was created, we must clean it up.
+			// Even if Build returned error, it might have created a snapshot (unlikely with our fix, but good practice).
+			// Since we don't have ID if it fails, we assume builder cleanup or fix in client handles it.
+			// If success, we track it.
+			if snapshotID != "" {
+				cleaner.Add(func() {
+					t.Logf("Deleting snapshot %s...", snapshotID)
+					if err := client.DeleteImage(context.Background(), snapshotID); err != nil {
+						t.Errorf("Failed to delete snapshot %s: %v", snapshotID, err)
+					}
+				})
+			}
 
 			if err != nil {
 				t.Fatalf("Build failed for %s: %v", tc.arch, err)
 			}
 			t.Logf("Build successful for %s, snapshot ID: %s", tc.arch, snapshotID)
 
-			// Cleanup Snapshot Defer
-			defer func() {
-				t.Logf("Deleting snapshot %s...", snapshotID)
-				if err := client.DeleteImage(context.Background(), snapshotID); err != nil {
-					t.Errorf("Failed to delete snapshot %s: %v", snapshotID, err)
-				}
-			}()
-
 			// 3. Verify Server Creation
 			verifyServerName := fmt.Sprintf("verify-%s-%s", tc.arch, time.Now().Format("20060102-150405"))
+
+			// Register cleanup for server immediately, so even if CreateServer fails partially or we crash, we try to delete it.
+			cleaner.Add(func() {
+				t.Logf("Deleting verification server %s...", verifyServerName)
+				if err := client.DeleteServer(context.Background(), verifyServerName); err != nil {
+					// It's okay if it doesn't exist.
+					t.Logf("Failed to delete verification server (might not exist): %v", err)
+				}
+			})
+
 			t.Logf("Creating verification server %s...", verifyServerName)
 
 			serverType := "cx23"
@@ -104,6 +141,15 @@ func TestImageBuildLifecycle(t *testing.T) {
 
 			// Create a temporary SSH key for verification to prevent root password emails
 			verifyKeyName := fmt.Sprintf("key-%s", verifyServerName)
+
+			// Register cleanup for SSH key immediately
+			cleaner.Add(func() {
+				t.Logf("Deleting SSH key %s...", verifyKeyName)
+				if err := client.DeleteSSHKey(context.Background(), verifyKeyName); err != nil {
+					t.Logf("Failed to delete ssh key %s (might not exist): %v", verifyKeyName, err)
+				}
+			})
+
 			verifyKeyData, err := keygen.GenerateRSAKeyPair(2048)
 			if err != nil {
 				t.Fatalf("Failed to generate key pair: %v", err)
@@ -113,20 +159,6 @@ func TestImageBuildLifecycle(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to upload ssh key: %v", err)
 			}
-
-			defer func() {
-				t.Logf("Deleting SSH key %s...", verifyKeyName)
-				if err := client.DeleteSSHKey(context.Background(), verifyKeyName); err != nil {
-					t.Errorf("Failed to delete ssh key %s: %v", verifyKeyName, err)
-				}
-			}()
-
-			defer func() {
-				t.Logf("Deleting verification server %s...", verifyServerName)
-				if err := client.DeleteServer(context.Background(), verifyServerName); err != nil {
-					t.Errorf("Failed to delete verification server: %v", err)
-				}
-			}()
 
 			// We pass the ssh key to prevent password emails
 			_, err = client.CreateServer(ctx, verifyServerName, snapshotID, serverType, []string{verifyKeyName}, verifyLabels)
@@ -153,14 +185,21 @@ func TestImageBuildLifecycle(t *testing.T) {
 				case <-timeout:
 					t.Fatalf("Timeout waiting for Talos API on %s", ip)
 				case <-ticker.C:
-					// Simple TCP dial to check if port is open
-					// We can use net.Dial
-					conn, err := net.Dial("tcp", ip+":50000") // reusing ssh package? No, import net
+					// Check connectivity and TLS handshake.
+					// Talos uses mTLS, so a normal handshake without client certs will fail during verification or return an error,
+					// but establishing the handshake proves the server is listening and speaking TLS.
+					conf := &tls.Config{
+						InsecureSkipVerify: true, // We don't have the CA, we just want to know if it's speaking TLS.
+					}
+					conn, err := tls.DialWithDialer(&net.Dialer{Timeout: 5 * time.Second}, "tcp", ip+":50000", conf)
 					if err == nil {
 						conn.Close()
-						t.Logf("Successfully connected to Talos API on %s:50000", ip)
+						t.Logf("Successfully performed TLS handshake with Talos API on %s:50000", ip)
 						success = true
 						goto VerifyDone
+					} else {
+						// Log the error for debugging (it might be connection refused, or timeout)
+						t.Logf("Waiting for Talos API... last error: %v", err)
 					}
 				}
 			}

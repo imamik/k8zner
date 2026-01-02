@@ -240,6 +240,10 @@ func (c *RealClient) CreateSnapshot(ctx context.Context, serverID, snapshotDescr
 	}
 
 	if err := c.client.Action.WaitFor(ctx, result.Action); err != nil {
+		// Attempt to cleanup the partial/failed snapshot.
+		if result.Image != nil {
+			_ = c.DeleteImage(context.Background(), fmt.Sprintf("%d", result.Image.ID))
+		}
 		return "", fmt.Errorf("failed to wait for snapshot creation: %w", err)
 	}
 
