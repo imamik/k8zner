@@ -7,20 +7,26 @@ import (
 
 	"github.com/sak-d/hcloud-k8s/internal/config"
 	"github.com/sak-d/hcloud-k8s/internal/hcloud"
-	"github.com/sak-d/hcloud-k8s/internal/talos"
 )
+
+// Reconciler is responsible for reconciling the state of the cluster.
+// TalosConfigProducer defines the interface for generating Talos configuration.
+type TalosConfigProducer interface {
+	GenerateControlPlaneConfig(san []string) ([]byte, error)
+	GenerateWorkerConfig() ([]byte, error)
+}
 
 // Reconciler is responsible for reconciling the state of the cluster.
 type Reconciler struct {
 	serverProvisioner hcloud.ServerProvisioner
-	talosGenerator    *talos.ConfigGenerator
+	talosGenerator    TalosConfigProducer
 	config            *config.Config
 }
 
 // NewReconciler creates a new Reconciler.
 func NewReconciler(
 	serverProvisioner hcloud.ServerProvisioner,
-	talosGenerator *talos.ConfigGenerator,
+	talosGenerator TalosConfigProducer,
 	cfg *config.Config,
 ) *Reconciler {
 	return &Reconciler{
@@ -48,6 +54,11 @@ func (r *Reconciler) ReconcileServers(ctx context.Context) error {
 }
 
 func (r *Reconciler) reconcileControlPlane(ctx context.Context) error {
+	// Enforce SSH Keys
+	if len(r.config.SSHKeys) == 0 {
+		return fmt.Errorf("no ssh_keys provided in configuration; ssh keys are required to prevent password emails and ensure access")
+	}
+
 	// For this iteration, we just loop through the desired count and create if missing.
 	// In a full implementation, we would query existing servers first.
 	// But since ServerProvisioner.CreateServer is idempotent (as per interface doc),
@@ -68,6 +79,11 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context) error {
 
 	count := 3 // Default
 	// if r.config.ControlPlane.Count > 0 { count = r.config.ControlPlane.Count }
+
+	imageName := r.config.ControlPlane.Image
+	if imageName == "" {
+		imageName = "talos" // Default if not specified, but usually should come from config
+	}
 
 	for i := 1; i <= count; i++ {
 		name := fmt.Sprintf("%s-control-plane-%d", r.config.ClusterName, i)
@@ -90,11 +106,6 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context) error {
 			return fmt.Errorf("failed to generate config for %s: %w", name, err)
 		}
 
-		// Create Server
-		// We need to pass the config as UserData.
-		// The CreateServer interface in internal/hcloud/client.go takes labels map[string]string.
-		// It DOES NOT currently accept UserData. We need to update the interface.
-
 		log.Printf("Creating server %s...", name)
 
 		// Labels for the server
@@ -105,7 +116,15 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context) error {
 
 		// Create Server
 		// TODO: serverType and imageType should come from config
-		_, err = r.serverProvisioner.CreateServer(ctx, name, "talos", "cpx21", nil, labels, string(cfgBytes))
+		serverType := r.config.ControlPlane.ServerType
+		if serverType == "" {
+			serverType = "cpx21" // Default
+		}
+
+		location := r.config.Location
+		// If location is empty, we pass empty string, and the client will pass nil, relying on Hetzner project defaults.
+
+		_, err = r.serverProvisioner.CreateServer(ctx, name, imageName, serverType, location, r.config.SSHKeys, labels, string(cfgBytes))
 		if err != nil {
 			return fmt.Errorf("failed to create server %s: %w", name, err)
 		}

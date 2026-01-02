@@ -12,6 +12,8 @@ import (
 type Config struct {
 	ClusterName string `mapstructure:"cluster_name" yaml:"cluster_name"`
 	HCloudToken string `mapstructure:"hcloud_token" yaml:"hcloud_token"`
+	Location    string `mapstructure:"location" yaml:"location"` // e.g. nbg1, fsn1, hel1
+	SSHKeys     []string `mapstructure:"ssh_keys" yaml:"ssh_keys"` // List of SSH key names/IDs
 
 	// Network Configuration
 	ControlPlane ControlPlaneConfig `mapstructure:"control_plane" yaml:"control_plane"`
@@ -22,6 +24,8 @@ type Config struct {
 
 type ControlPlaneConfig struct {
 	Endpoint string `mapstructure:"endpoint" yaml:"endpoint"`
+	Image    string `mapstructure:"image" yaml:"image"` // Image to use for servers (e.g., talos snapshot)
+	ServerType string `mapstructure:"server_type" yaml:"server_type"`
 }
 
 type TalosConfig struct {

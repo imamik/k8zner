@@ -73,7 +73,21 @@ func main() {
 				return fmt.Errorf("reconciliation failed: %w", err)
 			}
 
-			fmt.Println("Reconciliation complete!")
+			// 6. Output Talos Config
+			clientCfgBytes, err := talosGen.GetClientConfig()
+			if err != nil {
+				return fmt.Errorf("failed to generate talosconfig: %w", err)
+			}
+
+			talosConfigPath := "talosconfig"
+			if err := os.WriteFile(talosConfigPath, clientCfgBytes, 0600); err != nil {
+				return fmt.Errorf("failed to write talosconfig: %w", err)
+			}
+
+			fmt.Printf("Reconciliation complete!\n")
+			fmt.Printf("Secrets saved to: %s\n", secretsFile)
+			fmt.Printf("Talos config saved to: %s\n", talosConfigPath)
+
 			return nil
 		},
 	}

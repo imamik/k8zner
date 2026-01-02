@@ -2,7 +2,11 @@ package cluster
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
+	"fmt"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -18,10 +22,14 @@ func TestReconcileControlPlane(t *testing.T) {
 	// Config
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
+		SSHKeys:     []string{"test-key"}, // Required
 	}
 
-	// Talos Generator
-	gen, err := talos.NewConfigGenerator("test-cluster", "v1.30.0", "v1.7.0", "https://api:6443", "secrets.yaml")
+	// Talos Generator with temp secrets
+	secretsFile := filepath.Join(os.TempDir(), fmt.Sprintf("secrets-recon-%d.yaml", time.Now().UnixNano()))
+	defer os.Remove(secretsFile)
+
+	gen, err := talos.NewConfigGenerator("test-cluster", "v1.30.0", "v1.7.0", "https://api:6443", secretsFile)
 	assert.NoError(t, err)
 
 	reconciler := NewReconciler(mockProvisioner, gen, cfg)
@@ -36,7 +44,7 @@ func TestReconcileControlPlane(t *testing.T) {
 	}
 
 	callCount := 0
-	mockProvisioner.CreateServerFunc = func(ctx context.Context, name, imageType, serverType string, sshKeys []string, labels map[string]string, userData string) (string, error) {
+	mockProvisioner.CreateServerFunc = func(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string) (string, error) {
 		callCount++
 		// Verify basic checks
 		assert.Contains(t, name, "test-cluster-control-plane-")
@@ -55,8 +63,16 @@ func TestReconcileControlPlane(t *testing.T) {
 
 func TestReconcileControlPlane_Idempotency(t *testing.T) {
 	mockProvisioner := &hcloud.MockClient{}
-	cfg := &config.Config{ClusterName: "test-cluster"}
-	gen, _ := talos.NewConfigGenerator("test-cluster", "v1.30.0", "v1.7.0", "https://api:6443", "secrets.yaml")
+	cfg := &config.Config{
+		ClusterName: "test-cluster",
+		SSHKeys:     []string{"test-key"}, // Required
+	}
+
+	// Talos Generator with temp secrets
+	secretsFile := filepath.Join(os.TempDir(), fmt.Sprintf("secrets-recon-idem-%d.yaml", time.Now().UnixNano()))
+	defer os.Remove(secretsFile)
+
+	gen, _ := talos.NewConfigGenerator("test-cluster", "v1.30.0", "v1.7.0", "https://api:6443", secretsFile)
 	reconciler := NewReconciler(mockProvisioner, gen, cfg)
 
 	// Simulate servers ALREADY exist
@@ -65,7 +81,7 @@ func TestReconcileControlPlane_Idempotency(t *testing.T) {
 	}
 
 	createCalled := false
-	mockProvisioner.CreateServerFunc = func(ctx context.Context, name, imageType, serverType string, sshKeys []string, labels map[string]string, userData string) (string, error) {
+	mockProvisioner.CreateServerFunc = func(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string) (string, error) {
 		createCalled = true
 		return "server-id", nil
 	}

@@ -1,6 +1,7 @@
 package talos
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -21,7 +22,7 @@ type ConfigGenerator struct {
 }
 
 // NewConfigGenerator creates a new ConfigGenerator.
-// It attempts to load secrets from secretsFile if it exists, otherwise creates new secrets.
+// It attempts to load secrets from secretsFile if it exists, otherwise creates new secrets and saves them.
 func NewConfigGenerator(clusterName, kubernetesVersion, talosVersion, endpoint, secretsFile string) (*ConfigGenerator, error) {
 	vc, err := config.ParseContractFromVersion(talosVersion)
 	if err != nil {
@@ -29,21 +30,40 @@ func NewConfigGenerator(clusterName, kubernetesVersion, talosVersion, endpoint, 
 	}
 
 	var sb *secrets.Bundle
-	if _, err := os.Stat(secretsFile); err == nil {
-		// Load existing secrets
-		// data, err := os.ReadFile(secretsFile)
-		// if err != nil { ... }
-		// TODO: Implement actual secrets loading. For now, we assume if file exists we MIGHT want to load it.
-		// BUT since we can't easily unmarshal without complex logic, we will just create NEW secrets for this iteration
-		// and warn that we are ignoring the file.
-		// Real implementation requires mapstructure/yaml unmarshalling into Bundle struct or re-using specific keys.
+	if secretsFile != "" {
+		if _, err := os.Stat(secretsFile); err == nil {
+			// Load existing secrets using machinery's loader (expects JSON compatible with Bundle struct)
+			sb, err = secrets.LoadBundle(secretsFile)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load secrets bundle: %w", err)
+			}
 
-		// For now, FALLBACK to creating new bundle to ensure it works.
-		sb, err = secrets.NewBundle(secrets.NewFixedClock(time.Now()), vc)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create secrets bundle: %w", err)
+			// Validate loaded bundle (basic check)
+			if sb == nil {
+				return nil, fmt.Errorf("loaded secrets bundle is nil")
+			}
+			// Re-inject clock because loaded bundle might have it reset/nil or need valid clock
+			sb.Clock = secrets.NewFixedClock(time.Now())
+
+		} else {
+			// Create new
+			sb, err = secrets.NewBundle(secrets.NewFixedClock(time.Now()), vc)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create secrets bundle: %w", err)
+			}
+
+			// Save secrets
+			// We marshal the whole bundle which is compatible with LoadBundle
+			data, err := json.MarshalIndent(sb, "", "  ")
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal secrets bundle: %w", err)
+			}
+			if err := os.WriteFile(secretsFile, data, 0600); err != nil {
+				return nil, fmt.Errorf("failed to write secrets file: %w", err)
+			}
 		}
 	} else {
+		// In-memory only
 		sb, err = secrets.NewBundle(secrets.NewFixedClock(time.Now()), vc)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create secrets bundle: %w", err)

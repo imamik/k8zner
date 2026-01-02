@@ -21,7 +21,7 @@ func NewRealClient(token string) *RealClient {
 }
 
 // CreateServer creates a new server with the given specifications.
-func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverType string, sshKeys []string, labels map[string]string, userData string) (string, error) {
+func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string) (string, error) {
 	serverTypeObj, _, err := c.client.ServerType.Get(ctx, serverType)
 	if err != nil {
 		return "", fmt.Errorf("failed to get server type: %w", err)
@@ -86,6 +86,17 @@ func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverTy
 		sshKeyObjs = append(sshKeyObjs, keyObj)
 	}
 
+	var locObj *hcloud.Location
+	if location != "" {
+		locObj, _, err = c.client.Location.Get(ctx, location)
+		if err != nil {
+			return "", fmt.Errorf("failed to get location %s: %w", location, err)
+		}
+		if locObj == nil {
+			return "", fmt.Errorf("location not found: %s", location)
+		}
+	}
+
 	opts := hcloud.ServerCreateOpts{
 		Name:       name,
 		ServerType: serverTypeObj,
@@ -93,6 +104,7 @@ func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverTy
 		SSHKeys:    sshKeyObjs,
 		Labels:     labels,
 		UserData:   userData,
+		Location:   locObj,
 	}
 
 	result, _, err := c.client.Server.Create(ctx, opts)
