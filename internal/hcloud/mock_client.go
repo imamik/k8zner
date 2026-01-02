@@ -6,7 +6,7 @@ import (
 
 // MockClient is a mock implementation of ServerProvisioner, SnapshotManager, and SSHKeyManager.
 type MockClient struct {
-	CreateServerFunc   func(ctx context.Context, name, imageType, serverType string, sshKeys []string, labels map[string]string) (string, error)
+	CreateServerFunc   func(ctx context.Context, name, imageType, serverType string, sshKeys []string, labels map[string]string, userData string) (string, error)
 	DeleteServerFunc   func(ctx context.Context, name string) error
 	GetServerIPFunc    func(ctx context.Context, name string) (string, error)
 	GetServerIDFunc    func(ctx context.Context, name string) (string, error)
@@ -22,9 +22,9 @@ type MockClient struct {
 }
 
 // CreateServer mocks server creation.
-func (m *MockClient) CreateServer(ctx context.Context, name, imageType, serverType string, sshKeys []string, labels map[string]string) (string, error) {
+func (m *MockClient) CreateServer(ctx context.Context, name, imageType, serverType string, sshKeys []string, labels map[string]string, userData string) (string, error) {
 	if m.CreateServerFunc != nil {
-		return m.CreateServerFunc(ctx, name, imageType, serverType, sshKeys, labels)
+		return m.CreateServerFunc(ctx, name, imageType, serverType, sshKeys, labels, userData)
 	}
 	return "mock-id", nil
 }
