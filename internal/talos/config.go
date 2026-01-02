@@ -1,3 +1,4 @@
+// Package talos provides functionality for generating and managing Talos Linux configurations.
 package talos
 
 import (
