@@ -59,26 +59,10 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context) error {
 		return fmt.Errorf("no ssh_keys provided in configuration; ssh keys are required to prevent password emails and ensure access")
 	}
 
-	// For this iteration, we just loop through the desired count and create if missing.
-	// In a full implementation, we would query existing servers first.
-	// But since ServerProvisioner.CreateServer is idempotent (as per interface doc),
-	// we can rely on that or simple checking.
-
-	// Since CreateServer idempotency depends on the implementation (hcloud client),
-	// and we want to be robust, let's assume we need to check existence or rely on the provisioner.
-	// The interface says "It should be idempotent", so we will trust it for now.
-
-	// However, we need to generate different names for each node.
-	// Standard naming: <cluster-name>-control-plane-<index>
-
-	// TODO: Get actual count from config. For now assume it is in the config struct (which we need to update).
-	// Let's assume Config has ControlPlane.Count.
-
-	// We need to update internal/config/config.go to support this structure first.
-	// For now, I will assume a count of 3 if not present (or fail if config is missing).
-
-	count := 3 // Default
-	// if r.config.ControlPlane.Count > 0 { count = r.config.ControlPlane.Count }
+	count := r.config.ControlPlane.Count
+	if count <= 0 {
+		count = 1 // Default to 1 if not specified
+	}
 
 	imageName := r.config.ControlPlane.Image
 	if imageName == "" {
@@ -115,7 +99,6 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context) error {
 		}
 
 		// Create Server
-		// TODO: serverType and imageType should come from config
 		serverType := r.config.ControlPlane.ServerType
 		if serverType == "" {
 			serverType = "cpx21" // Default

@@ -23,9 +23,10 @@ type Config struct {
 }
 
 type ControlPlaneConfig struct {
-	Endpoint string `mapstructure:"endpoint" yaml:"endpoint"`
-	Image    string `mapstructure:"image" yaml:"image"` // Image to use for servers (e.g., talos snapshot)
+	Endpoint   string `mapstructure:"endpoint" yaml:"endpoint"`
+	Image      string `mapstructure:"image" yaml:"image"` // Image to use for servers (e.g., talos snapshot)
 	ServerType string `mapstructure:"server_type" yaml:"server_type"`
+	Count      int    `mapstructure:"count" yaml:"count"`
 }
 
 type TalosConfig struct {

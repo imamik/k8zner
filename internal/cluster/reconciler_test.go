@@ -23,6 +23,9 @@ func TestReconcileControlPlane(t *testing.T) {
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
 		SSHKeys:     []string{"test-key"}, // Required
+		ControlPlane: config.ControlPlaneConfig{
+			Count: 3,
+		},
 	}
 
 	// Talos Generator with temp secrets
@@ -66,6 +69,9 @@ func TestReconcileControlPlane_Idempotency(t *testing.T) {
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
 		SSHKeys:     []string{"test-key"}, // Required
+		ControlPlane: config.ControlPlaneConfig{
+			Count: 3,
+		},
 	}
 
 	// Talos Generator with temp secrets

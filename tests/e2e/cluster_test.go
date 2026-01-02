@@ -67,6 +67,7 @@ func TestClusterApply(t *testing.T) {
 	clusterName := fmt.Sprintf("e2e-cluster-%s", time.Now().Format("20060102-150405"))
 
 	// Config
+	count := 1
 	cfg := &config.Config{
 		ClusterName: clusterName,
 		HCloudToken: token,
@@ -76,6 +77,7 @@ func TestClusterApply(t *testing.T) {
 			Endpoint:   "https://127.0.0.1:6443", // Dummy endpoint
 			Image:      "debian-12",              // Known image
 			ServerType: "cx23",                   // Available Intel instance
+			Count:      count,
 		},
 		Talos: config.TalosConfig{
 			Version:    "v1.7.0",
@@ -83,17 +85,17 @@ func TestClusterApply(t *testing.T) {
 		},
 	}
 
-	// Cleanup defer
-	defer func() {
+	// Cleanup func
+	cleanup := func() {
 		t.Logf("Cleaning up cluster resources for %s...", clusterName)
-		for i := 1; i <= 3; i++ {
+		for i := 1; i <= count; i++ {
 			name := fmt.Sprintf("%s-control-plane-%d", clusterName, i)
 			t.Logf("Deleting server %s...", name)
 			_ = client.DeleteServer(ctx, name)
 		}
-		// Cleanup local secrets file if generated (though Mock doesn't use it, real app would)
-		// Here we use MockTalosProducer, so no secrets file is created by it.
-	}()
+	}
+	// Defer cleanup for safety
+	defer cleanup()
 
 	// Use Mock Talos Generator that returns valid cloud-init for Debian image
 	talosGen := &MockTalosProducer{ValidCloudInit: true}
@@ -109,7 +111,7 @@ func TestClusterApply(t *testing.T) {
 	}
 
 	// Verify
-	for i := 1; i <= 3; i++ {
+	for i := 1; i <= count; i++ {
 		name := fmt.Sprintf("%s-control-plane-%d", clusterName, i)
 		id, err := client.GetServerID(ctx, name)
 		if err != nil {
@@ -124,5 +126,20 @@ func TestClusterApply(t *testing.T) {
 	err = reconciler.ReconcileServers(ctx)
 	if err != nil {
 		t.Errorf("Second run of ReconcileServers failed: %v", err)
+	}
+
+	// Final Cleanup Verification
+	t.Log("Verifying cleanup...")
+	cleanup() // Run cleanup explicitly
+
+	// Wait a bit for async deletion if any (though DeleteServer waits)
+	time.Sleep(5 * time.Second)
+
+	for i := 1; i <= count; i++ {
+		name := fmt.Sprintf("%s-control-plane-%d", clusterName, i)
+		_, err := client.GetServerID(ctx, name)
+		if err == nil {
+			t.Errorf("Server %s still exists after cleanup!", name)
+		}
 	}
 }
