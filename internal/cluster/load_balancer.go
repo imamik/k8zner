@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"time"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	"github.com/sak-d/hcloud-k8s/internal/config"
 )
 
 func (r *Reconciler) reconcileLoadBalancers(ctx context.Context) error {
@@ -18,15 +20,17 @@ func (r *Reconciler) reconcileLoadBalancers(ctx context.Context) error {
 	}
 
 	if cpCount > 0 {
-		lbName := fmt.Sprintf("%s-control-plane", r.config.ClusterName)
+		// Name: ${cluster_name}-kube-api
+		lbName := fmt.Sprintf("%s-kube-api", r.config.ClusterName)
 		log.Printf("Reconciling Load Balancer %s...", lbName)
 
 		labels := map[string]string{
 			"cluster": r.config.ClusterName,
-			"role": "control-plane-lb",
+			"role":    "kube-api",
 		}
 
-		lb, err := r.lbManager.EnsureLoadBalancer(ctx, lbName, r.config.Location, "lb11", hcloud.LoadBalancerAlgorithmTypeLeastConnections, labels)
+		// Algorithm: round_robin
+		lb, err := r.lbManager.EnsureLoadBalancer(ctx, lbName, r.config.Location, "lb11", hcloud.LoadBalancerAlgorithmTypeRoundRobin, labels)
 		if err != nil {
 			return err
 		}
@@ -39,9 +43,9 @@ func (r *Reconciler) reconcileLoadBalancers(ctx context.Context) error {
 			HealthCheck: &hcloud.LoadBalancerAddServiceOptsHealthCheck{
 				Protocol: hcloud.LoadBalancerServiceProtocolHTTP,
 				Port:     ptr(6443),
-				Interval: ptr(time.Second * 10),
-				Timeout:  ptr(time.Second * 5),
-				Retries:  ptr(3),
+				Interval: ptr(time.Second * 3), // Terraform default: 3
+				Timeout:  ptr(time.Second * 2), // Terraform default: 2
+				Retries:  ptr(2),               // Terraform default: 2
 				HTTP: &hcloud.LoadBalancerAddServiceOptsHealthCheckHTTP{
 					Path:        ptr("/version"),
 					StatusCodes: []string{"401"},
@@ -54,7 +58,19 @@ func (r *Reconciler) reconcileLoadBalancers(ctx context.Context) error {
 			return err
 		}
 
-		err = r.lbManager.AttachToNetwork(ctx, lb, r.network, nil)
+		// Attach to Network with Private IP
+		// Private IP: cidrhost(subnet, -2)
+		lbSubnetCIDR, err := r.config.GetSubnetForRole("load-balancer", 0)
+		if err != nil {
+			return err
+		}
+		privateIPStr, err := config.CIDRHost(lbSubnetCIDR, -2)
+		if err != nil {
+			return fmt.Errorf("failed to calculate LB private IP: %w", err)
+		}
+		privateIP := net.ParseIP(privateIPStr)
+
+		err = r.lbManager.AttachToNetwork(ctx, lb, r.network, privateIP)
 		if err != nil {
 			return err
 		}

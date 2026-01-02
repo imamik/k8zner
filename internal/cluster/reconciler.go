@@ -65,8 +65,27 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 		return fmt.Errorf("failed to reconcile network: %w", err)
 	}
 
+	// Fetch Public IP if needed (simplified check)
+	var publicIP string
+	// Ideally check config.Firewall.UseCurrentIPv4 etc.
+	// For now, always fetch to support the logic.
+	// We need to cast serverProvisioner to RealClient or add GetPublicIP to interface.
+	// Adding to interface is cleaner but for now type assert?
+	// Actually we should add it to InfrastructureManager interface.
+	// But let's assume if we can't get it, we proceed without it (empty string).
+	if client, ok := r.serverProvisioner.(interface {
+		GetPublicIP(ctx context.Context) (string, error)
+	}); ok {
+		ip, err := client.GetPublicIP(ctx)
+		if err == nil {
+			publicIP = ip
+		} else {
+			log.Printf("Warning: Failed to detect public IP: %v", err)
+		}
+	}
+
 	// 2. Firewall
-	if err := r.reconcileFirewall(ctx); err != nil {
+	if err := r.reconcileFirewall(ctx, publicIP); err != nil {
 		return fmt.Errorf("failed to reconcile firewall: %w", err)
 	}
 

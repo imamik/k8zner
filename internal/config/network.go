@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/binary"
 	"fmt"
 	"net"
 )
@@ -52,23 +53,74 @@ func CIDRSubnet(prefix string, newbits int, netnum int) (string, error) {
 	return fmt.Sprintf("%s/%d", newIP.String(), newMaskSize), nil
 }
 
+// CIDRHost calculates a full host IP address for a given network address and host number.
+// This mimics the behavior of Terraform's cidrhost function.
+// prefix: The network prefix (e.g., "10.0.0.0/16")
+// hostnum: The host number to calculate. Can be negative.
+func CIDRHost(prefix string, hostnum int) (string, error) {
+	_, network, err := net.ParseCIDR(prefix)
+	if err != nil {
+		return "", fmt.Errorf("invalid CIDR prefix: %w", err)
+	}
+
+	maskSize, totalBits := network.Mask.Size()
+
+	// Number of host bits
+	hostBits := totalBits - maskSize
+	maxHosts := uint64(1) << hostBits
+
+	// Handle negative hostnum
+	var offset uint64
+	if hostnum < 0 {
+		absHostNum := uint64(-hostnum)
+		if absHostNum > maxHosts {
+			return "", fmt.Errorf("host number %d exceeds max hosts %d", hostnum, maxHosts)
+		}
+		offset = maxHosts - absHostNum
+	} else {
+		offset = uint64(hostnum)
+		if offset >= maxHosts {
+			return "", fmt.Errorf("host number %d exceeds max hosts %d", hostnum, maxHosts)
+		}
+	}
+
+	ip := network.IP
+	if ip.To4() != nil {
+		ip = ip.To4()
+	}
+	ipInt := bigIntFromIP(ip)
+	ipInt = ipInt + offset
+
+	newIP := ipFromBigInt(ipInt, len(ip))
+	return newIP.String(), nil
+}
+
 // Helper to convert IP to uint64
 func bigIntFromIP(ip net.IP) uint64 {
-	var val uint64
-	for _, b := range ip {
-		val <<= 8
-		val |= uint64(b)
+	if len(ip) == 16 {
+		// Only supporting IPv4 logic for now as simplified bigInt
+		// If IPv6, we need math/big, but standard Hetzner setup uses IPv4 for subnets usually.
+		// For robustness, let's assume IPv4 (4 bytes) if possible or convert.
+		if ip4 := ip.To4(); ip4 != nil {
+			return uint64(binary.BigEndian.Uint32(ip4))
+		}
+		// Fallback or error for true IPv6 (128 bit) which doesn't fit in uint64.
+		// NOTE: This simple implementation only supports IPv4.
+		return 0
 	}
-	return val
+	return uint64(binary.BigEndian.Uint32(ip))
 }
 
 func ipFromBigInt(val uint64, len int) net.IP {
-	res := make(net.IP, len)
-	for i := len - 1; i >= 0; i-- {
-		res[i] = byte(val & 0xff)
-		val >>= 8
+	if len == 4 {
+		ip := make(net.IP, 4)
+		binary.BigEndian.PutUint32(ip, uint32(val))
+		return ip
 	}
-	return res
+	// Simplified return for IPv4 mapped
+	ip := make(net.IP, 4)
+	binary.BigEndian.PutUint32(ip, uint32(val))
+	return ip
 }
 
 // CalculateSubnets calculates the standard subnets used in hcloud-k8s based on the main network CIDR.
