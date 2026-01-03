@@ -60,6 +60,7 @@ require (
 	github.com/siderolabs/net v0.4.0 // indirect
 	github.com/siderolabs/protoenc v0.2.4 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
+	github.com/stretchr/objx v0.5.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect

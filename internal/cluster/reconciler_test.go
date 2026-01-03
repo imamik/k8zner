@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"net"
 	"testing"
 
@@ -157,4 +158,94 @@ func TestReconciler_Reconcile(t *testing.T) {
 
 	// Verify expectations
 	mockTalos.AssertExpectations(t)
+}
+
+func TestReconciler_Reconcile_NetworkError(t *testing.T) {
+	// Setup Mocks
+	mockInfra := &hcloud_internal.MockClient{}
+	mockTalos := &MockTalosProducer{}
+
+	cfg := &config.Config{
+		ClusterName: "test-cluster",
+		Network: config.NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+			Zone:     "eu-central",
+		},
+	}
+
+	ctx := context.Background()
+
+	// Simulate Network Creation Error
+	expectedErr := errors.New("network creation failed")
+	mockInfra.EnsureNetworkFunc = func(ctx context.Context, name, ipRange, zone string, labels map[string]string) (*hcloud.Network, error) {
+		return nil, expectedErr
+	}
+
+	r := NewReconciler(mockInfra, mockTalos, cfg)
+
+	// Run Reconcile
+	err := r.Reconcile(ctx)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, expectedErr)
+}
+
+func TestReconciler_Reconcile_ServerCreationError(t *testing.T) {
+	// Setup Mocks
+	mockInfra := &hcloud_internal.MockClient{}
+	mockTalos := &MockTalosProducer{}
+
+	cfg := &config.Config{
+		ClusterName: "test-cluster",
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{
+				{
+					Name:       "control-plane",
+					ServerType: "cx21",
+					Count:      1,
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+
+	// Basic infra success
+	mockInfra.EnsureNetworkFunc = func(ctx context.Context, name, ipRange, zone string, labels map[string]string) (*hcloud.Network, error) {
+		return &hcloud.Network{}, nil
+	}
+	mockInfra.EnsureSubnetFunc = func(ctx context.Context, network *hcloud.Network, ipRange, networkZone string, subnetType hcloud.NetworkSubnetType) error {
+		return nil
+	}
+	mockInfra.GetPublicIPFunc = func(ctx context.Context) (string, error) {
+		return "1.2.3.4", nil
+	}
+	mockInfra.EnsureFirewallFunc = func(ctx context.Context, name string, rules []hcloud.FirewallRule, labels map[string]string) (*hcloud.Firewall, error) {
+		return &hcloud.Firewall{}, nil
+	}
+	mockInfra.GetLoadBalancerFunc = func(ctx context.Context, name string) (*hcloud.LoadBalancer, error) {
+		return nil, nil // No LB for this test to simplify
+	}
+
+	// Talos config generation success
+	mockTalos.On("GenerateControlPlaneConfig", mock.Anything).Return([]byte("cp-config"), nil)
+
+	// Server Creation Error
+	expectedErr := errors.New("server creation failed")
+	mockInfra.GetServerIDFunc = func(ctx context.Context, name string) (string, error) {
+		return "", nil
+	}
+	mockInfra.EnsurePlacementGroupFunc = func(ctx context.Context, name, pgType string, labels map[string]string) (*hcloud.PlacementGroup, error) {
+		return &hcloud.PlacementGroup{ID: 1}, nil
+	}
+	mockInfra.CreateServerFunc = func(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64) (string, error) {
+		return "", expectedErr
+	}
+
+	r := NewReconciler(mockInfra, mockTalos, cfg)
+
+	// Run Reconcile
+	err := r.Reconcile(ctx)
+	assert.Error(t, err)
+	// The error might be wrapped
+	assert.Contains(t, err.Error(), expectedErr.Error())
 }
