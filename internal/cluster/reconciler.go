@@ -335,15 +335,17 @@ func (r *Reconciler) ensureServer(
 		return "", fmt.Errorf("failed to create server %s: %w", serverName, err)
 	}
 
-	// Get IP after creation
-	ip, err := r.serverProvisioner.GetServerIP(ctx, serverName)
-	if err != nil {
-		// Retry?
-		time.Sleep(2 * time.Second)
+	// Get IP after creation with retries
+	var ip string
+	for i := 0; i < 10; i++ {
 		ip, err = r.serverProvisioner.GetServerIP(ctx, serverName)
-		if err != nil {
-			return "", err
+		if err == nil && ip != "" {
+			break
 		}
+		time.Sleep(2 * time.Second)
+	}
+	if err != nil || ip == "" {
+		return "", fmt.Errorf("failed to get server IP for %s after retries: %w", serverName, err)
 	}
 
 	return ip, nil
