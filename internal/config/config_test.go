@@ -12,11 +12,16 @@ func TestLoadFile(t *testing.T) {
 	content := `
 cluster_name: "test-cluster"
 hcloud_token: "token"
+network:
+  ipv4_cidr: "10.0.0.0/16"
 control_plane:
-  endpoint: "https://1.2.3.4:6443"
+  nodepools:
+    - name: "control-plane-1"
+      count: 3
 talos:
   version: "v1.7.0"
-  k8s_version: "v1.30.0"
+kubernetes:
+  version: "v1.30.0"
 `
 	tmpfile, err := os.CreateTemp("", "config-*.yaml")
 	assert.NoError(t, err)
@@ -32,6 +37,8 @@ talos:
 	assert.NotNil(t, cfg)
 
 	assert.Equal(t, "test-cluster", cfg.ClusterName)
-	assert.Equal(t, "https://1.2.3.4:6443", cfg.ControlPlane.Endpoint)
+	assert.Equal(t, "10.0.0.0/16", cfg.Network.IPv4CIDR)
 	assert.Equal(t, "v1.7.0", cfg.Talos.Version)
+	assert.Equal(t, "v1.30.0", cfg.Kubernetes.Version)
+	assert.Equal(t, 1, len(cfg.ControlPlane.NodePools))
 }

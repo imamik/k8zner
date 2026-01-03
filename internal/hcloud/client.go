@@ -3,46 +3,89 @@ package hcloud
 
 import (
 	"context"
+	"net"
+
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
 // ServerProvisioner defines the interface for provisioning servers.
-// It abstracts the underlying cloud provider API.
 type ServerProvisioner interface {
-	// CreateServer creates a new server with the given specifications.
-	// It should be idempotent.
-	// userData is the cloud-init user data to be passed to the server.
-	CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string) (string, error)
-
-	// DeleteServer deletes the server with the given name.
-	// It should handle the case where the server does not exist.
+	CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64) (string, error)
 	DeleteServer(ctx context.Context, name string) error
-
-	// GetServerIP returns the public IP of the server.
 	GetServerIP(ctx context.Context, name string) (string, error)
 	EnableRescue(ctx context.Context, serverID string, sshKeyIDs []string) (string, error)
-
-	// ResetServer resets (reboots) the server.
 	ResetServer(ctx context.Context, serverID string) error
-
-	// PoweroffServer shuts down the server.
 	PoweroffServer(ctx context.Context, serverID string) error
-
-	// GetServerID returns the ID of the server by name.
 	GetServerID(ctx context.Context, name string) (string, error)
 }
 
 // SnapshotManager defines the interface for managing snapshots.
 type SnapshotManager interface {
-	// CreateSnapshot creates a snapshot of the server.
 	CreateSnapshot(ctx context.Context, serverID, snapshotDescription string) (string, error)
-	// DeleteImage deletes an image by ID.
 	DeleteImage(ctx context.Context, imageID string) error
 }
 
 // SSHKeyManager defines the interface for managing SSH keys.
 type SSHKeyManager interface {
-	// CreateSSHKey creates a new SSH key.
 	CreateSSHKey(ctx context.Context, name, publicKey string) (string, error)
-	// DeleteSSHKey deletes the SSH key with the given name.
 	DeleteSSHKey(ctx context.Context, name string) error
+}
+
+// NetworkManager defines the interface for managing networks.
+type NetworkManager interface {
+	EnsureNetwork(ctx context.Context, name, ipRange, zone string, labels map[string]string) (*hcloud.Network, error)
+	EnsureSubnet(ctx context.Context, network *hcloud.Network, ipRange, networkZone string, subnetType hcloud.NetworkSubnetType) error
+	DeleteNetwork(ctx context.Context, name string) error
+	GetNetwork(ctx context.Context, name string) (*hcloud.Network, error)
+}
+
+// FirewallManager defines the interface for managing firewalls.
+type FirewallManager interface {
+	EnsureFirewall(ctx context.Context, name string, rules []hcloud.FirewallRule, labels map[string]string) (*hcloud.Firewall, error)
+	DeleteFirewall(ctx context.Context, name string) error
+	GetFirewall(ctx context.Context, name string) (*hcloud.Firewall, error)
+}
+
+// LoadBalancerManager defines the interface for managing load balancers.
+type LoadBalancerManager interface {
+	EnsureLoadBalancer(ctx context.Context, name, location, lbType string, algorithm hcloud.LoadBalancerAlgorithmType, labels map[string]string) (*hcloud.LoadBalancer, error)
+	ConfigureService(ctx context.Context, lb *hcloud.LoadBalancer, service hcloud.LoadBalancerAddServiceOpts) error
+	AttachToNetwork(ctx context.Context, lb *hcloud.LoadBalancer, network *hcloud.Network, ip net.IP) error
+	DeleteLoadBalancer(ctx context.Context, name string) error
+	GetLoadBalancer(ctx context.Context, name string) (*hcloud.LoadBalancer, error)
+}
+
+// PlacementGroupManager defines the interface for managing placement groups.
+type PlacementGroupManager interface {
+	EnsurePlacementGroup(ctx context.Context, name, pgType string, labels map[string]string) (*hcloud.PlacementGroup, error)
+	DeletePlacementGroup(ctx context.Context, name string) error
+	GetPlacementGroup(ctx context.Context, name string) (*hcloud.PlacementGroup, error)
+}
+
+// FloatingIPManager defines the interface for managing floating IPs.
+type FloatingIPManager interface {
+	EnsureFloatingIP(ctx context.Context, name, homeLocation, ipType string, labels map[string]string) (*hcloud.FloatingIP, error)
+	DeleteFloatingIP(ctx context.Context, name string) error
+	GetFloatingIP(ctx context.Context, name string) (*hcloud.FloatingIP, error)
+}
+
+// CertificateManager defines the interface for managing certificates.
+type CertificateManager interface {
+	EnsureCertificate(ctx context.Context, name, certificate, privateKey string, labels map[string]string) (*hcloud.Certificate, error)
+	GetCertificate(ctx context.Context, name string) (*hcloud.Certificate, error)
+	DeleteCertificate(ctx context.Context, name string) error
+}
+
+// InfrastructureManager combines all infrastructure interfaces.
+type InfrastructureManager interface {
+	ServerProvisioner
+	SnapshotManager
+	SSHKeyManager
+	NetworkManager
+	FirewallManager
+	LoadBalancerManager
+	PlacementGroupManager
+	FloatingIPManager
+	CertificateManager
+	GetPublicIP(ctx context.Context) (string, error)
 }

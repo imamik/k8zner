@@ -80,6 +80,11 @@ func NewConfigGenerator(clusterName, kubernetesVersion, talosVersion, endpoint, 
 	}, nil
 }
 
+// SetEndpoint updates the control plane endpoint.
+func (g *ConfigGenerator) SetEndpoint(endpoint string) {
+	g.endpoint = endpoint
+}
+
 // GenerateControlPlaneConfig generates the configuration for a control plane node.
 func (g *ConfigGenerator) GenerateControlPlaneConfig(san []string) ([]byte, error) {
 	vc, err := config.ParseContractFromVersion(g.talosVersion)

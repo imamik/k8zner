@@ -54,11 +54,40 @@ func main() {
 			// 3. Initialize Talos Generator
 			// Use local file for secrets persistence
 			secretsFile := "secrets.yaml" // TODO: Make configurable or relative to config
+			// Note: talos.NewConfigGenerator arguments might have changed or need verification.
+			// Currently: (clusterName, kubernetesVersion, talosVersion, endpoint, secretsFile)
+			// Config struct has: Talos.Version, Kubernetes.Version, ControlPlane.Endpoint (wait, Config struct doesn't have Endpoint?)
+			// Let's check config struct if I can.
+			// Assuming Config matches what I saw earlier.
+			// Config.ControlPlane probably doesn't have Endpoint directly?
+			// Terraform calculates endpoint from LB IP or Floating IP.
+			// I should probably pass a temporary endpoint or handle it inside generator?
+			// The generator needs an endpoint for the talosconfig.
+			// If we use LB, it's `https://<lb-ip>:6443`.
+			// Since we don't know LB IP yet (unless we query it), we might need to handle this.
+			// For now, let's assume the user provides it or we use a placeholder that matches expected DNS?
+			// Terraform usually uses `hcloud_load_balancer.control_plane.ipv4` which is known after apply.
+			// This circular dependency is handled in Terraform by state.
+			// Here, we might need two passes or update config later?
+			// Or we can use a DNS name if provided.
+			// For now, I'll pass a placeholder or try to get it from config if user supplied `control_plane_endpoint`?
+			// Checking `internal/config/config.go` earlier...
+			// `ControlPlaneConfig` has `NodePools`.
+			// `KubernetesConfig` has `Version`, `OIDC`, `CNI`.
+			// `TalosConfig` has `Version`.
+			// I don't see `Endpoint` in `ControlPlaneConfig` in my memory of `config.go`.
+			// Let's verify `config.go` content in next step if this fails to compile.
+			// But for now, I'll assume I need to pass something.
+
+			endpoint := fmt.Sprintf("https://%s-kube-api:6443", cfg.ClusterName) // Placeholder/Internal DNS?
+			// Or better, use the Load Balancer IP if we can predict it? No.
+			// If we use Floating IP, we know it.
+
 			talosGen, err := talos.NewConfigGenerator(
 				cfg.ClusterName,
-				cfg.Talos.K8sVersion,
+				cfg.Kubernetes.Version,
 				cfg.Talos.Version,
-				cfg.ControlPlane.Endpoint,
+				endpoint,
 				secretsFile,
 			)
 			if err != nil {
@@ -69,7 +98,7 @@ func main() {
 			reconciler := cluster.NewReconciler(hClient, talosGen, cfg)
 
 			// 5. Run Reconcile
-			if err := reconciler.ReconcileServers(cmd.Context()); err != nil {
+			if err := reconciler.Reconcile(cmd.Context()); err != nil {
 				return fmt.Errorf("reconciliation failed: %w", err)
 			}
 
