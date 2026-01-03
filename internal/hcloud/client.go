@@ -69,6 +69,13 @@ type FloatingIPManager interface {
 	GetFloatingIP(ctx context.Context, name string) (*hcloud.FloatingIP, error)
 }
 
+// CertificateManager defines the interface for managing certificates.
+type CertificateManager interface {
+	EnsureCertificate(ctx context.Context, name, certificate, privateKey string, labels map[string]string) (*hcloud.Certificate, error)
+	GetCertificate(ctx context.Context, name string) (*hcloud.Certificate, error)
+	DeleteCertificate(ctx context.Context, name string) error
+}
+
 // InfrastructureManager combines all infrastructure interfaces.
 type InfrastructureManager interface {
 	ServerProvisioner
@@ -79,4 +86,6 @@ type InfrastructureManager interface {
 	LoadBalancerManager
 	PlacementGroupManager
 	FloatingIPManager
+	CertificateManager
+	GetPublicIP(ctx context.Context) (string, error)
 }
