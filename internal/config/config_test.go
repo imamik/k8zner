@@ -25,11 +25,13 @@ kubernetes:
 `
 	tmpfile, err := os.CreateTemp("", "config-*.yaml")
 	assert.NoError(t, err)
-	defer os.Remove(tmpfile.Name())
+	defer func() {
+		_ = os.Remove(tmpfile.Name())
+	}()
 
 	_, err = tmpfile.Write([]byte(content))
 	assert.NoError(t, err)
-	tmpfile.Close()
+	_ = tmpfile.Close()
 
 	// Test LoadFile
 	cfg, err := LoadFile(tmpfile.Name())

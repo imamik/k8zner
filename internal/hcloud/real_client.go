@@ -21,7 +21,7 @@ func NewRealClient(token string) *RealClient {
 	}
 }
 
-// Helper for public IP detection
+// GetPublicIP returns the public IPv4 address of the host.
 func (c *RealClient) GetPublicIP(ctx context.Context) (string, error) {
 	// Simple HTTP request to icanhazip.com
 	req, err := http.NewRequestWithContext(ctx, "GET", "https://ipv4.icanhazip.com", nil)
@@ -32,7 +32,9 @@ func (c *RealClient) GetPublicIP(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err

@@ -45,6 +45,7 @@ func CIDRSubnet(prefix string, newbits int, netnum int) (string, error) {
 	offset := netnum * subnetSize
 
 	// Add offset to IP
+	// #nosec G115
 	ipInt = ipInt + uint64(offset)
 
 	// Convert back to IP
@@ -95,7 +96,7 @@ func CIDRHost(prefix string, hostnum int) (string, error) {
 	return newIP.String(), nil
 }
 
-// Helper to convert IP to uint64
+// Helper to convert IP to uint64.
 func bigIntFromIP(ip net.IP) uint64 {
 	if len(ip) == 16 {
 		// Only supporting IPv4 logic for now as simplified bigInt
@@ -111,14 +112,16 @@ func bigIntFromIP(ip net.IP) uint64 {
 	return uint64(binary.BigEndian.Uint32(ip))
 }
 
-func ipFromBigInt(val uint64, len int) net.IP {
-	if len == 4 {
+func ipFromBigInt(val uint64, length int) net.IP {
+	if length == 4 {
 		ip := make(net.IP, 4)
+		// #nosec G115
 		binary.BigEndian.PutUint32(ip, uint32(val))
 		return ip
 	}
 	// Simplified return for IPv4 mapped
 	ip := make(net.IP, 4)
+	// #nosec G115
 	binary.BigEndian.PutUint32(ip, uint32(val))
 	return ip
 }

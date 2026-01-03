@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// MockTalosProducer implementation
+// MockTalosProducer implementation.
 type MockTalosProducer struct {
 	mock.Mock
 }
@@ -73,24 +73,24 @@ func TestReconciler_Reconcile(t *testing.T) {
 	ctx := context.Background()
 
 	// Network
-	mockInfra.EnsureNetworkFunc = func(ctx context.Context, name, ipRange, zone string, labels map[string]string) (*hcloud.Network, error) {
+	mockInfra.EnsureNetworkFunc = func(_ context.Context, _, ipRange, _ string, _ map[string]string) (*hcloud.Network, error) {
 		_, ipNet, _ := net.ParseCIDR(ipRange)
 		return &hcloud.Network{ID: 1, IPRange: ipNet}, nil
 	}
-	mockInfra.EnsureSubnetFunc = func(ctx context.Context, network *hcloud.Network, ipRange, networkZone string, subnetType hcloud.NetworkSubnetType) error {
+	mockInfra.EnsureSubnetFunc = func(_ context.Context, _ *hcloud.Network, _, _ string, _ hcloud.NetworkSubnetType) error {
 		return nil
 	}
-	mockInfra.GetPublicIPFunc = func(ctx context.Context) (string, error) {
+	mockInfra.GetPublicIPFunc = func(_ context.Context) (string, error) {
 		return "1.2.3.4", nil
 	}
 
 	// Firewall
-	mockInfra.EnsureFirewallFunc = func(ctx context.Context, name string, rules []hcloud.FirewallRule, labels map[string]string) (*hcloud.Firewall, error) {
+	mockInfra.EnsureFirewallFunc = func(_ context.Context, _ string, _ []hcloud.FirewallRule, _ map[string]string) (*hcloud.Firewall, error) {
 		return &hcloud.Firewall{ID: 1}, nil
 	}
 
 	// LoadBalancer
-	mockInfra.EnsureLoadBalancerFunc = func(ctx context.Context, name, location, lbType string, algorithm hcloud.LoadBalancerAlgorithmType, labels map[string]string) (*hcloud.LoadBalancer, error) {
+	mockInfra.EnsureLoadBalancerFunc = func(_ context.Context, _, _, _ string, _ hcloud.LoadBalancerAlgorithmType, _ map[string]string) (*hcloud.LoadBalancer, error) {
 		return &hcloud.LoadBalancer{
 			ID: 1,
 			PublicNet: hcloud.LoadBalancerPublicNet{
@@ -100,7 +100,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 			},
 		}, nil
 	}
-	mockInfra.GetLoadBalancerFunc = func(ctx context.Context, name string) (*hcloud.LoadBalancer, error) {
+	mockInfra.GetLoadBalancerFunc = func(_ context.Context, _ string) (*hcloud.LoadBalancer, error) {
 		// Used in reconcileControlPlane to get IP
 		return &hcloud.LoadBalancer{
 			ID: 1,
@@ -113,12 +113,12 @@ func TestReconciler_Reconcile(t *testing.T) {
 	}
 
 	// Placement Group
-	mockInfra.EnsurePlacementGroupFunc = func(ctx context.Context, name, pgType string, labels map[string]string) (*hcloud.PlacementGroup, error) {
+	mockInfra.EnsurePlacementGroupFunc = func(_ context.Context, _, _ string, _ map[string]string) (*hcloud.PlacementGroup, error) {
 		return &hcloud.PlacementGroup{ID: 1}, nil
 	}
 
 	// Floating IP
-	mockInfra.EnsureFloatingIPFunc = func(ctx context.Context, name, homeLocation, ipType string, labels map[string]string) (*hcloud.FloatingIP, error) {
+	mockInfra.EnsureFloatingIPFunc = func(_ context.Context, _, _, _ string, _ map[string]string) (*hcloud.FloatingIP, error) {
 		return &hcloud.FloatingIP{ID: 1}, nil
 	}
 
@@ -129,19 +129,19 @@ func TestReconciler_Reconcile(t *testing.T) {
 	mockTalos.On("GetClientConfig").Return([]byte("client-config"), nil)
 
 	// Servers
-	mockInfra.GetServerIDFunc = func(ctx context.Context, name string) (string, error) {
+	mockInfra.GetServerIDFunc = func(_ context.Context, _ string) (string, error) {
 		return "", nil // Does not exist
 	}
-	mockInfra.CreateServerFunc = func(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64) (string, error) {
+	mockInfra.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64) (string, error) {
 		return "server-id", nil
 	}
-	mockInfra.GetServerIPFunc = func(ctx context.Context, name string) (string, error) {
+	mockInfra.GetServerIPFunc = func(_ context.Context, _ string) (string, error) {
 		return "10.0.1.2", nil
 	}
 
 	// Certificate
 	// Used by Bootstrapper to check for state marker
-	mockInfra.GetCertificateFunc = func(ctx context.Context, name string) (*hcloud.Certificate, error) {
+	mockInfra.GetCertificateFunc = func(_ context.Context, name string) (*hcloud.Certificate, error) {
 		if name == "test-cluster-state" {
 			// Return a mock certificate to simulate that the cluster is already bootstrapped.
 			// This avoids the bootstrapper trying to connect to a real node.
@@ -177,7 +177,7 @@ func TestReconciler_Reconcile_NetworkError(t *testing.T) {
 
 	// Simulate Network Creation Error
 	expectedErr := errors.New("network creation failed")
-	mockInfra.EnsureNetworkFunc = func(ctx context.Context, name, ipRange, zone string, labels map[string]string) (*hcloud.Network, error) {
+	mockInfra.EnsureNetworkFunc = func(_ context.Context, _, _, _ string, _ map[string]string) (*hcloud.Network, error) {
 		return nil, expectedErr
 	}
 
@@ -210,19 +210,19 @@ func TestReconciler_Reconcile_ServerCreationError(t *testing.T) {
 	ctx := context.Background()
 
 	// Basic infra success
-	mockInfra.EnsureNetworkFunc = func(ctx context.Context, name, ipRange, zone string, labels map[string]string) (*hcloud.Network, error) {
+	mockInfra.EnsureNetworkFunc = func(_ context.Context, _, _, _ string, _ map[string]string) (*hcloud.Network, error) {
 		return &hcloud.Network{}, nil
 	}
-	mockInfra.EnsureSubnetFunc = func(ctx context.Context, network *hcloud.Network, ipRange, networkZone string, subnetType hcloud.NetworkSubnetType) error {
+	mockInfra.EnsureSubnetFunc = func(_ context.Context, _ *hcloud.Network, _, _ string, _ hcloud.NetworkSubnetType) error {
 		return nil
 	}
-	mockInfra.GetPublicIPFunc = func(ctx context.Context) (string, error) {
+	mockInfra.GetPublicIPFunc = func(_ context.Context) (string, error) {
 		return "1.2.3.4", nil
 	}
-	mockInfra.EnsureFirewallFunc = func(ctx context.Context, name string, rules []hcloud.FirewallRule, labels map[string]string) (*hcloud.Firewall, error) {
+	mockInfra.EnsureFirewallFunc = func(_ context.Context, _ string, _ []hcloud.FirewallRule, _ map[string]string) (*hcloud.Firewall, error) {
 		return &hcloud.Firewall{}, nil
 	}
-	mockInfra.GetLoadBalancerFunc = func(ctx context.Context, name string) (*hcloud.LoadBalancer, error) {
+	mockInfra.GetLoadBalancerFunc = func(_ context.Context, _ string) (*hcloud.LoadBalancer, error) {
 		return nil, nil // No LB for this test to simplify
 	}
 
@@ -231,13 +231,13 @@ func TestReconciler_Reconcile_ServerCreationError(t *testing.T) {
 
 	// Server Creation Error
 	expectedErr := errors.New("server creation failed")
-	mockInfra.GetServerIDFunc = func(ctx context.Context, name string) (string, error) {
+	mockInfra.GetServerIDFunc = func(_ context.Context, _ string) (string, error) {
 		return "", nil
 	}
-	mockInfra.EnsurePlacementGroupFunc = func(ctx context.Context, name, pgType string, labels map[string]string) (*hcloud.PlacementGroup, error) {
+	mockInfra.EnsurePlacementGroupFunc = func(_ context.Context, _, _ string, _ map[string]string) (*hcloud.PlacementGroup, error) {
 		return &hcloud.PlacementGroup{ID: 1}, nil
 	}
-	mockInfra.CreateServerFunc = func(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64) (string, error) {
+	mockInfra.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64) (string, error) {
 		return "", expectedErr
 	}
 

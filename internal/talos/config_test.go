@@ -1,11 +1,11 @@
 package talos
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
-	"fmt"
 
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v3"
@@ -19,7 +19,9 @@ func TestGenerateControlPlaneConfig(t *testing.T) {
 
 	// Use temp file for secrets (ensure it doesn't exist)
 	secretsFile := filepath.Join(os.TempDir(), fmt.Sprintf("secrets-cp-%d.yaml", time.Now().UnixNano()))
-	defer os.Remove(secretsFile)
+	defer func() {
+		_ = os.Remove(secretsFile)
+	}()
 
 	gen, err := NewConfigGenerator(clusterName, k8sVersion, talosVersion, endpoint, secretsFile)
 	assert.NoError(t, err)
@@ -52,7 +54,9 @@ func TestGenerateWorkerConfig(t *testing.T) {
 
 	// Use temp file for secrets (ensure it doesn't exist)
 	secretsFile := filepath.Join(os.TempDir(), fmt.Sprintf("secrets-worker-%d.yaml", time.Now().UnixNano()))
-	defer os.Remove(secretsFile)
+	defer func() {
+		_ = os.Remove(secretsFile)
+	}()
 
 	gen, err := NewConfigGenerator(clusterName, k8sVersion, talosVersion, endpoint, secretsFile)
 	assert.NoError(t, err)

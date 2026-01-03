@@ -1,6 +1,6 @@
 module github.com/sak-d/hcloud-k8s
 
-go 1.24.0
+go 1.25.5
 
 require (
 	github.com/hetznercloud/hcloud-go/v2 v2.33.0

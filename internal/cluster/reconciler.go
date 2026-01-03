@@ -65,17 +65,17 @@ func NewReconciler(
 func (r *Reconciler) Reconcile(ctx context.Context) error {
 	log.Println("Starting reconciliation...")
 
-	// 0. Calculate Subnets
+	// 0. Calculate Subnets.
 	if err := r.config.CalculateSubnets(); err != nil {
 		return fmt.Errorf("failed to calculate subnets: %w", err)
 	}
 
-	// 1. Network
+	// 1. Network.
 	if err := r.reconcileNetwork(ctx); err != nil {
 		return fmt.Errorf("failed to reconcile network: %w", err)
 	}
 
-	// Fetch Public IP
+	// Fetch Public IP.
 	var publicIP string
 	if ip, err := r.infra.GetPublicIP(ctx); err == nil {
 		publicIP = ip
@@ -142,7 +142,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 	return nil
 }
 
-// reconcileControlPlane provisions control plane servers and returns a map of ServerName -> PublicIP
+// reconcileControlPlane provisions control plane servers and returns a map of ServerName -> PublicIP.
 func (r *Reconciler) reconcileControlPlane(ctx context.Context) (map[string]string, error) {
 	log.Printf("Reconciling Control Plane...")
 
@@ -176,10 +176,10 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context) (map[string]stri
 	}
 
 	// Add Floating IPs if any (Control Plane VIP)
-	if r.config.ControlPlane.PublicVIPIPv4Enabled {
-		// TODO: Implement VIP lookup if ID not provided
-		// For now assume standard pattern
-	}
+	// if r.config.ControlPlane.PublicVIPIPv4Enabled {
+	// 	// TODO: Implement VIP lookup if ID not provided
+	// 	// For now assume standard pattern
+	// }
 
 	// Generate Talos Config for CP
 	cpConfig, err := r.talosGenerator.GenerateControlPlaneConfig(sans)
@@ -246,7 +246,7 @@ func (r *Reconciler) reconcileWorkers(ctx context.Context) error {
 	return nil
 }
 
-// reconcileNodePool provisions a pool of servers
+// reconcileNodePool provisions a pool of servers.
 func (r *Reconciler) reconcileNodePool(
 	ctx context.Context,
 	poolName string,
@@ -274,7 +274,7 @@ func (r *Reconciler) reconcileNodePool(
 	return ips, nil
 }
 
-// ensureServer ensures a server exists and returns its IP
+// ensureServer ensures a server exists and returns its IP.
 func (r *Reconciler) ensureServer(
 	ctx context.Context,
 	serverName string,

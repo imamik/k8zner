@@ -1,3 +1,4 @@
+// Package main is the entry point for the hcloud-k8s CLI.
 package main
 
 import (
@@ -27,7 +28,7 @@ func main() {
 	var applyCmd = &cobra.Command{
 		Use:   "apply",
 		Short: "Apply configuration to the cluster",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			// 1. Load Config
 			if configPath == "" {
 				return fmt.Errorf("config file is required (use --config)")
@@ -139,7 +140,7 @@ func main() {
 	var buildCmd = &cobra.Command{
 		Use:   "build",
 		Short: "Build a new Talos image",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			token := os.Getenv("HCLOUD_TOKEN")
 			if token == "" {
 				return fmt.Errorf("HCLOUD_TOKEN environment variable is required")

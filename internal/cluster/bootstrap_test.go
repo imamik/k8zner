@@ -17,7 +17,7 @@ func TestBootstrap_StateMarkerPresent(t *testing.T) {
 	clusterName := "test-cluster"
 
 	// Mock GetCertificate to return a cert (marker exists)
-	mockInfra.GetCertificateFunc = func(ctx context.Context, name string) (*hcloud.Certificate, error) {
+	mockInfra.GetCertificateFunc = func(_ context.Context, name string) (*hcloud.Certificate, error) {
 		if name == "test-cluster-state" {
 			return &hcloud.Certificate{ID: 123}, nil
 		}

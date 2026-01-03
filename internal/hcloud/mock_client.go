@@ -60,7 +60,7 @@ type MockClient struct {
 	GetPublicIPFunc func(ctx context.Context) (string, error)
 }
 
-// Ensure interface compliance
+// Ensure interface compliance.
 var _ InfrastructureManager = (*MockClient)(nil)
 
 // CreateServer mocks server creation.
@@ -151,25 +151,31 @@ func (m *MockClient) DeleteSSHKey(ctx context.Context, name string) error {
 	return nil
 }
 
-// Network mocks
+// EnsureNetwork mocks network creation.
 func (m *MockClient) EnsureNetwork(ctx context.Context, name, ipRange, zone string, labels map[string]string) (*hcloud.Network, error) {
 	if m.EnsureNetworkFunc != nil {
 		return m.EnsureNetworkFunc(ctx, name, ipRange, zone, labels)
 	}
 	return &hcloud.Network{ID: 1}, nil
 }
+
+// EnsureSubnet mocks subnet creation.
 func (m *MockClient) EnsureSubnet(ctx context.Context, network *hcloud.Network, ipRange, networkZone string, subnetType hcloud.NetworkSubnetType) error {
 	if m.EnsureSubnetFunc != nil {
 		return m.EnsureSubnetFunc(ctx, network, ipRange, networkZone, subnetType)
 	}
 	return nil
 }
+
+// DeleteNetwork mocks network deletion.
 func (m *MockClient) DeleteNetwork(ctx context.Context, name string) error {
 	if m.DeleteNetworkFunc != nil {
 		return m.DeleteNetworkFunc(ctx, name)
 	}
 	return nil
 }
+
+// GetNetwork mocks getting a network.
 func (m *MockClient) GetNetwork(ctx context.Context, name string) (*hcloud.Network, error) {
 	if m.GetNetworkFunc != nil {
 		return m.GetNetworkFunc(ctx, name)
@@ -177,19 +183,23 @@ func (m *MockClient) GetNetwork(ctx context.Context, name string) (*hcloud.Netwo
 	return nil, nil
 }
 
-// Firewall mocks
+// EnsureFirewall mocks firewall creation.
 func (m *MockClient) EnsureFirewall(ctx context.Context, name string, rules []hcloud.FirewallRule, labels map[string]string) (*hcloud.Firewall, error) {
 	if m.EnsureFirewallFunc != nil {
 		return m.EnsureFirewallFunc(ctx, name, rules, labels)
 	}
 	return &hcloud.Firewall{ID: 1}, nil
 }
+
+// DeleteFirewall mocks firewall deletion.
 func (m *MockClient) DeleteFirewall(ctx context.Context, name string) error {
 	if m.DeleteFirewallFunc != nil {
 		return m.DeleteFirewallFunc(ctx, name)
 	}
 	return nil
 }
+
+// GetFirewall mocks getting a firewall.
 func (m *MockClient) GetFirewall(ctx context.Context, name string) (*hcloud.Firewall, error) {
 	if m.GetFirewallFunc != nil {
 		return m.GetFirewallFunc(ctx, name)
@@ -197,31 +207,39 @@ func (m *MockClient) GetFirewall(ctx context.Context, name string) (*hcloud.Fire
 	return nil, nil
 }
 
-// LoadBalancer mocks
+// EnsureLoadBalancer mocks load balancer creation.
 func (m *MockClient) EnsureLoadBalancer(ctx context.Context, name, location, lbType string, algorithm hcloud.LoadBalancerAlgorithmType, labels map[string]string) (*hcloud.LoadBalancer, error) {
 	if m.EnsureLoadBalancerFunc != nil {
 		return m.EnsureLoadBalancerFunc(ctx, name, location, lbType, algorithm, labels)
 	}
 	return &hcloud.LoadBalancer{ID: 1}, nil
 }
+
+// ConfigureService mocks load balancer service configuration.
 func (m *MockClient) ConfigureService(ctx context.Context, lb *hcloud.LoadBalancer, service hcloud.LoadBalancerAddServiceOpts) error {
 	if m.ConfigureServiceFunc != nil {
 		return m.ConfigureServiceFunc(ctx, lb, service)
 	}
 	return nil
 }
+
+// AttachToNetwork mocks load balancer network attachment.
 func (m *MockClient) AttachToNetwork(ctx context.Context, lb *hcloud.LoadBalancer, network *hcloud.Network, ip net.IP) error {
 	if m.AttachToNetworkFunc != nil {
 		return m.AttachToNetworkFunc(ctx, lb, network, ip)
 	}
 	return nil
 }
+
+// DeleteLoadBalancer mocks load balancer deletion.
 func (m *MockClient) DeleteLoadBalancer(ctx context.Context, name string) error {
 	if m.DeleteLoadBalancerFunc != nil {
 		return m.DeleteLoadBalancerFunc(ctx, name)
 	}
 	return nil
 }
+
+// GetLoadBalancer mocks getting a load balancer.
 func (m *MockClient) GetLoadBalancer(ctx context.Context, name string) (*hcloud.LoadBalancer, error) {
 	if m.GetLoadBalancerFunc != nil {
 		return m.GetLoadBalancerFunc(ctx, name)
@@ -229,19 +247,23 @@ func (m *MockClient) GetLoadBalancer(ctx context.Context, name string) (*hcloud.
 	return nil, nil
 }
 
-// PlacementGroup mocks
+// EnsurePlacementGroup mocks placement group creation.
 func (m *MockClient) EnsurePlacementGroup(ctx context.Context, name, pgType string, labels map[string]string) (*hcloud.PlacementGroup, error) {
 	if m.EnsurePlacementGroupFunc != nil {
 		return m.EnsurePlacementGroupFunc(ctx, name, pgType, labels)
 	}
 	return &hcloud.PlacementGroup{ID: 1}, nil
 }
+
+// DeletePlacementGroup mocks placement group deletion.
 func (m *MockClient) DeletePlacementGroup(ctx context.Context, name string) error {
 	if m.DeletePlacementGroupFunc != nil {
 		return m.DeletePlacementGroupFunc(ctx, name)
 	}
 	return nil
 }
+
+// GetPlacementGroup mocks getting a placement group.
 func (m *MockClient) GetPlacementGroup(ctx context.Context, name string) (*hcloud.PlacementGroup, error) {
 	if m.GetPlacementGroupFunc != nil {
 		return m.GetPlacementGroupFunc(ctx, name)
@@ -249,19 +271,23 @@ func (m *MockClient) GetPlacementGroup(ctx context.Context, name string) (*hclou
 	return nil, nil
 }
 
-// FloatingIP mocks
+// EnsureFloatingIP mocks floating IP creation.
 func (m *MockClient) EnsureFloatingIP(ctx context.Context, name, homeLocation, ipType string, labels map[string]string) (*hcloud.FloatingIP, error) {
 	if m.EnsureFloatingIPFunc != nil {
 		return m.EnsureFloatingIPFunc(ctx, name, homeLocation, ipType, labels)
 	}
 	return &hcloud.FloatingIP{ID: 1}, nil
 }
+
+// DeleteFloatingIP mocks floating IP deletion.
 func (m *MockClient) DeleteFloatingIP(ctx context.Context, name string) error {
 	if m.DeleteFloatingIPFunc != nil {
 		return m.DeleteFloatingIPFunc(ctx, name)
 	}
 	return nil
 }
+
+// GetFloatingIP mocks getting a floating IP.
 func (m *MockClient) GetFloatingIP(ctx context.Context, name string) (*hcloud.FloatingIP, error) {
 	if m.GetFloatingIPFunc != nil {
 		return m.GetFloatingIPFunc(ctx, name)
@@ -269,19 +295,23 @@ func (m *MockClient) GetFloatingIP(ctx context.Context, name string) (*hcloud.Fl
 	return nil, nil
 }
 
-// Certificate mocks
+// EnsureCertificate mocks certificate creation.
 func (m *MockClient) EnsureCertificate(ctx context.Context, name, certificate, privateKey string, labels map[string]string) (*hcloud.Certificate, error) {
 	if m.EnsureCertificateFunc != nil {
 		return m.EnsureCertificateFunc(ctx, name, certificate, privateKey, labels)
 	}
 	return &hcloud.Certificate{ID: 1}, nil
 }
+
+// GetCertificate mocks getting a certificate.
 func (m *MockClient) GetCertificate(ctx context.Context, name string) (*hcloud.Certificate, error) {
 	if m.GetCertificateFunc != nil {
 		return m.GetCertificateFunc(ctx, name)
 	}
 	return nil, nil
 }
+
+// DeleteCertificate mocks certificate deletion.
 func (m *MockClient) DeleteCertificate(ctx context.Context, name string) error {
 	if m.DeleteCertificateFunc != nil {
 		return m.DeleteCertificateFunc(ctx, name)
@@ -289,7 +319,7 @@ func (m *MockClient) DeleteCertificate(ctx context.Context, name string) error {
 	return nil
 }
 
-// GetPublicIP mocks
+// GetPublicIP mocks.
 func (m *MockClient) GetPublicIP(ctx context.Context) (string, error) {
 	if m.GetPublicIPFunc != nil {
 		return m.GetPublicIPFunc(ctx)

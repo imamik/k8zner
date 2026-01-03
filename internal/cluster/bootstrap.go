@@ -64,7 +64,9 @@ func (b *Bootstrapper) Bootstrap(ctx context.Context, clusterName string, firstC
 	if err != nil {
 		return fmt.Errorf("failed to create talos client: %w", err)
 	}
-	defer clientCtx.Close()
+	defer func() {
+		_ = clientCtx.Close()
+	}()
 
 	// 3. Bootstrap
 	log.Println("Sending bootstrap command...")
@@ -99,7 +101,7 @@ func (b *Bootstrapper) Bootstrap(ctx context.Context, clusterName string, firstC
 
 // waitForPort waits for a TCP port to be open.
 func (b *Bootstrapper) waitForPort(ctx context.Context, ip string, port int) error {
-	address := fmt.Sprintf("%s:%d", ip, port)
+	address := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
@@ -114,7 +116,7 @@ func (b *Bootstrapper) waitForPort(ctx context.Context, ip string, port int) err
 		case <-ticker.C:
 			conn, err := net.DialTimeout("tcp", address, 2*time.Second)
 			if err == nil {
-				conn.Close()
+				_ = conn.Close()
 				return nil
 			}
 		}

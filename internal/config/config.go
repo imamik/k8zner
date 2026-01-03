@@ -1,3 +1,4 @@
+// Package config defines the configuration structure and methods for the application.
 package config
 
 import (
@@ -40,6 +41,7 @@ type Config struct {
 	Kubernetes KubernetesConfig `mapstructure:"kubernetes" yaml:"kubernetes"`
 }
 
+// NetworkConfig defines the network-related configuration.
 type NetworkConfig struct {
 	IPv4CIDR              string `mapstructure:"ipv4_cidr" yaml:"ipv4_cidr"`
 	NodeIPv4CIDR          string `mapstructure:"node_ipv4_cidr" yaml:"node_ipv4_cidr"`
@@ -50,16 +52,18 @@ type NetworkConfig struct {
 	Zone                  string `mapstructure:"zone" yaml:"zone"` // e.g. eu-central
 }
 
+// FirewallConfig defines the firewall-related configuration.
 type FirewallConfig struct {
-	UseCurrentIPv4  bool           `mapstructure:"use_current_ipv4" yaml:"use_current_ipv4"`
-	UseCurrentIPv6  bool           `mapstructure:"use_current_ipv6" yaml:"use_current_ipv6"`
-	APISource       []string       `mapstructure:"api_source" yaml:"api_source"`
-	KubeAPISource   []string       `mapstructure:"kube_api_source" yaml:"kube_api_source"`
-	TalosAPISource  []string       `mapstructure:"talos_api_source" yaml:"talos_api_source"`
-	ExtraRules      []FirewallRule `mapstructure:"extra_rules" yaml:"extra_rules"`
-	ExistingID      int            `mapstructure:"id" yaml:"id"`
+	UseCurrentIPv4 bool           `mapstructure:"use_current_ipv4" yaml:"use_current_ipv4"`
+	UseCurrentIPv6 bool           `mapstructure:"use_current_ipv6" yaml:"use_current_ipv6"`
+	APISource      []string       `mapstructure:"api_source" yaml:"api_source"`
+	KubeAPISource  []string       `mapstructure:"kube_api_source" yaml:"kube_api_source"`
+	TalosAPISource []string       `mapstructure:"talos_api_source" yaml:"talos_api_source"`
+	ExtraRules     []FirewallRule `mapstructure:"extra_rules" yaml:"extra_rules"`
+	ExistingID     int            `mapstructure:"id" yaml:"id"`
 }
 
+// FirewallRule defines a single firewall rule.
 type FirewallRule struct {
 	Description    string   `mapstructure:"description" yaml:"description"`
 	Direction      string   `mapstructure:"direction" yaml:"direction"` // in, out
@@ -69,6 +73,7 @@ type FirewallRule struct {
 	Port           string   `mapstructure:"port" yaml:"port"`
 }
 
+// ControlPlaneConfig defines the control plane configuration.
 type ControlPlaneConfig struct {
 	NodePools             []ControlPlaneNodePool `mapstructure:"nodepools" yaml:"nodepools"`
 	PublicVIPIPv4Enabled  bool                   `mapstructure:"public_vip_ipv4_enabled" yaml:"public_vip_ipv4_enabled"`
@@ -76,6 +81,7 @@ type ControlPlaneConfig struct {
 	PrivateVIPIPv4Enabled bool                   `mapstructure:"private_vip_ipv4_enabled" yaml:"private_vip_ipv4_enabled"`
 }
 
+// ControlPlaneNodePool defines a node pool for the control plane.
 type ControlPlaneNodePool struct {
 	Name        string            `mapstructure:"name" yaml:"name"`
 	Location    string            `mapstructure:"location" yaml:"location"`
@@ -87,6 +93,7 @@ type ControlPlaneNodePool struct {
 	Image       string            `mapstructure:"image" yaml:"image"` // Optional override
 }
 
+// WorkerNodePool defines a node pool for workers.
 type WorkerNodePool struct {
 	Name           string            `mapstructure:"name" yaml:"name"`
 	Location       string            `mapstructure:"location" yaml:"location"`
@@ -99,11 +106,13 @@ type WorkerNodePool struct {
 	Image          string            `mapstructure:"image" yaml:"image"` // Optional override
 }
 
+// AutoscalerConfig defines the autoscaler configuration.
 type AutoscalerConfig struct {
 	Enabled   bool                 `mapstructure:"enabled" yaml:"enabled"`
 	NodePools []AutoscalerNodePool `mapstructure:"nodepools" yaml:"nodepools"`
 }
 
+// AutoscalerNodePool defines a node pool for the autoscaler.
 type AutoscalerNodePool struct {
 	Name     string            `mapstructure:"name" yaml:"name"`
 	Location string            `mapstructure:"location" yaml:"location"`
@@ -114,22 +123,25 @@ type AutoscalerNodePool struct {
 	Taints   []string          `mapstructure:"taints" yaml:"taints"`
 }
 
+// IngressConfig defines the ingress (load balancer) configuration.
 type IngressConfig struct {
-	Enabled           bool   `mapstructure:"enabled" yaml:"enabled"`
-	LoadBalancerType  string `mapstructure:"load_balancer_type" yaml:"load_balancer_type"`
-	PublicNetwork     bool   `mapstructure:"public_network_enabled" yaml:"public_network_enabled"`
-	Algorithm         string `mapstructure:"algorithm" yaml:"algorithm"`
-	HealthCheckInt    int    `mapstructure:"health_check_interval" yaml:"health_check_interval"`
-	HealthCheckRetry  int    `mapstructure:"health_check_retries" yaml:"health_check_retries"`
+	Enabled            bool   `mapstructure:"enabled" yaml:"enabled"`
+	LoadBalancerType   string `mapstructure:"load_balancer_type" yaml:"load_balancer_type"`
+	PublicNetwork      bool   `mapstructure:"public_network_enabled" yaml:"public_network_enabled"`
+	Algorithm          string `mapstructure:"algorithm" yaml:"algorithm"`
+	HealthCheckInt     int    `mapstructure:"health_check_interval" yaml:"health_check_interval"`
+	HealthCheckRetry   int    `mapstructure:"health_check_retries" yaml:"health_check_retries"`
 	HealthCheckTimeout int    `mapstructure:"health_check_timeout" yaml:"health_check_timeout"`
 }
 
+// TalosConfig defines the Talos-specific configuration.
 type TalosConfig struct {
-	Version        string   `mapstructure:"version" yaml:"version"`
-	Extensions     []string `mapstructure:"extensions" yaml:"extensions"`
-	Upgrade        UpgradeConfig `mapstructure:"upgrade" yaml:"upgrade"`
+	Version    string        `mapstructure:"version" yaml:"version"`
+	Extensions []string      `mapstructure:"extensions" yaml:"extensions"`
+	Upgrade    UpgradeConfig `mapstructure:"upgrade" yaml:"upgrade"`
 }
 
+// UpgradeConfig defines the upgrade-related configuration.
 type UpgradeConfig struct {
 	Debug      bool   `mapstructure:"debug" yaml:"debug"`
 	Force      bool   `mapstructure:"force" yaml:"force"`
@@ -137,24 +149,28 @@ type UpgradeConfig struct {
 	RebootMode string `mapstructure:"reboot_mode" yaml:"reboot_mode"`
 }
 
+// KubernetesConfig defines the Kubernetes-specific configuration.
 type KubernetesConfig struct {
 	Version string     `mapstructure:"version" yaml:"version"`
 	OIDC    OIDCConfig `mapstructure:"oidc" yaml:"oidc"`
 	CNI     CNIConfig  `mapstructure:"cni" yaml:"cni"`
 }
 
+// OIDCConfig defines the OIDC authentication configuration.
 type OIDCConfig struct {
-	Enabled      bool   `mapstructure:"enabled" yaml:"enabled"`
-	IssuerURL    string `mapstructure:"issuer_url" yaml:"issuer_url"`
-	ClientID     string `mapstructure:"client_id" yaml:"client_id"`
+	Enabled   bool   `mapstructure:"enabled" yaml:"enabled"`
+	IssuerURL string `mapstructure:"issuer_url" yaml:"issuer_url"`
+	ClientID  string `mapstructure:"client_id" yaml:"client_id"`
 }
 
+// CNIConfig defines the CNI-related configuration.
 type CNIConfig struct {
 	Encryption string `mapstructure:"encryption" yaml:"encryption"` // ipsec, wireguard
 }
 
 // LoadFile reads and parses the configuration from a YAML file.
 func LoadFile(path string) (*Config, error) {
+	// #nosec G304
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
