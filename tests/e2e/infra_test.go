@@ -22,10 +22,10 @@ import (
 type MockTalosProducer struct{}
 
 func (m *MockTalosProducer) GenerateControlPlaneConfig(san []string) ([]byte, error) {
-	return []byte("mock-config"), nil
+	return []byte("#cloud-config\nruncmd:\n  - echo hello"), nil
 }
 func (m *MockTalosProducer) GenerateWorkerConfig() ([]byte, error) {
-	return []byte("mock-config"), nil
+	return []byte("#cloud-config\nruncmd:\n  - echo hello"), nil
 }
 func (m *MockTalosProducer) GetClientConfig() ([]byte, error) {
 	return []byte("mock-client-config"), nil
@@ -58,7 +58,7 @@ func TestInfraProvisioning(t *testing.T) {
 				{
 					Name:       "control-plane-1",
 					Count:      1,
-					ServerType: "cx22",
+					ServerType: "cx23",
 					Location:   "hel1",
 					Image:      "debian-12", // Override image to avoid errors if "talos" is missing
 				},

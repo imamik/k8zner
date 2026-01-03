@@ -220,7 +220,7 @@ func (c *RealClient) GetServerID(ctx context.Context, name string) (string, erro
 		return "", fmt.Errorf("failed to get server: %w", err)
 	}
 	if server == nil {
-		return "", fmt.Errorf("server not found: %s", name)
+		return "", nil // Server not found, return empty ID
 	}
 	return fmt.Sprintf("%d", server.ID), nil
 }
