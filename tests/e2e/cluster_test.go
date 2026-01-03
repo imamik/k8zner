@@ -6,16 +6,13 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/sak-d/hcloud-k8s/internal/cluster"
 	"github.com/sak-d/hcloud-k8s/internal/config"
 	hcloud_client "github.com/sak-d/hcloud-k8s/internal/hcloud"
-	"github.com/sak-d/hcloud-k8s/internal/talos"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // TestClusterProvisioning is an end-to-end test that provisions a cluster and verifies resources.
@@ -45,7 +42,7 @@ func TestClusterProvisioning(t *testing.T) {
 			NodePools: []config.ControlPlaneNodePool{
 				{
 					Name:       "control-plane",
-					ServerType: "cx22",
+					ServerType: "cx23",
 					Location:   "hel1",
 					Count:      1,
 					Image:      "debian-12",
@@ -55,7 +52,7 @@ func TestClusterProvisioning(t *testing.T) {
 		Workers: []config.WorkerNodePool{
 			{
 				Name:       "worker",
-				ServerType: "cx22",
+				ServerType: "cx23",
 				Location:   "hel1",
 				Count:      1,
 				Image:      "debian-12",
@@ -103,15 +100,8 @@ func TestClusterProvisioning(t *testing.T) {
 	defer cleanup()
 
 	// Initialize Managers
-	secretsFile := filepath.Join(t.TempDir(), "secrets.yaml")
-	talosGen, err := talos.NewConfigGenerator(
-		cfg.ClusterName,
-		cfg.Kubernetes.Version,
-		cfg.Talos.Version,
-		"https://1.1.1.1:6443", // Dummy endpoint
-		secretsFile,
-	)
-	require.NoError(t, err)
+	// Use MockTalosProducer to avoid "invalid user_data" error with Debian image
+	talosGen := &MockTalosProducer{}
 
 	reconciler := cluster.NewReconciler(hClient, talosGen, cfg)
 
@@ -119,7 +109,7 @@ func TestClusterProvisioning(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 
-	err = reconciler.Reconcile(ctx)
+	err := reconciler.Reconcile(ctx)
 	if err != nil {
 		t.Logf("Reconcile returned error (expected as we can't bootstrap debian): %v", err)
 	}

@@ -13,7 +13,7 @@ import (
 	hcloud_internal "github.com/sak-d/hcloud-k8s/internal/hcloud"
 )
 
-// Reconciler is responsible for reconciling the state of the cluster.
+// TalosConfigProducer defines the interface for generating Talos configurations.
 type TalosConfigProducer interface {
 	GenerateControlPlaneConfig(san []string) ([]byte, error)
 	GenerateWorkerConfig() ([]byte, error)
@@ -146,8 +146,6 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 func (r *Reconciler) reconcileControlPlane(ctx context.Context) (map[string]string, error) {
 	log.Printf("Reconciling Control Plane...")
 
-	ips := make(map[string]string)
-
 	// Collect all SANs
 	var sans []string
 
@@ -189,9 +187,9 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context) (map[string]stri
 		return nil, err
 	}
 
-	// Create Servers
+	// Provision Servers
+	ips := make(map[string]string)
 	for _, pool := range r.config.ControlPlane.NodePools {
-
 		// Placement Group for Control Plane
 		pgName := fmt.Sprintf("%s-%s", r.config.ClusterName, pool.Name)
 		pgLabels := map[string]string{
@@ -203,78 +201,12 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context) (map[string]stri
 			return nil, err
 		}
 
-		for j := 1; j <= pool.Count; j++ {
-			// Name: <cluster>-<pool>-<index> (e.g. cluster-control-plane-1)
-			serverName := fmt.Sprintf("%s-%s-%d", r.config.ClusterName, pool.Name, j)
-
-			// Check if exists
-			serverID, err := r.serverProvisioner.GetServerID(ctx, serverName)
-			if err != nil {
-				return nil, err
-			}
-
-			if serverID != "" {
-				// Server exists, get IP
-				ip, err := r.serverProvisioner.GetServerIP(ctx, serverName)
-				if err != nil {
-					return nil, err
-				}
-				ips[serverName] = ip
-				continue
-			}
-
-			// Create
-			log.Printf("Creating Control Plane Server %s...", serverName)
-
-			// Labels
-			labels := map[string]string{
-				"cluster": r.config.ClusterName,
-				"role":    "control-plane",
-				"pool":    pool.Name,
-			}
-			for k, v := range pool.Labels {
-				labels[k] = v
-			}
-
-			// SSH Keys
-			// Use all defined keys
-			sshKeys := r.config.SSHKeys
-
-			// UserData
-			userData := string(cpConfig)
-
-			// Create
-			image := pool.Image
-			if image == "" {
-				image = "talos"
-			}
-
-			_, err = r.serverProvisioner.CreateServer(
-				ctx,
-				serverName,
-				image,
-				pool.ServerType,
-				pool.Location,
-				sshKeys,
-				labels,
-				userData,
-				&pg.ID, // Pass Placement Group ID (int64)
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create server %s: %w", serverName, err)
-			}
-
-			// Get IP after creation
-			ip, err := r.serverProvisioner.GetServerIP(ctx, serverName)
-			if err != nil {
-				// Retry?
-				time.Sleep(2 * time.Second)
-				ip, err = r.serverProvisioner.GetServerIP(ctx, serverName)
-				if err != nil {
-					return nil, err
-				}
-			}
-			ips[serverName] = ip
+		poolIPs, err := r.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "control-plane", pool.Labels, string(cpConfig), &pg.ID)
+		if err != nil {
+			return nil, err
+		}
+		for k, v := range poolIPs {
+			ips[k] = v
 		}
 	}
 
@@ -291,7 +223,7 @@ func (r *Reconciler) reconcileWorkers(ctx context.Context) error {
 
 	for _, pool := range r.config.Workers {
 		// Placement Group
-		var pgID *int64 // changed from *int to *int64
+		var pgID *int64
 		if pool.PlacementGroup {
 			pgName := fmt.Sprintf("%s-%s", r.config.ClusterName, pool.Name)
 			labels := map[string]string{
@@ -305,56 +237,116 @@ func (r *Reconciler) reconcileWorkers(ctx context.Context) error {
 			pgID = &pg.ID
 		}
 
-		for j := 1; j <= pool.Count; j++ {
-			serverName := fmt.Sprintf("%s-%s-%d", r.config.ClusterName, pool.Name, j)
-
-			// Check if exists
-			serverID, err := r.serverProvisioner.GetServerID(ctx, serverName)
-			if err != nil {
-				return err
-			}
-			if serverID != "" {
-				continue
-			}
-
-			// Create
-			log.Printf("Creating Worker Server %s...", serverName)
-
-			labels := map[string]string{
-				"cluster": r.config.ClusterName,
-				"role":    "worker",
-				"pool":    pool.Name,
-			}
-			for k, v := range pool.Labels {
-				labels[k] = v
-			}
-
-			image := pool.Image
-			if image == "" {
-				image = "talos"
-			}
-
-			_, err = r.serverProvisioner.CreateServer(
-				ctx,
-				serverName,
-				image,
-				pool.ServerType,
-				pool.Location,
-				r.config.SSHKeys,
-				labels,
-				string(workerConfig),
-				pgID,
-			)
-			if err != nil {
-				return fmt.Errorf("failed to create server %s: %w", serverName, err)
-			}
+		_, err = r.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "worker", pool.Labels, string(workerConfig), pgID)
+		if err != nil {
+			return err
 		}
 	}
 
 	return nil
 }
 
-// Helpers
-func ptr[T any](v T) *T {
-	return &v
+// reconcileNodePool provisions a pool of servers
+func (r *Reconciler) reconcileNodePool(
+	ctx context.Context,
+	poolName string,
+	count int,
+	serverType string,
+	location string,
+	image string,
+	role string,
+	extraLabels map[string]string,
+	userData string,
+	pgID *int64,
+) (map[string]string, error) {
+	ips := make(map[string]string)
+
+	for j := 1; j <= count; j++ {
+		// Name: <cluster>-<pool>-<index> (e.g. cluster-control-plane-1)
+		serverName := fmt.Sprintf("%s-%s-%d", r.config.ClusterName, poolName, j)
+
+		ip, err := r.ensureServer(ctx, serverName, serverType, location, image, role, poolName, extraLabels, userData, pgID)
+		if err != nil {
+			return nil, err
+		}
+		ips[serverName] = ip
+	}
+	return ips, nil
+}
+
+// ensureServer ensures a server exists and returns its IP
+func (r *Reconciler) ensureServer(
+	ctx context.Context,
+	serverName string,
+	serverType string,
+	location string,
+	image string,
+	role string,
+	poolName string,
+	extraLabels map[string]string,
+	userData string,
+	pgID *int64,
+) (string, error) {
+	// Check if exists
+	serverID, err := r.serverProvisioner.GetServerID(ctx, serverName)
+	if err != nil {
+		return "", err
+	}
+
+	if serverID != "" {
+		// Server exists, get IP
+		ip, err := r.serverProvisioner.GetServerIP(ctx, serverName)
+		if err != nil {
+			return "", err
+		}
+		return ip, nil
+	}
+
+	// Create
+	log.Printf("Creating %s Server %s...", role, serverName)
+
+	// Labels
+	labels := map[string]string{
+		"cluster": r.config.ClusterName,
+		"role":    role,
+		"pool":    poolName,
+	}
+	for k, v := range extraLabels {
+		labels[k] = v
+	}
+
+	// Image defaulting
+	if image == "" {
+		image = "talos"
+	}
+
+	_, err = r.serverProvisioner.CreateServer(
+		ctx,
+		serverName,
+		image,
+		serverType,
+		location,
+		r.config.SSHKeys,
+		labels,
+		userData,
+		pgID,
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to create server %s: %w", serverName, err)
+	}
+
+	// Get IP after creation with retries
+	var ip string
+	for i := 0; i < 10; i++ {
+		ip, err = r.serverProvisioner.GetServerIP(ctx, serverName)
+		if err == nil && ip != "" {
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
+	if err != nil || ip == "" {
+		return "", fmt.Errorf("failed to get server IP for %s after retries: %w", serverName, err)
+	}
+
+	return ip, nil
 }

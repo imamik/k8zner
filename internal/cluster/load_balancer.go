@@ -38,18 +38,18 @@ func (r *Reconciler) reconcileLoadBalancers(ctx context.Context) error {
 		// Service: 6443
 		service := hcloud.LoadBalancerAddServiceOpts{
 			Protocol:        hcloud.LoadBalancerServiceProtocolTCP,
-			ListenPort:      ptr(6443),
-			DestinationPort: ptr(6443),
+			ListenPort:      hcloud.Ptr(6443),
+			DestinationPort: hcloud.Ptr(6443),
 			HealthCheck: &hcloud.LoadBalancerAddServiceOptsHealthCheck{
 				Protocol: hcloud.LoadBalancerServiceProtocolHTTP,
-				Port:     ptr(6443),
-				Interval: ptr(time.Second * 3), // Terraform default: 3
-				Timeout:  ptr(time.Second * 2), // Terraform default: 2
-				Retries:  ptr(2),               // Terraform default: 2
+				Port:     hcloud.Ptr(6443),
+				Interval: hcloud.Ptr(time.Second * 3), // Terraform default: 3
+				Timeout:  hcloud.Ptr(time.Second * 2), // Terraform default: 2
+				Retries:  hcloud.Ptr(2),               // Terraform default: 2
 				HTTP: &hcloud.LoadBalancerAddServiceOptsHealthCheckHTTP{
-					Path:        ptr("/version"),
+					Path:        hcloud.Ptr("/version"),
 					StatusCodes: []string{"401"},
-					TLS:         ptr(true),
+					TLS:         hcloud.Ptr(true),
 				},
 			},
 		}
