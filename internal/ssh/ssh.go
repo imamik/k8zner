@@ -43,7 +43,8 @@ func (c *Client) Execute(ctx context.Context, command string) (string, error) {
 
 	var client *ssh.Client
 	// Simple retry logic.
-	for i := 0; i < 10; i++ {
+	// ARM64 servers can be slow to boot into rescue mode.
+	for i := 0; i < 60; i++ {
 		client, err = ssh.Dial("tcp", c.host+":22", config)
 		if err == nil {
 			break

@@ -52,10 +52,10 @@ func (r *Reconciler) reconcileFirewall(ctx context.Context, publicIP string) err
 		}
 		if len(sourceNets) > 0 {
 			rules = append(rules, hcloud.FirewallRule{
-				Description: ptr("Allow Incoming Requests to Kube API"),
+				Description: hcloud.Ptr("Allow Incoming Requests to Kube API"),
 				Direction:   hcloud.FirewallRuleDirectionIn,
 				Protocol:    hcloud.FirewallRuleProtocolTCP,
-				Port:        ptr("6443"),
+				Port:        hcloud.Ptr("6443"),
 				SourceIPs:   sourceNets,
 			})
 		}
@@ -72,10 +72,10 @@ func (r *Reconciler) reconcileFirewall(ctx context.Context, publicIP string) err
 		}
 		if len(sourceNets) > 0 {
 			rules = append(rules, hcloud.FirewallRule{
-				Description: ptr("Allow Incoming Requests to Talos API"),
+				Description: hcloud.Ptr("Allow Incoming Requests to Talos API"),
 				Direction:   hcloud.FirewallRuleDirectionIn,
 				Protocol:    hcloud.FirewallRuleProtocolTCP,
-				Port:        ptr("50000"),
+				Port:        hcloud.Ptr("50000"),
 				SourceIPs:   sourceNets,
 			})
 		}
