@@ -77,10 +77,7 @@ func (b *Builder) Build(ctx context.Context, imageName, talosVersion, architectu
 	}
 
 	defer func() {
-		log.Printf("Deleting server %s...", serverName)
-		if err := b.provisioner.DeleteServer(context.Background(), serverName); err != nil {
-			log.Printf("Failed to delete server %s: %v", serverName, err)
-		}
+		b.cleanupServer(serverName)
 	}()
 
 	serverID, err := b.provisioner.CreateServer(ctx, serverName, "debian-12", serverType, "", sshKeys, labels, "", nil)
@@ -155,4 +152,36 @@ func (b *Builder) Build(ctx context.Context, imageName, talosVersion, architectu
 	}
 
 	return snapshotID, nil
+}
+
+func (b *Builder) cleanupServer(serverName string) {
+	log.Printf("Cleaning up server %s...", serverName)
+	// Create a context with a generous timeout to allow for retries (e.g. if locked by snapshot)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		err := b.provisioner.DeleteServer(ctx, serverName)
+		if err == nil {
+			log.Printf("Server %s deleted successfully", serverName)
+			return
+		}
+
+		// Check if error is retryable (locked) or not found.
+		// hcloud-go returns specific errors but checking string might be fragile.
+		// However, logging the error and retrying is safer.
+		// If context expires, we give up.
+		log.Printf("Failed to delete server %s (retrying): %v", serverName, err)
+
+		select {
+		case <-ctx.Done():
+			log.Printf("Timeout waiting to delete server %s: %v", serverName, ctx.Err())
+			return
+		case <-ticker.C:
+			// continue retry
+		}
+	}
 }
