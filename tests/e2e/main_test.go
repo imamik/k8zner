@@ -56,7 +56,9 @@ func TestImageBuildLifecycle(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		tc := tc // capture range variable
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel() // Run in parallel
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 			defer cancel()
 

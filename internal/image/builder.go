@@ -132,7 +132,7 @@ func (b *Builder) Build(ctx context.Context, imageName, talosVersion, architectu
 		talosURL = fmt.Sprintf("https://github.com/siderolabs/talos/releases/download/%s/metal-%s.raw.zst", talosVersion, architecture)
 	}
 
-	installCmd := fmt.Sprintf("DISK=$(lsblk -d -n -o NAME | grep -E '^sda|^vda' | head -n 1) && if [ -z \"$DISK\" ]; then echo 'No disk found'; exit 1; fi && echo \"Writing to /dev/$DISK\" && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y zstd && wget -O /tmp/talos.raw.zst %s && zstd -d -c /tmp/talos.raw.zst | dd of=/dev/$DISK bs=4M && sync", talosURL)
+	installCmd := fmt.Sprintf("DISK=$(lsblk -d -n -o NAME | grep -E '^sda|^vda' | head -n 1) && if [ -z \"$DISK\" ]; then echo 'No disk found'; exit 1; fi && echo \"Writing to /dev/$DISK\" && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y zstd wget && wget -qO- %s | zstd -d | dd of=/dev/$DISK bs=4M && sync", talosURL)
 
 	log.Printf("Provisioning Talos (Command: %s)...", installCmd)
 	output, err := comm.Execute(ctx, installCmd)
