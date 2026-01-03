@@ -18,6 +18,7 @@ type TalosConfigProducer interface {
 	GenerateControlPlaneConfig(san []string) ([]byte, error)
 	GenerateWorkerConfig() ([]byte, error)
 	GetClientConfig() ([]byte, error)
+	SetEndpoint(endpoint string)
 }
 
 // Reconciler is responsible for reconciling the state of the cluster.
@@ -158,7 +159,18 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context) (map[string]stri
 		return nil, err
 	}
 	if lb != nil {
-		sans = append(sans, lb.PublicNet.IPv4.IP.String())
+		// Use LB Public IP as endpoint
+		if lb.PublicNet.IPv4.IP != nil {
+			lbIP := lb.PublicNet.IPv4.IP.String()
+			sans = append(sans, lbIP)
+
+			// UPDATE TALOS ENDPOINT
+			// We use the LB IP as the control plane endpoint.
+			endpoint := fmt.Sprintf("https://%s:6443", lbIP)
+			log.Printf("Setting Talos Endpoint to: %s", endpoint)
+			r.talosGenerator.SetEndpoint(endpoint)
+		}
+
 		// Also add private IP of LB
 		for _, net := range lb.PrivateNet {
 			sans = append(sans, net.IP.String())
@@ -179,6 +191,18 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context) (map[string]stri
 
 	// Create Servers
 	for _, pool := range r.config.ControlPlane.NodePools {
+
+		// Placement Group for Control Plane
+		pgName := fmt.Sprintf("%s-%s", r.config.ClusterName, pool.Name)
+		pgLabels := map[string]string{
+			"cluster": r.config.ClusterName,
+			"pool":    pool.Name,
+		}
+		pg, err := r.pgManager.EnsurePlacementGroup(ctx, pgName, "spread", pgLabels)
+		if err != nil {
+			return nil, err
+		}
+
 		for j := 1; j <= pool.Count; j++ {
 			// Name: <cluster>-<pool>-<index> (e.g. cluster-control-plane-1)
 			serverName := fmt.Sprintf("%s-%s-%d", r.config.ClusterName, pool.Name, j)
@@ -234,6 +258,7 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context) (map[string]stri
 				sshKeys,
 				labels,
 				userData,
+				&pg.ID, // Pass Placement Group ID (int64)
 			)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create server %s: %w", serverName, err)
@@ -266,16 +291,18 @@ func (r *Reconciler) reconcileWorkers(ctx context.Context) error {
 
 	for _, pool := range r.config.Workers {
 		// Placement Group
+		var pgID *int64 // changed from *int to *int64
 		if pool.PlacementGroup {
 			pgName := fmt.Sprintf("%s-%s", r.config.ClusterName, pool.Name)
 			labels := map[string]string{
 				"cluster": r.config.ClusterName,
 				"pool":    pool.Name,
 			}
-			_, err := r.pgManager.EnsurePlacementGroup(ctx, pgName, "spread", labels)
+			pg, err := r.pgManager.EnsurePlacementGroup(ctx, pgName, "spread", labels)
 			if err != nil {
 				return err
 			}
+			pgID = &pg.ID
 		}
 
 		for j := 1; j <= pool.Count; j++ {
@@ -316,6 +343,7 @@ func (r *Reconciler) reconcileWorkers(ctx context.Context) error {
 				r.config.SSHKeys,
 				labels,
 				string(workerConfig),
+				pgID,
 			)
 			if err != nil {
 				return fmt.Errorf("failed to create server %s: %w", serverName, err)
