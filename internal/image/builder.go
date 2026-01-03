@@ -80,7 +80,7 @@ func (b *Builder) Build(ctx context.Context, imageName, talosVersion, architectu
 		b.cleanupServer(serverName)
 	}()
 
-	serverID, err := b.provisioner.CreateServer(ctx, serverName, "debian-12", serverType, sshKeys, labels)
+	serverID, err := b.provisioner.CreateServer(ctx, serverName, "debian-12", serverType, "", sshKeys, labels, "", nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create server: %w", err)
 	}
@@ -122,14 +122,15 @@ func (b *Builder) Build(ctx context.Context, imageName, talosVersion, architectu
 	}
 
 	// URL generation.
-	talosURL := fmt.Sprintf("https://github.com/siderolabs/talos/releases/download/%s/talos-%s-%s.raw.zst", talosVersion, architecture, architecture)
-	if architecture == "amd64" {
+	var talosURL string
+	switch architecture {
+	case "amd64", "arm64":
 		talosURL = fmt.Sprintf("https://github.com/siderolabs/talos/releases/download/%s/metal-%s.raw.zst", talosVersion, architecture)
-	} else if architecture == "arm64" {
-		talosURL = fmt.Sprintf("https://github.com/siderolabs/talos/releases/download/%s/metal-%s.raw.zst", talosVersion, architecture)
+	default:
+		talosURL = fmt.Sprintf("https://github.com/siderolabs/talos/releases/download/%s/talos-%s-%s.raw.zst", talosVersion, architecture, architecture)
 	}
 
-	installCmd := fmt.Sprintf("DISK=$(lsblk -d -n -o NAME | grep -E '^sda|^vda' | head -n 1) && if [ -z \"$DISK\" ]; then echo 'No disk found'; exit 1; fi && echo \"Writing to /dev/$DISK\" && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y zstd && wget -O /tmp/talos.raw.zst %s && zstd -d -c /tmp/talos.raw.zst | dd of=/dev/$DISK bs=4M && sync", talosURL)
+	installCmd := fmt.Sprintf("DISK=$(lsblk -d -n -o NAME | grep -E '^sda|^vda' | head -n 1) && if [ -z \"$DISK\" ]; then echo 'No disk found'; exit 1; fi && echo \"Writing to /dev/$DISK\" && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y zstd wget && wget -qO- %s | zstd -d | dd of=/dev/$DISK bs=4M && sync", talosURL)
 
 	log.Printf("Provisioning Talos (Command: %s)...", installCmd)
 	output, err := comm.Execute(ctx, installCmd)

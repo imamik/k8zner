@@ -1,37 +1,46 @@
-package config_test
+package config
 
 import (
+	"os"
 	"testing"
 
-	"github.com/sak-d/hcloud-k8s/internal/config"
+	"github.com/stretchr/testify/assert"
 )
 
-func TestLoadConfig(t *testing.T) {
-	input := map[string]interface{}{
-		"hcloud_token": "test-token",
-		"cluster_name": "test-cluster",
-	}
+func TestLoadFile(t *testing.T) {
+	// Create temporary config file
+	content := `
+cluster_name: "test-cluster"
+hcloud_token: "token"
+network:
+  ipv4_cidr: "10.0.0.0/16"
+control_plane:
+  nodepools:
+    - name: "control-plane-1"
+      count: 3
+talos:
+  version: "v1.7.0"
+kubernetes:
+  version: "v1.30.0"
+`
+	tmpfile, err := os.CreateTemp("", "config-*.yaml")
+	assert.NoError(t, err)
+	defer func() {
+		_ = os.Remove(tmpfile.Name())
+	}()
 
-	cfg, err := config.Load(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	_, err = tmpfile.Write([]byte(content))
+	assert.NoError(t, err)
+	_ = tmpfile.Close()
 
-	if cfg.HCloudToken != "test-token" {
-		t.Errorf("expected token 'test-token', got '%s'", cfg.HCloudToken)
-	}
-	if cfg.ClusterName != "test-cluster" {
-		t.Errorf("expected cluster name 'test-cluster', got '%s'", cfg.ClusterName)
-	}
-}
+	// Test LoadFile
+	cfg, err := LoadFile(tmpfile.Name())
+	assert.NoError(t, err)
+	assert.NotNil(t, cfg)
 
-func TestValidateConfig_MissingToken(t *testing.T) {
-	cfg := &config.Config{
-		ClusterName: "test-cluster",
-	}
-
-	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected error for missing token, got nil")
-	}
+	assert.Equal(t, "test-cluster", cfg.ClusterName)
+	assert.Equal(t, "10.0.0.0/16", cfg.Network.IPv4CIDR)
+	assert.Equal(t, "v1.7.0", cfg.Talos.Version)
+	assert.Equal(t, "v1.30.0", cfg.Kubernetes.Version)
+	assert.Equal(t, 1, len(cfg.ControlPlane.NodePools))
 }

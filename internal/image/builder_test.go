@@ -11,7 +11,7 @@ import (
 
 func TestBuild(t *testing.T) {
 	mockClient := &hcloud.MockClient{
-		CreateServerFunc: func(_ context.Context, _ string, _ string, _ string, _ []string, _ map[string]string) (string, error) {
+		CreateServerFunc: func(_ context.Context, _ string, _ string, _ string, _ string, _ []string, _ map[string]string, _ string, _ *int64) (string, error) {
 			return "123", nil
 		},
 		GetServerIPFunc: func(_ context.Context, _ string) (string, error) {
