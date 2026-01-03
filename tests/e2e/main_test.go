@@ -81,6 +81,9 @@ func TestImageBuildLifecycle(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 			defer cancel()
 
+			cleaner := &ResourceCleaner{t: t}
+			defer cleaner.Cleanup()
+
 			// Unique image name per test
 			imageName := fmt.Sprintf("e2e-test-image-%s-%s", tc.arch, time.Now().Format("20060102-150405"))
 
