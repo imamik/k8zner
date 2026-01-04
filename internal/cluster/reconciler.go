@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"log"
 	"sort"
-	"time"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/sak-d/hcloud-k8s/internal/config"
 	hcloud_internal "github.com/sak-d/hcloud-k8s/internal/hcloud"
+	"github.com/sak-d/hcloud-k8s/internal/retry"
 )
 
 // TalosConfigProducer defines the interface for generating Talos configurations.
@@ -34,6 +34,7 @@ type Reconciler struct {
 	talosGenerator    TalosConfigProducer
 	config            *config.Config
 	bootstrapper      *Bootstrapper
+	timeouts          *config.Timeouts
 
 	// State
 	network  *hcloud.Network
@@ -58,6 +59,7 @@ func NewReconciler(
 		talosGenerator:    talosGenerator,
 		config:            cfg,
 		bootstrapper:      NewBootstrapper(infra),
+		timeouts:          config.LoadTimeouts(),
 	}
 }
 
@@ -396,17 +398,25 @@ func (r *Reconciler) ensureServer(
 		return "", fmt.Errorf("failed to create server %s: %w", serverName, err)
 	}
 
-	// Get IP after creation with retries
+	// Get IP after creation with retry logic and configurable timeout
+	ipCtx, cancel := context.WithTimeout(ctx, r.timeouts.ServerIP)
+	defer cancel()
+
 	var ip string
-	for i := 0; i < 10; i++ {
-		ip, err = r.serverProvisioner.GetServerIP(ctx, serverName)
-		if err == nil && ip != "" {
-			break
+	err = retry.WithExponentialBackoff(ipCtx, func() error {
+		var getErr error
+		ip, getErr = r.serverProvisioner.GetServerIP(ctx, serverName)
+		if getErr != nil {
+			return getErr
 		}
-		time.Sleep(2 * time.Second)
-	}
-	if err != nil || ip == "" {
-		return "", fmt.Errorf("failed to get server IP for %s after retries: %w", serverName, err)
+		if ip == "" {
+			return fmt.Errorf("server IP not yet assigned")
+		}
+		return nil
+	}, retry.WithMaxRetries(r.timeouts.RetryMaxAttempts), retry.WithInitialDelay(r.timeouts.RetryInitialDelay))
+
+	if err != nil {
+		return "", fmt.Errorf("failed to get server IP for %s: %w", serverName, err)
 	}
 
 	return ip, nil

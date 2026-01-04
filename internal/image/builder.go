@@ -157,59 +157,26 @@ func (b *Builder) Build(ctx context.Context, imageName, talosVersion, architectu
 
 func (b *Builder) cleanupServer(serverName string) {
 	log.Printf("Cleaning up server %s...", serverName)
-	// Create a context with a generous timeout to allow for retries (e.g. if locked by snapshot)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
-
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		err := b.provisioner.DeleteServer(ctx, serverName)
-		if err == nil {
-			log.Printf("Server %s deleted successfully", serverName)
-			return
-		}
-
-		// Check if error is retryable (locked) or not found.
-		// hcloud-go returns specific errors but checking string might be fragile.
-		// However, logging the error and retrying is safer.
-		// If context expires, we give up.
-		log.Printf("Failed to delete server %s (retrying): %v", serverName, err)
-
-		select {
-		case <-ctx.Done():
-			log.Printf("Timeout waiting to delete server %s: %v", serverName, ctx.Err())
-			return
-		case <-ticker.C:
-			// continue retry
-		}
+	// DeleteServer now has built-in retry logic and timeout (5 minutes default)
+	// from Phase 2 improvements, so we can simply call it
+	ctx := context.Background()
+	err := b.provisioner.DeleteServer(ctx, serverName)
+	if err != nil {
+		log.Printf("Failed to delete server %s: %v", serverName, err)
+	} else {
+		log.Printf("Server %s deleted successfully", serverName)
 	}
 }
 
 func (b *Builder) cleanupSSHKey(keyName string) {
 	log.Printf("Cleaning up SSH key %s...", keyName)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		err := b.sshKeyManager.DeleteSSHKey(ctx, keyName)
-		if err == nil {
-			log.Printf("SSH key %s deleted successfully", keyName)
-			return
-		}
-
-		log.Printf("Failed to delete SSH key %s (retrying): %v", keyName, err)
-
-		select {
-		case <-ctx.Done():
-			log.Printf("Timeout waiting to delete SSH key %s: %v", keyName, ctx.Err())
-			return
-		case <-ticker.C:
-			// continue retry
-		}
+	// DeleteSSHKey now has built-in retry logic and timeout (5 minutes default)
+	// from Phase 2 improvements, so we can simply call it
+	ctx := context.Background()
+	err := b.sshKeyManager.DeleteSSHKey(ctx, keyName)
+	if err != nil {
+		log.Printf("Failed to delete SSH key %s: %v", keyName, err)
+	} else {
+		log.Printf("SSH key %s deleted successfully", keyName)
 	}
 }
