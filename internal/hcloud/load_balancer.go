@@ -70,6 +70,30 @@ func (c *RealClient) ConfigureService(ctx context.Context, lb *hcloud.LoadBalanc
 	return c.client.Action.WaitFor(ctx, action)
 }
 
+// AddTarget adds a target to the load balancer.
+func (c *RealClient) AddTarget(ctx context.Context, lb *hcloud.LoadBalancer, targetType hcloud.LoadBalancerTargetType, labelSelector string) error {
+	// Check if target exists
+	for _, target := range lb.Targets {
+		if target.Type == targetType && target.LabelSelector != nil && target.LabelSelector.Selector == labelSelector {
+			return nil // Already exists
+		}
+	}
+
+	if targetType == hcloud.LoadBalancerTargetTypeLabelSelector {
+		opts := hcloud.LoadBalancerAddLabelSelectorTargetOpts{
+			Selector:     labelSelector,
+			UsePrivateIP: hcloud.Ptr(true),
+		}
+		action, _, err := c.client.LoadBalancer.AddLabelSelectorTarget(ctx, lb, opts)
+		if err != nil {
+			return fmt.Errorf("failed to add target: %w", err)
+		}
+		return c.client.Action.WaitFor(ctx, action)
+	}
+
+	return fmt.Errorf("unsupported target type: %s", targetType)
+}
+
 // AttachToNetwork attaches the load balancer to a network.
 func (c *RealClient) AttachToNetwork(ctx context.Context, lb *hcloud.LoadBalancer, network *hcloud.Network, ip net.IP) error {
 	// Check if already attached

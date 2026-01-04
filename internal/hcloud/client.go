@@ -10,7 +10,7 @@ import (
 
 // ServerProvisioner defines the interface for provisioning servers.
 type ServerProvisioner interface {
-	CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64) (string, error)
+	CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string) (string, error)
 	DeleteServer(ctx context.Context, name string) error
 	GetServerIP(ctx context.Context, name string) (string, error)
 	EnableRescue(ctx context.Context, serverID string, sshKeyIDs []string) (string, error)
@@ -50,6 +50,7 @@ type FirewallManager interface {
 type LoadBalancerManager interface {
 	EnsureLoadBalancer(ctx context.Context, name, location, lbType string, algorithm hcloud.LoadBalancerAlgorithmType, labels map[string]string) (*hcloud.LoadBalancer, error)
 	ConfigureService(ctx context.Context, lb *hcloud.LoadBalancer, service hcloud.LoadBalancerAddServiceOpts) error
+	AddTarget(ctx context.Context, lb *hcloud.LoadBalancer, targetType hcloud.LoadBalancerTargetType, labelSelector string) error
 	AttachToNetwork(ctx context.Context, lb *hcloud.LoadBalancer, network *hcloud.Network, ip net.IP) error
 	DeleteLoadBalancer(ctx context.Context, name string) error
 	GetLoadBalancer(ctx context.Context, name string) (*hcloud.LoadBalancer, error)

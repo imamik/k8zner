@@ -81,6 +81,50 @@ func (r *Reconciler) reconcileFirewall(ctx context.Context, publicIP string) err
 		}
 	}
 
+	// Extra Rules
+	for _, rule := range r.config.Firewall.ExtraRules {
+		// Helper to parse IPs
+		parseIPs := func(ips []string) []net.IPNet {
+			var nets []net.IPNet
+			for _, ip := range ips {
+				_, n, err := net.ParseCIDR(ip)
+				if err == nil {
+					nets = append(nets, *n)
+				}
+			}
+			return nets
+		}
+
+		direction := hcloud.FirewallRuleDirectionIn
+		if rule.Direction == "out" {
+			direction = hcloud.FirewallRuleDirectionOut
+		}
+
+		protocol := hcloud.FirewallRuleProtocolTCP
+		switch rule.Protocol {
+		case "udp":
+			protocol = hcloud.FirewallRuleProtocolUDP
+		case "icmp":
+			protocol = hcloud.FirewallRuleProtocolICMP
+		case "gre":
+			protocol = hcloud.FirewallRuleProtocolGRE
+		case "esp":
+			protocol = hcloud.FirewallRuleProtocolESP
+		}
+
+		r := hcloud.FirewallRule{
+			Description:    hcloud.Ptr(rule.Description),
+			Direction:      direction,
+			Protocol:       protocol,
+			SourceIPs:      parseIPs(rule.SourceIPs),
+			DestinationIPs: parseIPs(rule.DestinationIPs),
+		}
+		if rule.Port != "" {
+			r.Port = hcloud.Ptr(rule.Port)
+		}
+		rules = append(rules, r)
+	}
+
 	labels := map[string]string{
 		"cluster": r.config.ClusterName,
 	}

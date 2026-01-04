@@ -9,7 +9,7 @@ import (
 
 // MockClient is a mock implementation of InfrastructureManager.
 type MockClient struct {
-	CreateServerFunc   func(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64) (string, error)
+	CreateServerFunc   func(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string) (string, error)
 	DeleteServerFunc   func(ctx context.Context, name string) error
 	GetServerIPFunc    func(ctx context.Context, name string) (string, error)
 	GetServerIDFunc    func(ctx context.Context, name string) (string, error)
@@ -64,9 +64,9 @@ type MockClient struct {
 var _ InfrastructureManager = (*MockClient)(nil)
 
 // CreateServer mocks server creation.
-func (m *MockClient) CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64) (string, error) {
+func (m *MockClient) CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string) (string, error) {
 	if m.CreateServerFunc != nil {
-		return m.CreateServerFunc(ctx, name, imageType, serverType, location, sshKeys, labels, userData, placementGroupID)
+		return m.CreateServerFunc(ctx, name, imageType, serverType, location, sshKeys, labels, userData, placementGroupID, networkID, privateIP)
 	}
 	return "mock-id", nil
 }
@@ -220,6 +220,11 @@ func (m *MockClient) ConfigureService(ctx context.Context, lb *hcloud.LoadBalanc
 	if m.ConfigureServiceFunc != nil {
 		return m.ConfigureServiceFunc(ctx, lb, service)
 	}
+	return nil
+}
+
+// AddTarget mocks adding a target to the load balancer.
+func (m *MockClient) AddTarget(ctx context.Context, lb *hcloud.LoadBalancer, targetType hcloud.LoadBalancerTargetType, labelSelector string) error {
 	return nil
 }
 

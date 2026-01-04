@@ -3,13 +3,14 @@ package hcloud
 import (
 	"context"
 	"fmt"
+	"net"
 	"strconv"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
 // CreateServer creates a new server with the given specifications.
-func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64) (string, error) {
+func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string) (string, error) {
 	serverTypeObj, _, err := c.client.ServerType.Get(ctx, serverType)
 	if err != nil {
 		return "", fmt.Errorf("failed to get server type: %w", err)
@@ -86,15 +87,21 @@ func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverTy
 		pgObj = &hcloud.PlacementGroup{ID: *placementGroupID}
 	}
 
+	var startAfterCreate *bool
+	if networkID != 0 && privateIP != "" {
+		startAfterCreate = hcloud.Ptr(false)
+	}
+
 	opts := hcloud.ServerCreateOpts{
-		Name:           name,
-		ServerType:     serverTypeObj,
-		Image:          imageObj,
-		SSHKeys:        sshKeyObjs,
-		Labels:         labels,
-		UserData:       userData,
-		Location:       locObj,
-		PlacementGroup: pgObj,
+		Name:             name,
+		ServerType:       serverTypeObj,
+		Image:            imageObj,
+		SSHKeys:          sshKeyObjs,
+		Labels:           labels,
+		UserData:         userData,
+		Location:         locObj,
+		PlacementGroup:   pgObj,
+		StartAfterCreate: startAfterCreate,
 	}
 
 	result, _, err := c.client.Server.Create(ctx, opts)
@@ -104,6 +111,35 @@ func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverTy
 
 	if err := c.client.Action.WaitFor(ctx, result.Action); err != nil {
 		return "", fmt.Errorf("failed to wait for server creation: %w", err)
+	}
+
+	// Attach to Network if requested
+	if networkID != 0 && privateIP != "" {
+		ip := net.ParseIP(privateIP)
+		if ip == nil {
+			return "", fmt.Errorf("invalid private ip: %s", privateIP)
+		}
+
+		attachOpts := hcloud.ServerAttachToNetworkOpts{
+			Network: &hcloud.Network{ID: networkID},
+			IP:      ip,
+		}
+		action, _, err := c.client.Server.AttachToNetwork(ctx, result.Server, attachOpts)
+		if err != nil {
+			return "", fmt.Errorf("failed to attach server to network: %w", err)
+		}
+		if err := c.client.Action.WaitFor(ctx, action); err != nil {
+			return "", fmt.Errorf("failed to wait for network attachment: %w", err)
+		}
+
+		// Power On
+		action, _, err = c.client.Server.Poweron(ctx, result.Server)
+		if err != nil {
+			return "", fmt.Errorf("failed to power on server: %w", err)
+		}
+		if err := c.client.Action.WaitFor(ctx, action); err != nil {
+			return "", fmt.Errorf("failed to wait for server power on: %w", err)
+		}
 	}
 
 	return fmt.Sprintf("%d", result.Server.ID), nil

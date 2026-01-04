@@ -189,7 +189,7 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context) (map[string]stri
 
 	// Provision Servers
 	ips := make(map[string]string)
-	for _, pool := range r.config.ControlPlane.NodePools {
+	for i, pool := range r.config.ControlPlane.NodePools {
 		// Placement Group for Control Plane
 		pgName := fmt.Sprintf("%s-%s", r.config.ClusterName, pool.Name)
 		pgLabels := map[string]string{
@@ -201,7 +201,7 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context) (map[string]stri
 			return nil, err
 		}
 
-		poolIPs, err := r.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "control-plane", pool.Labels, string(cpConfig), &pg.ID)
+		poolIPs, err := r.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "control-plane", pool.Labels, string(cpConfig), &pg.ID, i)
 		if err != nil {
 			return nil, err
 		}
@@ -221,23 +221,10 @@ func (r *Reconciler) reconcileWorkers(ctx context.Context) error {
 		return err
 	}
 
-	for _, pool := range r.config.Workers {
-		// Placement Group
-		var pgID *int64
-		if pool.PlacementGroup {
-			pgName := fmt.Sprintf("%s-%s", r.config.ClusterName, pool.Name)
-			labels := map[string]string{
-				"cluster": r.config.ClusterName,
-				"pool":    pool.Name,
-			}
-			pg, err := r.pgManager.EnsurePlacementGroup(ctx, pgName, "spread", labels)
-			if err != nil {
-				return err
-			}
-			pgID = &pg.ID
-		}
-
-		_, err = r.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "worker", pool.Labels, string(workerConfig), pgID)
+	for i, pool := range r.config.Workers {
+		// Placement Group (Managed inside reconcileNodePool for Workers due to sharding)
+		// We pass nil here, and handle it inside reconcileNodePool based on pool config and index.
+		_, err = r.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "worker", pool.Labels, string(workerConfig), nil, i)
 		if err != nil {
 			return err
 		}
@@ -258,6 +245,7 @@ func (r *Reconciler) reconcileNodePool(
 	extraLabels map[string]string,
 	userData string,
 	pgID *int64,
+	poolIndex int,
 ) (map[string]string, error) {
 	ips := make(map[string]string)
 
@@ -265,7 +253,71 @@ func (r *Reconciler) reconcileNodePool(
 		// Name: <cluster>-<pool>-<index> (e.g. cluster-control-plane-1)
 		serverName := fmt.Sprintf("%s-%s-%d", r.config.ClusterName, poolName, j)
 
-		ip, err := r.ensureServer(ctx, serverName, serverType, location, image, role, poolName, extraLabels, userData, pgID)
+		// Calculate global index for subnet calculations
+		// For CP: 10 * np_index + cp_index + 1
+		// For Worker: wkr_index + 1
+		var hostNum int
+		var subnet string
+		var err error
+
+		if role == "control-plane" {
+			// Terraform: ipv4_private = cidrhost(subnet, np_index * 10 + cp_index + 1)
+			subnet, err = r.config.GetSubnetForRole("control-plane", 0)
+			if err != nil {
+				return nil, err
+			}
+			hostNum = poolIndex*10 + (j - 1) + 1
+		} else {
+			// Terraform: ipv4_private = cidrhost(subnet, wkr_index + 1)
+			// Note: Terraform iterates worker nodepools and uses separate subnets for each
+			// hcloud_network_subnet.worker[np.name]
+			// The config.GetSubnetForRole("worker", i) handles the subnet iteration.
+			subnet, err = r.config.GetSubnetForRole("worker", poolIndex)
+			if err != nil {
+				return nil, err
+			}
+			hostNum = (j - 1) + 1
+		}
+
+		privateIP, err := config.CIDRHost(subnet, hostNum)
+		if err != nil {
+			return nil, fmt.Errorf("failed to calculate private ip: %w", err)
+		}
+
+		// Placement Group Sharding for Workers
+		// Terraform: ${cluster}-${pool}-pg-${ceil((index+1)/10)}
+		var currentPGID *int64
+		if role == "worker" && pgID == nil { // Workers manage their own PGs if enabled
+			// Check if enabled in config for this pool
+			usePG := false
+			// Find the pool config again (slightly inefficient but safe)
+			for _, p := range r.config.Workers {
+				if p.Name == poolName {
+					usePG = p.PlacementGroup
+					break
+				}
+			}
+
+			if usePG {
+				pgIndex := int((j-1)/10) + 1
+				pgName := fmt.Sprintf("%s-%s-pg-%d", r.config.ClusterName, poolName, pgIndex)
+				pgLabels := map[string]string{
+					"cluster":  r.config.ClusterName,
+					"pool":     poolName,
+					"role":     "worker",
+					"nodepool": poolName,
+				}
+				pg, err := r.pgManager.EnsurePlacementGroup(ctx, pgName, "spread", pgLabels)
+				if err != nil {
+					return nil, err
+				}
+				currentPGID = &pg.ID
+			}
+		} else {
+			currentPGID = pgID
+		}
+
+		ip, err := r.ensureServer(ctx, serverName, serverType, location, image, role, poolName, extraLabels, userData, currentPGID, privateIP)
 		if err != nil {
 			return nil, err
 		}
@@ -286,6 +338,7 @@ func (r *Reconciler) ensureServer(
 	extraLabels map[string]string,
 	userData string,
 	pgID *int64,
+	privateIP string,
 ) (string, error) {
 	// Check if exists
 	serverID, err := r.serverProvisioner.GetServerID(ctx, serverName)
@@ -320,6 +373,12 @@ func (r *Reconciler) ensureServer(
 		image = "talos"
 	}
 
+	// Get Network ID
+	if r.network == nil {
+		return "", fmt.Errorf("network not initialized")
+	}
+	networkID := r.network.ID
+
 	_, err = r.serverProvisioner.CreateServer(
 		ctx,
 		serverName,
@@ -330,6 +389,8 @@ func (r *Reconciler) ensureServer(
 		labels,
 		userData,
 		pgID,
+		networkID,
+		privateIP,
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to create server %s: %w", serverName, err)
