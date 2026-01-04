@@ -101,11 +101,14 @@ func TestClusterProvisioning(t *testing.T) {
 		logger("Deleted Network")
 
 		// Delete Placement Groups
-		hClient.DeletePlacementGroup(ctx, clusterName+"-worker")
+		hClient.DeletePlacementGroup(ctx, clusterName+"-control-plane-pg")
 		hClient.DeletePlacementGroup(ctx, clusterName+"-control-plane")
+		hClient.DeletePlacementGroup(ctx, clusterName+"-worker-pg-1")
+		logger("Deleted PGs")
 
 		// Delete Certificates
 		hClient.DeleteCertificate(ctx, clusterName+"-state")
+		logger("Deleted Certificates")
 	}
 	defer cleanup()
 
