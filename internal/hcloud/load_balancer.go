@@ -6,6 +6,7 @@ import (
 	"net"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	"github.com/sak-d/hcloud-k8s/internal/retry"
 )
 
 // EnsureLoadBalancer ensures that a load balancer exists with the given specifications.
@@ -116,15 +117,31 @@ func (c *RealClient) AttachToNetwork(ctx context.Context, lb *hcloud.LoadBalance
 
 // DeleteLoadBalancer deletes the load balancer with the given name.
 func (c *RealClient) DeleteLoadBalancer(ctx context.Context, name string) error {
-	lb, _, err := c.client.LoadBalancer.Get(ctx, name)
-	if err != nil {
-		return err
-	}
-	if lb == nil {
+	// Add timeout context for delete operation
+	ctx, cancel := context.WithTimeout(ctx, c.timeouts.Delete)
+	defer cancel()
+
+	// Delete with retry logic (resource might be locked)
+	return retry.WithExponentialBackoff(ctx, func() error {
+		lb, _, err := c.client.LoadBalancer.Get(ctx, name)
+		if err != nil {
+			return retry.Fatal(fmt.Errorf("failed to get load balancer: %w", err))
+		}
+		if lb == nil {
+			return nil // Load balancer already deleted
+		}
+
+		_, err = c.client.LoadBalancer.Delete(ctx, lb)
+		if err != nil {
+			// Check if resource is locked (retryable)
+			if isResourceLocked(err) {
+				return err
+			}
+			// Other errors are fatal
+			return retry.Fatal(err)
+		}
 		return nil
-	}
-	_, err = c.client.LoadBalancer.Delete(ctx, lb)
-	return err
+	}, retry.WithMaxRetries(c.timeouts.RetryMaxAttempts), retry.WithInitialDelay(c.timeouts.RetryInitialDelay))
 }
 
 // GetLoadBalancer returns the load balancer with the given name.

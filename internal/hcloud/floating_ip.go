@@ -2,8 +2,10 @@ package hcloud
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	"github.com/sak-d/hcloud-k8s/internal/retry"
 )
 
 // EnsureFloatingIP ensures that a floating IP exists with the given specifications.
@@ -36,15 +38,31 @@ func (c *RealClient) EnsureFloatingIP(ctx context.Context, name, homeLocation, i
 
 // DeleteFloatingIP deletes the floating IP with the given name.
 func (c *RealClient) DeleteFloatingIP(ctx context.Context, name string) error {
-	fip, _, err := c.client.FloatingIP.Get(ctx, name)
-	if err != nil {
-		return err
-	}
-	if fip == nil {
+	// Add timeout context for delete operation
+	ctx, cancel := context.WithTimeout(ctx, c.timeouts.Delete)
+	defer cancel()
+
+	// Delete with retry logic (resource might be locked)
+	return retry.WithExponentialBackoff(ctx, func() error {
+		fip, _, err := c.client.FloatingIP.Get(ctx, name)
+		if err != nil {
+			return retry.Fatal(fmt.Errorf("failed to get floating IP: %w", err))
+		}
+		if fip == nil {
+			return nil // Floating IP already deleted
+		}
+
+		_, err = c.client.FloatingIP.Delete(ctx, fip)
+		if err != nil {
+			// Check if resource is locked (retryable)
+			if isResourceLocked(err) {
+				return err
+			}
+			// Other errors are fatal
+			return retry.Fatal(err)
+		}
 		return nil
-	}
-	_, err = c.client.FloatingIP.Delete(ctx, fip)
-	return err
+	}, retry.WithMaxRetries(c.timeouts.RetryMaxAttempts), retry.WithInitialDelay(c.timeouts.RetryInitialDelay))
 }
 
 // GetFloatingIP returns the floating IP with the given name.

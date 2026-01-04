@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	"github.com/sak-d/hcloud-k8s/internal/retry"
 )
 
 // EnsureFirewall ensures that a firewall exists with the given specifications.
@@ -49,15 +50,31 @@ func (c *RealClient) EnsureFirewall(ctx context.Context, name string, rules []hc
 
 // DeleteFirewall deletes the firewall with the given name.
 func (c *RealClient) DeleteFirewall(ctx context.Context, name string) error {
-	fw, _, err := c.client.Firewall.Get(ctx, name)
-	if err != nil {
-		return fmt.Errorf("failed to get firewall: %w", err)
-	}
-	if fw == nil {
+	// Add timeout context for delete operation
+	ctx, cancel := context.WithTimeout(ctx, c.timeouts.Delete)
+	defer cancel()
+
+	// Delete with retry logic (resource might be locked)
+	return retry.WithExponentialBackoff(ctx, func() error {
+		fw, _, err := c.client.Firewall.Get(ctx, name)
+		if err != nil {
+			return retry.Fatal(fmt.Errorf("failed to get firewall: %w", err))
+		}
+		if fw == nil {
+			return nil // Firewall already deleted
+		}
+
+		_, err = c.client.Firewall.Delete(ctx, fw)
+		if err != nil {
+			// Check if resource is locked (retryable)
+			if isResourceLocked(err) {
+				return err
+			}
+			// Other errors are fatal
+			return retry.Fatal(err)
+		}
 		return nil
-	}
-	_, err = c.client.Firewall.Delete(ctx, fw)
-	return err
+	}, retry.WithMaxRetries(c.timeouts.RetryMaxAttempts), retry.WithInitialDelay(c.timeouts.RetryInitialDelay))
 }
 
 // GetFirewall returns the firewall with the given name.
