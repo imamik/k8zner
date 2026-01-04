@@ -365,8 +365,9 @@ func (r *Reconciler) ensureImage(ctx context.Context, serverType string) (string
 	}
 
 	if snapshot != nil {
-		log.Printf("Found existing Talos snapshot: %s (ID: %d)", snapshot.Description, snapshot.ID)
-		return snapshot.Description, nil
+		snapshotID := fmt.Sprintf("%d", snapshot.ID)
+		log.Printf("Found existing Talos snapshot: %s (ID: %s)", snapshot.Description, snapshotID)
+		return snapshotID, nil
 	}
 
 	// Snapshot doesn't exist, build it
@@ -383,15 +384,9 @@ func (r *Reconciler) ensureImage(ctx context.Context, serverType string) (string
 		return "", fmt.Errorf("failed to build Talos image: %w", err)
 	}
 
-	// Get the created snapshot to return its description
-	snapshot, err = r.snapshotManager.GetSnapshotByLabels(ctx, labels)
-	if err != nil || snapshot == nil {
-		// Fallback to generated name
-		return fmt.Sprintf("talos-%s-k8s-%s-%s", talosVersion, k8sVersion, arch), nil
-	}
-
-	log.Printf("Successfully built Talos snapshot: %s (ID: %s)", snapshot.Description, snapshotID)
-	return snapshot.Description, nil
+	// Return the snapshot ID that was just created
+	log.Printf("Successfully built Talos snapshot ID: %s", snapshotID)
+	return snapshotID, nil
 }
 
 // createImageBuilder creates an image builder instance.
