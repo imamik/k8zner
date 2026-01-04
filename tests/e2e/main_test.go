@@ -78,6 +78,11 @@ func TestImageBuildLifecycle(t *testing.T) {
 		tc := tc // capture range variable
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel() // Run in parallel
+
+			// Setup cleaner for this subtest
+			cleaner := &ResourceCleaner{t: t}
+			defer cleaner.Cleanup()
+
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 			defer cancel()
 
@@ -160,7 +165,8 @@ func TestImageBuildLifecycle(t *testing.T) {
 			}
 
 			// We pass the ssh key to prevent password emails
-			_, err = client.CreateServer(ctx, verifyServerName, snapshotID, serverType, "", []string{verifyKeyName}, verifyLabels, "", nil)
+			// Updated CreateServer signature: ..., placementGroupID, networkID, privateIP
+			_, err = client.CreateServer(ctx, verifyServerName, snapshotID, serverType, "", []string{verifyKeyName}, verifyLabels, "", nil, 0, "")
 			if err != nil {
 				t.Fatalf("Failed to create verification server: %v", err)
 			}
