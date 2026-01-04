@@ -12,6 +12,24 @@ import (
 	"github.com/sak-d/hcloud-k8s/internal/keygen"
 )
 
+// ResourceCleaner helps track and clean up resources.
+type ResourceCleaner struct {
+	t        *testing.T
+	cleanups []func()
+}
+
+// Add adds a cleanup function.
+func (rc *ResourceCleaner) Add(f func()) {
+	rc.cleanups = append(rc.cleanups, f)
+}
+
+// Cleanup executes all cleanup functions in LIFO order.
+func (rc *ResourceCleaner) Cleanup() {
+	for i := len(rc.cleanups) - 1; i >= 0; i-- {
+		rc.cleanups[i]()
+	}
+}
+
 // setupSSHKey generates a temporary SSH key, uploads it to HCloud, and registers cleanup.
 // It returns the key name and private key bytes.
 func setupSSHKey(t *testing.T, client *hcloud.RealClient, cleaner *ResourceCleaner, prefix string) (string, []byte) {
