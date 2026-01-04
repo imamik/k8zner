@@ -141,7 +141,13 @@ func (b *Builder) Build(ctx context.Context, imageName, talosVersion, architectu
 
 	// 6. Create Snapshot.
 	log.Printf("Creating snapshot...")
-	snapshotID, err := b.snapshotManager.CreateSnapshot(ctx, serverID, imageName)
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+	labels["os"] = "talos"
+	labels["arch"] = architecture
+
+	snapshotID, err := b.snapshotManager.CreateSnapshot(ctx, serverID, imageName, labels)
 	if err != nil {
 		return "", fmt.Errorf("failed to create snapshot: %w", err)
 	}

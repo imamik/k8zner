@@ -60,7 +60,7 @@ func TestInfraProvisioning(t *testing.T) {
 					Count:      1,
 					ServerType: "cx23",
 					Location:   "hel1",
-					Image:      "debian-12", // Override image to avoid errors if "talos" is missing
+					Image:      "talos",
 				},
 			},
 			PublicVIPIPv4Enabled: true,
@@ -95,10 +95,8 @@ func TestInfraProvisioning(t *testing.T) {
 	// RUN RECONCILE
 	t.Logf("Running Reconcile for %s...", clusterName)
 	err := reconciler.Reconcile(ctx)
-	// We expect failure at Bootstrap step because image is debian-12 (not Talos) or client config is mock
-	// But Infra should be created.
 	if err != nil {
-		t.Logf("Reconcile returned error (expected in mock/partial E2E): %v", err)
+		t.Logf("Reconcile returned error: %v", err)
 	}
 
 	// VERIFY

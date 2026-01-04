@@ -9,7 +9,7 @@ import (
 )
 
 // CreateSnapshot creates a snapshot of the server.
-func (c *RealClient) CreateSnapshot(ctx context.Context, serverID, snapshotDescription string) (string, error) {
+func (c *RealClient) CreateSnapshot(ctx context.Context, serverID, snapshotDescription string, labels map[string]string) (string, error) {
 	id, err := strconv.ParseInt(serverID, 10, 64)
 	if err != nil {
 		return "", fmt.Errorf("invalid server id: %s", serverID)
@@ -19,6 +19,7 @@ func (c *RealClient) CreateSnapshot(ctx context.Context, serverID, snapshotDescr
 	result, _, err := c.client.Server.CreateImage(ctx, server, &hcloud.ServerCreateImageOpts{
 		Type:        hcloud.ImageTypeSnapshot,
 		Description: &snapshotDescription,
+		Labels:      labels,
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to create snapshot: %w", err)

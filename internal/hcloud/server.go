@@ -3,8 +3,10 @@ package hcloud
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"strconv"
+	"time"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
@@ -19,14 +21,62 @@ func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverTy
 		return "", fmt.Errorf("server type not found: %s", serverType)
 	}
 
-	// Try to get image by name first.
-	imageObj, _, err := c.client.Image.Get(ctx, imageType) //nolint:staticcheck
-	if err != nil {
-		return "", fmt.Errorf("failed to get image: %w", err)
+	var imageObj *hcloud.Image
+	// Special handling for talos
+	if imageType == "talos" {
+		images, _, err := c.client.Image.List(ctx, hcloud.ImageListOpts{
+			ListOpts: hcloud.ListOpts{
+				LabelSelector: "os=talos",
+			},
+			Architecture: []hcloud.Architecture{serverTypeObj.Architecture},
+			Sort:         []string{"created:desc"},
+		})
+		if err == nil && len(images) > 0 {
+			imageObj = images[0]
+		}
+	}
+
+	// Try to get image by name if not found via labels or if another image was requested.
+	if imageObj == nil {
+		imageObj, _, err = c.client.Image.Get(ctx, imageType) //nolint:staticcheck
+		if err != nil {
+			return "", fmt.Errorf("failed to get image: %w", err)
+		}
+	}
+
+	if imageObj == nil {
+		return "", fmt.Errorf("image not found: %s", imageType)
+	}
+
+	// Wait for image to be available if it's still creating
+	if imageObj.Status != hcloud.ImageStatusAvailable {
+		log.Printf("Image %s (%d) is in status %s, waiting for it to become available...", imageObj.Name, imageObj.ID, imageObj.Status)
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		timeout := time.After(5 * time.Minute)
+	waitLoop:
+		for {
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-timeout:
+				return "", fmt.Errorf("timeout waiting for image %d to become available", imageObj.ID)
+			case <-ticker.C:
+				img, _, err := c.client.Image.GetByID(ctx, imageObj.ID)
+				if err != nil {
+					return "", fmt.Errorf("failed to get image status: %w", err)
+				}
+				if img.Status == hcloud.ImageStatusAvailable {
+					imageObj = img
+					break waitLoop
+				}
+				log.Printf("Still waiting for image %d (status: %s)...", imageObj.ID, img.Status)
+			}
+		}
 	}
 
 	// Check if image architecture matches server type architecture.
-	if imageObj != nil && imageObj.Architecture != serverTypeObj.Architecture {
+	if imageObj.Architecture != serverTypeObj.Architecture {
 		images, _, err := c.client.Image.List(ctx, hcloud.ImageListOpts{
 			Name:         imageType,
 			Architecture: []hcloud.Architecture{serverTypeObj.Architecture},
@@ -37,26 +87,6 @@ func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverTy
 		if len(images) > 0 {
 			imageObj = images[0]
 		}
-	}
-
-	// Special handling for debian-12
-	if imageObj == nil {
-		if imageType == "debian-12" {
-			images, _, err := c.client.Image.List(ctx, hcloud.ImageListOpts{
-				Name:         "debian-12",
-				Architecture: []hcloud.Architecture{serverTypeObj.Architecture},
-			})
-			if err != nil {
-				return "", fmt.Errorf("failed to list images: %w", err)
-			}
-			if len(images) > 0 {
-				imageObj = images[0]
-			}
-		}
-	}
-
-	if imageObj == nil {
-		return "", fmt.Errorf("image not found: %s", imageType)
 	}
 
 	var sshKeyObjs []*hcloud.SSHKey

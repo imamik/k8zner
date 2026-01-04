@@ -17,7 +17,7 @@ func TestBuild(t *testing.T) {
 		GetServerIPFunc: func(_ context.Context, _ string) (string, error) {
 			return "1.2.3.4", nil
 		},
-		CreateSnapshotFunc: func(_ context.Context, _ string, _ string) (string, error) {
+		CreateSnapshotFunc: func(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
 			return "snap-123", nil
 		},
 		DeleteServerFunc: func(_ context.Context, _ string) error {

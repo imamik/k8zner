@@ -76,20 +76,22 @@ func TestImageBuildLifecycle(t *testing.T) {
 			}
 
 			t.Logf("Starting build for %s...", tc.arch)
-			snapshotID, err := builder.Build(ctx, imageName, "v1.12.0", tc.arch, labels)
+			snapshotID, err := builder.Build(ctx, imageName, "v1.8.3", tc.arch, labels)
 
 			// If snapshot was created, we must clean it up.
 			// Even if Build returned error, it might have created a snapshot (unlikely with our fix, but good practice).
 			// Since we don't have ID if it fails, we assume builder cleanup or fix in client handles it.
 			// If success, we track it.
-			if snapshotID != "" {
-				cleaner.Add(func() {
-					t.Logf("Deleting snapshot %s...", snapshotID)
-					if err := client.DeleteImage(context.Background(), snapshotID); err != nil {
-						t.Errorf("Failed to delete snapshot %s: %v", snapshotID, err)
-					}
-				})
-			}
+			/*
+				if snapshotID != "" {
+					cleaner.Add(func() {
+						t.Logf("Deleting snapshot %s...", snapshotID)
+						if err := client.DeleteImage(context.Background(), snapshotID); err != nil {
+							t.Errorf("Failed to delete snapshot %s: %v", snapshotID, err)
+						}
+					})
+				}
+			*/
 
 			if err != nil {
 				t.Fatalf("Build failed for %s: %v", tc.arch, err)

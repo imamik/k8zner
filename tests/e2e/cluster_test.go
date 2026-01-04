@@ -5,6 +5,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/sak-d/hcloud-k8s/internal/cluster"
 	"github.com/sak-d/hcloud-k8s/internal/config"
 	hcloud_client "github.com/sak-d/hcloud-k8s/internal/hcloud"
+	"github.com/sak-d/hcloud-k8s/internal/talos"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -45,7 +47,7 @@ func TestClusterProvisioning(t *testing.T) {
 					ServerType: "cx23",
 					Location:   "hel1",
 					Count:      1,
-					Image:      "debian-12",
+					Image:      "talos",
 				},
 			},
 		},
@@ -55,11 +57,11 @@ func TestClusterProvisioning(t *testing.T) {
 				ServerType: "cx23",
 				Location:   "hel1",
 				Count:      1,
-				Image:      "debian-12",
+				Image:      "talos",
 			},
 		},
 		Talos: config.TalosConfig{
-			Version: "v1.7.0",
+			Version: "v1.8.3",
 		},
 		Kubernetes: config.KubernetesConfig{
 			Version: "1.30.0",
@@ -108,8 +110,9 @@ func TestClusterProvisioning(t *testing.T) {
 	defer cleanup()
 
 	// Initialize Managers
-	// Use MockTalosProducer to avoid "invalid user_data" error with Debian image
-	talosGen := &MockTalosProducer{}
+	// Use real Talos generator for a "real" E2E run
+	talosGen, err := talos.NewConfigGenerator(clusterName, cfg.Kubernetes.Version, cfg.Talos.Version, "", "")
+	assert.NoError(t, err)
 
 	reconciler := cluster.NewReconciler(hClient, talosGen, cfg)
 
@@ -117,9 +120,35 @@ func TestClusterProvisioning(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 
-	err := reconciler.Reconcile(ctx)
-	if err != nil {
-		t.Logf("Reconcile returned error (expected as we can't bootstrap debian): %v", err)
+	err = reconciler.Reconcile(ctx)
+	assert.NoError(t, err)
+
+	// Verify APIs are reachable
+	// We check for Talos API on one of the servers
+	cp1IP, err := hClient.GetServerIP(ctx, clusterName+"-control-plane-1")
+	assert.NoError(t, err)
+	assert.NotEmpty(t, cp1IP)
+
+	// Kube API through Load Balancer
+	lb, err := hClient.GetLoadBalancer(ctx, clusterName+"-kube-api")
+	assert.NoError(t, err)
+	lbIP := lb.PublicNet.IPv4.IP.String()
+	assert.NotEmpty(t, lbIP)
+
+	t.Logf("Verifying APIs: Talos=%s:50000, Kube=%s:6443", cp1IP, lbIP)
+
+	// Connectivity Check: Talos API
+	if err := waitForPort(cp1IP, 50000, 2*time.Minute); err != nil {
+		t.Errorf("Talos API not reachable: %v", err)
+	} else {
+		t.Log("Talos API is reachable!")
+	}
+
+	// Connectivity Check: Kube API
+	if err := waitForPort(lbIP, 6443, 10*time.Minute); err != nil {
+		t.Errorf("Kube API not reachable: %v", err)
+	} else {
+		t.Log("Kube API is reachable!")
 	}
 
 	// Verify Resources using Interface Getters
@@ -135,7 +164,7 @@ func TestClusterProvisioning(t *testing.T) {
 	assert.NotNil(t, fw)
 
 	// Check LB
-	lb, err := hClient.GetLoadBalancer(ctx, clusterName+"-kube-api")
+	lb, err = hClient.GetLoadBalancer(ctx, clusterName+"-kube-api")
 	assert.NoError(t, err)
 	assert.NotNil(t, lb)
 
@@ -143,4 +172,21 @@ func TestClusterProvisioning(t *testing.T) {
 	srvID, err := hClient.GetServerID(ctx, clusterName+"-control-plane-1")
 	assert.NoError(t, err)
 	assert.NotEmpty(t, srvID)
+}
+
+func waitForPort(ip string, port int, timeout time.Duration) error {
+	address := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("tcp", address, 2*time.Second)
+		if err == nil {
+			_ = conn.Close()
+			return nil
+		}
+		time.Sleep(5 * time.Second)
+	}
+	return fmt.Errorf("timeout waiting for %s", address)
 }

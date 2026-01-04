@@ -17,7 +17,7 @@ type MockClient struct {
 	ResetServerFunc    func(ctx context.Context, serverID string) error
 	PoweroffServerFunc func(ctx context.Context, serverID string) error
 
-	CreateSnapshotFunc func(ctx context.Context, serverID, snapshotDescription string) (string, error)
+	CreateSnapshotFunc func(ctx context.Context, serverID, snapshotDescription string, labels map[string]string) (string, error)
 	DeleteImageFunc    func(ctx context.Context, imageID string) error
 
 	CreateSSHKeyFunc func(ctx context.Context, name, publicKey string) (string, error)
@@ -120,9 +120,9 @@ func (m *MockClient) PoweroffServer(ctx context.Context, serverID string) error 
 }
 
 // CreateSnapshot mocks snapshot creation.
-func (m *MockClient) CreateSnapshot(ctx context.Context, serverID, snapshotDescription string) (string, error) {
+func (m *MockClient) CreateSnapshot(ctx context.Context, serverID, snapshotDescription string, labels map[string]string) (string, error) {
 	if m.CreateSnapshotFunc != nil {
-		return m.CreateSnapshotFunc(ctx, serverID, snapshotDescription)
+		return m.CreateSnapshotFunc(ctx, serverID, snapshotDescription, labels)
 	}
 	return "mock-snapshot-id", nil
 }
