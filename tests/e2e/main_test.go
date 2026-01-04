@@ -63,7 +63,7 @@ func TestImageBuildLifecycle(t *testing.T) {
 			defer cancel()
 
 			cleaner := &ResourceCleaner{t: t}
-			defer cleaner.Cleanup()
+			// Note: No need for defer cleaner.Cleanup() - t.Cleanup() is called automatically
 
 			labels := map[string]string{
 				"type":       "e2e-test",
