@@ -58,48 +58,53 @@ func TestImageBuildLifecycle(t *testing.T) {
 	for _, tc := range tests {
 		tc := tc // capture range variable
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel() // Run in parallel
-
-			// Setup cleaner for this subtest
-			cleaner := &ResourceCleaner{t: t}
-			defer cleaner.Cleanup()
-
+			// Note: Not parallel - TestMain builds snapshots sequentially first
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 			defer cancel()
 
 			cleaner := &ResourceCleaner{t: t}
-			defer cleaner.Cleanup()
+			// Note: No need for defer cleaner.Cleanup() - t.Cleanup() is called automatically
 
-			// Unique image name per test
-			imageName := fmt.Sprintf("e2e-test-image-%s-%s", tc.arch, time.Now().Format("20060102-150405"))
-
-			labels := map[string]string{
-				"type":       "e2e-test",
-				"created_by": "hcloud-k8s-e2e",
-				"test_name":  "TestImageBuildLifecycle",
-				"arch":       tc.arch,
+			// Use shared snapshot from TestMain if available
+			var snapshotID string
+			if sharedCtx != nil {
+				if tc.arch == "amd64" && sharedCtx.SnapshotAMD64 != "" {
+					snapshotID = sharedCtx.SnapshotAMD64
+					t.Logf("Using shared amd64 snapshot: %s", snapshotID)
+				} else if tc.arch == "arm64" && sharedCtx.SnapshotARM64 != "" {
+					snapshotID = sharedCtx.SnapshotARM64
+					t.Logf("Using shared arm64 snapshot: %s", snapshotID)
+				}
 			}
 
-			t.Logf("Starting build for %s...", tc.arch)
-			snapshotID, err := builder.Build(ctx, imageName, "v1.12.0", tc.arch, labels)
+			// If no shared snapshot, build one (fallback)
+			if snapshotID == "" {
+				labels := map[string]string{
+					"type":       "e2e-test",
+					"created_by": "hcloud-k8s-e2e",
+					"test_name":  "TestImageBuildLifecycle",
+					"arch":       tc.arch,
+				}
 
-			// If snapshot was created, we must clean it up.
-			// Even if Build returned error, it might have created a snapshot (unlikely with our fix, but good practice).
-			// Since we don't have ID if it fails, we assume builder cleanup or fix in client handles it.
-			// If success, we track it.
-			if snapshotID != "" {
-				cleaner.Add(func() {
-					t.Logf("Deleting snapshot %s...", snapshotID)
-					if err := client.DeleteImage(context.Background(), snapshotID); err != nil {
-						t.Errorf("Failed to delete snapshot %s: %v", snapshotID, err)
-					}
-				})
-			}
+				t.Logf("Building %s snapshot...", tc.arch)
+				var err error
+				snapshotID, err = builder.Build(ctx, "v1.8.3", "v1.31.0", tc.arch, labels)
 
-			if err != nil {
-				t.Fatalf("Build failed for %s: %v", tc.arch, err)
+				// If snapshot was created, we must clean it up
+				if snapshotID != "" {
+					cleaner.Add(func() {
+						t.Logf("Deleting snapshot %s...", snapshotID)
+						if err := client.DeleteImage(context.Background(), snapshotID); err != nil {
+							t.Errorf("Failed to delete snapshot %s: %v", snapshotID, err)
+						}
+					})
+				}
+
+				if err != nil {
+					t.Fatalf("Build failed for %s: %v", tc.arch, err)
+				}
+				t.Logf("Build successful for %s, snapshot ID: %s", tc.arch, snapshotID)
 			}
-			t.Logf("Build successful for %s, snapshot ID: %s", tc.arch, snapshotID)
 
 			// 3. Verify Server Creation
 			verifyServerName := fmt.Sprintf("verify-%s-%s", tc.arch, time.Now().Format("20060102-150405"))

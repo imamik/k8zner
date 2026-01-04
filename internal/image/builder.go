@@ -38,7 +38,9 @@ func NewBuilder(client interface{}, commFact CommunicatorFactory) *Builder {
 }
 
 // Build creates a temporary server, installs Talos, creates a snapshot, and cleans up.
-func (b *Builder) Build(ctx context.Context, imageName, talosVersion, architecture string, labels map[string]string) (string, error) {
+func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architecture string, labels map[string]string) (string, error) {
+	// Generate image name from versions and architecture
+	imageName := fmt.Sprintf("talos-%s-k8s-%s-%s", talosVersion, k8sVersion, architecture)
 	serverName := fmt.Sprintf("build-%s-%s", imageName, time.Now().Format("20060102150405"))
 
 	// 0. Setup SSH Key.
@@ -58,12 +60,7 @@ func (b *Builder) Build(ctx context.Context, imageName, talosVersion, architectu
 		return "", fmt.Errorf("failed to upload ssh key: %w", err)
 	}
 
-	defer func() {
-		log.Printf("Deleting SSH key %s...", keyName)
-		if err := b.sshKeyManager.DeleteSSHKey(context.Background(), keyName); err != nil {
-			log.Printf("Failed to delete ssh key %s: %v", keyName, err)
-		}
-	}()
+	defer b.cleanupSSHKey(keyName)
 
 	// 1. Create Server.
 	log.Printf("Creating server %s...", serverName)
@@ -147,7 +144,15 @@ func (b *Builder) Build(ctx context.Context, imageName, talosVersion, architectu
 
 	// 6. Create Snapshot.
 	log.Printf("Creating snapshot...")
-	snapshotID, err := b.snapshotManager.CreateSnapshot(ctx, serverID, imageName)
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+	labels["os"] = "talos"
+	labels["talos-version"] = talosVersion
+	labels["k8s-version"] = k8sVersion
+	labels["arch"] = architecture
+
+	snapshotID, err := b.snapshotManager.CreateSnapshot(ctx, serverID, imageName, labels)
 	if err != nil {
 		return "", fmt.Errorf("failed to create snapshot: %w", err)
 	}
@@ -157,32 +162,26 @@ func (b *Builder) Build(ctx context.Context, imageName, talosVersion, architectu
 
 func (b *Builder) cleanupServer(serverName string) {
 	log.Printf("Cleaning up server %s...", serverName)
-	// Create a context with a generous timeout to allow for retries (e.g. if locked by snapshot)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
+	// DeleteServer now has built-in retry logic and timeout (5 minutes default)
+	// from Phase 2 improvements, so we can simply call it
+	ctx := context.Background()
+	err := b.provisioner.DeleteServer(ctx, serverName)
+	if err != nil {
+		log.Printf("Failed to delete server %s: %v", serverName, err)
+	} else {
+		log.Printf("Server %s deleted successfully", serverName)
+	}
+}
 
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		err := b.provisioner.DeleteServer(ctx, serverName)
-		if err == nil {
-			log.Printf("Server %s deleted successfully", serverName)
-			return
-		}
-
-		// Check if error is retryable (locked) or not found.
-		// hcloud-go returns specific errors but checking string might be fragile.
-		// However, logging the error and retrying is safer.
-		// If context expires, we give up.
-		log.Printf("Failed to delete server %s (retrying): %v", serverName, err)
-
-		select {
-		case <-ctx.Done():
-			log.Printf("Timeout waiting to delete server %s: %v", serverName, ctx.Err())
-			return
-		case <-ticker.C:
-			// continue retry
-		}
+func (b *Builder) cleanupSSHKey(keyName string) {
+	log.Printf("Cleaning up SSH key %s...", keyName)
+	// DeleteSSHKey now has built-in retry logic and timeout (5 minutes default)
+	// from Phase 2 improvements, so we can simply call it
+	ctx := context.Background()
+	err := b.sshKeyManager.DeleteSSHKey(ctx, keyName)
+	if err != nil {
+		log.Printf("Failed to delete SSH key %s: %v", keyName, err)
+	} else {
+		log.Printf("SSH key %s deleted successfully", keyName)
 	}
 }

@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"log"
 	"sort"
-	"time"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/sak-d/hcloud-k8s/internal/config"
 	hcloud_internal "github.com/sak-d/hcloud-k8s/internal/hcloud"
+	"github.com/sak-d/hcloud-k8s/internal/image"
+	"github.com/sak-d/hcloud-k8s/internal/retry"
 )
 
 // TalosConfigProducer defines the interface for generating Talos configurations.
@@ -30,10 +31,12 @@ type Reconciler struct {
 	pgManager         hcloud_internal.PlacementGroupManager
 	fipManager        hcloud_internal.FloatingIPManager
 	certManager       hcloud_internal.CertificateManager
+	snapshotManager   hcloud_internal.SnapshotManager
 	infra             hcloud_internal.InfrastructureManager // Combined interface for Bootstrapper
 	talosGenerator    TalosConfigProducer
 	config            *config.Config
 	bootstrapper      *Bootstrapper
+	timeouts          *config.Timeouts
 
 	// State
 	network  *hcloud.Network
@@ -54,10 +57,12 @@ func NewReconciler(
 		pgManager:         infra,
 		fipManager:        infra,
 		certManager:       infra,
+		snapshotManager:   infra,
 		infra:             infra,
 		talosGenerator:    talosGenerator,
 		config:            cfg,
 		bootstrapper:      NewBootstrapper(infra),
+		timeouts:          config.LoadTimeouts(),
 	}
 }
 
@@ -326,6 +331,71 @@ func (r *Reconciler) reconcileNodePool(
 	return ips, nil
 }
 
+// ensureImage ensures the required Talos image exists, building it if necessary.
+func (r *Reconciler) ensureImage(ctx context.Context, serverType string) (string, error) {
+	// Determine architecture from server type
+	arch := "amd64"
+	if len(serverType) >= 3 && serverType[:3] == "cax" {
+		arch = "arm64"
+	}
+
+	// Get versions from config
+	talosVersion := r.config.Talos.Version
+	k8sVersion := r.config.Kubernetes.Version
+
+	// Set defaults if not configured
+	if talosVersion == "" {
+		talosVersion = "v1.8.3"
+	}
+	if k8sVersion == "" {
+		k8sVersion = "v1.31.0"
+	}
+
+	// Check if snapshot already exists
+	labels := map[string]string{
+		"os":            "talos",
+		"talos-version": talosVersion,
+		"k8s-version":   k8sVersion,
+		"arch":          arch,
+	}
+
+	snapshot, err := r.snapshotManager.GetSnapshotByLabels(ctx, labels)
+	if err != nil {
+		return "", fmt.Errorf("failed to check for existing snapshot: %w", err)
+	}
+
+	if snapshot != nil {
+		snapshotID := fmt.Sprintf("%d", snapshot.ID)
+		log.Printf("Found existing Talos snapshot: %s (ID: %s)", snapshot.Description, snapshotID)
+		return snapshotID, nil
+	}
+
+	// Snapshot doesn't exist, build it
+	log.Printf("Talos snapshot not found for %s/%s/%s, building...", talosVersion, k8sVersion, arch)
+
+	// Import image builder
+	builder := r.createImageBuilder()
+	if builder == nil {
+		return "", fmt.Errorf("image builder not available")
+	}
+
+	snapshotID, err := builder.Build(ctx, talosVersion, k8sVersion, arch, labels)
+	if err != nil {
+		return "", fmt.Errorf("failed to build Talos image: %w", err)
+	}
+
+	// Return the snapshot ID that was just created
+	log.Printf("Successfully built Talos snapshot ID: %s", snapshotID)
+	return snapshotID, nil
+}
+
+// createImageBuilder creates an image builder instance.
+func (r *Reconciler) createImageBuilder() *image.Builder {
+	// Pass nil for communicator factory - the builder will use its internal
+	// SSH key generation and create its own SSH client with those keys
+	return image.NewBuilder(r.infra, nil)
+}
+
 // ensureServer ensures a server exists and returns its IP.
 func (r *Reconciler) ensureServer(
 	ctx context.Context,
@@ -368,9 +438,14 @@ func (r *Reconciler) ensureServer(
 		labels[k] = v
 	}
 
-	// Image defaulting
-	if image == "" {
-		image = "talos"
+	// Image defaulting - if empty or "talos", ensure the versioned image exists
+	if image == "" || image == "talos" {
+		var err error
+		image, err = r.ensureImage(ctx, serverType)
+		if err != nil {
+			return "", fmt.Errorf("failed to ensure Talos image: %w", err)
+		}
+		log.Printf("Using Talos image: %s", image)
 	}
 
 	// Get Network ID
@@ -396,17 +471,25 @@ func (r *Reconciler) ensureServer(
 		return "", fmt.Errorf("failed to create server %s: %w", serverName, err)
 	}
 
-	// Get IP after creation with retries
+	// Get IP after creation with retry logic and configurable timeout
+	ipCtx, cancel := context.WithTimeout(ctx, r.timeouts.ServerIP)
+	defer cancel()
+
 	var ip string
-	for i := 0; i < 10; i++ {
-		ip, err = r.serverProvisioner.GetServerIP(ctx, serverName)
-		if err == nil && ip != "" {
-			break
+	err = retry.WithExponentialBackoff(ipCtx, func() error {
+		var getErr error
+		ip, getErr = r.serverProvisioner.GetServerIP(ctx, serverName)
+		if getErr != nil {
+			return getErr
 		}
-		time.Sleep(2 * time.Second)
-	}
-	if err != nil || ip == "" {
-		return "", fmt.Errorf("failed to get server IP for %s after retries: %w", serverName, err)
+		if ip == "" {
+			return fmt.Errorf("server IP not yet assigned")
+		}
+		return nil
+	}, retry.WithMaxRetries(r.timeouts.RetryMaxAttempts), retry.WithInitialDelay(r.timeouts.RetryInitialDelay))
+
+	if err != nil {
+		return "", fmt.Errorf("failed to get server IP for %s: %w", serverName, err)
 	}
 
 	return ip, nil

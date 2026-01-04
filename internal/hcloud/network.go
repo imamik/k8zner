@@ -6,10 +6,11 @@ import (
 	"net"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	"github.com/sak-d/hcloud-k8s/internal/retry"
 )
 
 // EnsureNetwork ensures that a network exists with the given specifications.
-func (c *RealClient) EnsureNetwork(ctx context.Context, name, ipRange, _ string, labels map[string]string) (*hcloud.Network, error) {
+func (c *RealClient) EnsureNetwork(ctx context.Context, name, ipRange, zone string, labels map[string]string) (*hcloud.Network, error) {
 	network, _, err := c.client.Network.Get(ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get network: %w", err)
@@ -80,15 +81,31 @@ func (c *RealClient) EnsureSubnet(ctx context.Context, network *hcloud.Network, 
 
 // DeleteNetwork deletes the network with the given name.
 func (c *RealClient) DeleteNetwork(ctx context.Context, name string) error {
-	network, _, err := c.client.Network.Get(ctx, name)
-	if err != nil {
-		return fmt.Errorf("failed to get network: %w", err)
-	}
-	if network == nil {
+	// Add timeout context for delete operation
+	ctx, cancel := context.WithTimeout(ctx, c.timeouts.Delete)
+	defer cancel()
+
+	// Delete with retry logic (resource might be locked)
+	return retry.WithExponentialBackoff(ctx, func() error {
+		network, _, err := c.client.Network.Get(ctx, name)
+		if err != nil {
+			return retry.Fatal(fmt.Errorf("failed to get network: %w", err))
+		}
+		if network == nil {
+			return nil // Network already deleted
+		}
+
+		_, err = c.client.Network.Delete(ctx, network)
+		if err != nil {
+			// Check if resource is locked (retryable)
+			if isResourceLocked(err) {
+				return err
+			}
+			// Other errors are fatal
+			return retry.Fatal(err)
+		}
 		return nil
-	}
-	_, err = c.client.Network.Delete(ctx, network)
-	return err
+	}, retry.WithMaxRetries(c.timeouts.RetryMaxAttempts), retry.WithInitialDelay(c.timeouts.RetryInitialDelay))
 }
 
 // GetNetwork returns the network with the given name.

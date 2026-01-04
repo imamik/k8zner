@@ -21,8 +21,9 @@ type ServerProvisioner interface {
 
 // SnapshotManager defines the interface for managing snapshots.
 type SnapshotManager interface {
-	CreateSnapshot(ctx context.Context, serverID, snapshotDescription string) (string, error)
+	CreateSnapshot(ctx context.Context, serverID, snapshotDescription string, labels map[string]string) (string, error)
 	DeleteImage(ctx context.Context, imageID string) error
+	GetSnapshotByLabels(ctx context.Context, labels map[string]string) (*hcloud.Image, error)
 }
 
 // SSHKeyManager defines the interface for managing SSH keys.
