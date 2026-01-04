@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"log"
 	"sort"
-	"time"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/sak-d/hcloud-k8s/internal/config"
 	hcloud_internal "github.com/sak-d/hcloud-k8s/internal/hcloud"
+	"github.com/sak-d/hcloud-k8s/internal/image"
+	"github.com/sak-d/hcloud-k8s/internal/retry"
 )
 
 // TalosConfigProducer defines the interface for generating Talos configurations.
@@ -30,10 +31,12 @@ type Reconciler struct {
 	pgManager         hcloud_internal.PlacementGroupManager
 	fipManager        hcloud_internal.FloatingIPManager
 	certManager       hcloud_internal.CertificateManager
+	snapshotManager   hcloud_internal.SnapshotManager
 	infra             hcloud_internal.InfrastructureManager // Combined interface for Bootstrapper
 	talosGenerator    TalosConfigProducer
 	config            *config.Config
 	bootstrapper      *Bootstrapper
+	timeouts          *config.Timeouts
 
 	// State
 	network  *hcloud.Network
@@ -54,10 +57,12 @@ func NewReconciler(
 		pgManager:         infra,
 		fipManager:        infra,
 		certManager:       infra,
+		snapshotManager:   infra,
 		infra:             infra,
 		talosGenerator:    talosGenerator,
 		config:            cfg,
 		bootstrapper:      NewBootstrapper(infra),
+		timeouts:          config.LoadTimeouts(),
 	}
 }
 
@@ -189,7 +194,7 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context) (map[string]stri
 
 	// Provision Servers
 	ips := make(map[string]string)
-	for _, pool := range r.config.ControlPlane.NodePools {
+	for i, pool := range r.config.ControlPlane.NodePools {
 		// Placement Group for Control Plane
 		pgName := fmt.Sprintf("%s-%s", r.config.ClusterName, pool.Name)
 		pgLabels := map[string]string{
@@ -201,7 +206,7 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context) (map[string]stri
 			return nil, err
 		}
 
-		poolIPs, err := r.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "control-plane", pool.Labels, string(cpConfig), &pg.ID)
+		poolIPs, err := r.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "control-plane", pool.Labels, string(cpConfig), &pg.ID, i)
 		if err != nil {
 			return nil, err
 		}
@@ -221,23 +226,10 @@ func (r *Reconciler) reconcileWorkers(ctx context.Context) error {
 		return err
 	}
 
-	for _, pool := range r.config.Workers {
-		// Placement Group
-		var pgID *int64
-		if pool.PlacementGroup {
-			pgName := fmt.Sprintf("%s-%s", r.config.ClusterName, pool.Name)
-			labels := map[string]string{
-				"cluster": r.config.ClusterName,
-				"pool":    pool.Name,
-			}
-			pg, err := r.pgManager.EnsurePlacementGroup(ctx, pgName, "spread", labels)
-			if err != nil {
-				return err
-			}
-			pgID = &pg.ID
-		}
-
-		_, err = r.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "worker", pool.Labels, string(workerConfig), pgID)
+	for i, pool := range r.config.Workers {
+		// Placement Group (Managed inside reconcileNodePool for Workers due to sharding)
+		// We pass nil here, and handle it inside reconcileNodePool based on pool config and index.
+		_, err = r.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "worker", pool.Labels, string(workerConfig), nil, i)
 		if err != nil {
 			return err
 		}
@@ -258,6 +250,7 @@ func (r *Reconciler) reconcileNodePool(
 	extraLabels map[string]string,
 	userData string,
 	pgID *int64,
+	poolIndex int,
 ) (map[string]string, error) {
 	ips := make(map[string]string)
 
@@ -265,13 +258,142 @@ func (r *Reconciler) reconcileNodePool(
 		// Name: <cluster>-<pool>-<index> (e.g. cluster-control-plane-1)
 		serverName := fmt.Sprintf("%s-%s-%d", r.config.ClusterName, poolName, j)
 
-		ip, err := r.ensureServer(ctx, serverName, serverType, location, image, role, poolName, extraLabels, userData, pgID)
+		// Calculate global index for subnet calculations
+		// For CP: 10 * np_index + cp_index + 1
+		// For Worker: wkr_index + 1
+		var hostNum int
+		var subnet string
+		var err error
+
+		if role == "control-plane" {
+			// Terraform: ipv4_private = cidrhost(subnet, np_index * 10 + cp_index + 1)
+			subnet, err = r.config.GetSubnetForRole("control-plane", 0)
+			if err != nil {
+				return nil, err
+			}
+			hostNum = poolIndex*10 + (j - 1) + 1
+		} else {
+			// Terraform: ipv4_private = cidrhost(subnet, wkr_index + 1)
+			// Note: Terraform iterates worker nodepools and uses separate subnets for each
+			// hcloud_network_subnet.worker[np.name]
+			// The config.GetSubnetForRole("worker", i) handles the subnet iteration.
+			subnet, err = r.config.GetSubnetForRole("worker", poolIndex)
+			if err != nil {
+				return nil, err
+			}
+			hostNum = (j - 1) + 1
+		}
+
+		privateIP, err := config.CIDRHost(subnet, hostNum)
+		if err != nil {
+			return nil, fmt.Errorf("failed to calculate private ip: %w", err)
+		}
+
+		// Placement Group Sharding for Workers
+		// Terraform: ${cluster}-${pool}-pg-${ceil((index+1)/10)}
+		var currentPGID *int64
+		if role == "worker" && pgID == nil { // Workers manage their own PGs if enabled
+			// Check if enabled in config for this pool
+			usePG := false
+			// Find the pool config again (slightly inefficient but safe)
+			for _, p := range r.config.Workers {
+				if p.Name == poolName {
+					usePG = p.PlacementGroup
+					break
+				}
+			}
+
+			if usePG {
+				pgIndex := int((j-1)/10) + 1
+				pgName := fmt.Sprintf("%s-%s-pg-%d", r.config.ClusterName, poolName, pgIndex)
+				pgLabels := map[string]string{
+					"cluster":  r.config.ClusterName,
+					"pool":     poolName,
+					"role":     "worker",
+					"nodepool": poolName,
+				}
+				pg, err := r.pgManager.EnsurePlacementGroup(ctx, pgName, "spread", pgLabels)
+				if err != nil {
+					return nil, err
+				}
+				currentPGID = &pg.ID
+			}
+		} else {
+			currentPGID = pgID
+		}
+
+		ip, err := r.ensureServer(ctx, serverName, serverType, location, image, role, poolName, extraLabels, userData, currentPGID, privateIP)
 		if err != nil {
 			return nil, err
 		}
 		ips[serverName] = ip
 	}
 	return ips, nil
+}
+
+// ensureImage ensures the required Talos image exists, building it if necessary.
+func (r *Reconciler) ensureImage(ctx context.Context, serverType string) (string, error) {
+	// Determine architecture from server type
+	arch := "amd64"
+	if len(serverType) >= 3 && serverType[:3] == "cax" {
+		arch = "arm64"
+	}
+
+	// Get versions from config
+	talosVersion := r.config.Talos.Version
+	k8sVersion := r.config.Kubernetes.Version
+
+	// Set defaults if not configured
+	if talosVersion == "" {
+		talosVersion = "v1.8.3"
+	}
+	if k8sVersion == "" {
+		k8sVersion = "v1.31.0"
+	}
+
+	// Check if snapshot already exists
+	labels := map[string]string{
+		"os":            "talos",
+		"talos-version": talosVersion,
+		"k8s-version":   k8sVersion,
+		"arch":          arch,
+	}
+
+	snapshot, err := r.snapshotManager.GetSnapshotByLabels(ctx, labels)
+	if err != nil {
+		return "", fmt.Errorf("failed to check for existing snapshot: %w", err)
+	}
+
+	if snapshot != nil {
+		snapshotID := fmt.Sprintf("%d", snapshot.ID)
+		log.Printf("Found existing Talos snapshot: %s (ID: %s)", snapshot.Description, snapshotID)
+		return snapshotID, nil
+	}
+
+	// Snapshot doesn't exist, build it
+	log.Printf("Talos snapshot not found for %s/%s/%s, building...", talosVersion, k8sVersion, arch)
+
+	// Import image builder
+	builder := r.createImageBuilder()
+	if builder == nil {
+		return "", fmt.Errorf("image builder not available")
+	}
+
+	snapshotID, err := builder.Build(ctx, talosVersion, k8sVersion, arch, labels)
+	if err != nil {
+		return "", fmt.Errorf("failed to build Talos image: %w", err)
+	}
+
+	// Return the snapshot ID that was just created
+	log.Printf("Successfully built Talos snapshot ID: %s", snapshotID)
+	return snapshotID, nil
+}
+
+// createImageBuilder creates an image builder instance.
+func (r *Reconciler) createImageBuilder() *image.Builder {
+	// Pass nil for communicator factory - the builder will use its internal
+	// SSH key generation and create its own SSH client with those keys
+	return image.NewBuilder(r.infra, nil)
 }
 
 // ensureServer ensures a server exists and returns its IP.
@@ -286,6 +408,7 @@ func (r *Reconciler) ensureServer(
 	extraLabels map[string]string,
 	userData string,
 	pgID *int64,
+	privateIP string,
 ) (string, error) {
 	// Check if exists
 	serverID, err := r.serverProvisioner.GetServerID(ctx, serverName)
@@ -315,10 +438,21 @@ func (r *Reconciler) ensureServer(
 		labels[k] = v
 	}
 
-	// Image defaulting
-	if image == "" {
-		image = "talos"
+	// Image defaulting - if empty or "talos", ensure the versioned image exists
+	if image == "" || image == "talos" {
+		var err error
+		image, err = r.ensureImage(ctx, serverType)
+		if err != nil {
+			return "", fmt.Errorf("failed to ensure Talos image: %w", err)
+		}
+		log.Printf("Using Talos image: %s", image)
 	}
+
+	// Get Network ID
+	if r.network == nil {
+		return "", fmt.Errorf("network not initialized")
+	}
+	networkID := r.network.ID
 
 	_, err = r.serverProvisioner.CreateServer(
 		ctx,
@@ -330,22 +464,32 @@ func (r *Reconciler) ensureServer(
 		labels,
 		userData,
 		pgID,
+		networkID,
+		privateIP,
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to create server %s: %w", serverName, err)
 	}
 
-	// Get IP after creation with retries
+	// Get IP after creation with retry logic and configurable timeout
+	ipCtx, cancel := context.WithTimeout(ctx, r.timeouts.ServerIP)
+	defer cancel()
+
 	var ip string
-	for i := 0; i < 10; i++ {
-		ip, err = r.serverProvisioner.GetServerIP(ctx, serverName)
-		if err == nil && ip != "" {
-			break
+	err = retry.WithExponentialBackoff(ipCtx, func() error {
+		var getErr error
+		ip, getErr = r.serverProvisioner.GetServerIP(ctx, serverName)
+		if getErr != nil {
+			return getErr
 		}
-		time.Sleep(2 * time.Second)
-	}
-	if err != nil || ip == "" {
-		return "", fmt.Errorf("failed to get server IP for %s after retries: %w", serverName, err)
+		if ip == "" {
+			return fmt.Errorf("server IP not yet assigned")
+		}
+		return nil
+	}, retry.WithMaxRetries(r.timeouts.RetryMaxAttempts), retry.WithInitialDelay(r.timeouts.RetryInitialDelay))
+
+	if err != nil {
+		return "", fmt.Errorf("failed to get server IP for %s: %w", serverName, err)
 	}
 
 	return ip, nil

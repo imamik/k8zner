@@ -9,7 +9,7 @@ import (
 
 // MockClient is a mock implementation of InfrastructureManager.
 type MockClient struct {
-	CreateServerFunc   func(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64) (string, error)
+	CreateServerFunc   func(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string) (string, error)
 	DeleteServerFunc   func(ctx context.Context, name string) error
 	GetServerIPFunc    func(ctx context.Context, name string) (string, error)
 	GetServerIDFunc    func(ctx context.Context, name string) (string, error)
@@ -17,8 +17,9 @@ type MockClient struct {
 	ResetServerFunc    func(ctx context.Context, serverID string) error
 	PoweroffServerFunc func(ctx context.Context, serverID string) error
 
-	CreateSnapshotFunc func(ctx context.Context, serverID, snapshotDescription string) (string, error)
-	DeleteImageFunc    func(ctx context.Context, imageID string) error
+	CreateSnapshotFunc       func(ctx context.Context, serverID, snapshotDescription string, labels map[string]string) (string, error)
+	DeleteImageFunc          func(ctx context.Context, imageID string) error
+	GetSnapshotByLabelsFunc  func(ctx context.Context, labels map[string]string) (*hcloud.Image, error)
 
 	CreateSSHKeyFunc func(ctx context.Context, name, publicKey string) (string, error)
 	DeleteSSHKeyFunc func(ctx context.Context, name string) error
@@ -64,9 +65,9 @@ type MockClient struct {
 var _ InfrastructureManager = (*MockClient)(nil)
 
 // CreateServer mocks server creation.
-func (m *MockClient) CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64) (string, error) {
+func (m *MockClient) CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string) (string, error) {
 	if m.CreateServerFunc != nil {
-		return m.CreateServerFunc(ctx, name, imageType, serverType, location, sshKeys, labels, userData, placementGroupID)
+		return m.CreateServerFunc(ctx, name, imageType, serverType, location, sshKeys, labels, userData, placementGroupID, networkID, privateIP)
 	}
 	return "mock-id", nil
 }
@@ -120,9 +121,9 @@ func (m *MockClient) PoweroffServer(ctx context.Context, serverID string) error 
 }
 
 // CreateSnapshot mocks snapshot creation.
-func (m *MockClient) CreateSnapshot(ctx context.Context, serverID, snapshotDescription string) (string, error) {
+func (m *MockClient) CreateSnapshot(ctx context.Context, serverID, snapshotDescription string, labels map[string]string) (string, error) {
 	if m.CreateSnapshotFunc != nil {
-		return m.CreateSnapshotFunc(ctx, serverID, snapshotDescription)
+		return m.CreateSnapshotFunc(ctx, serverID, snapshotDescription, labels)
 	}
 	return "mock-snapshot-id", nil
 }
@@ -133,6 +134,14 @@ func (m *MockClient) DeleteImage(ctx context.Context, imageID string) error {
 		return m.DeleteImageFunc(ctx, imageID)
 	}
 	return nil
+}
+
+// GetSnapshotByLabels mocks getting snapshot by labels.
+func (m *MockClient) GetSnapshotByLabels(ctx context.Context, labels map[string]string) (*hcloud.Image, error) {
+	if m.GetSnapshotByLabelsFunc != nil {
+		return m.GetSnapshotByLabelsFunc(ctx, labels)
+	}
+	return nil, nil // No snapshot found by default
 }
 
 // CreateSSHKey mocks ssh key creation.
@@ -220,6 +229,11 @@ func (m *MockClient) ConfigureService(ctx context.Context, lb *hcloud.LoadBalanc
 	if m.ConfigureServiceFunc != nil {
 		return m.ConfigureServiceFunc(ctx, lb, service)
 	}
+	return nil
+}
+
+// AddTarget mocks adding a target to the load balancer.
+func (m *MockClient) AddTarget(ctx context.Context, lb *hcloud.LoadBalancer, targetType hcloud.LoadBalancerTargetType, labelSelector string) error {
 	return nil
 }
 

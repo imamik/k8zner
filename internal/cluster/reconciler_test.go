@@ -132,11 +132,21 @@ func TestReconciler_Reconcile(t *testing.T) {
 	mockInfra.GetServerIDFunc = func(_ context.Context, _ string) (string, error) {
 		return "", nil // Does not exist
 	}
-	mockInfra.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64) (string, error) {
+	mockInfra.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string) (string, error) {
 		return "server-id", nil
 	}
 	mockInfra.GetServerIPFunc = func(_ context.Context, _ string) (string, error) {
 		return "10.0.1.2", nil
+	}
+
+	// Snapshots - Return existing snapshot so auto-build is skipped in tests
+	mockInfra.GetSnapshotByLabelsFunc = func(_ context.Context, labels map[string]string) (*hcloud.Image, error) {
+		// Return a mock Talos snapshot
+		return &hcloud.Image{
+			ID:          123,
+			Description: "talos-v1.8.3-k8s-v1.31.0-amd64",
+			Labels:      labels,
+		}, nil
 	}
 
 	// Certificate
@@ -237,8 +247,15 @@ func TestReconciler_Reconcile_ServerCreationError(t *testing.T) {
 	mockInfra.EnsurePlacementGroupFunc = func(_ context.Context, _, _ string, _ map[string]string) (*hcloud.PlacementGroup, error) {
 		return &hcloud.PlacementGroup{ID: 1}, nil
 	}
-	mockInfra.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64) (string, error) {
+	mockInfra.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string) (string, error) {
 		return "", expectedErr
+	}
+	mockInfra.GetSnapshotByLabelsFunc = func(_ context.Context, labels map[string]string) (*hcloud.Image, error) {
+		return &hcloud.Image{
+			ID:          123,
+			Description: "talos-v1.8.3-k8s-v1.31.0-amd64",
+			Labels:      labels,
+		}, nil
 	}
 
 	r := NewReconciler(mockInfra, mockTalos, cfg)

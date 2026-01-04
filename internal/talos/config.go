@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/siderolabs/talos/pkg/machinery/config"
@@ -109,7 +110,12 @@ func (g *ConfigGenerator) GenerateControlPlaneConfig(san []string) ([]byte, erro
 		return nil, fmt.Errorf("failed to generate control plane config: %w", err)
 	}
 
-	return cfg.Bytes()
+	bytes, err := cfg.Bytes()
+	if err != nil {
+		return nil, err
+	}
+
+	return stripComments(bytes), nil
 }
 
 // GenerateWorkerConfig generates the configuration for a worker node.
@@ -135,7 +141,12 @@ func (g *ConfigGenerator) GenerateWorkerConfig() ([]byte, error) {
 		return nil, fmt.Errorf("failed to generate worker config: %w", err)
 	}
 
-	return cfg.Bytes()
+	bytes, err := cfg.Bytes()
+	if err != nil {
+		return nil, err
+	}
+
+	return stripComments(bytes), nil
 }
 
 // GetClientConfig returns the talosconfig for the cluster.
@@ -160,5 +171,23 @@ func (g *ConfigGenerator) GetClientConfig() ([]byte, error) {
 		return nil, err
 	}
 
-	return clientCfg.Bytes()
+	bytes, err := clientCfg.Bytes()
+	if err != nil {
+		return nil, err
+	}
+
+	return bytes, nil
+}
+
+func stripComments(data []byte) []byte {
+	lines := strings.Split(string(data), "\n")
+	var result []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		result = append(result, line)
+	}
+	return []byte(strings.Join(result, "\n"))
 }

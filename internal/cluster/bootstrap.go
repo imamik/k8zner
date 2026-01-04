@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -60,7 +61,7 @@ func (b *Bootstrapper) Bootstrap(ctx context.Context, clusterName string, firstC
 	}
 
 	// Create Talos Client Context
-	clientCtx, err := client.New(ctx, client.WithConfig(cfg), client.WithEndpoints(firstControlPlaneIP))
+	clientCtx, err := client.New(ctx, client.WithConfig(cfg), client.WithEndpoints(firstControlPlaneIP), client.WithTLSConfig(&tls.Config{InsecureSkipVerify: true}))
 	if err != nil {
 		return fmt.Errorf("failed to create talos client: %w", err)
 	}
@@ -69,6 +70,14 @@ func (b *Bootstrapper) Bootstrap(ctx context.Context, clusterName string, firstC
 	}()
 
 	// 3. Bootstrap
+	// Log Version
+	versionResp, err := clientCtx.Version(ctx)
+	if err != nil {
+		log.Printf("Warning: Could not get Talos version from %s: %v", firstControlPlaneIP, err)
+	} else if messages := versionResp.GetMessages(); len(messages) > 0 {
+		log.Printf("Talos Node %s version tag: %s", firstControlPlaneIP, messages[0].GetVersion().GetTag())
+	}
+
 	log.Println("Sending bootstrap command...")
 	// BootstrapRequest in newer Talos versions (machinery v1.5+) doesn't need Node address in the request struct itself,
 	// as it's handled by the client connection context.

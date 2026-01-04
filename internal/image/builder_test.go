@@ -11,13 +11,13 @@ import (
 
 func TestBuild(t *testing.T) {
 	mockClient := &hcloud.MockClient{
-		CreateServerFunc: func(_ context.Context, _ string, _ string, _ string, _ string, _ []string, _ map[string]string, _ string, _ *int64) (string, error) {
+		CreateServerFunc: func(_ context.Context, _ string, _ string, _ string, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string) (string, error) {
 			return "123", nil
 		},
 		GetServerIPFunc: func(_ context.Context, _ string) (string, error) {
 			return "1.2.3.4", nil
 		},
-		CreateSnapshotFunc: func(_ context.Context, _ string, _ string) (string, error) {
+		CreateSnapshotFunc: func(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
 			return "snap-123", nil
 		},
 		DeleteServerFunc: func(_ context.Context, _ string) error {

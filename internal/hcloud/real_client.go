@@ -7,17 +7,20 @@ import (
 	"strings"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	"github.com/sak-d/hcloud-k8s/internal/config"
 )
 
 // RealClient implements InfrastructureManager using the Hetzner Cloud API.
 type RealClient struct {
-	client *hcloud.Client
+	client   *hcloud.Client
+	timeouts *config.Timeouts
 }
 
 // NewRealClient creates a new RealClient.
 func NewRealClient(token string) *RealClient {
 	return &RealClient{
-		client: hcloud.NewClient(hcloud.WithToken(token)),
+		client:   hcloud.NewClient(hcloud.WithToken(token)),
+		timeouts: config.LoadTimeouts(),
 	}
 }
 

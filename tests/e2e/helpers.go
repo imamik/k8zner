@@ -13,21 +13,21 @@ import (
 )
 
 // ResourceCleaner helps track and clean up resources.
+// Uses t.Cleanup() to ensure cleanup runs even on test timeout.
 type ResourceCleaner struct {
-	t        *testing.T
-	cleanups []func()
+	t *testing.T
 }
 
-// Add adds a cleanup function.
+// Add adds a cleanup function that will run even if the test times out.
+// Functions are executed in LIFO order (last added, first executed).
 func (rc *ResourceCleaner) Add(f func()) {
-	rc.cleanups = append(rc.cleanups, f)
+	rc.t.Cleanup(f)
 }
 
-// Cleanup executes all cleanup functions in LIFO order.
+// Cleanup is a no-op since we use t.Cleanup() now.
+// Kept for backwards compatibility.
 func (rc *ResourceCleaner) Cleanup() {
-	for i := len(rc.cleanups) - 1; i >= 0; i-- {
-		rc.cleanups[i]()
-	}
+	// No-op: t.Cleanup() handles everything automatically
 }
 
 // setupSSHKey generates a temporary SSH key, uploads it to HCloud, and registers cleanup.
