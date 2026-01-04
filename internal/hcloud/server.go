@@ -9,10 +9,15 @@ import (
 	"time"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	"github.com/sak-d/hcloud-k8s/internal/retry"
 )
 
 // CreateServer creates a new server with the given specifications.
 func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string) (string, error) {
+	// Add timeout context for server creation
+	ctx, cancel := context.WithTimeout(ctx, c.timeouts.ServerCreate)
+	defer cancel()
+
 	serverTypeObj, _, err := c.client.ServerType.Get(ctx, serverType)
 	if err != nil {
 		return "", fmt.Errorf("failed to get server type: %w", err)
@@ -53,7 +58,7 @@ func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverTy
 		log.Printf("Image %s (%d) is in status %s, waiting for it to become available...", imageObj.Name, imageObj.ID, imageObj.Status)
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
-		timeout := time.After(5 * time.Minute)
+		timeout := time.After(c.timeouts.ImageWait)
 	waitLoop:
 		for {
 			select {
@@ -134,7 +139,22 @@ func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverTy
 		StartAfterCreate: startAfterCreate,
 	}
 
-	result, _, err := c.client.Server.Create(ctx, opts)
+	// Create server with retry logic
+	var result hcloud.ServerCreateResult
+	err = retry.WithExponentialBackoff(ctx, func() error {
+		res, _, err := c.client.Server.Create(ctx, opts)
+		if err != nil {
+			// Check if error is fatal (don't retry)
+			if isInvalidParameter(err) {
+				return retry.Fatal(err)
+			}
+			// Retryable error (rate limit, temporary failure, etc.)
+			return err
+		}
+		result = res
+		return nil
+	}, retry.WithMaxRetries(c.timeouts.RetryMaxAttempts), retry.WithInitialDelay(c.timeouts.RetryInitialDelay))
+
 	if err != nil {
 		return "", fmt.Errorf("failed to create server: %w", err)
 	}
@@ -154,16 +174,22 @@ func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverTy
 			Network: &hcloud.Network{ID: networkID},
 			IP:      ip,
 		}
-		action, _, err := c.client.Server.AttachToNetwork(ctx, result.Server, attachOpts)
+
+		// Attach to network with retry logic (network might not be ready immediately)
+		err = retry.WithExponentialBackoff(ctx, func() error {
+			action, _, err := c.client.Server.AttachToNetwork(ctx, result.Server, attachOpts)
+			if err != nil {
+				return err
+			}
+			return c.client.Action.WaitFor(ctx, action)
+		}, retry.WithMaxRetries(c.timeouts.RetryMaxAttempts), retry.WithInitialDelay(c.timeouts.RetryInitialDelay))
+
 		if err != nil {
 			return "", fmt.Errorf("failed to attach server to network: %w", err)
 		}
-		if err := c.client.Action.WaitFor(ctx, action); err != nil {
-			return "", fmt.Errorf("failed to wait for network attachment: %w", err)
-		}
 
 		// Power On
-		action, _, err = c.client.Server.Poweron(ctx, result.Server)
+		action, _, err := c.client.Server.Poweron(ctx, result.Server)
 		if err != nil {
 			return "", fmt.Errorf("failed to power on server: %w", err)
 		}
@@ -177,20 +203,31 @@ func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverTy
 
 // DeleteServer deletes the server with the given name.
 func (c *RealClient) DeleteServer(ctx context.Context, name string) error {
-	server, _, err := c.client.Server.Get(ctx, name)
-	if err != nil {
-		return fmt.Errorf("failed to get server: %w", err)
-	}
-	if server == nil {
-		return nil // Server already deleted.
-	}
+	// Add timeout context for delete operation
+	ctx, cancel := context.WithTimeout(ctx, c.timeouts.Delete)
+	defer cancel()
 
-	_, err = c.client.Server.Delete(ctx, server) //nolint:staticcheck
-	if err != nil {
-		return fmt.Errorf("failed to delete server: %w", err)
-	}
+	// Delete with retry logic (resource might be locked)
+	return retry.WithExponentialBackoff(ctx, func() error {
+		server, _, err := c.client.Server.Get(ctx, name)
+		if err != nil {
+			return retry.Fatal(fmt.Errorf("failed to get server: %w", err))
+		}
+		if server == nil {
+			return nil // Server already deleted
+		}
 
-	return nil
+		_, err = c.client.Server.Delete(ctx, server) //nolint:staticcheck
+		if err != nil {
+			// Check if resource is locked (retryable)
+			if isResourceLocked(err) {
+				return err
+			}
+			// Other errors are fatal
+			return retry.Fatal(err)
+		}
+		return nil
+	}, retry.WithMaxRetries(c.timeouts.RetryMaxAttempts), retry.WithInitialDelay(c.timeouts.RetryInitialDelay))
 }
 
 // GetServerIP returns the public IP of the server.
