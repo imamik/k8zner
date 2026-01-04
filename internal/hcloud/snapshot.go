@@ -59,3 +59,40 @@ func (c *RealClient) DeleteImage(ctx context.Context, imageID string) error {
 		return nil
 	}, retry.WithMaxRetries(c.timeouts.RetryMaxAttempts), retry.WithInitialDelay(c.timeouts.RetryInitialDelay))
 }
+
+// GetSnapshotByLabels finds a snapshot matching the given labels.
+func (c *RealClient) GetSnapshotByLabels(ctx context.Context, labels map[string]string) (*hcloud.Image, error) {
+	opts := hcloud.ImageListOpts{
+		Type: []hcloud.ImageType{hcloud.ImageTypeSnapshot},
+	}
+	opts.LabelSelector = buildLabelSelector(labels)
+
+	images, err := c.client.Image.AllWithOpts(ctx, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list images: %w", err)
+	}
+
+	if len(images) == 0 {
+		return nil, nil // No matching snapshot found
+	}
+
+	// Return the most recent snapshot
+	return images[0], nil
+}
+
+// buildLabelSelector creates a label selector string from a map of labels.
+func buildLabelSelector(labels map[string]string) string {
+	var selectors []string
+	for k, v := range labels {
+		selectors = append(selectors, fmt.Sprintf("%s=%s", k, v))
+	}
+	// Join with comma for AND logic
+	result := ""
+	for i, s := range selectors {
+		if i > 0 {
+			result += ","
+		}
+		result += s
+	}
+	return result
+}

@@ -17,8 +17,9 @@ type MockClient struct {
 	ResetServerFunc    func(ctx context.Context, serverID string) error
 	PoweroffServerFunc func(ctx context.Context, serverID string) error
 
-	CreateSnapshotFunc func(ctx context.Context, serverID, snapshotDescription string, labels map[string]string) (string, error)
-	DeleteImageFunc    func(ctx context.Context, imageID string) error
+	CreateSnapshotFunc       func(ctx context.Context, serverID, snapshotDescription string, labels map[string]string) (string, error)
+	DeleteImageFunc          func(ctx context.Context, imageID string) error
+	GetSnapshotByLabelsFunc  func(ctx context.Context, labels map[string]string) (*hcloud.Image, error)
 
 	CreateSSHKeyFunc func(ctx context.Context, name, publicKey string) (string, error)
 	DeleteSSHKeyFunc func(ctx context.Context, name string) error
@@ -133,6 +134,14 @@ func (m *MockClient) DeleteImage(ctx context.Context, imageID string) error {
 		return m.DeleteImageFunc(ctx, imageID)
 	}
 	return nil
+}
+
+// GetSnapshotByLabels mocks getting snapshot by labels.
+func (m *MockClient) GetSnapshotByLabels(ctx context.Context, labels map[string]string) (*hcloud.Image, error) {
+	if m.GetSnapshotByLabelsFunc != nil {
+		return m.GetSnapshotByLabelsFunc(ctx, labels)
+	}
+	return nil, nil // No snapshot found by default
 }
 
 // CreateSSHKey mocks ssh key creation.

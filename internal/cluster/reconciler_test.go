@@ -139,6 +139,16 @@ func TestReconciler_Reconcile(t *testing.T) {
 		return "10.0.1.2", nil
 	}
 
+	// Snapshots - Return existing snapshot so auto-build is skipped in tests
+	mockInfra.GetSnapshotByLabelsFunc = func(_ context.Context, labels map[string]string) (*hcloud.Image, error) {
+		// Return a mock Talos snapshot
+		return &hcloud.Image{
+			ID:          123,
+			Description: "talos-v1.8.3-k8s-v1.31.0-amd64",
+			Labels:      labels,
+		}, nil
+	}
+
 	// Certificate
 	// Used by Bootstrapper to check for state marker
 	mockInfra.GetCertificateFunc = func(_ context.Context, name string) (*hcloud.Certificate, error) {
@@ -239,6 +249,13 @@ func TestReconciler_Reconcile_ServerCreationError(t *testing.T) {
 	}
 	mockInfra.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string) (string, error) {
 		return "", expectedErr
+	}
+	mockInfra.GetSnapshotByLabelsFunc = func(_ context.Context, labels map[string]string) (*hcloud.Image, error) {
+		return &hcloud.Image{
+			ID:          123,
+			Description: "talos-v1.8.3-k8s-v1.31.0-amd64",
+			Labels:      labels,
+		}, nil
 	}
 
 	r := NewReconciler(mockInfra, mockTalos, cfg)

@@ -65,9 +65,6 @@ func TestImageBuildLifecycle(t *testing.T) {
 			cleaner := &ResourceCleaner{t: t}
 			defer cleaner.Cleanup()
 
-			// Unique image name per test
-			imageName := fmt.Sprintf("e2e-test-image-%s-%s", tc.arch, time.Now().Format("20060102-150405"))
-
 			labels := map[string]string{
 				"type":       "e2e-test",
 				"created_by": "hcloud-k8s-e2e",
@@ -76,7 +73,7 @@ func TestImageBuildLifecycle(t *testing.T) {
 			}
 
 			t.Logf("Starting build for %s...", tc.arch)
-			snapshotID, err := builder.Build(ctx, imageName, "v1.8.3", tc.arch, labels)
+			snapshotID, err := builder.Build(ctx, "v1.8.3", "v1.31.0", tc.arch, labels)
 
 			// If snapshot was created, we must clean it up.
 			// Even if Build returned error, it might have created a snapshot (unlikely with our fix, but good practice).

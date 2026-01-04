@@ -38,7 +38,9 @@ func NewBuilder(client interface{}, commFact CommunicatorFactory) *Builder {
 }
 
 // Build creates a temporary server, installs Talos, creates a snapshot, and cleans up.
-func (b *Builder) Build(ctx context.Context, imageName, talosVersion, architecture string, labels map[string]string) (string, error) {
+func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architecture string, labels map[string]string) (string, error) {
+	// Generate image name from versions and architecture
+	imageName := fmt.Sprintf("talos-%s-k8s-%s-%s", talosVersion, k8sVersion, architecture)
 	serverName := fmt.Sprintf("build-%s-%s", imageName, time.Now().Format("20060102150405"))
 
 	// 0. Setup SSH Key.
@@ -145,6 +147,8 @@ func (b *Builder) Build(ctx context.Context, imageName, talosVersion, architectu
 		labels = make(map[string]string)
 	}
 	labels["os"] = "talos"
+	labels["talos-version"] = talosVersion
+	labels["k8s-version"] = k8sVersion
 	labels["arch"] = architecture
 
 	snapshotID, err := b.snapshotManager.CreateSnapshot(ctx, serverID, imageName, labels)

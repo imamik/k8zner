@@ -10,6 +10,7 @@ import (
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/sak-d/hcloud-k8s/internal/config"
 	hcloud_internal "github.com/sak-d/hcloud-k8s/internal/hcloud"
+	"github.com/sak-d/hcloud-k8s/internal/image"
 	"github.com/sak-d/hcloud-k8s/internal/retry"
 )
 
@@ -30,6 +31,7 @@ type Reconciler struct {
 	pgManager         hcloud_internal.PlacementGroupManager
 	fipManager        hcloud_internal.FloatingIPManager
 	certManager       hcloud_internal.CertificateManager
+	snapshotManager   hcloud_internal.SnapshotManager
 	infra             hcloud_internal.InfrastructureManager // Combined interface for Bootstrapper
 	talosGenerator    TalosConfigProducer
 	config            *config.Config
@@ -55,6 +57,7 @@ func NewReconciler(
 		pgManager:         infra,
 		fipManager:        infra,
 		certManager:       infra,
+		snapshotManager:   infra,
 		infra:             infra,
 		talosGenerator:    talosGenerator,
 		config:            cfg,
@@ -328,6 +331,76 @@ func (r *Reconciler) reconcileNodePool(
 	return ips, nil
 }
 
+// ensureImage ensures the required Talos image exists, building it if necessary.
+func (r *Reconciler) ensureImage(ctx context.Context, serverType string) (string, error) {
+	// Determine architecture from server type
+	arch := "amd64"
+	if len(serverType) >= 3 && serverType[:3] == "cax" {
+		arch = "arm64"
+	}
+
+	// Get versions from config
+	talosVersion := r.config.Talos.Version
+	k8sVersion := r.config.Kubernetes.Version
+
+	// Set defaults if not configured
+	if talosVersion == "" {
+		talosVersion = "v1.8.3"
+	}
+	if k8sVersion == "" {
+		k8sVersion = "v1.31.0"
+	}
+
+	// Check if snapshot already exists
+	labels := map[string]string{
+		"os":            "talos",
+		"talos-version": talosVersion,
+		"k8s-version":   k8sVersion,
+		"arch":          arch,
+	}
+
+	snapshot, err := r.snapshotManager.GetSnapshotByLabels(ctx, labels)
+	if err != nil {
+		return "", fmt.Errorf("failed to check for existing snapshot: %w", err)
+	}
+
+	if snapshot != nil {
+		log.Printf("Found existing Talos snapshot: %s (ID: %d)", snapshot.Description, snapshot.ID)
+		return snapshot.Description, nil
+	}
+
+	// Snapshot doesn't exist, build it
+	log.Printf("Talos snapshot not found for %s/%s/%s, building...", talosVersion, k8sVersion, arch)
+
+	// Import image builder
+	builder := r.createImageBuilder()
+	if builder == nil {
+		return "", fmt.Errorf("image builder not available")
+	}
+
+	snapshotID, err := builder.Build(ctx, talosVersion, k8sVersion, arch, labels)
+	if err != nil {
+		return "", fmt.Errorf("failed to build Talos image: %w", err)
+	}
+
+	// Get the created snapshot to return its description
+	snapshot, err = r.snapshotManager.GetSnapshotByLabels(ctx, labels)
+	if err != nil || snapshot == nil {
+		// Fallback to generated name
+		return fmt.Sprintf("talos-%s-k8s-%s-%s", talosVersion, k8sVersion, arch), nil
+	}
+
+	log.Printf("Successfully built Talos snapshot: %s (ID: %s)", snapshot.Description, snapshotID)
+	return snapshot.Description, nil
+}
+
+// createImageBuilder creates an image builder instance.
+func (r *Reconciler) createImageBuilder() *image.Builder {
+	// Pass nil for communicator factory - the builder will use its internal
+	// SSH key generation and create its own SSH client with those keys
+	return image.NewBuilder(r.infra, nil)
+}
+
 // ensureServer ensures a server exists and returns its IP.
 func (r *Reconciler) ensureServer(
 	ctx context.Context,
@@ -370,9 +443,14 @@ func (r *Reconciler) ensureServer(
 		labels[k] = v
 	}
 
-	// Image defaulting
-	if image == "" {
-		image = "talos"
+	// Image defaulting - if empty or "talos", ensure the versioned image exists
+	if image == "" || image == "talos" {
+		var err error
+		image, err = r.ensureImage(ctx, serverType)
+		if err != nil {
+			return "", fmt.Errorf("failed to ensure Talos image: %w", err)
+		}
+		log.Printf("Using Talos image: %s", image)
 	}
 
 	// Get Network ID
