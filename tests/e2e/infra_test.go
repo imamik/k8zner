@@ -69,6 +69,14 @@ func TestInfraProvisioning(t *testing.T) {
 
 	ctx := context.Background()
 	client := hcloud_internal.NewRealClient(token)
+
+	cleaner := &ResourceCleaner{t: t}
+	defer cleaner.Cleanup()
+
+	// Setup SSH Key
+	sshKeyName, _ := setupSSHKey(t, client, cleaner, clusterName)
+	cfg.SSHKeys = []string{sshKeyName}
+
 	reconciler := cluster.NewReconciler(client, &MockTalosProducer{}, cfg)
 
 	// CLEANUP

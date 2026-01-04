@@ -13,27 +13,8 @@ import (
 
 	"github.com/sak-d/hcloud-k8s/internal/hcloud"
 	"github.com/sak-d/hcloud-k8s/internal/image"
-	"github.com/sak-d/hcloud-k8s/internal/keygen"
 	"github.com/sak-d/hcloud-k8s/internal/ssh"
 )
-
-// ResourceCleaner helps track and clean up resources.
-type ResourceCleaner struct {
-	t        *testing.T
-	cleanups []func()
-}
-
-// Add adds a cleanup function.
-func (rc *ResourceCleaner) Add(f func()) {
-	rc.cleanups = append(rc.cleanups, f)
-}
-
-// Cleanup executes all cleanup functions in LIFO order.
-func (rc *ResourceCleaner) Cleanup() {
-	for i := len(rc.cleanups) - 1; i >= 0; i-- {
-		rc.cleanups[i]()
-	}
-}
 
 func TestImageBuildLifecycle(t *testing.T) {
 	token := os.Getenv("HCLOUD_TOKEN")
@@ -80,6 +61,9 @@ func TestImageBuildLifecycle(t *testing.T) {
 			t.Parallel() // Run in parallel
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 			defer cancel()
+
+			cleaner := &ResourceCleaner{t: t}
+			defer cleaner.Cleanup()
 
 			// Unique image name per test
 			imageName := fmt.Sprintf("e2e-test-image-%s-%s", tc.arch, time.Now().Format("20060102-150405"))
@@ -138,26 +122,8 @@ func TestImageBuildLifecycle(t *testing.T) {
 				"arch":       tc.arch,
 			}
 
-			// Create a temporary SSH key for verification to prevent root password emails
-			verifyKeyName := fmt.Sprintf("key-%s", verifyServerName)
-
-			// Register cleanup for SSH key immediately
-			cleaner.Add(func() {
-				t.Logf("Deleting SSH key %s...", verifyKeyName)
-				if err := client.DeleteSSHKey(context.Background(), verifyKeyName); err != nil {
-					t.Logf("Failed to delete ssh key %s (might not exist): %v", verifyKeyName, err)
-				}
-			})
-
-			verifyKeyData, err := keygen.GenerateRSAKeyPair(2048)
-			if err != nil {
-				t.Fatalf("Failed to generate key pair: %v", err)
-			}
-
-			_, err = client.CreateSSHKey(ctx, verifyKeyName, string(verifyKeyData.PublicKey))
-			if err != nil {
-				t.Fatalf("Failed to upload ssh key: %v", err)
-			}
+			// Setup SSH Key for verification
+			verifyKeyName, _ := setupSSHKey(t, client, cleaner, verifyServerName)
 
 			// We pass the ssh key to prevent password emails
 			_, err = client.CreateServer(ctx, verifyServerName, snapshotID, serverType, "", []string{verifyKeyName}, verifyLabels, "", nil)
