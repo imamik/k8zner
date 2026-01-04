@@ -80,7 +80,8 @@ func (b *Builder) Build(ctx context.Context, imageName, talosVersion, architectu
 		b.cleanupServer(serverName)
 	}()
 
-	serverID, err := b.provisioner.CreateServer(ctx, serverName, "debian-12", serverType, "", sshKeys, labels, "", nil)
+	// No network or private IP needed for image builder
+	serverID, err := b.provisioner.CreateServer(ctx, serverName, "debian-12", serverType, "", sshKeys, labels, "", nil, 0, "")
 	if err != nil {
 		return "", fmt.Errorf("failed to create server: %w", err)
 	}
