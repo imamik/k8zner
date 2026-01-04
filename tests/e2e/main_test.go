@@ -126,7 +126,7 @@ func TestImageBuildLifecycle(t *testing.T) {
 			verifyKeyName, _ := setupSSHKey(t, client, cleaner, verifyServerName)
 
 			// We pass the ssh key to prevent password emails
-			_, err = client.CreateServer(ctx, verifyServerName, snapshotID, serverType, "", []string{verifyKeyName}, verifyLabels, "", nil)
+			_, err = client.CreateServer(ctx, verifyServerName, snapshotID, serverType, "", []string{verifyKeyName}, verifyLabels, "", nil, 0, "")
 			if err != nil {
 				t.Fatalf("Failed to create verification server: %v", err)
 			}

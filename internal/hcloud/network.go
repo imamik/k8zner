@@ -9,7 +9,7 @@ import (
 )
 
 // EnsureNetwork ensures that a network exists with the given specifications.
-func (c *RealClient) EnsureNetwork(ctx context.Context, name, ipRange, _ string, labels map[string]string) (*hcloud.Network, error) {
+func (c *RealClient) EnsureNetwork(ctx context.Context, name, ipRange, zone string, labels map[string]string) (*hcloud.Network, error) {
 	network, _, err := c.client.Network.Get(ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get network: %w", err)

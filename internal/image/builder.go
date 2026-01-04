@@ -58,12 +58,7 @@ func (b *Builder) Build(ctx context.Context, imageName, talosVersion, architectu
 		return "", fmt.Errorf("failed to upload ssh key: %w", err)
 	}
 
-	defer func() {
-		log.Printf("Deleting SSH key %s...", keyName)
-		if err := b.sshKeyManager.DeleteSSHKey(context.Background(), keyName); err != nil {
-			log.Printf("Failed to delete ssh key %s: %v", keyName, err)
-		}
-	}()
+	defer b.cleanupSSHKey(keyName)
 
 	// 1. Create Server.
 	log.Printf("Creating server %s...", serverName)
@@ -80,7 +75,7 @@ func (b *Builder) Build(ctx context.Context, imageName, talosVersion, architectu
 		b.cleanupServer(serverName)
 	}()
 
-	serverID, err := b.provisioner.CreateServer(ctx, serverName, "debian-12", serverType, "", sshKeys, labels, "", nil)
+	serverID, err := b.provisioner.CreateServer(ctx, serverName, "debian-12", serverType, "", sshKeys, labels, "", nil, 0, "")
 	if err != nil {
 		return "", fmt.Errorf("failed to create server: %w", err)
 	}
@@ -179,6 +174,33 @@ func (b *Builder) cleanupServer(serverName string) {
 		select {
 		case <-ctx.Done():
 			log.Printf("Timeout waiting to delete server %s: %v", serverName, ctx.Err())
+			return
+		case <-ticker.C:
+			// continue retry
+		}
+	}
+}
+
+func (b *Builder) cleanupSSHKey(keyName string) {
+	log.Printf("Cleaning up SSH key %s...", keyName)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		err := b.sshKeyManager.DeleteSSHKey(ctx, keyName)
+		if err == nil {
+			log.Printf("SSH key %s deleted successfully", keyName)
+			return
+		}
+
+		log.Printf("Failed to delete SSH key %s (retrying): %v", keyName, err)
+
+		select {
+		case <-ctx.Done():
+			log.Printf("Timeout waiting to delete SSH key %s: %v", keyName, ctx.Err())
 			return
 		case <-ticker.C:
 			// continue retry
