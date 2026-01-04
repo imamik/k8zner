@@ -64,8 +64,15 @@ func TestClusterProvisioning(t *testing.T) {
 			Version: "v1.8.3",
 		},
 		Kubernetes: config.KubernetesConfig{
-			Version: "1.30.0",
+			Version: "v1.31.0",
 		},
+	}
+
+	// Use shared snapshots if available (built in TestMain)
+	if sharedCtx != nil && sharedCtx.SnapshotAMD64 != "" {
+		t.Log("Using shared Talos snapshot from test suite")
+		// Snapshots will be used automatically via auto-build feature
+		// The reconciler will find existing snapshots with matching labels
 	}
 
 	// Initialize Real Client
