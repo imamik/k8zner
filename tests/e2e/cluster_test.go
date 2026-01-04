@@ -69,6 +69,13 @@ func TestClusterProvisioning(t *testing.T) {
 	// Initialize Real Client
 	hClient := hcloud_client.NewRealClient(token)
 
+	cleaner := &ResourceCleaner{t: t}
+	defer cleaner.Cleanup()
+
+	// Setup SSH Key
+	sshKeyName, _ := setupSSHKey(t, hClient, cleaner, clusterName)
+	cfg.SSHKeys = []string{sshKeyName}
+
 	// Clean up before and after
 	cleanup := func() {
 		ctx := context.Background()
@@ -93,6 +100,7 @@ func TestClusterProvisioning(t *testing.T) {
 
 		// Delete Placement Groups
 		hClient.DeletePlacementGroup(ctx, clusterName+"-worker")
+		hClient.DeletePlacementGroup(ctx, clusterName+"-control-plane")
 
 		// Delete Certificates
 		hClient.DeleteCertificate(ctx, clusterName+"-state")
