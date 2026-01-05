@@ -72,7 +72,6 @@ func TestInfraProvisioning(t *testing.T) {
 	client := hcloud_internal.NewRealClient(token)
 
 	cleaner := &ResourceCleaner{t: t}
-	defer cleaner.Cleanup()
 
 	// Setup SSH Key
 	sshKeyName, _ := setupSSHKey(t, client, cleaner, clusterName)

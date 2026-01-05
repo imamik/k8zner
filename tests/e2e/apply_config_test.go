@@ -40,7 +40,6 @@ func TestApplyConfig(t *testing.T) {
 	hcloudClient := hcloud_internal.NewRealClient(token)
 
 	cleaner := &ResourceCleaner{t: t}
-	defer cleaner.Cleanup()
 
 	// Get shared Talos snapshot from suite
 	t.Log("Using shared Talos snapshot from test suite")
@@ -78,7 +77,7 @@ func TestApplyConfig(t *testing.T) {
 
 	// Wait for Talos API to become available
 	t.Log("Waiting for Talos API port 50000 to become accessible...")
-	err = waitForTalosAPI(ctx, nodeIP, 5*time.Minute)
+	err = WaitForPort(ctx, nodeIP, 50000, 5*time.Minute)
 	require.NoError(t, err, "Talos API should become accessible")
 	t.Log("✓ Talos API port is accessible")
 
@@ -89,10 +88,10 @@ func TestApplyConfig(t *testing.T) {
 
 	configGenerator, err := talos_config.NewConfigGenerator(
 		clusterName,
-		"v1.31.0",   // Kubernetes version
-		"v1.8.3",    // Talos version
-		endpoint,    // Control plane endpoint with port
-		"",          // No existing secrets file, will generate new
+		"v1.31.0", // Kubernetes version
+		"v1.8.3",  // Talos version
+		endpoint,  // Control plane endpoint with port
+		"",        // No existing secrets file, will generate new
 	)
 	require.NoError(t, err, "Should be able to create config generator")
 
@@ -133,7 +132,7 @@ func TestApplyConfig(t *testing.T) {
 	time.Sleep(60 * time.Second)
 
 	t.Log("Waiting for Talos API to become accessible again after reboot...")
-	err = waitForTalosAPI(ctx, nodeIP, 5*time.Minute)
+	err = WaitForPort(ctx, nodeIP, 50000, 5*time.Minute)
 	require.NoError(t, err, "Talos API should become accessible after reboot")
 	t.Log("✓ Node is back online")
 

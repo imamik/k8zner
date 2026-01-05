@@ -5,6 +5,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"net"
 	"testing"
 	"time"
 
@@ -22,12 +23,6 @@ type ResourceCleaner struct {
 // Functions are executed in LIFO order (last added, first executed).
 func (rc *ResourceCleaner) Add(f func()) {
 	rc.t.Cleanup(f)
-}
-
-// Cleanup is a no-op since we use t.Cleanup() now.
-// Kept for backwards compatibility.
-func (rc *ResourceCleaner) Cleanup() {
-	// No-op: t.Cleanup() handles everything automatically
 }
 
 // setupSSHKey generates a temporary SSH key, uploads it to HCloud, and registers cleanup.
@@ -54,4 +49,31 @@ func setupSSHKey(t *testing.T, client *hcloud.RealClient, cleaner *ResourceClean
 	})
 
 	return keyName, keyPair.PrivateKey
+}
+
+// WaitForPort waits for a TCP port to become accessible.
+func WaitForPort(ctx context.Context, ip string, port int, timeout time.Duration) error {
+	address := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
+	deadline := time.Now().Add(timeout)
+
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timeout waiting for %s", address)
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			conn, err := net.DialTimeout("tcp", address, 2*time.Second)
+			if err == nil {
+				_ = conn.Close()
+				return nil
+			}
+			// Continue waiting
+		}
+	}
 }
