@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"sort"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/sak-d/hcloud-k8s/internal/config"
@@ -121,21 +120,21 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 			return fmt.Errorf("failed to get client config: %w", err)
 		}
 
-		// Use the first CP node's IP for bootstrapping
-		var firstCPIP string
-		var names []string
-		for name := range cpIPs {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		if len(names) > 0 {
-			firstCPIP = cpIPs[names[0]]
+		// Generate machine configs for each control plane node
+		// For now, all control plane nodes get the same config
+		// In the future, we could customize per-node if needed
+		cpConfig, err := r.talosGenerator.GenerateControlPlaneConfig(nil) // SANs already set during reconcileControlPlane
+		if err != nil {
+			return fmt.Errorf("failed to generate control plane config: %w", err)
 		}
 
-		if firstCPIP != "" {
-			if err := r.bootstrapper.Bootstrap(ctx, r.config.ClusterName, firstCPIP, clientCfg); err != nil {
-				return fmt.Errorf("failed to bootstrap cluster: %w", err)
-			}
+		machineConfigs := make(map[string][]byte)
+		for name := range cpIPs {
+			machineConfigs[name] = cpConfig
+		}
+
+		if err := r.bootstrapper.Bootstrap(ctx, r.config.ClusterName, cpIPs, machineConfigs, clientCfg); err != nil {
+			return fmt.Errorf("failed to bootstrap cluster: %w", err)
 		}
 	}
 

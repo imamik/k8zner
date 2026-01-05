@@ -33,8 +33,9 @@ func NewBootstrapper(hClient hcloud_internal.InfrastructureManager) *Bootstrappe
 }
 
 // Bootstrap performs the bootstrap process.
-// It checks for the state marker, waits for the node, calls bootstrap, and saves the kubeconfig.
-func (b *Bootstrapper) Bootstrap(ctx context.Context, clusterName string, firstControlPlaneIP string, clientConfigBytes []byte) error {
+// It checks for the state marker, applies machine configs to all control plane nodes,
+// waits for them to be ready, calls bootstrap on the first node, and creates the state marker.
+func (b *Bootstrapper) Bootstrap(ctx context.Context, clusterName string, controlPlaneNodes map[string]string, machineConfigs map[string][]byte, clientConfigBytes []byte) error {
 	markerName := fmt.Sprintf("%s-state", clusterName)
 
 	// 1. Check for State Marker
@@ -47,21 +48,47 @@ func (b *Bootstrapper) Bootstrap(ctx context.Context, clusterName string, firstC
 		return nil
 	}
 
-	log.Printf("Bootstrapping cluster %s...", clusterName)
+	log.Printf("Bootstrapping cluster %s with %d control plane nodes...", clusterName, len(controlPlaneNodes))
 
-	// 2. Initialize Talos Client
+	// 2. Apply machine configurations to all control plane nodes
+	log.Println("Applying machine configurations to control plane nodes...")
+	for nodeName, nodeIP := range controlPlaneNodes {
+		machineConfig, ok := machineConfigs[nodeName]
+		if !ok {
+			return fmt.Errorf("missing machine config for node %s", nodeName)
+		}
+
+		log.Printf("Applying config to node %s (%s)...", nodeName, nodeIP)
+		if err := b.applyMachineConfig(ctx, nodeIP, machineConfig); err != nil {
+			return fmt.Errorf("failed to apply config to node %s: %w", nodeName, err)
+		}
+	}
+
+	// 3. Wait for all nodes to reboot and become ready
+	log.Println("Waiting for nodes to reboot and become ready...")
+	for nodeName, nodeIP := range controlPlaneNodes {
+		log.Printf("Waiting for node %s (%s) to be ready...", nodeName, nodeIP)
+		if err := b.waitForNodeReady(ctx, nodeIP, clientConfigBytes); err != nil {
+			return fmt.Errorf("node %s failed to become ready: %w", nodeName, err)
+		}
+		log.Printf("Node %s is ready", nodeName)
+	}
+
+	// 4. Initialize Talos Client for bootstrap
 	cfg, err := config.FromString(string(clientConfigBytes))
 	if err != nil {
 		return fmt.Errorf("failed to parse client config: %w", err)
 	}
 
-	// We need to wait for the node to be ready (TCP 50000).
-	if err := b.waitForPort(ctx, firstControlPlaneIP, 50000); err != nil {
-		return fmt.Errorf("failed to connect to node %s: %w", firstControlPlaneIP, err)
+	// Get first control plane IP for bootstrap
+	var firstCPIP string
+	for _, ip := range controlPlaneNodes {
+		firstCPIP = ip
+		break
 	}
 
 	// Create Talos Client Context
-	clientCtx, err := client.New(ctx, client.WithConfig(cfg), client.WithEndpoints(firstControlPlaneIP), client.WithTLSConfig(&tls.Config{InsecureSkipVerify: true}))
+	clientCtx, err := client.New(ctx, client.WithConfig(cfg), client.WithEndpoints(firstCPIP), client.WithTLSConfig(&tls.Config{InsecureSkipVerify: true}))
 	if err != nil {
 		return fmt.Errorf("failed to create talos client: %w", err)
 	}
@@ -69,25 +96,15 @@ func (b *Bootstrapper) Bootstrap(ctx context.Context, clusterName string, firstC
 		_ = clientCtx.Close()
 	}()
 
-	// 3. Bootstrap
-	// Log Version
-	versionResp, err := clientCtx.Version(ctx)
-	if err != nil {
-		log.Printf("Warning: Could not get Talos version from %s: %v", firstControlPlaneIP, err)
-	} else if messages := versionResp.GetMessages(); len(messages) > 0 {
-		log.Printf("Talos Node %s version tag: %s", firstControlPlaneIP, messages[0].GetVersion().GetTag())
-	}
-
-	log.Println("Sending bootstrap command...")
-	// BootstrapRequest in newer Talos versions (machinery v1.5+) doesn't need Node address in the request struct itself,
-	// as it's handled by the client connection context.
+	// 5. Bootstrap the cluster
+	log.Printf("Bootstrapping etcd on first control plane node %s...", firstCPIP)
 	req := &machine.BootstrapRequest{}
 
 	if err := clientCtx.Bootstrap(ctx, req); err != nil {
 		return fmt.Errorf("failed to bootstrap: %w", err)
 	}
 
-	// 4. Create State Marker
+	// 6. Create State Marker
 	log.Println("Creating state marker...")
 	labels := map[string]string{
 		"cluster": clusterName,
@@ -128,6 +145,87 @@ func (b *Bootstrapper) waitForPort(ctx context.Context, ip string, port int) err
 				_ = conn.Close()
 				return nil
 			}
+		}
+	}
+}
+
+// applyMachineConfig applies a machine configuration to a Talos node in maintenance mode.
+func (b *Bootstrapper) applyMachineConfig(ctx context.Context, nodeIP string, machineConfig []byte) error {
+	// Wait for Talos API to be available (maintenance mode)
+	if err := b.waitForPort(ctx, nodeIP, 50000); err != nil {
+		return fmt.Errorf("failed to wait for Talos API: %w", err)
+	}
+
+	// Create client with insecure connection (maintenance mode doesn't require auth)
+	clientCtx, err := client.New(ctx,
+		client.WithEndpoints(nodeIP),
+		client.WithTLSConfig(&tls.Config{InsecureSkipVerify: true}),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create talos client: %w", err)
+	}
+	defer clientCtx.Close()
+
+	// Apply the configuration
+	applyReq := &machine.ApplyConfigurationRequest{
+		Data: machineConfig,
+		Mode: machine.ApplyConfigurationRequest_REBOOT,
+	}
+
+	_, err = clientCtx.ApplyConfiguration(ctx, applyReq)
+	if err != nil {
+		return fmt.Errorf("failed to apply configuration: %w", err)
+	}
+
+	return nil
+}
+
+// waitForNodeReady waits for a node to reboot and become ready after applying configuration.
+func (b *Bootstrapper) waitForNodeReady(ctx context.Context, nodeIP string, clientConfigBytes []byte) error {
+	// Parse client config
+	cfg, err := config.FromString(string(clientConfigBytes))
+	if err != nil {
+		return fmt.Errorf("failed to parse client config: %w", err)
+	}
+
+	// Wait for port to become unavailable (node rebooting)
+	log.Printf("Waiting for node %s to begin reboot...", nodeIP)
+	time.Sleep(10 * time.Second)
+
+	// Wait for port to come back up
+	log.Printf("Waiting for node %s to come back online...", nodeIP)
+	if err := b.waitForPort(ctx, nodeIP, 50000); err != nil {
+		return fmt.Errorf("failed to wait for node to come back: %w", err)
+	}
+
+	// Create authenticated client
+	clientCtx, err := client.New(ctx,
+		client.WithConfig(cfg),
+		client.WithEndpoints(nodeIP),
+		client.WithTLSConfig(&tls.Config{InsecureSkipVerify: true}),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create talos client: %w", err)
+	}
+	defer clientCtx.Close()
+
+	// Wait for node to report ready status
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	timeout := time.After(10 * time.Minute)
+
+	for {
+		select {
+		case <-timeout:
+			return fmt.Errorf("timeout waiting for node to be ready")
+		case <-ticker.C:
+			// Try to get version - if this succeeds, node is ready
+			_, err := clientCtx.Version(ctx)
+			if err == nil {
+				return nil
+			}
+			log.Printf("Node %s not yet ready, waiting... (error: %v)", nodeIP, err)
 		}
 	}
 }
