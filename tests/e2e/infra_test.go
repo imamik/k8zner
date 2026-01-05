@@ -67,7 +67,8 @@ func TestInfraProvisioning(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
+	defer cancel()
 	client := hcloud_internal.NewRealClient(token)
 
 	cleaner := &ResourceCleaner{t: t}

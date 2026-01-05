@@ -13,7 +13,7 @@ build:
 	go build -o bin/hcloud-k8s ./cmd/hcloud-k8s
 
 e2e:
-	go test -v -tags=e2e ./tests/e2e/...
+	go test -v -timeout=1h -tags=e2e ./tests/e2e/...
 
 clean:
 	rm -rf bin/
