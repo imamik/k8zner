@@ -167,9 +167,11 @@ func (b *Bootstrapper) applyMachineConfig(ctx context.Context, nodeIP string, ma
 	defer clientCtx.Close()
 
 	// Apply the configuration
+	// Use AUTO mode to automatically detect if installation is needed
+	// (maintenance mode -> install to disk, already installed -> reboot)
 	applyReq := &machine.ApplyConfigurationRequest{
 		Data: machineConfig,
-		Mode: machine.ApplyConfigurationRequest_REBOOT,
+		Mode: machine.ApplyConfigurationRequest_AUTO,
 	}
 
 	_, err = clientCtx.ApplyConfiguration(ctx, applyReq)
