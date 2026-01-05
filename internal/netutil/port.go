@@ -1,3 +1,4 @@
+// Package netutil provides network utility functions for port checking and network operations.
 package netutil
 
 import (

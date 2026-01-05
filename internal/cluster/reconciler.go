@@ -88,14 +88,14 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 		{
 			Name: "publicIP",
 			Func: func(ctx context.Context) error {
-				if ip, err := r.infra.GetPublicIP(ctx); err == nil {
+				ip, err := r.infra.GetPublicIP(ctx)
+				if err == nil {
 					publicIP = ip
 					return nil
-				} else {
-					log.Printf("Warning: Failed to detect public IP: %v", err)
-					// Don't fail on public IP detection error
-					return nil
 				}
+				log.Printf("Warning: Failed to detect public IP: %v", err)
+				// Don't fail on public IP detection error
+				return nil
 			},
 		},
 	}

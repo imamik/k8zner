@@ -129,7 +129,7 @@ func (b *Bootstrapper) Bootstrap(ctx context.Context, clusterName string, contro
 // applyMachineConfig applies a machine configuration to a Talos node.
 // For pre-installed Talos (from snapshots), nodes boot into maintenance mode
 // and require an insecure connection to apply the initial configuration.
-func (b *Bootstrapper) applyMachineConfig(ctx context.Context, nodeIP string, machineConfig []byte, clientConfigBytes []byte) error {
+func (b *Bootstrapper) applyMachineConfig(ctx context.Context, nodeIP string, machineConfig []byte, _ []byte) error {
 	// Wait for Talos API to be available
 	if err := netutil.WaitForPort(ctx, nodeIP, 50000, netutil.TalosAPIWaitTimeout); err != nil {
 		return fmt.Errorf("failed to wait for Talos API: %w", err)
@@ -140,12 +140,13 @@ func (b *Bootstrapper) applyMachineConfig(ctx context.Context, nodeIP string, ma
 	// credentials yet, so we must use an insecure connection to apply the initial config.
 	clientCtx, err := client.New(ctx,
 		client.WithEndpoints(nodeIP),
+		//nolint:gosec // InsecureSkipVerify is required for Talos maintenance mode
 		client.WithTLSConfig(&tls.Config{InsecureSkipVerify: true}),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create talos client: %w", err)
 	}
-	defer clientCtx.Close()
+	defer func() { _ = clientCtx.Close() }()
 
 	// Apply the configuration
 	// Use REBOOT mode for pre-installed Talos (from Packer snapshots)
@@ -191,7 +192,7 @@ func (b *Bootstrapper) waitForNodeReady(ctx context.Context, nodeIP string, clie
 	if err != nil {
 		return fmt.Errorf("failed to create talos client: %w", err)
 	}
-	defer clientCtx.Close()
+	defer func() { _ = clientCtx.Close() }()
 
 	// Wait for node to report ready status
 	ticker := time.NewTicker(10 * time.Second)

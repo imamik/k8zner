@@ -233,7 +233,7 @@ func (m *MockClient) ConfigureService(ctx context.Context, lb *hcloud.LoadBalanc
 }
 
 // AddTarget mocks adding a target to the load balancer.
-func (m *MockClient) AddTarget(ctx context.Context, lb *hcloud.LoadBalancer, targetType hcloud.LoadBalancerTargetType, labelSelector string) error {
+func (m *MockClient) AddTarget(_ context.Context, _ *hcloud.LoadBalancer, _ hcloud.LoadBalancerTargetType, _ string) error {
 	return nil
 }
 

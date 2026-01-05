@@ -1,18 +1,9 @@
-version: "1"
 linters:
   enable:
     - staticcheck
     - gosec
     - revive
     - errcheck
-    - godot
-linters-settings:
-  godot:
-    scope: all
-    exclude:
-      - "^// +[a-zA-Z0-9]+"
-    capital: true
-    period: true
 issues:
   exclude-use-default: false
   max-issues-per-linter: 0
