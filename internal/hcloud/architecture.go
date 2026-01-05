@@ -16,7 +16,7 @@ const (
 // All other server types use AMD64 (x86_64) architecture.
 //
 // Examples:
-//   - "cx11", "cpx21", "ccx33" -> amd64
+//   - "cpx22", "cpx21", "ccx33" -> amd64
 //   - "cax11", "cax21", "cax31" -> arm64
 func DetectArchitecture(serverType string) Architecture {
 	if len(serverType) >= 3 && serverType[:3] == "cax" {
@@ -35,7 +35,7 @@ func GetDefaultServerType(arch Architecture) string {
 	case ArchARM64:
 		return "cax11" // 2 ARM cores, 4 GB RAM
 	default:
-		return "cx22" // 2 AMD cores, 4 GB RAM
+		return "cpx22" // 2 AMD cores, 4 GB RAM
 	}
 }
 
