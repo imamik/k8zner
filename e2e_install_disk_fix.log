@@ -1,0 +1,426 @@
+go test -v -tags=e2e ./tests/e2e/...
+2026/01/05 11:28:11 === Building Talos snapshots for E2E tests ===
+2026/01/05 11:28:11 Building amd64 snapshot...
+2026/01/05 11:28:11 Generating SSH key key-build-talos-v1.8.3-k8s-v1.31.0-amd64-20260105112811...
+2026/01/05 11:28:11 Creating server build-talos-v1.8.3-k8s-v1.31.0-amd64-20260105112811...
+2026/01/05 11:28:24 Server IP: 37.27.196.42
+2026/01/05 11:28:24 Enabling Rescue Mode...
+2026/01/05 11:28:32 Resetting server to boot into Rescue Mode...
+2026/01/05 11:28:46 Waiting for Rescue System...
+2026/01/05 11:28:56 Provisioning Talos (Command: DISK=$(lsblk -d -n -o NAME | grep -E '^sda|^vda' | head -n 1) && if [ -z "$DISK" ]; then echo 'No disk found'; exit 1; fi && echo "Writing to /dev/$DISK" && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y zstd wget && wget -qO- https://github.com/siderolabs/talos/releases/download/v1.8.3/metal-amd64.raw.zst | zstd -d | dd of=/dev/$DISK bs=4M && sync)...
+2026/01/05 11:29:27 Powering off server for snapshot...
+2026/01/05 11:29:36 Creating snapshot...
+2026/01/05 11:30:29 Cleaning up server build-talos-v1.8.3-k8s-v1.31.0-amd64-20260105112811...
+2026/01/05 11:30:30 Server build-talos-v1.8.3-k8s-v1.31.0-amd64-20260105112811 deleted successfully
+2026/01/05 11:30:30 Cleaning up SSH key key-build-talos-v1.8.3-k8s-v1.31.0-amd64-20260105112811...
+2026/01/05 11:30:30 SSH key key-build-talos-v1.8.3-k8s-v1.31.0-amd64-20260105112811 deleted successfully
+2026/01/05 11:30:30 Built amd64 snapshot: 346922836
+2026/01/05 11:30:30 Building arm64 snapshot...
+2026/01/05 11:30:30 Generating SSH key key-build-talos-v1.8.3-k8s-v1.31.0-arm64-20260105113030...
+2026/01/05 11:30:30 Creating server build-talos-v1.8.3-k8s-v1.31.0-arm64-20260105113030...
+2026/01/05 11:30:42 Server IP: 95.217.21.45
+2026/01/05 11:30:42 Enabling Rescue Mode...
+2026/01/05 11:30:51 Resetting server to boot into Rescue Mode...
+2026/01/05 11:31:07 Waiting for Rescue System...
+2026/01/05 11:31:17 Provisioning Talos (Command: DISK=$(lsblk -d -n -o NAME | grep -E '^sda|^vda' | head -n 1) && if [ -z "$DISK" ]; then echo 'No disk found'; exit 1; fi && echo "Writing to /dev/$DISK" && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y zstd wget && wget -qO- https://github.com/siderolabs/talos/releases/download/v1.8.3/metal-arm64.raw.zst | zstd -d | dd of=/dev/$DISK bs=4M && sync)...
+2026/01/05 11:31:52 Powering off server for snapshot...
+2026/01/05 11:32:00 Creating snapshot...
+2026/01/05 11:32:52 Cleaning up server build-talos-v1.8.3-k8s-v1.31.0-arm64-20260105113030...
+2026/01/05 11:32:53 Server build-talos-v1.8.3-k8s-v1.31.0-arm64-20260105113030 deleted successfully
+2026/01/05 11:32:53 Cleaning up SSH key key-build-talos-v1.8.3-k8s-v1.31.0-arm64-20260105113030...
+2026/01/05 11:32:53 SSH key key-build-talos-v1.8.3-k8s-v1.31.0-arm64-20260105113030 deleted successfully
+2026/01/05 11:32:53 Built arm64 snapshot: 346923590
+=== RUN   TestClusterProvisioning
+    cluster_test.go:73: Using shared Talos snapshot from test suite
+    helpers.go:37: Generating SSH key e2e-test-1767609173-key-1767609173185700000...
+2026/01/05 11:32:53 Starting reconciliation...
+2026/01/05 11:32:53 Reconciling Network e2e-test-1767609173...
+2026/01/05 11:32:54 Reconciling Firewall e2e-test-1767609173...
+2026/01/05 11:32:54 Reconciling Load Balancer e2e-test-1767609173-kube-api...
+2026/01/05 11:33:11 Reconciling Control Plane...
+2026/01/05 11:33:11 Setting Talos Endpoint to: https://65.109.41.54:6443
+2026/01/05 11:33:11 Creating control-plane Server e2e-test-1767609173-control-plane-1...
+2026/01/05 11:33:11 Found existing Talos snapshot: talos-v1.8.3-k8s-v1.31.0-amd64 (ID: 346922836)
+2026/01/05 11:33:11 Using Talos image: 346922836
+2026/01/05 11:36:02 Bootstrapping cluster e2e-test-1767609173 with 1 control plane nodes...
+2026/01/05 11:36:02 Applying machine configurations to control plane nodes...
+2026/01/05 11:36:02 Applying config to node e2e-test-1767609173-control-plane-1 (95.217.21.45)...
+2026/01/05 11:36:27 Waiting for nodes to reboot and become ready...
+2026/01/05 11:36:27 Waiting for node e2e-test-1767609173-control-plane-1 (95.217.21.45) to be ready...
+2026/01/05 11:36:27 Waiting for node 95.217.21.45 to begin reboot...
+2026/01/05 11:36:37 Waiting for node 95.217.21.45 to come back online...
+2026/01/05 11:36:53 Node 95.217.21.45 not yet ready, waiting... (error: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: remote error: tls: certificate required")
+2026/01/05 11:37:03 Node 95.217.21.45 not yet ready, waiting... (error: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: remote error: tls: certificate required")
+2026/01/05 11:37:13 Node 95.217.21.45 not yet ready, waiting... (error: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: remote error: tls: certificate required")
+2026/01/05 11:37:23 Node 95.217.21.45 not yet ready, waiting... (error: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: remote error: tls: certificate required")
+2026/01/05 11:37:33 Node 95.217.21.45 not yet ready, waiting... (error: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: remote error: tls: certificate required")
+2026/01/05 11:37:43 Node 95.217.21.45 not yet ready, waiting... (error: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: remote error: tls: certificate required")
+2026/01/05 11:37:53 Node 95.217.21.45 not yet ready, waiting... (error: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: remote error: tls: certificate required")
+2026/01/05 11:41:56 Node 95.217.21.45 not yet ready, waiting... (error: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: remote error: tls: certificate required")
+2026/01/05 11:42:06 Node 95.217.21.45 not yet ready, waiting... (error: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: remote error: tls: certificate required")
+2026/01/05 11:42:16 Node 95.217.21.45 not yet ready, waiting... (error: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: remote error: tls: certificate required")
+2026/01/05 11:42:26 Node 95.217.21.45 not yet ready, waiting... (error: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: remote error: tls: certificate required")
+2026/01/05 11:42:36 Node 95.217.21.45 not yet ready, waiting... (error: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: remote error: tls: certificate required")
+2026/01/05 11:42:46 Node 95.217.21.45 not yet ready, waiting... (error: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: remote error: tls: certificate required")
+2026/01/05 11:42:56 Node 95.217.21.45 not yet ready, waiting... (error: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: remote error: tls: certificate required")
+SIGQUIT: quit
+PC=0x18f1164f8 m=0 sigcode=0
+
+goroutine 0 gp=0x101c545e0 m=0 mp=0x101c555c0 [idle]:
+runtime.pthread_cond_wait(0x101c55b28, 0x101c55ae8)
+	/opt/homebrew/opt/go/libexec/src/runtime/sys_darwin.go:547 +0x20 fp=0x16f70e230 sp=0x16f70e200 pc=0x100754500
+runtime.semasleep(0xffffffffffffffff)
+	/opt/homebrew/opt/go/libexec/src/runtime/os_darwin.go:72 +0x80 fp=0x16f70e290 sp=0x16f70e230 pc=0x10072ef20
+runtime.notesleep(0x101c55710)
+	/opt/homebrew/opt/go/libexec/src/runtime/lock_sema.go:62 +0xac fp=0x16f70e2c0 sp=0x16f70e290 pc=0x10070562c
+runtime.mPark(...)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:1974
+runtime.stopm()
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:3013 +0x84 fp=0x16f70e2f0 sp=0x16f70e2c0 pc=0x100739cc4
+runtime.findRunnable()
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:3784 +0x1358 fp=0x16f70e4c0 sp=0x16f70e2f0 pc=0x10073bdd8
+runtime.schedule()
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:4152 +0x90 fp=0x16f70e500 sp=0x16f70e4c0 pc=0x10073d0d0
+runtime.park_m(0x14000244a80)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:4280 +0x2ac fp=0x16f70e560 sp=0x16f70e500 pc=0x10073d5ac
+runtime.mcall()
+	/opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:241 +0x54 fp=0x16f70e570 sp=0x16f70e560 pc=0x1007705c4
+
+goroutine 1 gp=0x140000021c0 m=nil [chan receive, 6 minutes]:
+runtime.gopark(0x100773a60?, 0x1400005b8c8?, 0xb7?, 0x11?, 0x101df56c0?)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:460 +0xc0 fp=0x1400051f880 sp=0x1400051f860 pc=0x10076a420
+runtime.chanrecv(0x14000113800, 0x1400005b987, 0x1)
+	/opt/homebrew/opt/go/libexec/src/runtime/chan.go:667 +0x428 fp=0x1400051f900 sp=0x1400051f880 pc=0x100700698
+runtime.chanrecv1(0x101c51f80?, 0x101430a40?)
+	/opt/homebrew/opt/go/libexec/src/runtime/chan.go:509 +0x14 fp=0x1400051f930 sp=0x1400051f900 pc=0x100700234
+testing.(*T).Run(0x140003b9500, {0x100fe322d?, 0x1400005ba48?}, 0x1013fed60)
+	/opt/homebrew/opt/go/libexec/src/testing/testing.go:2005 +0x378 fp=0x1400051fa10 sp=0x1400051f930 pc=0x10082f6e8
+testing.runTests.func1(0x140003b9500)
+	/opt/homebrew/opt/go/libexec/src/testing/testing.go:2477 +0x38 fp=0x1400051fa50 sp=0x1400051fa10 pc=0x1008314e8
+testing.tRunner(0x140003b9500, 0x1400005bb78)
+	/opt/homebrew/opt/go/libexec/src/testing/testing.go:1934 +0xc8 fp=0x1400051faa0 sp=0x1400051fa50 pc=0x10082e988
+testing.runTests(0x140004d6630, {0x101c28880, 0x3, 0x3}, {0x1014095f8?, 0x101c12980?, 0x101c530c0?})
+	/opt/homebrew/opt/go/libexec/src/testing/testing.go:2475 +0x3b8 fp=0x1400051fba0 sp=0x1400051faa0 pc=0x100831408
+testing.(*M).Run(0x1400040ea00)
+	/opt/homebrew/opt/go/libexec/src/testing/testing.go:2337 +0x530 fp=0x1400051fdd0 sp=0x1400051fba0 pc=0x1008302b0
+github.com/sak-d/hcloud-k8s/tests/e2e.TestMain(0x1400040ea00)
+	/Users/milan.kappen/Repos/Private/hcloud-kubernetes/tests/e2e/suite_test.go:47 +0x1ac fp=0x1400051feb0 sp=0x1400051fdd0 pc=0x100f7e62c
+main.main()
+	_testmain.go:51 +0x88 fp=0x1400051ff40 sp=0x1400051feb0 pc=0x100f7fa88
+runtime.main()
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:285 +0x278 fp=0x1400051ffd0 sp=0x1400051ff40 pc=0x100734b48
+runtime.goexit({})
+	/opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:1268 +0x4 fp=0x1400051ffd0 sp=0x1400051ffd0 pc=0x100772b24
+
+goroutine 18 gp=0x14000102380 m=nil [force gc (idle), 10 minutes]:
+runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:460 +0xc0 fp=0x14000080790 sp=0x14000080770 pc=0x10076a420
+runtime.goparkunlock(...)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:466
+runtime.forcegchelper()
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:373 +0xb4 fp=0x140000807d0 sp=0x14000080790 pc=0x100734e94
+runtime.goexit({})
+	/opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:1268 +0x4 fp=0x140000807d0 sp=0x140000807d0 pc=0x100772b24
+created by runtime.init.7 in goroutine 1
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:361 +0x24
+
+goroutine 19 gp=0x14000102540 m=nil [GC sweep wait]:
+runtime.gopark(0x101c51b01?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:460 +0xc0 fp=0x14000080f60 sp=0x14000080f40 pc=0x10076a420
+runtime.goparkunlock(...)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:466
+runtime.bgsweep(0x14000112000)
+	/opt/homebrew/opt/go/libexec/src/runtime/mgcsweep.go:323 +0x104 fp=0x14000080fb0 sp=0x14000080f60 pc=0x10071d234
+runtime.gcenable.gowrap1()
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:212 +0x28 fp=0x14000080fd0 sp=0x14000080fb0 pc=0x100710dc8
+runtime.goexit({})
+	/opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:1268 +0x4 fp=0x14000080fd0 sp=0x14000080fd0 pc=0x100772b24
+created by runtime.gcenable in goroutine 1
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:212 +0x6c
+
+goroutine 20 gp=0x14000102700 m=nil [GC scavenge wait]:
+runtime.gopark(0x6a7c7?, 0xc8bde?, 0x0?, 0x0?, 0x0?)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:460 +0xc0 fp=0x14000081760 sp=0x14000081740 pc=0x10076a420
+runtime.goparkunlock(...)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:466
+runtime.(*scavengerState).park(0x101c539c0)
+	/opt/homebrew/opt/go/libexec/src/runtime/mgcscavenge.go:425 +0x5c fp=0x14000081790 sp=0x14000081760 pc=0x10071ad5c
+runtime.bgscavenge(0x14000112000)
+	/opt/homebrew/opt/go/libexec/src/runtime/mgcscavenge.go:658 +0xac fp=0x140000817b0 sp=0x14000081790 pc=0x10071b2fc
+runtime.gcenable.gowrap2()
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:213 +0x28 fp=0x140000817d0 sp=0x140000817b0 pc=0x100710d68
+runtime.goexit({})
+	/opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:1268 +0x4 fp=0x140000817d0 sp=0x140000817d0 pc=0x100772b24
+created by runtime.gcenable in goroutine 1
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:213 +0xac
+
+goroutine 21 gp=0x140001028c0 m=nil [GOMAXPROCS updater (idle), 10 minutes]:
+runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:460 +0xc0 fp=0x14000081f70 sp=0x14000081f50 pc=0x10076a420
+runtime.goparkunlock(...)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:466
+runtime.updateMaxProcsGoroutine()
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:6720 +0xf4 fp=0x14000081fd0 sp=0x14000081f70 pc=0x1007439a4
+runtime.goexit({})
+	/opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:1268 +0x4 fp=0x14000081fd0 sp=0x14000081fd0 pc=0x100772b24
+created by runtime.defaultGOMAXPROCSUpdateEnable in goroutine 1
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:6708 +0x48
+
+goroutine 22 gp=0x14000102e00 m=nil [finalizer wait, 10 minutes]:
+runtime.gopark(0x8?, 0x10077745c?, 0xc8?, 0x45?, 0x101db1fe8?)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:460 +0xc0 fp=0x14000084580 sp=0x14000084560 pc=0x10076a420
+runtime.runFinalizers()
+	/opt/homebrew/opt/go/libexec/src/runtime/mfinal.go:210 +0x104 fp=0x140000847d0 sp=0x14000084580 pc=0x10070fdb4
+runtime.goexit({})
+	/opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:1268 +0x4 fp=0x140000847d0 sp=0x140000847d0 pc=0x100772b24
+created by runtime.createfing in goroutine 1
+	/opt/homebrew/opt/go/libexec/src/runtime/mfinal.go:172 +0x78
+
+goroutine 23 gp=0x14000103a40 m=nil [cleanup wait, 6 minutes]:
+runtime.gopark(0x14000082750?, 0x101e0f200?, 0x78?, 0x27?, 0x10070d584?)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:460 +0xc0 fp=0x14000082740 sp=0x14000082720 pc=0x10076a420
+runtime.goparkunlock(...)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:466
+runtime.(*cleanupQueue).dequeue(0x101c54420)
+	/opt/homebrew/opt/go/libexec/src/runtime/mcleanup.go:439 +0x110 fp=0x14000082780 sp=0x14000082740 pc=0x10070cd80
+runtime.runCleanups()
+	/opt/homebrew/opt/go/libexec/src/runtime/mcleanup.go:635 +0x40 fp=0x140000827d0 sp=0x14000082780 pc=0x10070d590
+runtime.goexit({})
+	/opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:1268 +0x4 fp=0x140000827d0 sp=0x140000827d0 pc=0x100772b24
+created by runtime.(*cleanupQueue).createGs in goroutine 1
+	/opt/homebrew/opt/go/libexec/src/runtime/mcleanup.go:589 +0x108
+
+goroutine 30 gp=0x14000103dc0 m=nil [GC worker (idle)]:
+runtime.gopark(0x690b568e53369?, 0x3?, 0xca?, 0x77?, 0x0?)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:460 +0xc0 fp=0x14000096f10 sp=0x14000096ef0 pc=0x10076a420
+runtime.gcBgMarkWorker(0x1400011ad90)
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1463 +0xe0 fp=0x14000096fb0 sp=0x14000096f10 pc=0x100713440
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1373 +0x28 fp=0x14000096fd0 sp=0x14000096fb0 pc=0x100713328
+runtime.goexit({})
+	/opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:1268 +0x4 fp=0x14000096fd0 sp=0x14000096fd0 pc=0x100772b24
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1373 +0x140
+
+goroutine 31 gp=0x140003b8540 m=nil [GC worker (idle)]:
+runtime.gopark(0x690b568e52c3f?, 0x3?, 0xdb?, 0xe?, 0x0?)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:460 +0xc0 fp=0x14000515f10 sp=0x14000515ef0 pc=0x10076a420
+runtime.gcBgMarkWorker(0x1400011ad90)
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1463 +0xe0 fp=0x14000515fb0 sp=0x14000515f10 pc=0x100713440
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1373 +0x28 fp=0x14000515fd0 sp=0x14000515fb0 pc=0x100713328
+runtime.goexit({})
+	/opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:1268 +0x4 fp=0x14000515fd0 sp=0x14000515fd0 pc=0x100772b24
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1373 +0x140
+
+goroutine 32 gp=0x140002448c0 m=nil [GC worker (idle), 3 minutes]:
+runtime.gopark(0x6909f5f0f6312?, 0x1?, 0xf9?, 0x15?, 0x0?)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:460 +0xc0 fp=0x14000097f10 sp=0x14000097ef0 pc=0x10076a420
+runtime.gcBgMarkWorker(0x1400011ad90)
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1463 +0xe0 fp=0x14000097fb0 sp=0x14000097f10 pc=0x100713440
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1373 +0x28 fp=0x14000097fd0 sp=0x14000097fb0 pc=0x100713328
+runtime.goexit({})
+	/opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:1268 +0x4 fp=0x14000097fd0 sp=0x14000097fd0 pc=0x100772b24
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1373 +0x140
+
+goroutine 33 gp=0x14000244a80 m=nil [GC worker (idle)]:
+runtime.gopark(0x101c7dd20?, 0x3?, 0x51?, 0x12?, 0x0?)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:460 +0xc0 fp=0x14000516f10 sp=0x14000516ef0 pc=0x10076a420
+runtime.gcBgMarkWorker(0x1400011ad90)
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1463 +0xe0 fp=0x14000516fb0 sp=0x14000516f10 pc=0x100713440
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1373 +0x28 fp=0x14000516fd0 sp=0x14000516fb0 pc=0x100713328
+runtime.goexit({})
+	/opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:1268 +0x4 fp=0x14000516fd0 sp=0x14000516fd0 pc=0x100772b24
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1373 +0x140
+
+goroutine 50 gp=0x14000244c40 m=nil [GC worker (idle)]:
+runtime.gopark(0x690b568e52104?, 0x3?, 0xf?, 0x43?, 0x0?)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:460 +0xc0 fp=0x14000517f10 sp=0x14000517ef0 pc=0x10076a420
+runtime.gcBgMarkWorker(0x1400011ad90)
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1463 +0xe0 fp=0x14000517fb0 sp=0x14000517f10 pc=0x100713440
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1373 +0x28 fp=0x14000517fd0 sp=0x14000517fb0 pc=0x100713328
+runtime.goexit({})
+	/opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:1268 +0x4 fp=0x14000517fd0 sp=0x14000517fd0 pc=0x100772b24
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1373 +0x140
+
+goroutine 51 gp=0x14000244e00 m=nil [GC worker (idle)]:
+runtime.gopark(0x690b568e465d8?, 0x3?, 0xe7?, 0x87?, 0x0?)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:460 +0xc0 fp=0x1400041ef10 sp=0x1400041eef0 pc=0x10076a420
+runtime.gcBgMarkWorker(0x1400011ad90)
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1463 +0xe0 fp=0x1400041efb0 sp=0x1400041ef10 pc=0x100713440
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1373 +0x28 fp=0x1400041efd0 sp=0x1400041efb0 pc=0x100713328
+runtime.goexit({})
+	/opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:1268 +0x4 fp=0x1400041efd0 sp=0x1400041efd0 pc=0x100772b24
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1373 +0x140
+
+goroutine 52 gp=0x14000244fc0 m=nil [GC worker (idle)]:
+runtime.gopark(0x690b568e464de?, 0x3?, 0xb6?, 0xa5?, 0x0?)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:460 +0xc0 fp=0x14000090f10 sp=0x14000090ef0 pc=0x10076a420
+runtime.gcBgMarkWorker(0x1400011ad90)
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1463 +0xe0 fp=0x14000090fb0 sp=0x14000090f10 pc=0x100713440
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1373 +0x28 fp=0x14000090fd0 sp=0x14000090fb0 pc=0x100713328
+runtime.goexit({})
+	/opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:1268 +0x4 fp=0x14000090fd0 sp=0x14000090fd0 pc=0x100772b24
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1373 +0x140
+
+goroutine 53 gp=0x14000245180 m=nil [GC worker (idle)]:
+runtime.gopark(0x690b568e56abf?, 0x1?, 0xa0?, 0xfd?, 0x0?)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:460 +0xc0 fp=0x14000422f10 sp=0x14000422ef0 pc=0x10076a420
+runtime.gcBgMarkWorker(0x1400011ad90)
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1463 +0xe0 fp=0x14000422fb0 sp=0x14000422f10 pc=0x100713440
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1373 +0x28 fp=0x14000422fd0 sp=0x14000422fb0 pc=0x100713328
+runtime.goexit({})
+	/opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:1268 +0x4 fp=0x14000422fd0 sp=0x14000422fd0 pc=0x100772b24
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1373 +0x140
+
+goroutine 893 gp=0x14000502380 m=nil [chan receive, 2 minutes]:
+runtime.gopark(0x140004266b8?, 0x1007085dc?, 0x10?, 0x0?, 0x1012cdcc0?)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:460 +0xc0 fp=0x14000426680 sp=0x14000426660 pc=0x10076a420
+runtime.chanrecv(0x140001763f0, 0x14000426780, 0x1)
+	/opt/homebrew/opt/go/libexec/src/runtime/chan.go:667 +0x428 fp=0x14000426700 sp=0x14000426680 pc=0x100700698
+runtime.chanrecv2(0x101415e40?, 0x140006ac5f0?)
+	/opt/homebrew/opt/go/libexec/src/runtime/chan.go:514 +0x14 fp=0x14000426730 sp=0x14000426700 pc=0x100700254
+google.golang.org/grpc/internal/grpcsync.(*CallbackSerializer).run(0x140005226c0, {0x101415e40, 0x140006ac5f0})
+	/Users/milan.kappen/go/pkg/mod/google.golang.org/grpc@v1.76.0/internal/grpcsync/callback_serializer.go:88 +0xcc fp=0x140004267a0 sp=0x14000426730 pc=0x100c08ddc
+google.golang.org/grpc/internal/grpcsync.NewCallbackSerializer.gowrap1()
+	/Users/milan.kappen/go/pkg/mod/google.golang.org/grpc@v1.76.0/internal/grpcsync/callback_serializer.go:52 +0x2c fp=0x140004267d0 sp=0x140004267a0 pc=0x100c08c1c
+runtime.goexit({})
+	/opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:1268 +0x4 fp=0x140004267d0 sp=0x140004267d0 pc=0x100772b24
+created by google.golang.org/grpc/internal/grpcsync.NewCallbackSerializer in goroutine 479
+	/Users/milan.kappen/go/pkg/mod/google.golang.org/grpc@v1.76.0/internal/grpcsync/callback_serializer.go:52 +0x10c
+
+goroutine 465 gp=0x14000245500 m=nil [cleanup wait]:
+runtime.gopark(0x14000134840?, 0x101e0f200?, 0x78?, 0x7f?, 0x10070d584?)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:460 +0xc0 fp=0x14000427f40 sp=0x14000427f20 pc=0x10076a420
+runtime.goparkunlock(...)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:466
+runtime.(*cleanupQueue).dequeue(0x101c54420)
+	/opt/homebrew/opt/go/libexec/src/runtime/mcleanup.go:439 +0x110 fp=0x14000427f80 sp=0x14000427f40 pc=0x10070cd80
+runtime.runCleanups()
+	/opt/homebrew/opt/go/libexec/src/runtime/mcleanup.go:635 +0x40 fp=0x14000427fd0 sp=0x14000427f80 pc=0x10070d590
+runtime.goexit({})
+	/opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:1268 +0x4 fp=0x14000427fd0 sp=0x14000427fd0 pc=0x100772b24
+created by runtime.(*cleanupQueue).createGs in goroutine 479
+	/opt/homebrew/opt/go/libexec/src/runtime/mcleanup.go:589 +0x108
+
+goroutine 479 gp=0x14000245c00 m=nil [select]:
+runtime.gopark(0x14000199640?, 0x2?, 0x7d?, 0x44?, 0x140001995dc?)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:460 +0xc0 fp=0x14000199430 sp=0x14000199410 pc=0x10076a420
+runtime.selectgo(0x14000199640, 0x140001995d8, 0x2?, 0x0, 0x0?, 0x1)
+	/opt/homebrew/opt/go/libexec/src/runtime/select.go:351 +0x6bc fp=0x14000199570 sp=0x14000199430 pc=0x10074893c
+github.com/sak-d/hcloud-k8s/internal/cluster.(*Bootstrapper).waitForNodeReady(0x140000560d0, {0x101415eb0, 0x140001d4150}, {0x140004b0f90, 0xc}, {0x14000173000?, 0x333a?, 0x3500?})
+	/Users/milan.kappen/Repos/Private/hcloud-kubernetes/internal/cluster/bootstrap.go:219 +0x3d4 fp=0x14000199750 sp=0x14000199570 pc=0x100f0b914
+github.com/sak-d/hcloud-k8s/internal/cluster.(*Bootstrapper).Bootstrap(0x140000560d0, {0x101415eb0, 0x140001d4150}, {0x1400013ccf0, 0x13}, 0x1400032b230, 0x1400027bca8, {0x14000173000, 0x633, 0x800})
+	/Users/milan.kappen/Repos/Private/hcloud-kubernetes/internal/cluster/bootstrap.go:71 +0x6c0 fp=0x14000199ad0 sp=0x14000199750 pc=0x100f0a330
+github.com/sak-d/hcloud-k8s/internal/cluster.(*Reconciler).Reconcile(0x14000220d00, {0x101415eb0, 0x140001d4150})
+	/Users/milan.kappen/Repos/Private/hcloud-kubernetes/internal/cluster/reconciler.go:136 +0x550 fp=0x14000199dc0 sp=0x14000199ad0 pc=0x100f0f180
+github.com/sak-d/hcloud-k8s/tests/e2e.TestClusterProvisioning(0x140003b96c0)
+	/Users/milan.kappen/Repos/Private/hcloud-kubernetes/tests/e2e/cluster_test.go:133 +0x444 fp=0x14000199f60 sp=0x14000199dc0 pc=0x100f7b924
+testing.tRunner(0x140003b96c0, 0x1013fed60)
+	/opt/homebrew/opt/go/libexec/src/testing/testing.go:1934 +0xc8 fp=0x14000199fb0 sp=0x14000199f60 pc=0x10082e988
+testing.(*T).Run.gowrap1()
+	/opt/homebrew/opt/go/libexec/src/testing/testing.go:1997 +0x28 fp=0x14000199fd0 sp=0x14000199fb0 pc=0x10082f808
+runtime.goexit({})
+	/opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:1268 +0x4 fp=0x14000199fd0 sp=0x14000199fd0 pc=0x100772b24
+created by testing.(*T).Run in goroutine 1
+	/opt/homebrew/opt/go/libexec/src/testing/testing.go:1997 +0x364
+
+goroutine 895 gp=0x14000502e00 m=nil [chan receive]:
+runtime.gopark(0x3?, 0x10140d140?, 0xe0?, 0x56?, 0x0?)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:460 +0xc0 fp=0x14000510e80 sp=0x14000510e60 pc=0x10076a420
+runtime.chanrecv(0x140001764d0, 0x14000510f80, 0x1)
+	/opt/homebrew/opt/go/libexec/src/runtime/chan.go:667 +0x428 fp=0x14000510f00 sp=0x14000510e80 pc=0x100700698
+runtime.chanrecv2(0x101415e40?, 0x140006ac690?)
+	/opt/homebrew/opt/go/libexec/src/runtime/chan.go:514 +0x14 fp=0x14000510f30 sp=0x14000510f00 pc=0x100700254
+google.golang.org/grpc/internal/grpcsync.(*CallbackSerializer).run(0x14000522720, {0x101415e40, 0x140006ac690})
+	/Users/milan.kappen/go/pkg/mod/google.golang.org/grpc@v1.76.0/internal/grpcsync/callback_serializer.go:88 +0xcc fp=0x14000510fa0 sp=0x14000510f30 pc=0x100c08ddc
+google.golang.org/grpc/internal/grpcsync.NewCallbackSerializer.gowrap1()
+	/Users/milan.kappen/go/pkg/mod/google.golang.org/grpc@v1.76.0/internal/grpcsync/callback_serializer.go:52 +0x2c fp=0x14000510fd0 sp=0x14000510fa0 pc=0x100c08c1c
+runtime.goexit({})
+	/opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:1268 +0x4 fp=0x14000510fd0 sp=0x14000510fd0 pc=0x100772b24
+created by google.golang.org/grpc/internal/grpcsync.NewCallbackSerializer in goroutine 479
+	/Users/milan.kappen/go/pkg/mod/google.golang.org/grpc@v1.76.0/internal/grpcsync/callback_serializer.go:52 +0x10c
+
+goroutine 894 gp=0x14000003c00 m=nil [chan receive]:
+runtime.gopark(0x140005900c0?, 0x0?, 0xe0?, 0x80?, 0x3?)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:460 +0xc0 fp=0x14000093e80 sp=0x14000093e60 pc=0x10076a420
+runtime.chanrecv(0x14000176460, 0x14000093f80, 0x1)
+	/opt/homebrew/opt/go/libexec/src/runtime/chan.go:667 +0x428 fp=0x14000093f00 sp=0x14000093e80 pc=0x100700698
+runtime.chanrecv2(0x101415e40?, 0x140006ac640?)
+	/opt/homebrew/opt/go/libexec/src/runtime/chan.go:514 +0x14 fp=0x14000093f30 sp=0x14000093f00 pc=0x100700254
+google.golang.org/grpc/internal/grpcsync.(*CallbackSerializer).run(0x140005226f0, {0x101415e40, 0x140006ac640})
+	/Users/milan.kappen/go/pkg/mod/google.golang.org/grpc@v1.76.0/internal/grpcsync/callback_serializer.go:88 +0xcc fp=0x14000093fa0 sp=0x14000093f30 pc=0x100c08ddc
+google.golang.org/grpc/internal/grpcsync.NewCallbackSerializer.gowrap1()
+	/Users/milan.kappen/go/pkg/mod/google.golang.org/grpc@v1.76.0/internal/grpcsync/callback_serializer.go:52 +0x2c fp=0x14000093fd0 sp=0x14000093fa0 pc=0x100c08c1c
+runtime.goexit({})
+	/opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:1268 +0x4 fp=0x14000093fd0 sp=0x14000093fd0 pc=0x100772b24
+created by google.golang.org/grpc/internal/grpcsync.NewCallbackSerializer in goroutine 479
+	/Users/milan.kappen/go/pkg/mod/google.golang.org/grpc@v1.76.0/internal/grpcsync/callback_serializer.go:52 +0x10c
+
+goroutine 931 gp=0x140005828c0 m=nil [select]:
+runtime.gopark(0x1400019df18?, 0x3?, 0x38?, 0xdd?, 0x1400019de8a?)
+	/opt/homebrew/opt/go/libexec/src/runtime/proc.go:460 +0xc0 fp=0x1400019dcf0 sp=0x1400019dcd0 pc=0x10076a420
+runtime.selectgo(0x1400019df18, 0x1400019de84, 0x10140d140?, 0x0, 0x1400011ab60?, 0x1)
+	/opt/homebrew/opt/go/libexec/src/runtime/select.go:351 +0x6bc fp=0x1400019de30 sp=0x1400019dcf0 pc=0x10074893c
+google.golang.org/grpc.(*addrConn).resetTransportAndUnlock(0x140001b8308)
+	/Users/milan.kappen/go/pkg/mod/google.golang.org/grpc@v1.76.0/clientconn.go:1298 +0x424 fp=0x1400019df50 sp=0x1400019de30 pc=0x100cb7fa4
+google.golang.org/grpc.(*addrConn).connect(0x140001b8308)
+	/Users/milan.kappen/go/pkg/mod/google.golang.org/grpc@v1.76.0/clientconn.go:942 +0x18c fp=0x1400019dfb0 sp=0x1400019df50 pc=0x100cb637c
+google.golang.org/grpc.(*acBalancerWrapper).Connect.gowrap1()
+	/Users/milan.kappen/go/pkg/mod/google.golang.org/grpc@v1.76.0/balancer_wrapper.go:354 +0x28 fp=0x1400019dfd0 sp=0x1400019dfb0 pc=0x100cb1238
+runtime.goexit({})
+	/opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:1268 +0x4 fp=0x1400019dfd0 sp=0x1400019dfd0 pc=0x100772b24
+created by google.golang.org/grpc.(*acBalancerWrapper).Connect in goroutine 895
+	/Users/milan.kappen/go/pkg/mod/google.golang.org/grpc@v1.76.0/balancer_wrapper.go:354 +0x60
+
+r0      0x104
+r1      0x0
+r2      0x9500
+r3      0x0
+r4      0x0
+r5      0xa0
+r6      0x0
+r7      0x0
+r8      0x16f70e118
+r9      0x0
+r10     0x100
+r11     0x10000000102
+r12     0x10000000102
+r13     0x100
+r14     0x0
+r15     0x10000000100
+r16     0x131
+r17     0x1fd11d398
+r18     0x0
+r19     0x101c55ae8
+r20     0x101c55b28
+r21     0x1fbb22160
+r22     0x0
+r23     0x0
+r24     0x9500
+r25     0x9501
+r26     0x9600
+r27     0x101c11000
+r28     0x101c545e0
+r29     0x16f70e190
+lr      0x18f1560dc
+sp      0x16f70e100
+pc      0x18f1164f8
+fault   0x18f1164f8
+*** Test killed with quit: ran too long (11m0s).
+FAIL	github.com/sak-d/hcloud-k8s/tests/e2e	660.011s
+FAIL
+make: *** [e2e] Error 1

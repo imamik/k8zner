@@ -100,6 +100,7 @@ func (g *ConfigGenerator) GenerateControlPlaneConfig(san []string) ([]byte, erro
 		generate.WithVersionContract(vc),
 		generate.WithSecretsBundle(g.secretsBundle),
 		generate.WithAdditionalSubjectAltNames(san),
+		generate.WithInstallDisk("/dev/sda"), // Hetzner Cloud uses /dev/sda
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create input: %w", err)
@@ -131,6 +132,7 @@ func (g *ConfigGenerator) GenerateWorkerConfig() ([]byte, error) {
 		g.kubernetesVersion,
 		generate.WithVersionContract(vc),
 		generate.WithSecretsBundle(g.secretsBundle),
+		generate.WithInstallDisk("/dev/sda"), // Hetzner Cloud uses /dev/sda
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create input: %w", err)
