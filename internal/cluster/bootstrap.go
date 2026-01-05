@@ -59,7 +59,7 @@ func (b *Bootstrapper) Bootstrap(ctx context.Context, clusterName string, contro
 		}
 
 		log.Printf("Applying config to node %s (%s)...", nodeName, nodeIP)
-		if err := b.applyMachineConfig(ctx, nodeIP, machineConfig); err != nil {
+		if err := b.applyMachineConfig(ctx, nodeIP, machineConfig, clientConfigBytes); err != nil {
 			return fmt.Errorf("failed to apply config to node %s: %w", nodeName, err)
 		}
 	}
@@ -149,15 +149,25 @@ func (b *Bootstrapper) waitForPort(ctx context.Context, ip string, port int) err
 	}
 }
 
-// applyMachineConfig applies a machine configuration to a Talos node in maintenance mode.
-func (b *Bootstrapper) applyMachineConfig(ctx context.Context, nodeIP string, machineConfig []byte) error {
-	// Wait for Talos API to be available (maintenance mode)
+// applyMachineConfig applies a machine configuration to a Talos node.
+// For pre-installed Talos (from snapshots), this uses authenticated connections
+// matching Terraform's talos_machine_configuration_apply behavior.
+func (b *Bootstrapper) applyMachineConfig(ctx context.Context, nodeIP string, machineConfig []byte, clientConfigBytes []byte) error {
+	// Wait for Talos API to be available
 	if err := b.waitForPort(ctx, nodeIP, 50000); err != nil {
 		return fmt.Errorf("failed to wait for Talos API: %w", err)
 	}
 
-	// Create client with insecure connection (maintenance mode doesn't require auth)
+	// Parse client config for authentication
+	cfg, err := config.FromString(string(clientConfigBytes))
+	if err != nil {
+		return fmt.Errorf("failed to parse client config: %w", err)
+	}
+
+	// Create authenticated client (like Terraform does)
+	// Pre-installed Talos nodes from snapshots expect authenticated connections
 	clientCtx, err := client.New(ctx,
+		client.WithConfig(cfg),
 		client.WithEndpoints(nodeIP),
 		client.WithTLSConfig(&tls.Config{InsecureSkipVerify: true}),
 	)
@@ -167,11 +177,12 @@ func (b *Bootstrapper) applyMachineConfig(ctx context.Context, nodeIP string, ma
 	defer clientCtx.Close()
 
 	// Apply the configuration
-	// Use AUTO mode to automatically detect if installation is needed
-	// (maintenance mode -> install to disk, already installed -> reboot)
+	// Use REBOOT mode for pre-installed Talos (from Packer snapshots)
+	// This matches Terraform's behavior and avoids confusion with AUTO mode
+	// which might trigger installation logic on pre-installed systems
 	applyReq := &machine.ApplyConfigurationRequest{
 		Data: machineConfig,
-		Mode: machine.ApplyConfigurationRequest_AUTO,
+		Mode: machine.ApplyConfigurationRequest_REBOOT,
 	}
 
 	_, err = clientCtx.ApplyConfiguration(ctx, applyReq)
