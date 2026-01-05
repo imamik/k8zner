@@ -88,7 +88,6 @@ func TestInfraProvisioning(t *testing.T) {
 		client.DeleteFloatingIP(ctx, clusterName+"-control-plane-ipv4")
 		client.DeleteFirewall(ctx, clusterName)
 		client.DeleteNetwork(ctx, clusterName)
-		client.DeletePlacementGroup(ctx, clusterName+"-control-plane-pg")
 		client.DeletePlacementGroup(ctx, clusterName+"-control-plane-1")
 		client.DeleteServer(ctx, clusterName+"-control-plane-1-1")
 		t.Log("Deleted Resources")

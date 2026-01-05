@@ -11,10 +11,10 @@ import (
 	"fmt"
 	"log"
 	"math/big"
-	"net"
 	"time"
 
 	hcloud_internal "github.com/sak-d/hcloud-k8s/internal/hcloud"
+	"github.com/sak-d/hcloud-k8s/internal/netutil"
 	"github.com/siderolabs/talos/pkg/machinery/api/machine"
 	"github.com/siderolabs/talos/pkg/machinery/client"
 	"github.com/siderolabs/talos/pkg/machinery/client/config"
@@ -126,36 +126,12 @@ func (b *Bootstrapper) Bootstrap(ctx context.Context, clusterName string, contro
 	return nil
 }
 
-// waitForPort waits for a TCP port to be open.
-func (b *Bootstrapper) waitForPort(ctx context.Context, ip string, port int) error {
-	address := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	// Timeout after 10 minutes
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
-	defer cancel()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			conn, err := net.DialTimeout("tcp", address, 2*time.Second)
-			if err == nil {
-				_ = conn.Close()
-				return nil
-			}
-		}
-	}
-}
-
 // applyMachineConfig applies a machine configuration to a Talos node.
 // For pre-installed Talos (from snapshots), nodes boot into maintenance mode
 // and require an insecure connection to apply the initial configuration.
 func (b *Bootstrapper) applyMachineConfig(ctx context.Context, nodeIP string, machineConfig []byte, clientConfigBytes []byte) error {
 	// Wait for Talos API to be available
-	if err := b.waitForPort(ctx, nodeIP, 50000); err != nil {
+	if err := netutil.WaitForPort(ctx, nodeIP, 50000, netutil.TalosAPIWaitTimeout); err != nil {
 		return fmt.Errorf("failed to wait for Talos API: %w", err)
 	}
 
@@ -202,7 +178,7 @@ func (b *Bootstrapper) waitForNodeReady(ctx context.Context, nodeIP string, clie
 
 	// Wait for port to come back up
 	log.Printf("Waiting for node %s to come back online...", nodeIP)
-	if err := b.waitForPort(ctx, nodeIP, 50000); err != nil {
+	if err := netutil.WaitForPort(ctx, nodeIP, 50000, netutil.TalosAPIWaitTimeout); err != nil {
 		return fmt.Errorf("failed to wait for node to come back: %w", err)
 	}
 

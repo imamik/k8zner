@@ -51,7 +51,3 @@ type MockSSH struct{}
 func (m *MockSSH) Execute(_ context.Context, _ string) (string, error) {
 	return "ok", nil
 }
-
-func (m *MockSSH) UploadFile(_ context.Context, _, _ string) error {
-	return nil
-}

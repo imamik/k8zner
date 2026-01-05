@@ -115,7 +115,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 
 	// 2-5. Parallelize infrastructure setup after network
 	log.Printf("=== PARALLELIZING INFRASTRUCTURE SETUP at %s ===", time.Now().Format("15:04:05"))
-	infraChan := make(chan asyncResult, 4)
+	infraChan := make(chan asyncResult, 3)
 
 	// Firewall
 	go func() {
@@ -133,14 +133,6 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 		infraChan <- asyncResult{name: "loadBalancers", err: err}
 	}()
 
-	// Placement Groups
-	go func() {
-		log.Printf("[placementGroups] Starting at %s", time.Now().Format("15:04:05"))
-		err := r.reconcilePlacementGroups(ctx)
-		log.Printf("[placementGroups] Completed at %s", time.Now().Format("15:04:05"))
-		infraChan <- asyncResult{name: "placementGroups", err: err}
-	}()
-
 	// Floating IPs
 	go func() {
 		log.Printf("[floatingIPs] Starting at %s", time.Now().Format("15:04:05"))
@@ -150,7 +142,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 	}()
 
 	// Wait for all infrastructure components
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 3; i++ {
 		result := <-infraChan
 		if result.err != nil {
 			return fmt.Errorf("failed to reconcile %s: %w", result.name, result.err)

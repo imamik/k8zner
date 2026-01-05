@@ -74,9 +74,3 @@ func (c *Client) Execute(ctx context.Context, command string) (string, error) {
 
 	return string(output), nil
 }
-
-// UploadFile uploads a file to the remote host.
-func (c *Client) UploadFile(_ context.Context, _, _ string) error {
-	// Not implemented yet.
-	return nil
-}
