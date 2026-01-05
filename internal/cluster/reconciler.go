@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/sak-d/hcloud-k8s/internal/config"
@@ -79,33 +80,83 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 		return fmt.Errorf("failed to reconcile network: %w", err)
 	}
 
-	// Fetch Public IP.
+	// 1.5. Pre-build all required Talos images in parallel with public IP fetch
+	type asyncResult struct {
+		name string
+		err  error
+	}
+	resultChan := make(chan asyncResult, 2)
+
+	// Start image building
+	go func() {
+		err := r.ensureAllImages(ctx)
+		resultChan <- asyncResult{name: "images", err: err}
+	}()
+
+	// Start public IP fetch
 	var publicIP string
-	if ip, err := r.infra.GetPublicIP(ctx); err == nil {
-		publicIP = ip
-	} else {
-		log.Printf("Warning: Failed to detect public IP: %v", err)
+	go func() {
+		if ip, err := r.infra.GetPublicIP(ctx); err == nil {
+			publicIP = ip
+			resultChan <- asyncResult{name: "publicIP", err: nil}
+		} else {
+			log.Printf("Warning: Failed to detect public IP: %v", err)
+			resultChan <- asyncResult{name: "publicIP", err: err}
+		}
+	}()
+
+	// Wait for both to complete
+	for i := 0; i < 2; i++ {
+		result := <-resultChan
+		if result.name == "images" && result.err != nil {
+			return fmt.Errorf("failed to ensure Talos images: %w", result.err)
+		}
 	}
 
-	// 2. Firewall
-	if err := r.reconcileFirewall(ctx, publicIP); err != nil {
-		return fmt.Errorf("failed to reconcile firewall: %w", err)
-	}
+	// 2-5. Parallelize infrastructure setup after network
+	log.Printf("=== PARALLELIZING INFRASTRUCTURE SETUP at %s ===", time.Now().Format("15:04:05"))
+	infraChan := make(chan asyncResult, 4)
 
-	// 3. Load Balancers
-	if err := r.reconcileLoadBalancers(ctx); err != nil {
-		return fmt.Errorf("failed to reconcile load balancers: %w", err)
-	}
+	// Firewall
+	go func() {
+		log.Printf("[firewall] Starting at %s", time.Now().Format("15:04:05"))
+		err := r.reconcileFirewall(ctx, publicIP)
+		log.Printf("[firewall] Completed at %s", time.Now().Format("15:04:05"))
+		infraChan <- asyncResult{name: "firewall", err: err}
+	}()
 
-	// 4. Placement Groups
-	if err := r.reconcilePlacementGroups(ctx); err != nil {
-		return fmt.Errorf("failed to reconcile placement groups: %w", err)
-	}
+	// Load Balancers
+	go func() {
+		log.Printf("[loadBalancers] Starting at %s", time.Now().Format("15:04:05"))
+		err := r.reconcileLoadBalancers(ctx)
+		log.Printf("[loadBalancers] Completed at %s", time.Now().Format("15:04:05"))
+		infraChan <- asyncResult{name: "loadBalancers", err: err}
+	}()
 
-	// 5. Floating IPs
-	if err := r.reconcileFloatingIPs(ctx); err != nil {
-		return fmt.Errorf("failed to reconcile floating IPs: %w", err)
+	// Placement Groups
+	go func() {
+		log.Printf("[placementGroups] Starting at %s", time.Now().Format("15:04:05"))
+		err := r.reconcilePlacementGroups(ctx)
+		log.Printf("[placementGroups] Completed at %s", time.Now().Format("15:04:05"))
+		infraChan <- asyncResult{name: "placementGroups", err: err}
+	}()
+
+	// Floating IPs
+	go func() {
+		log.Printf("[floatingIPs] Starting at %s", time.Now().Format("15:04:05"))
+		err := r.reconcileFloatingIPs(ctx)
+		log.Printf("[floatingIPs] Completed at %s", time.Now().Format("15:04:05"))
+		infraChan <- asyncResult{name: "floatingIPs", err: err}
+	}()
+
+	// Wait for all infrastructure components
+	for i := 0; i < 4; i++ {
+		result := <-infraChan
+		if result.err != nil {
+			return fmt.Errorf("failed to reconcile %s: %w", result.name, result.err)
+		}
 	}
+	log.Printf("=== INFRASTRUCTURE SETUP COMPLETE at %s ===", time.Now().Format("15:04:05"))
 
 	// 6. Control Plane Servers
 	cpIPs, err := r.reconcileControlPlane(ctx)
@@ -225,19 +276,46 @@ func (r *Reconciler) reconcileWorkers(ctx context.Context) error {
 		return err
 	}
 
+	// Parallelize worker pool provisioning
+	if len(r.config.Workers) == 0 {
+		log.Println("No worker pools configured")
+		return nil
+	}
+
+	log.Printf("=== CREATING %d WORKER POOLS IN PARALLEL at %s ===", len(r.config.Workers), time.Now().Format("15:04:05"))
+
+	type workerResult struct {
+		poolName string
+		err      error
+	}
+
+	resultChan := make(chan workerResult, len(r.config.Workers))
+
 	for i, pool := range r.config.Workers {
-		// Placement Group (Managed inside reconcileNodePool for Workers due to sharding)
-		// We pass nil here, and handle it inside reconcileNodePool based on pool config and index.
-		_, err = r.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "worker", pool.Labels, string(workerConfig), nil, i)
-		if err != nil {
-			return err
+		i, pool := i, pool // capture loop variables
+		go func() {
+			log.Printf("[workerPool:%s] Starting at %s", pool.Name, time.Now().Format("15:04:05"))
+			// Placement Group (Managed inside reconcileNodePool for Workers due to sharding)
+			// We pass nil here, and handle it inside reconcileNodePool based on pool config and index.
+			_, err := r.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "worker", pool.Labels, string(workerConfig), nil, i)
+			log.Printf("[workerPool:%s] Completed at %s", pool.Name, time.Now().Format("15:04:05"))
+			resultChan <- workerResult{poolName: pool.Name, err: err}
+		}()
+	}
+
+	// Wait for all worker pools to complete
+	for i := 0; i < len(r.config.Workers); i++ {
+		result := <-resultChan
+		if result.err != nil {
+			return fmt.Errorf("failed to reconcile worker pool %s: %w", result.poolName, result.err)
 		}
 	}
 
+	log.Printf("=== SUCCESSFULLY CREATED ALL WORKER POOLS at %s ===", time.Now().Format("15:04:05"))
 	return nil
 }
 
-// reconcileNodePool provisions a pool of servers.
+// reconcileNodePool provisions a pool of servers in parallel.
 func (r *Reconciler) reconcileNodePool(
 	ctx context.Context,
 	poolName string,
@@ -251,7 +329,14 @@ func (r *Reconciler) reconcileNodePool(
 	pgID *int64,
 	poolIndex int,
 ) (map[string]string, error) {
-	ips := make(map[string]string)
+	// Pre-calculate all server configurations
+	type serverConfig struct {
+		name      string
+		privateIP string
+		pgID      *int64
+	}
+
+	configs := make([]serverConfig, count)
 
 	for j := 1; j <= count; j++ {
 		// Name: <cluster>-<pool>-<index> (e.g. cluster-control-plane-1)
@@ -321,17 +406,180 @@ func (r *Reconciler) reconcileNodePool(
 			currentPGID = pgID
 		}
 
-		ip, err := r.ensureServer(ctx, serverName, serverType, location, image, role, poolName, extraLabels, userData, currentPGID, privateIP)
-		if err != nil {
-			return nil, err
+		configs[j-1] = serverConfig{
+			name:      serverName,
+			privateIP: privateIP,
+			pgID:      currentPGID,
 		}
-		ips[serverName] = ip
 	}
+
+	// Create all servers in parallel
+	log.Printf("=== CREATING %d SERVERS IN PARALLEL for pool %s at %s ===", count, poolName, time.Now().Format("15:04:05"))
+	type serverResult struct {
+		name string
+		ip   string
+		err  error
+	}
+
+	resultChan := make(chan serverResult, count)
+
+	for _, cfg := range configs {
+		cfg := cfg // capture loop variable
+		go func() {
+			log.Printf("[server:%s] Starting at %s", cfg.name, time.Now().Format("15:04:05"))
+			ip, err := r.ensureServer(ctx, cfg.name, serverType, location, image, role, poolName, extraLabels, userData, cfg.pgID, cfg.privateIP)
+			log.Printf("[server:%s] Completed at %s", cfg.name, time.Now().Format("15:04:05"))
+			resultChan <- serverResult{name: cfg.name, ip: ip, err: err}
+		}()
+	}
+
+	// Collect results
+	ips := make(map[string]string)
+	for i := 0; i < count; i++ {
+		result := <-resultChan
+		if result.err != nil {
+			return nil, fmt.Errorf("failed to create server %s: %w", result.name, result.err)
+		}
+		ips[result.name] = result.ip
+	}
+
+	log.Printf("=== SUCCESSFULLY CREATED %d SERVERS for pool %s at %s ===", count, poolName, time.Now().Format("15:04:05"))
 	return ips, nil
 }
 
+// ensureAllImages pre-builds all required Talos images in parallel.
+// This is called early in reconciliation to avoid sequential image building during server creation.
+func (r *Reconciler) ensureAllImages(ctx context.Context) error {
+	log.Println("Pre-building all required Talos images...")
+
+	// Collect all unique server types from control plane and worker pools
+	serverTypes := make(map[string]bool)
+
+	// Control plane server types
+	for _, pool := range r.config.ControlPlane.NodePools {
+		if pool.Image == "" || pool.Image == "talos" {
+			serverTypes[pool.ServerType] = true
+		}
+	}
+
+	// Worker server types
+	for _, pool := range r.config.Workers {
+		if pool.Image == "" || pool.Image == "talos" {
+			serverTypes[pool.ServerType] = true
+		}
+	}
+
+	if len(serverTypes) == 0 {
+		log.Println("No Talos images needed (all pools use custom images)")
+		return nil
+	}
+
+	// Determine unique architectures needed
+	architectures := make(map[string]bool)
+	for serverType := range serverTypes {
+		arch := "amd64"
+		if len(serverType) >= 3 && serverType[:3] == "cax" {
+			arch = "arm64"
+		}
+		architectures[arch] = true
+	}
+
+	log.Printf("Building images for architectures: %v", getKeys(architectures))
+
+	// Get versions from config
+	talosVersion := r.config.Talos.Version
+	k8sVersion := r.config.Kubernetes.Version
+	if talosVersion == "" {
+		talosVersion = "v1.8.3"
+	}
+	if k8sVersion == "" {
+		k8sVersion = "v1.31.0"
+	}
+
+	// Get location from first control plane node, or default to nbg1
+	location := "nbg1"
+	if len(r.config.ControlPlane.NodePools) > 0 && r.config.ControlPlane.NodePools[0].Location != "" {
+		location = r.config.ControlPlane.NodePools[0].Location
+	}
+
+	// Build images in parallel
+	type buildResult struct {
+		arch string
+		err  error
+	}
+
+	resultChan := make(chan buildResult, len(architectures))
+
+	for arch := range architectures {
+		arch := arch // capture loop variable
+		go func() {
+			labels := map[string]string{
+				"os":            "talos",
+				"talos-version": talosVersion,
+				"k8s-version":   k8sVersion,
+				"arch":          arch,
+			}
+
+			// Check if snapshot already exists
+			snapshot, err := r.snapshotManager.GetSnapshotByLabels(ctx, labels)
+			if err != nil {
+				resultChan <- buildResult{arch: arch, err: fmt.Errorf("failed to check for existing snapshot: %w", err)}
+				return
+			}
+
+			if snapshot != nil {
+				log.Printf("Found existing Talos snapshot for %s: %s (ID: %d)", arch, snapshot.Description, snapshot.ID)
+				resultChan <- buildResult{arch: arch, err: nil}
+				return
+			}
+
+			// Build image
+			log.Printf("Building Talos image for %s/%s/%s in location %s...", talosVersion, k8sVersion, arch, location)
+			builder := r.createImageBuilder()
+			if builder == nil {
+				resultChan <- buildResult{arch: arch, err: fmt.Errorf("image builder not available")}
+				return
+			}
+
+			snapshotID, err := builder.Build(ctx, talosVersion, k8sVersion, arch, location, labels)
+			if err != nil {
+				resultChan <- buildResult{arch: arch, err: fmt.Errorf("failed to build image: %w", err)}
+				return
+			}
+
+			log.Printf("Successfully built Talos snapshot for %s: ID %s", arch, snapshotID)
+			resultChan <- buildResult{arch: arch, err: nil}
+		}()
+	}
+
+	// Wait for all builds to complete
+	var errors []error
+	for i := 0; i < len(architectures); i++ {
+		result := <-resultChan
+		if result.err != nil {
+			errors = append(errors, fmt.Errorf("%s: %w", result.arch, result.err))
+		}
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("failed to build some images: %v", errors)
+	}
+
+	log.Println("All required Talos images are ready")
+	return nil
+}
+
+// getKeys returns the keys of a map as a slice (helper function).
+func getKeys(m map[string]bool) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 // ensureImage ensures the required Talos image exists, building it if necessary.
-func (r *Reconciler) ensureImage(ctx context.Context, serverType string) (string, error) {
+func (r *Reconciler) ensureImage(ctx context.Context, serverType, location string) (string, error) {
 	// Determine architecture from server type
 	arch := "amd64"
 	if len(serverType) >= 3 && serverType[:3] == "cax" {
@@ -348,6 +596,11 @@ func (r *Reconciler) ensureImage(ctx context.Context, serverType string) (string
 	}
 	if k8sVersion == "" {
 		k8sVersion = "v1.31.0"
+	}
+
+	// Default location if not provided
+	if location == "" {
+		location = "nbg1"
 	}
 
 	// Check if snapshot already exists
@@ -370,7 +623,7 @@ func (r *Reconciler) ensureImage(ctx context.Context, serverType string) (string
 	}
 
 	// Snapshot doesn't exist, build it
-	log.Printf("Talos snapshot not found for %s/%s/%s, building...", talosVersion, k8sVersion, arch)
+	log.Printf("Talos snapshot not found for %s/%s/%s, building in location %s...", talosVersion, k8sVersion, arch, location)
 
 	// Import image builder
 	builder := r.createImageBuilder()
@@ -378,7 +631,7 @@ func (r *Reconciler) ensureImage(ctx context.Context, serverType string) (string
 		return "", fmt.Errorf("image builder not available")
 	}
 
-	snapshotID, err := builder.Build(ctx, talosVersion, k8sVersion, arch, labels)
+	snapshotID, err := builder.Build(ctx, talosVersion, k8sVersion, arch, location, labels)
 	if err != nil {
 		return "", fmt.Errorf("failed to build Talos image: %w", err)
 	}
@@ -440,7 +693,7 @@ func (r *Reconciler) ensureServer(
 	// Image defaulting - if empty or "talos", ensure the versioned image exists
 	if image == "" || image == "talos" {
 		var err error
-		image, err = r.ensureImage(ctx, serverType)
+		image, err = r.ensureImage(ctx, serverType, location)
 		if err != nil {
 			return "", fmt.Errorf("failed to ensure Talos image: %w", err)
 		}

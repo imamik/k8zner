@@ -36,7 +36,7 @@ func TestBuild(t *testing.T) {
 	}
 
 	builder := image.NewBuilder(mockClient, mockSSHFactory)
-	snapshotID, err := builder.Build(context.Background(), "test-image", "v1.8.0", "amd64", nil)
+	snapshotID, err := builder.Build(context.Background(), "test-image", "v1.8.0", "amd64", "nbg1", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

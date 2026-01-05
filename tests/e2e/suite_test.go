@@ -53,7 +53,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// buildSharedSnapshots builds Talos snapshots for both amd64 and arm64.
+// buildSharedSnapshots builds Talos snapshots for both amd64 and arm64 IN PARALLEL.
 func buildSharedSnapshots(client *hcloud_client.RealClient) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
@@ -77,44 +77,107 @@ func buildSharedSnapshots(client *hcloud_client.RealClient) error {
 		"e2e-shared":    "true",
 	}
 
-	// Check for existing amd64 snapshot
+	// Check for existing snapshots FIRST
+	log.Println("Checking for existing snapshots...")
 	existingAMD64, err := client.GetSnapshotByLabels(ctx, labelsAMD64)
 	if err != nil {
 		return fmt.Errorf("failed to check for existing amd64 snapshot: %w", err)
 	}
 
-	if existingAMD64 != nil {
-		log.Printf("Found existing amd64 snapshot: %s (ID: %d)", existingAMD64.Description, existingAMD64.ID)
-		sharedCtx.SnapshotAMD64 = fmt.Sprintf("%d", existingAMD64.ID)
-	} else {
-		log.Println("Building amd64 snapshot...")
-		snapshotID, err := builder.Build(ctx, "v1.8.3", "v1.31.0", "amd64", labelsAMD64)
-		if err != nil {
-			return fmt.Errorf("failed to build amd64 snapshot: %w", err)
-		}
-		sharedCtx.SnapshotAMD64 = snapshotID
-		log.Printf("Built amd64 snapshot: %s", snapshotID)
-	}
-
-	// Check for existing arm64 snapshot
 	existingARM64, err := client.GetSnapshotByLabels(ctx, labelsARM64)
 	if err != nil {
 		return fmt.Errorf("failed to check for existing arm64 snapshot: %w", err)
 	}
 
+	// Track what needs to be built
+	needAMD64 := existingAMD64 == nil
+	needARM64 := existingARM64 == nil
+
+	// Report existing snapshots
+	if existingAMD64 != nil {
+		log.Printf("Found existing amd64 snapshot: %s (ID: %d)", existingAMD64.Description, existingAMD64.ID)
+		sharedCtx.SnapshotAMD64 = fmt.Sprintf("%d", existingAMD64.ID)
+	}
 	if existingARM64 != nil {
 		log.Printf("Found existing arm64 snapshot: %s (ID: %d)", existingARM64.Description, existingARM64.ID)
 		sharedCtx.SnapshotARM64 = fmt.Sprintf("%d", existingARM64.ID)
-	} else {
-		log.Println("Building arm64 snapshot...")
-		snapshotID, err := builder.Build(ctx, "v1.8.3", "v1.31.0", "arm64", labelsARM64)
-		if err != nil {
-			return fmt.Errorf("failed to build arm64 snapshot: %w", err)
-		}
-		sharedCtx.SnapshotARM64 = snapshotID
-		log.Printf("Built arm64 snapshot: %s", snapshotID)
 	}
 
+	// If nothing needs building, we're done
+	if !needAMD64 && !needARM64 {
+		log.Println("All snapshots already exist, skipping build")
+		return nil
+	}
+
+	// Build missing snapshots IN PARALLEL
+	log.Printf("=== BUILDING SNAPSHOTS IN PARALLEL (amd64=%v, arm64=%v) ===", needAMD64, needARM64)
+
+	type buildResult struct {
+		arch       string
+		snapshotID string
+		err        error
+	}
+
+	buildCount := 0
+	if needAMD64 {
+		buildCount++
+	}
+	if needARM64 {
+		buildCount++
+	}
+
+	resultChan := make(chan buildResult, buildCount)
+
+	// Start AMD64 build if needed
+	if needAMD64 {
+		go func() {
+			log.Printf("[amd64] Starting build at %s", time.Now().Format("15:04:05"))
+			snapshotID, err := builder.Build(ctx, "v1.8.3", "v1.31.0", "amd64", "nbg1", labelsAMD64)
+			if err != nil {
+				log.Printf("[amd64] Build failed at %s: %v", time.Now().Format("15:04:05"), err)
+				resultChan <- buildResult{arch: "amd64", err: err}
+			} else {
+				log.Printf("[amd64] Build completed at %s: %s", time.Now().Format("15:04:05"), snapshotID)
+				resultChan <- buildResult{arch: "amd64", snapshotID: snapshotID}
+			}
+		}()
+	}
+
+	// Start ARM64 build if needed
+	if needARM64 {
+		go func() {
+			log.Printf("[arm64] Starting build at %s", time.Now().Format("15:04:05"))
+			snapshotID, err := builder.Build(ctx, "v1.8.3", "v1.31.0", "arm64", "nbg1", labelsARM64)
+			if err != nil {
+				log.Printf("[arm64] Build failed at %s: %v", time.Now().Format("15:04:05"), err)
+				resultChan <- buildResult{arch: "arm64", err: err}
+			} else {
+				log.Printf("[arm64] Build completed at %s: %s", time.Now().Format("15:04:05"), snapshotID)
+				resultChan <- buildResult{arch: "arm64", snapshotID: snapshotID}
+			}
+		}()
+	}
+
+	// Wait for all builds to complete
+	var buildErrors []error
+	for i := 0; i < buildCount; i++ {
+		result := <-resultChan
+		if result.err != nil {
+			buildErrors = append(buildErrors, fmt.Errorf("%s: %w", result.arch, result.err))
+		} else {
+			if result.arch == "amd64" {
+				sharedCtx.SnapshotAMD64 = result.snapshotID
+			} else {
+				sharedCtx.SnapshotARM64 = result.snapshotID
+			}
+		}
+	}
+
+	if len(buildErrors) > 0 {
+		return fmt.Errorf("failed to build snapshots: %v", buildErrors)
+	}
+
+	log.Println("=== ALL SNAPSHOTS BUILT SUCCESSFULLY ===")
 	return nil
 }
 

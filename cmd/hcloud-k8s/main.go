@@ -136,6 +136,7 @@ func main() {
 		imageName    string
 		talosVersion string
 		arch         string
+		location     string
 	)
 	var buildCmd = &cobra.Command{
 		Use:   "build",
@@ -149,9 +150,9 @@ func main() {
 			client := hcloud.NewRealClient(token)
 			builder := image.NewBuilder(client, nil) // use default SSH communicator
 
-			log.Printf("Building image %s (Talos %s, Arch %s)...", imageName, talosVersion, arch)
+			log.Printf("Building image %s (Talos %s, Arch %s) in location %s...", imageName, talosVersion, arch, location)
 
-			snapshotID, err := builder.Build(context.Background(), imageName, talosVersion, arch, nil)
+			snapshotID, err := builder.Build(context.Background(), imageName, talosVersion, arch, location, nil)
 			if err != nil {
 				return fmt.Errorf("build failed: %w", err)
 			}
@@ -162,6 +163,7 @@ func main() {
 	}
 	buildCmd.Flags().StringVar(&imageName, "name", "talos", "Name of the image to create")
 	buildCmd.Flags().StringVar(&talosVersion, "version", "v1.7.0", "Talos version to install")
+	buildCmd.Flags().StringVar(&location, "location", "nbg1", "Hetzner datacenter location (e.g., nbg1, fsn1, hel1)")
 	buildCmd.Flags().StringVar(&arch, "arch", "amd64", "Architecture (amd64 or arm64)")
 	imageCmd.AddCommand(buildCmd)
 

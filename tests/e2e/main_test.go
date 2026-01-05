@@ -88,7 +88,7 @@ func TestImageBuildLifecycle(t *testing.T) {
 
 				t.Logf("Building %s snapshot...", tc.arch)
 				var err error
-				snapshotID, err = builder.Build(ctx, "v1.8.3", "v1.31.0", tc.arch, labels)
+				snapshotID, err = builder.Build(ctx, "v1.8.3", "v1.31.0", tc.arch, "nbg1", labels)
 
 				// If snapshot was created, we must clean it up
 				if snapshotID != "" {

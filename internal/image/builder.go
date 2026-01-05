@@ -38,10 +38,15 @@ func NewBuilder(client interface{}, commFact CommunicatorFactory) *Builder {
 }
 
 // Build creates a temporary server, installs Talos, creates a snapshot, and cleans up.
-func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architecture string, labels map[string]string) (string, error) {
+func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architecture, location string, labels map[string]string) (string, error) {
 	// Generate image name from versions and architecture
 	imageName := fmt.Sprintf("talos-%s-k8s-%s-%s", talosVersion, k8sVersion, architecture)
 	serverName := fmt.Sprintf("build-%s-%s", imageName, time.Now().Format("20060102150405"))
+
+	// Default to nbg1 if no location specified
+	if location == "" {
+		location = "nbg1"
+	}
 
 	// 0. Setup SSH Key.
 	keyName := fmt.Sprintf("key-%s", serverName)
@@ -63,7 +68,7 @@ func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architect
 	defer b.cleanupSSHKey(keyName)
 
 	// 1. Create Server.
-	log.Printf("Creating server %s...", serverName)
+	log.Printf("Creating server %s in location %s...", serverName, location)
 
 	// We need to pass the ssh key NAME to CreateServer.
 	sshKeys := []string{keyName}
@@ -77,7 +82,7 @@ func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architect
 		b.cleanupServer(serverName)
 	}()
 
-	serverID, err := b.provisioner.CreateServer(ctx, serverName, "debian-12", serverType, "", sshKeys, labels, "", nil, 0, "")
+	serverID, err := b.provisioner.CreateServer(ctx, serverName, "debian-13", serverType, location, sshKeys, labels, "", nil, 0, "")
 	if err != nil {
 		return "", fmt.Errorf("failed to create server: %w", err)
 	}
