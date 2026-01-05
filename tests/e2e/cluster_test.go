@@ -32,7 +32,7 @@ func TestClusterProvisioning(t *testing.T) {
 	cfg := &config.Config{
 		ClusterName: clusterName,
 		HCloudToken: token,
-		Location:    "hel1",
+		Location:    "nbg1",
 		Network: config.NetworkConfig{
 			IPv4CIDR: "10.0.0.0/16",
 			Zone:     "eu-central",
@@ -44,8 +44,8 @@ func TestClusterProvisioning(t *testing.T) {
 			NodePools: []config.ControlPlaneNodePool{
 				{
 					Name:       "control-plane",
-					ServerType: "cx23",
-					Location:   "hel1",
+					ServerType: "cpx22",
+					Location:   "nbg1",
 					Count:      1,
 					Image:      "talos",
 				},
@@ -54,8 +54,8 @@ func TestClusterProvisioning(t *testing.T) {
 		Workers: []config.WorkerNodePool{
 			{
 				Name:       "worker",
-				ServerType: "cx23",
-				Location:   "hel1",
+				ServerType: "cpx22",
+				Location:   "nbg1",
 				Count:      1,
 				Image:      "talos",
 			},

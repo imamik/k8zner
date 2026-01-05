@@ -7,8 +7,8 @@ cluster_name: "talos-k8s-example"
 # hcloud_token: "your-token-here"
 
 # Default location for resources if not specified elsewhere.
-# Available: fsn1 (Falkenstein), nbg1 (Nuremberg), hel1 (Helsinki), ash (Ashburn), etc.
-location: "hel1"
+# Available: nbg1 (Nuremberg), fsn1 (Falkenstein), hel1 (Helsinki), ash (Ashburn), etc.
+location: "nbg1"
 
 # List of SSH Key names to inject into servers.
 # These keys must already exist in your Hetzner Cloud project.
@@ -21,8 +21,8 @@ control_plane:
   # Number of control plane nodes to provision.
   count: 3
 
-  # Server Type (e.g., cpx21, cx22, cax11 for ARM).
-  server_type: "cpx21"
+  # Server Type (e.g., cpx22 for AMD64, cax11 for ARM).
+  server_type: "cpx22"
 
   # Image snapshot name to use (created via `hcloud-k8s image build`).
   # You can also use "debian-12" for testing, but Talos config injection requires a Talos image.

@@ -45,7 +45,7 @@ func TestInfraProvisioning(t *testing.T) {
 	cfg := &config.Config{
 		ClusterName: clusterName,
 		HCloudToken: token,
-		Location:    "hel1",
+		Location:    "nbg1",
 		Network: config.NetworkConfig{
 			IPv4CIDR: "10.0.0.0/16",
 			Zone:     "eu-central",
@@ -58,8 +58,8 @@ func TestInfraProvisioning(t *testing.T) {
 				{
 					Name:       "control-plane-1",
 					Count:      1,
-					ServerType: "cx23",
-					Location:   "hel1",
+					ServerType: "cpx22",
+					Location:   "nbg1",
 					Image:      "talos",
 				},
 			},

@@ -38,13 +38,13 @@ Create a `config.yaml` file:
 
 ```yaml
 cluster_name: "my-talos-cluster"
-location: "hel1" # fsn1, nbg1, hel1, ash, etc.
+location: "nbg1" # nbg1, fsn1, hel1, ash, etc.
 ssh_keys:
   - "my-ssh-key-name" # Must exist in Hetzner Cloud
 
 control_plane:
   count: 3
-  server_type: "cpx21"
+  server_type: "cpx22" # cpx22 for AMD64, cax11 for ARM
   image: "talos-v1.9.0" # Matches the image name built above
   endpoint: "https://<LOAD_BALANCER_IP>:6443" # VIP or LB IP
 

@@ -88,7 +88,8 @@ func (b *Bootstrapper) Bootstrap(ctx context.Context, clusterName string, contro
 	}
 
 	// Create Talos Client Context
-	clientCtx, err := client.New(ctx, client.WithConfig(cfg), client.WithEndpoints(firstCPIP), client.WithTLSConfig(&tls.Config{InsecureSkipVerify: true}))
+	// Use config which includes proper TLS setup with client certificates for mTLS
+	clientCtx, err := client.New(ctx, client.WithConfig(cfg), client.WithEndpoints(firstCPIP))
 	if err != nil {
 		return fmt.Errorf("failed to create talos client: %w", err)
 	}
@@ -150,24 +151,18 @@ func (b *Bootstrapper) waitForPort(ctx context.Context, ip string, port int) err
 }
 
 // applyMachineConfig applies a machine configuration to a Talos node.
-// For pre-installed Talos (from snapshots), this uses authenticated connections
-// matching Terraform's talos_machine_configuration_apply behavior.
+// For pre-installed Talos (from snapshots), nodes boot into maintenance mode
+// and require an insecure connection to apply the initial configuration.
 func (b *Bootstrapper) applyMachineConfig(ctx context.Context, nodeIP string, machineConfig []byte, clientConfigBytes []byte) error {
 	// Wait for Talos API to be available
 	if err := b.waitForPort(ctx, nodeIP, 50000); err != nil {
 		return fmt.Errorf("failed to wait for Talos API: %w", err)
 	}
 
-	// Parse client config for authentication
-	cfg, err := config.FromString(string(clientConfigBytes))
-	if err != nil {
-		return fmt.Errorf("failed to parse client config: %w", err)
-	}
-
-	// Create authenticated client (like Terraform does)
-	// Pre-installed Talos nodes from snapshots expect authenticated connections
+	// Create insecure client for maintenance mode
+	// Fresh Talos nodes from snapshots boot into maintenance mode and don't have
+	// credentials yet, so we must use an insecure connection to apply the initial config.
 	clientCtx, err := client.New(ctx,
-		client.WithConfig(cfg),
 		client.WithEndpoints(nodeIP),
 		client.WithTLSConfig(&tls.Config{InsecureSkipVerify: true}),
 	)
@@ -212,10 +207,10 @@ func (b *Bootstrapper) waitForNodeReady(ctx context.Context, nodeIP string, clie
 	}
 
 	// Create authenticated client
+	// Use config from talosconfig which includes client certificates for mTLS
 	clientCtx, err := client.New(ctx,
 		client.WithConfig(cfg),
 		client.WithEndpoints(nodeIP),
-		client.WithTLSConfig(&tls.Config{InsecureSkipVerify: true}),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create talos client: %w", err)
