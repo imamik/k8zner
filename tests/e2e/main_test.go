@@ -117,7 +117,7 @@ func TestImageBuildLifecycle(t *testing.T) {
 
 			t.Logf("Creating verification server %s...", verifyServerName)
 
-			serverType := "cx23"
+			serverType := "cpx22" // 80 GB disk, enough for Talos snapshot
 			if tc.arch == "arm64" {
 				serverType = "cax11"
 			}
