@@ -1,0 +1,78 @@
+package cluster
+
+import (
+	"context"
+	"fmt"
+	"log"
+)
+
+// reconcileControlPlane provisions control plane servers and returns a map of ServerName -> PublicIP.
+func (r *Reconciler) reconcileControlPlane(ctx context.Context) (map[string]string, error) {
+	log.Printf("Reconciling Control Plane...")
+
+	names := NewNames(r.config.ClusterName)
+
+	// Collect all SANs
+	var sans []string
+
+	// LB IP (Public) - if Ingress enabled or API LB?
+	// The API LB is "kube-api".
+	lb, err := r.lbManager.GetLoadBalancer(ctx, names.KubeAPILoadBalancer())
+	if err != nil {
+		return nil, err
+	}
+	if lb != nil {
+		// Use LB Public IP as endpoint
+		if lb.PublicNet.IPv4.IP != nil {
+			lbIP := lb.PublicNet.IPv4.IP.String()
+			sans = append(sans, lbIP)
+
+			// UPDATE TALOS ENDPOINT
+			// We use the LB IP as the control plane endpoint.
+			endpoint := fmt.Sprintf("https://%s:6443", lbIP)
+			log.Printf("Setting Talos Endpoint to: %s", endpoint)
+			r.talosGenerator.SetEndpoint(endpoint)
+		}
+
+		// Also add private IP of LB
+		for _, net := range lb.PrivateNet {
+			sans = append(sans, net.IP.String())
+		}
+	}
+
+	// Add Floating IPs if any (Control Plane VIP)
+	// if r.config.ControlPlane.PublicVIPIPv4Enabled {
+	// 	// TODO: Implement VIP lookup if ID not provided
+	// 	// For now assume standard pattern
+	// }
+
+	// Generate Talos Config for CP
+	cpConfig, err := r.talosGenerator.GenerateControlPlaneConfig(sans)
+	if err != nil {
+		return nil, err
+	}
+
+	// Provision Servers
+	ips := make(map[string]string)
+	for i, pool := range r.config.ControlPlane.NodePools {
+		// Placement Group for Control Plane
+		pgLabels := NewLabelBuilder(r.config.ClusterName).
+			WithPool(pool.Name).
+			Build()
+
+		pg, err := r.pgManager.EnsurePlacementGroup(ctx, names.PlacementGroup(pool.Name), "spread", pgLabels)
+		if err != nil {
+			return nil, err
+		}
+
+		poolIPs, err := r.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "control-plane", pool.Labels, string(cpConfig), &pg.ID, i)
+		if err != nil {
+			return nil, err
+		}
+		for k, v := range poolIPs {
+			ips[k] = v
+		}
+	}
+
+	return ips, nil
+}

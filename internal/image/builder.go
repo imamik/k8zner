@@ -73,10 +73,8 @@ func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architect
 	// We need to pass the ssh key NAME to CreateServer.
 	sshKeys := []string{keyName}
 
-	serverType := "cx23"
-	if architecture == "arm64" {
-		serverType = "cax11"
-	}
+	// Select appropriate server type for the architecture
+	serverType := hcloud.GetDefaultServerType(hcloud.Architecture(architecture))
 
 	defer func() {
 		b.cleanupServer(serverName)
