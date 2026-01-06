@@ -30,6 +30,9 @@ func (m *MockTalosProducer) GenerateWorkerConfig() ([]byte, error) {
 func (m *MockTalosProducer) GetClientConfig() ([]byte, error) {
 	return []byte("mock-client-config"), nil
 }
+func (m *MockTalosProducer) GetKubeconfig(ctx context.Context) ([]byte, error) {
+	return []byte("mock-kubeconfig"), nil
+}
 func (m *MockTalosProducer) SetEndpoint(endpoint string) {}
 
 func TestInfraProvisioning(t *testing.T) {

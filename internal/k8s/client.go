@@ -71,6 +71,12 @@ func NewClientFromBytes(kubeconfigData []byte) (*Client, error) {
 	}, nil
 }
 
+// GetClientset returns the underlying Kubernetes clientset.
+// This is primarily used for testing and direct API access.
+func (c *Client) GetClientset() *kubernetes.Clientset {
+	return c.clientset
+}
+
 // Apply applies a YAML manifest to the cluster using server-side apply.
 // This ensures idempotent operations.
 func (c *Client) Apply(ctx context.Context, manifest string) error {
