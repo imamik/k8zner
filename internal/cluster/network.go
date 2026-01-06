@@ -25,23 +25,35 @@ func (r *Reconciler) reconcileNetwork(ctx context.Context) error {
 
 	// Control Plane Subnet
 	cpSubnet, err := r.config.GetSubnetForRole("control-plane", 0)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	err = r.networkManager.EnsureSubnet(ctx, network, cpSubnet, r.config.Network.Zone, hcloud.NetworkSubnetTypeCloud)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 
 	// LB Subnet
 	lbSubnet, err := r.config.GetSubnetForRole("load-balancer", 0)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	err = r.networkManager.EnsureSubnet(ctx, network, lbSubnet, r.config.Network.Zone, hcloud.NetworkSubnetTypeCloud)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 
 	// Worker Subnets
 	for i := range r.config.Workers {
 		wSubnet, err := r.config.GetSubnetForRole("worker", i)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 
 		err = r.networkManager.EnsureSubnet(ctx, network, wSubnet, r.config.Network.Zone, hcloud.NetworkSubnetTypeCloud)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

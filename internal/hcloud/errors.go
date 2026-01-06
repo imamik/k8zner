@@ -30,4 +30,3 @@ func isInvalidParameter(err error) bool {
 		strings.Contains(errStr, "not found") ||
 		strings.Contains(errStr, "does not exist")
 }
-

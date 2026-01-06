@@ -16,8 +16,8 @@ func TestCIDRSubnet(t *testing.T) {
 		{"10.0.0.0/16", 8, 1, "10.0.1.0/24", false},
 		{"10.0.0.0/16", 8, 255, "10.0.255.0/24", false},
 		{"10.0.0.0/16", 8, 256, "", true},
-		{"10.0.0.0/16", 3, 2, "10.0.64.0/19", false}, // Node CIDR Default
-		{"10.0.0.0/16", 3, 3, "10.0.96.0/19", false}, // Service CIDR Default
+		{"10.0.0.0/16", 3, 2, "10.0.64.0/19", false},  // Node CIDR Default
+		{"10.0.0.0/16", 3, 3, "10.0.96.0/19", false},  // Service CIDR Default
 		{"10.0.0.0/16", 1, 1, "10.0.128.0/17", false}, // Pod CIDR Default
 	}
 
