@@ -4,6 +4,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -78,7 +79,7 @@ func (c *Client) GetClientset() *kubernetes.Clientset {
 }
 
 // Apply applies a YAML manifest to the cluster using server-side apply.
-// This ensures idempotent operations.
+// This ensures idempotent operations. Retries on connection errors for up to 3 minutes.
 func (c *Client) Apply(ctx context.Context, manifest string) error {
 	// Parse YAML into unstructured objects
 	decoder := yaml.NewYAMLOrJSONDecoder(strings.NewReader(manifest), 4096)
@@ -111,37 +112,87 @@ func (c *Client) Apply(ctx context.Context, manifest string) error {
 			namespace = "default"
 		}
 
-		// Use dynamic client to apply the resource
+		// Apply with retries for connection errors
+		err = c.applyResourceWithRetry(ctx, gvr, namespace, &obj, 3*time.Minute)
+		if err != nil {
+			return fmt.Errorf("failed to apply resource %s/%s: %w",
+				obj.GetKind(), obj.GetName(), err)
+		}
+
+		fmt.Printf("Applied %s/%s in namespace %s\n",
+			obj.GetKind(), obj.GetName(), namespace)
+	}
+
+	return nil
+}
+
+// applyResourceWithRetry applies a resource with retries on connection errors.
+func (c *Client) applyResourceWithRetry(ctx context.Context, gvr schema.GroupVersionResource,
+	namespace string, obj *unstructured.Unstructured, timeout time.Duration) error {
+
+	deadline := time.Now().Add(timeout)
+	attempt := 0
+
+	for {
+		attempt++
 		var result *unstructured.Unstructured
+		var err error
+
+		// Try to create the resource
 		if namespace != "" && namespace != "default" {
 			result, err = c.dynamic.Resource(gvr).Namespace(namespace).
-				Create(ctx, &obj, metav1.CreateOptions{})
+				Create(ctx, obj, metav1.CreateOptions{})
 		} else {
 			result, err = c.dynamic.Resource(gvr).
-				Create(ctx, &obj, metav1.CreateOptions{})
+				Create(ctx, obj, metav1.CreateOptions{})
 		}
 
 		if err != nil {
 			// If resource already exists, try to update it
 			if namespace != "" && namespace != "default" {
 				result, err = c.dynamic.Resource(gvr).Namespace(namespace).
-					Update(ctx, &obj, metav1.UpdateOptions{})
+					Update(ctx, obj, metav1.UpdateOptions{})
 			} else {
 				result, err = c.dynamic.Resource(gvr).
-					Update(ctx, &obj, metav1.UpdateOptions{})
-			}
-
-			if err != nil {
-				return fmt.Errorf("failed to apply resource %s/%s: %w",
-					obj.GetKind(), obj.GetName(), err)
+					Update(ctx, obj, metav1.UpdateOptions{})
 			}
 		}
 
-		fmt.Printf("Applied %s/%s in namespace %s\n",
-			result.GetKind(), result.GetName(), namespace)
-	}
+		// If successful, return
+		if err == nil {
+			_ = result // Mark as used
+			return nil
+		}
 
-	return nil
+		// Check if it's a temporary connection error
+		if isConnectionError(err) {
+			if time.Now().After(deadline) {
+				return fmt.Errorf("timeout after %d attempts: %w", attempt, err)
+			}
+			if attempt == 1 {
+				log.Printf("Connection error applying %s/%s, will retry (API server may be initializing)...",
+					obj.GetKind(), obj.GetName())
+			}
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		// Not a connection error, fail immediately
+		return err
+	}
+}
+
+// isConnectionError checks if an error is a temporary connection error that should be retried.
+func isConnectionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "EOF") ||
+		strings.Contains(errStr, "connection refused") ||
+		strings.Contains(errStr, "connection reset") ||
+		strings.Contains(errStr, "i/o timeout") ||
+		strings.Contains(errStr, "TLS handshake timeout")
 }
 
 // CreateSecret creates or updates a Kubernetes secret.

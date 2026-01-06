@@ -30,12 +30,10 @@ func (r *Reconciler) reconcileAddons(ctx context.Context, kubeconfigPath string)
 		return fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
-	// Wait for API server to be fully ready
-	log.Println("Waiting for Kubernetes API server to be ready...")
-	if err := waitForAPIServer(ctx, k8sClient, 5*time.Minute); err != nil {
-		return fmt.Errorf("kubernetes API server not ready: %w", err)
-	}
-	log.Println("✓ Kubernetes API server is ready")
+	// Note: We don't wait for full API server readiness here because Talos clusters
+	// often need a CNI (Cilium) to be installed before the API server becomes fully
+	// operational. The addon installation will retry on connection errors.
+	log.Println("Note: API server may not be fully ready until CNI (Cilium) is installed")
 
 	// Create addon instances
 	addonList := r.createAddonList()
