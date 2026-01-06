@@ -17,16 +17,18 @@ import (
 // This test ALWAYS builds fresh snapshots (ignores cached ones) to ensure
 // the image builder is working correctly and can catch regressions.
 //
+// These test snapshots use unique names (with timestamp suffix) to avoid conflicts
+// with the production snapshots cached in TestMain.
+//
 // Set E2E_SKIP_SNAPSHOT_BUILD_TEST=true to skip this test for faster local dev,
 // but it should ALWAYS run in CI to catch snapshot creation issues.
 func TestSnapshotCreation(t *testing.T) {
+	t.Parallel() // Run in parallel with other tests
+
 	// Allow skipping this test for local dev speed, but warn about it
 	if os.Getenv("E2E_SKIP_SNAPSHOT_BUILD_TEST") == "true" {
 		t.Skip("Skipping snapshot build test (E2E_SKIP_SNAPSHOT_BUILD_TEST=true) - NOTE: This should NOT be skipped in CI!")
 	}
-
-	// Don't run in parallel - snapshot building is resource-intensive
-	// and we want clear logs
 
 	token := os.Getenv("HCLOUD_TOKEN")
 	if token == "" {
@@ -47,21 +49,29 @@ func TestSnapshotCreation(t *testing.T) {
 	for _, tc := range tests {
 		tc := tc // capture range variable
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel() // Run amd64 and arm64 tests in parallel
+
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 			defer cancel()
 
 			cleaner := &ResourceCleaner{t: t}
 
-			// ALWAYS build a fresh snapshot (ignore cache)
+			// Use unique snapshot name with timestamp to avoid conflicts with production snapshots
+			// Production snapshots (in TestMain): talos-v1.8.3-k8s-v1.31.0-{arch}
+			// Test snapshots: talos-v1.8.3-k8s-v1.31.0-{arch}-test-{timestamp}
+			testTimestamp := time.Now().Unix()
 			labels := map[string]string{
-				"type":       "e2e-snapshot-build-test",
-				"created_by": "hcloud-k8s-e2e",
-				"test_name":  "TestSnapshotCreation",
-				"arch":       tc.arch,
-				"test_run":   fmt.Sprintf("%d", time.Now().Unix()), // Unique per run
+				"os":            "talos",
+				"talos-version": "v1.8.3",
+				"k8s-version":   "v1.31.0",
+				"arch":          tc.arch,
+				"type":          "e2e-snapshot-build-test",
+				"created_by":    "hcloud-k8s-e2e",
+				"test_name":     "TestSnapshotCreation",
+				"test_run":      fmt.Sprintf("%d", testTimestamp),
 			}
 
-			t.Logf("Building FRESH %s snapshot to test build process...", tc.arch)
+			t.Logf("Building FRESH %s test snapshot (timestamp: %d) to validate build process...", tc.arch, testTimestamp)
 			startTime := time.Now()
 
 			snapshotID, err := builder.Build(ctx, "v1.8.3", "v1.31.0", tc.arch, "nbg1", labels)

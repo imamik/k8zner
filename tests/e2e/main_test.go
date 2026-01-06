@@ -10,8 +10,6 @@ import (
 	"time"
 
 	"github.com/sak-d/hcloud-k8s/internal/hcloud"
-	"github.com/sak-d/hcloud-k8s/internal/image"
-	"github.com/sak-d/hcloud-k8s/internal/ssh"
 )
 
 // TestImageBuildLifecycle verifies that servers can boot from Talos snapshots
@@ -40,6 +38,8 @@ func TestImageBuildLifecycle(t *testing.T) {
 	for _, tc := range tests {
 		tc := tc // capture range variable
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel() // Run amd64 and arm64 tests in parallel
+
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 			defer cancel()
 
