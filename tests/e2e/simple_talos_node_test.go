@@ -23,6 +23,8 @@ import (
 // 3. Can establish insecure connection to Talos API
 // 4. Can retrieve basic node information
 func TestSimpleTalosNode(t *testing.T) {
+	t.Parallel() // Run in parallel with other tests
+
 	token := os.Getenv("HCLOUD_TOKEN")
 	if token == "" {
 		t.Skip("HCLOUD_TOKEN not set, skipping e2e test")

@@ -19,6 +19,8 @@ import (
 // - 3 control plane servers (should be created in parallel)
 // - 2 worker pools with 2 servers each (pools and servers should be created in parallel)
 func TestParallelProvisioning(t *testing.T) {
+	t.Parallel() // Run in parallel with other tests
+
 	if sharedCtx == nil || sharedCtx.Client == nil {
 		t.Skip("Shared context not initialized")
 	}
