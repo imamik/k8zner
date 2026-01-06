@@ -16,6 +16,17 @@ type RealClient struct {
 	timeouts *config.Timeouts
 }
 
+func (c *RealClient) getGenericTimeouts() *Timeouts {
+	if c.timeouts == nil {
+		return nil
+	}
+	return &Timeouts{
+		Delete:            c.timeouts.Delete,
+		RetryMaxAttempts:  c.timeouts.RetryMaxAttempts,
+		RetryInitialDelay: c.timeouts.RetryInitialDelay,
+	}
+}
+
 // NewRealClient creates a new RealClient.
 func NewRealClient(token string) *RealClient {
 	return &RealClient{

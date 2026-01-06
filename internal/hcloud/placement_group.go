@@ -2,61 +2,46 @@ package hcloud
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
-	"github.com/sak-d/hcloud-k8s/internal/retry"
 )
 
 // EnsurePlacementGroup ensures that a placement group exists with the given specifications.
 func (c *RealClient) EnsurePlacementGroup(ctx context.Context, name, pgType string, labels map[string]string) (*hcloud.PlacementGroup, error) {
-	pg, _, err := c.client.PlacementGroup.Get(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-	if pg != nil {
-		return pg, nil
-	}
-
-	opts := hcloud.PlacementGroupCreateOpts{
-		Name:   name,
-		Type:   hcloud.PlacementGroupType(pgType),
-		Labels: labels,
-	}
-	res, _, err := c.client.PlacementGroup.Create(ctx, opts)
-	if err != nil {
-		return nil, err
-	}
-	return res.PlacementGroup, nil
+	return reconcileResource(ctx, name, ReconcileFuncs[hcloud.PlacementGroup]{
+		Get: func(ctx context.Context, name string) (*hcloud.PlacementGroup, error) {
+			pg, _, err := c.client.PlacementGroup.Get(ctx, name)
+			return pg, err
+		},
+		Create: func(ctx context.Context) (*hcloud.PlacementGroup, error) {
+			opts := hcloud.PlacementGroupCreateOpts{
+				Name:   name,
+				Type:   hcloud.PlacementGroupType(pgType),
+				Labels: labels,
+			}
+			res, _, err := c.client.PlacementGroup.Create(ctx, opts)
+			if err != nil {
+				return nil, err
+			}
+			return res.PlacementGroup, nil
+		},
+		NeedsUpdate: nil,
+		Update:      nil,
+	})
 }
 
 // DeletePlacementGroup deletes the placement group with the given name.
 func (c *RealClient) DeletePlacementGroup(ctx context.Context, name string) error {
-	// Add timeout context for delete operation
-	ctx, cancel := context.WithTimeout(ctx, c.timeouts.Delete)
-	defer cancel()
-
-	// Delete with retry logic (resource might be locked)
-	return retry.WithExponentialBackoff(ctx, func() error {
-		pg, _, err := c.client.PlacementGroup.Get(ctx, name)
-		if err != nil {
-			return retry.Fatal(fmt.Errorf("failed to get placement group: %w", err))
-		}
-		if pg == nil {
-			return nil // Placement group already deleted
-		}
-
-		_, err = c.client.PlacementGroup.Delete(ctx, pg)
-		if err != nil {
-			// Check if resource is locked (retryable)
-			if isResourceLocked(err) {
-				return err
-			}
-			// Other errors are fatal
-			return retry.Fatal(err)
-		}
-		return nil
-	}, retry.WithMaxRetries(c.timeouts.RetryMaxAttempts), retry.WithInitialDelay(c.timeouts.RetryInitialDelay))
+	return deleteResource(ctx, name, DeleteFuncs[hcloud.PlacementGroup]{
+		Get: func(ctx context.Context, name string) (*hcloud.PlacementGroup, error) {
+			pg, _, err := c.client.PlacementGroup.Get(ctx, name)
+			return pg, err
+		},
+		Delete: func(ctx context.Context, pg *hcloud.PlacementGroup) error {
+			_, err := c.client.PlacementGroup.Delete(ctx, pg)
+			return err
+		},
+	}, c.getGenericTimeouts())
 }
 
 // GetPlacementGroup returns the placement group with the given name.
