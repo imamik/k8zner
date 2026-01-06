@@ -9,123 +9,129 @@ import (
 	"github.com/sak-d/hcloud-k8s/internal/retry"
 )
 
-// CreateServer creates a new server with the given specifications.
-func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string) (string, error) {
-	// Add timeout context for server creation
-	ctx, cancel := context.WithTimeout(ctx, c.timeouts.ServerCreate)
-	defer cancel()
+// EnsureServer ensures that a server exists with the given specifications.
+// It returns the created or existing server.
+func (c *RealClient) EnsureServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string) (*hcloud.Server, error) {
+	return reconcileResource(ctx, name, ReconcileFuncs[hcloud.Server]{
+		Get: func(ctx context.Context, name string) (*hcloud.Server, error) {
+			server, _, err := c.client.Server.Get(ctx, name)
+			return server, err
+		},
+		Create: func(ctx context.Context) (*hcloud.Server, error) {
+			// Add timeout context for server creation
+			createCtx, cancel := context.WithTimeout(ctx, c.timeouts.ServerCreate)
+			defer cancel()
 
-	// Resolve server type
-	serverTypeObj, _, err := c.client.ServerType.Get(ctx, serverType)
-	if err != nil {
-		return "", fmt.Errorf("failed to get server type: %w", err)
-	}
-	if serverTypeObj == nil {
-		return "", fmt.Errorf("server type not found: %s", serverType)
-	}
-
-	// Resolve and wait for image
-	imageObj, err := c.resolveImage(ctx, imageType, serverTypeObj)
-	if err != nil {
-		return "", err
-	}
-
-	// Resolve SSH keys
-	sshKeyObjs, err := c.resolveSSHKeys(ctx, sshKeys)
-	if err != nil {
-		return "", err
-	}
-
-	// Resolve location
-	locObj, err := c.resolveLocation(ctx, location)
-	if err != nil {
-		return "", err
-	}
-
-	// Resolve placement group
-	pgObj := resolvePlacementGroup(placementGroupID)
-
-	// Determine if server should start after creation
-	var startAfterCreate *bool
-	if networkID != 0 && privateIP != "" {
-		startAfterCreate = hcloud.Ptr(false)
-	}
-
-	// Build server creation options
-	opts := hcloud.ServerCreateOpts{
-		Name:             name,
-		ServerType:       serverTypeObj,
-		Image:            imageObj,
-		SSHKeys:          sshKeyObjs,
-		Labels:           labels,
-		UserData:         userData,
-		Location:         locObj,
-		PlacementGroup:   pgObj,
-		StartAfterCreate: startAfterCreate,
-	}
-
-	// Create server with retry logic
-	var result hcloud.ServerCreateResult
-	err = retry.WithExponentialBackoff(ctx, func() error {
-		res, _, err := c.client.Server.Create(ctx, opts)
-		if err != nil {
-			// Check if error is fatal (don't retry)
-			if isInvalidParameter(err) {
-				return retry.Fatal(err)
+			// Resolve server type
+			serverTypeObj, _, err := c.client.ServerType.Get(createCtx, serverType)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get server type: %w", err)
 			}
-			// Retryable error (rate limit, temporary failure, etc.)
-			return err
-		}
-		result = res
-		return nil
-	}, retry.WithMaxRetries(c.timeouts.RetryMaxAttempts), retry.WithInitialDelay(c.timeouts.RetryInitialDelay))
+			if serverTypeObj == nil {
+				return nil, fmt.Errorf("server type not found: %s", serverType)
+			}
 
+			// Resolve and wait for image
+			imageObj, err := c.resolveImage(createCtx, imageType, serverTypeObj)
+			if err != nil {
+				return nil, err
+			}
+
+			// Resolve SSH keys
+			sshKeyObjs, err := c.resolveSSHKeys(createCtx, sshKeys)
+			if err != nil {
+				return nil, err
+			}
+
+			// Resolve location
+			locObj, err := c.resolveLocation(createCtx, location)
+			if err != nil {
+				return nil, err
+			}
+
+			// Resolve placement group
+			pgObj := resolvePlacementGroup(placementGroupID)
+
+			// Determine if server should start after creation
+			var startAfterCreate *bool
+			if networkID != 0 && privateIP != "" {
+				startAfterCreate = hcloud.Ptr(false)
+			}
+
+			// Build server creation options
+			opts := hcloud.ServerCreateOpts{
+				Name:             name,
+				ServerType:       serverTypeObj,
+				Image:            imageObj,
+				SSHKeys:          sshKeyObjs,
+				Labels:           labels,
+				UserData:         userData,
+				Location:         locObj,
+				PlacementGroup:   pgObj,
+				StartAfterCreate: startAfterCreate,
+			}
+
+			// Create server with retry logic
+			var result hcloud.ServerCreateResult
+			err = retry.WithExponentialBackoff(createCtx, func() error {
+				res, _, err := c.client.Server.Create(createCtx, opts)
+				if err != nil {
+					// Check if error is fatal (don't retry)
+					if isInvalidParameter(err) {
+						return retry.Fatal(err)
+					}
+					// Retryable error (rate limit, temporary failure, etc.)
+					return err
+				}
+				result = res
+				return nil
+			}, retry.WithMaxRetries(c.timeouts.RetryMaxAttempts), retry.WithInitialDelay(c.timeouts.RetryInitialDelay))
+
+			if err != nil {
+				return nil, fmt.Errorf("failed to create server: %w", err)
+			}
+
+			// Wait for server creation to complete
+			if err := c.client.Action.WaitFor(createCtx, result.Action); err != nil {
+				return nil, fmt.Errorf("failed to wait for server creation: %w", err)
+			}
+
+			// Attach to network if requested
+			if networkID != 0 && privateIP != "" {
+				if err := c.attachServerToNetwork(createCtx, result.Server, networkID, privateIP); err != nil {
+					return nil, err
+				}
+			}
+
+			return result.Server, nil
+		},
+		NeedsUpdate: nil, // TODO: Implement update logic if needed
+		Update:      nil,
+	})
+}
+
+// CreateServer creates a new server with the given specifications.
+// Deprecated: Use EnsureServer instead. This is kept for compatibility with ServerProvisioner interface.
+func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string) (string, error) {
+	server, err := c.EnsureServer(ctx, name, imageType, serverType, location, sshKeys, labels, userData, placementGroupID, networkID, privateIP)
 	if err != nil {
-		return "", fmt.Errorf("failed to create server: %w", err)
+		return "", err
 	}
-
-	// Wait for server creation to complete
-	if err := c.client.Action.WaitFor(ctx, result.Action); err != nil {
-		return "", fmt.Errorf("failed to wait for server creation: %w", err)
-	}
-
-	// Attach to network if requested
-	if networkID != 0 && privateIP != "" {
-		if err := c.attachServerToNetwork(ctx, result.Server, networkID, privateIP); err != nil {
-			return "", err
-		}
-	}
-
-	return fmt.Sprintf("%d", result.Server.ID), nil
+	return fmt.Sprintf("%d", server.ID), nil
 }
 
 // DeleteServer deletes the server with the given name.
 func (c *RealClient) DeleteServer(ctx context.Context, name string) error {
-	// Add timeout context for delete operation
-	ctx, cancel := context.WithTimeout(ctx, c.timeouts.Delete)
-	defer cancel()
-
-	// Delete with retry logic (resource might be locked)
-	return retry.WithExponentialBackoff(ctx, func() error {
-		server, _, err := c.client.Server.Get(ctx, name)
-		if err != nil {
-			return retry.Fatal(fmt.Errorf("failed to get server: %w", err))
-		}
-		if server == nil {
-			return nil // Server already deleted
-		}
-
-		_, err = c.client.Server.Delete(ctx, server) //nolint:staticcheck
-		if err != nil {
-			// Check if resource is locked (retryable)
-			if isResourceLocked(err) {
-				return err
-			}
-			// Other errors are fatal
-			return retry.Fatal(err)
-		}
-		return nil
-	}, retry.WithMaxRetries(c.timeouts.RetryMaxAttempts), retry.WithInitialDelay(c.timeouts.RetryInitialDelay))
+	return deleteResource(ctx, name, DeleteFuncs[hcloud.Server]{
+		Get: func(ctx context.Context, name string) (*hcloud.Server, error) {
+			server, _, err := c.client.Server.Get(ctx, name)
+			return server, err
+		},
+		Delete: func(ctx context.Context, server *hcloud.Server) error {
+			_, err := c.client.Server.Delete(ctx, server) //nolint:staticcheck
+			return err
+		},
+	}, c.getGenericTimeouts())
 }
 
 // GetServerIP returns the public IP of the server.

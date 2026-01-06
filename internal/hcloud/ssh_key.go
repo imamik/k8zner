@@ -5,47 +5,52 @@ import (
 	"fmt"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
-	"github.com/sak-d/hcloud-k8s/internal/retry"
 )
 
+// EnsureSSHKey ensures that an SSH key exists.
+// Note: Hetzner Cloud SSH keys are immutable. If a key with the same name exists, it is returned.
+func (c *RealClient) EnsureSSHKey(ctx context.Context, name, publicKey string) (*hcloud.SSHKey, error) {
+	return reconcileResource(ctx, name, ReconcileFuncs[hcloud.SSHKey]{
+		Get: func(ctx context.Context, name string) (*hcloud.SSHKey, error) {
+			key, _, err := c.client.SSHKey.Get(ctx, name)
+			return key, err
+		},
+		Create: func(ctx context.Context) (*hcloud.SSHKey, error) {
+			opts := hcloud.SSHKeyCreateOpts{
+				Name:      name,
+				PublicKey: publicKey,
+			}
+			key, _, err := c.client.SSHKey.Create(ctx, opts)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create ssh key: %w", err)
+			}
+			return key, nil
+		},
+		NeedsUpdate: nil, // SSH keys are immutable
+		Update:      nil,
+	})
+}
+
 // CreateSSHKey creates a new SSH key.
+// Deprecated: Use EnsureSSHKey instead.
 func (c *RealClient) CreateSSHKey(ctx context.Context, name, publicKey string) (string, error) {
-	opts := hcloud.SSHKeyCreateOpts{
-		Name:      name,
-		PublicKey: publicKey,
-	}
-	key, _, err := c.client.SSHKey.Create(ctx, opts)
+	key, err := c.EnsureSSHKey(ctx, name, publicKey)
 	if err != nil {
-		return "", fmt.Errorf("failed to create ssh key: %w", err)
+		return "", err
 	}
 	return fmt.Sprintf("%d", key.ID), nil
 }
 
 // DeleteSSHKey deletes the SSH key with the given name.
 func (c *RealClient) DeleteSSHKey(ctx context.Context, name string) error {
-	// Add timeout context for delete operation
-	ctx, cancel := context.WithTimeout(ctx, c.timeouts.Delete)
-	defer cancel()
-
-	// Delete with retry logic (resource might be locked)
-	return retry.WithExponentialBackoff(ctx, func() error {
-		key, _, err := c.client.SSHKey.Get(ctx, name)
-		if err != nil {
-			return retry.Fatal(fmt.Errorf("failed to get ssh key: %w", err))
-		}
-		if key == nil {
-			return nil // SSH key already deleted
-		}
-
-		_, err = c.client.SSHKey.Delete(ctx, key)
-		if err != nil {
-			// Check if resource is locked (retryable)
-			if isResourceLocked(err) {
-				return err
-			}
-			// Other errors are fatal
-			return retry.Fatal(err)
-		}
-		return nil
-	}, retry.WithMaxRetries(c.timeouts.RetryMaxAttempts), retry.WithInitialDelay(c.timeouts.RetryInitialDelay))
+	return deleteResource(ctx, name, DeleteFuncs[hcloud.SSHKey]{
+		Get: func(ctx context.Context, name string) (*hcloud.SSHKey, error) {
+			key, _, err := c.client.SSHKey.Get(ctx, name)
+			return key, err
+		},
+		Delete: func(ctx context.Context, key *hcloud.SSHKey) error {
+			_, err := c.client.SSHKey.Delete(ctx, key)
+			return err
+		},
+	}, c.getGenericTimeouts())
 }

@@ -6,7 +6,6 @@ import (
 	"strconv"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
-	"github.com/sak-d/hcloud-k8s/internal/retry"
 )
 
 // CreateSnapshot creates a snapshot of the server.
@@ -35,29 +34,20 @@ func (c *RealClient) CreateSnapshot(ctx context.Context, serverID, snapshotDescr
 
 // DeleteImage deletes an image by ID.
 func (c *RealClient) DeleteImage(ctx context.Context, imageID string) error {
-	// Add timeout context for delete operation
-	ctx, cancel := context.WithTimeout(ctx, c.timeouts.Delete)
-	defer cancel()
-
-	// Delete with retry logic (resource might be locked)
-	return retry.WithExponentialBackoff(ctx, func() error {
-		id, err := strconv.ParseInt(imageID, 10, 64)
-		if err != nil {
-			return retry.Fatal(fmt.Errorf("invalid image id: %s", imageID))
-		}
-		image := &hcloud.Image{ID: id}
-
-		_, err = c.client.Image.Delete(ctx, image)
-		if err != nil {
-			// Check if resource is locked (retryable)
-			if isResourceLocked(err) {
-				return err
+	return deleteResource(ctx, imageID, DeleteFuncs[hcloud.Image]{
+		Get: func(ctx context.Context, idStr string) (*hcloud.Image, error) {
+			id, err := strconv.ParseInt(idStr, 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("invalid image id: %s", idStr)
 			}
-			// Other errors are fatal
-			return retry.Fatal(fmt.Errorf("failed to delete image: %w", err))
-		}
-		return nil
-	}, retry.WithMaxRetries(c.timeouts.RetryMaxAttempts), retry.WithInitialDelay(c.timeouts.RetryInitialDelay))
+			img, _, err := c.client.Image.GetByID(ctx, id)
+			return img, err
+		},
+		Delete: func(ctx context.Context, img *hcloud.Image) error {
+			_, err := c.client.Image.Delete(ctx, img)
+			return err
+		},
+	}, c.getGenericTimeouts())
 }
 
 // GetSnapshotByLabels finds a snapshot matching the given labels.
