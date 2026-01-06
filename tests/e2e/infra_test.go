@@ -33,6 +33,8 @@ func (m *MockTalosProducer) GetClientConfig() ([]byte, error) {
 func (m *MockTalosProducer) SetEndpoint(endpoint string) {}
 
 func TestInfraProvisioning(t *testing.T) {
+	t.Parallel() // Run in parallel with other tests
+
 	token := os.Getenv("HCLOUD_TOKEN")
 	if token == "" {
 		t.Skip("HCLOUD_TOKEN not set, skipping e2e test")
