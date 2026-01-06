@@ -29,7 +29,6 @@ func TestParallelProvisioning(t *testing.T) {
 	t.Logf("Cluster name: %s", clusterName)
 
 	cleaner := &ResourceCleaner{t: t}
-	defer cleaner.Cleanup()
 
 	// Setup SSH key
 	sshKeyName, _ := setupSSHKey(t, sharedCtx.Client, cleaner, clusterName)

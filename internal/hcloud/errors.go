@@ -2,8 +2,6 @@ package hcloud
 
 import (
 	"strings"
-
-	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
 // isResourceLocked checks if an error indicates a resource is locked.
@@ -33,47 +31,3 @@ func isInvalidParameter(err error) bool {
 		strings.Contains(errStr, "does not exist")
 }
 
-// isRateLimitError checks if an error is due to rate limiting.
-// Rate limit errors are retryable.
-func isRateLimitError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	// Check for hcloud.Error with specific code
-	var hcloudErr hcloud.Error
-	if err, ok := err.(hcloud.Error); ok {
-		hcloudErr = err
-		// Rate limit is typically HTTP 429
-		return hcloudErr.Code == "rate_limit_exceeded" || strings.Contains(hcloudErr.Message, "rate limit")
-	}
-
-	errStr := err.Error()
-	return strings.Contains(errStr, "rate limit") ||
-		strings.Contains(errStr, "429") ||
-		strings.Contains(errStr, "too many requests")
-}
-
-// isTemporaryError checks if an error is temporary and retryable.
-func isTemporaryError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	errStr := err.Error()
-	return strings.Contains(errStr, "temporary") ||
-		strings.Contains(errStr, "timeout") ||
-		strings.Contains(errStr, "503") || // Service Unavailable
-		strings.Contains(errStr, "502")    // Bad Gateway
-}
-
-// isRetryable checks if an error should trigger a retry.
-func isRetryable(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	return isResourceLocked(err) ||
-		isRateLimitError(err) ||
-		isTemporaryError(err)
-}

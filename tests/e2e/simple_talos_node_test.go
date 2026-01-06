@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"net"
 	"os"
 	"strings"
 	"testing"
@@ -38,7 +37,6 @@ func TestSimpleTalosNode(t *testing.T) {
 	hcloudClient := hcloud_internal.NewRealClient(token)
 
 	cleaner := &ResourceCleaner{t: t}
-	defer cleaner.Cleanup()
 
 	// Get shared Talos snapshot from suite
 	t.Log("Using shared Talos snapshot from test suite")
@@ -76,7 +74,7 @@ func TestSimpleTalosNode(t *testing.T) {
 
 	// Wait for server to boot and Talos API to become available
 	t.Log("Waiting for Talos API port 50000 to become accessible...")
-	err = waitForTalosAPI(ctx, nodeIP, 5*time.Minute)
+	err = WaitForPort(ctx, nodeIP, 50000, 5*time.Minute)
 	require.NoError(t, err, "Talos API should become accessible")
 	t.Log("✓ Talos API port is accessible")
 
@@ -111,31 +109,4 @@ func TestSimpleTalosNode(t *testing.T) {
 	}
 
 	t.Log("=== Test 1 PASSED: Server boots from snapshot, Talos API accessible, node in maintenance mode ===")
-}
-
-// waitForTalosAPI waits for the Talos API port to become accessible
-func waitForTalosAPI(ctx context.Context, ip string, timeout time.Duration) error {
-	address := net.JoinHostPort(ip, "50000")
-	deadline := time.Now().Add(timeout)
-
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		if time.Now().After(deadline) {
-			return fmt.Errorf("timeout waiting for Talos API at %s", address)
-		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			conn, err := net.DialTimeout("tcp", address, 2*time.Second)
-			if err == nil {
-				_ = conn.Close()
-				return nil
-			}
-			// Continue waiting
-		}
-	}
 }

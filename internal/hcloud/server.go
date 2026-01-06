@@ -3,10 +3,7 @@ package hcloud
 import (
 	"context"
 	"fmt"
-	"log"
-	"net"
 	"strconv"
-	"time"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/sak-d/hcloud-k8s/internal/retry"
@@ -18,6 +15,7 @@ func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverTy
 	ctx, cancel := context.WithTimeout(ctx, c.timeouts.ServerCreate)
 	defer cancel()
 
+	// Resolve server type
 	serverTypeObj, _, err := c.client.ServerType.Get(ctx, serverType)
 	if err != nil {
 		return "", fmt.Errorf("failed to get server type: %w", err)
@@ -26,107 +24,34 @@ func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverTy
 		return "", fmt.Errorf("server type not found: %s", serverType)
 	}
 
-	var imageObj *hcloud.Image
-	// Special handling for talos
-	if imageType == "talos" {
-		images, _, err := c.client.Image.List(ctx, hcloud.ImageListOpts{
-			ListOpts: hcloud.ListOpts{
-				LabelSelector: "os=talos",
-			},
-			Architecture: []hcloud.Architecture{serverTypeObj.Architecture},
-			Sort:         []string{"created:desc"},
-		})
-		if err == nil && len(images) > 0 {
-			imageObj = images[0]
-		}
+	// Resolve and wait for image
+	imageObj, err := c.resolveImage(ctx, imageType, serverTypeObj)
+	if err != nil {
+		return "", err
 	}
 
-	// Try to get image by name if not found via labels or if another image was requested.
-	if imageObj == nil {
-		imageObj, _, err = c.client.Image.Get(ctx, imageType) //nolint:staticcheck
-		if err != nil {
-			return "", fmt.Errorf("failed to get image: %w", err)
-		}
+	// Resolve SSH keys
+	sshKeyObjs, err := c.resolveSSHKeys(ctx, sshKeys)
+	if err != nil {
+		return "", err
 	}
 
-	if imageObj == nil {
-		return "", fmt.Errorf("image not found: %s", imageType)
+	// Resolve location
+	locObj, err := c.resolveLocation(ctx, location)
+	if err != nil {
+		return "", err
 	}
 
-	// Wait for image to be available if it's still creating
-	if imageObj.Status != hcloud.ImageStatusAvailable {
-		log.Printf("Image %s (%d) is in status %s, waiting for it to become available...", imageObj.Name, imageObj.ID, imageObj.Status)
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		timeout := time.After(c.timeouts.ImageWait)
-	waitLoop:
-		for {
-			select {
-			case <-ctx.Done():
-				return "", ctx.Err()
-			case <-timeout:
-				return "", fmt.Errorf("timeout waiting for image %d to become available", imageObj.ID)
-			case <-ticker.C:
-				img, _, err := c.client.Image.GetByID(ctx, imageObj.ID)
-				if err != nil {
-					return "", fmt.Errorf("failed to get image status: %w", err)
-				}
-				if img.Status == hcloud.ImageStatusAvailable {
-					imageObj = img
-					break waitLoop
-				}
-				log.Printf("Still waiting for image %d (status: %s)...", imageObj.ID, img.Status)
-			}
-		}
-	}
+	// Resolve placement group
+	pgObj := resolvePlacementGroup(placementGroupID)
 
-	// Check if image architecture matches server type architecture.
-	if imageObj.Architecture != serverTypeObj.Architecture {
-		images, _, err := c.client.Image.List(ctx, hcloud.ImageListOpts{
-			Name:         imageType,
-			Architecture: []hcloud.Architecture{serverTypeObj.Architecture},
-		})
-		if err != nil {
-			return "", fmt.Errorf("failed to list images: %w", err)
-		}
-		if len(images) > 0 {
-			imageObj = images[0]
-		}
-	}
-
-	var sshKeyObjs []*hcloud.SSHKey
-	for _, key := range sshKeys {
-		keyObj, _, err := c.client.SSHKey.Get(ctx, key)
-		if err != nil {
-			return "", fmt.Errorf("failed to get ssh key %s: %w", key, err)
-		}
-		if keyObj == nil {
-			return "", fmt.Errorf("ssh key not found: %s", key)
-		}
-		sshKeyObjs = append(sshKeyObjs, keyObj)
-	}
-
-	var locObj *hcloud.Location
-	if location != "" {
-		locObj, _, err = c.client.Location.Get(ctx, location)
-		if err != nil {
-			return "", fmt.Errorf("failed to get location %s: %w", location, err)
-		}
-		if locObj == nil {
-			return "", fmt.Errorf("location not found: %s", location)
-		}
-	}
-
-	var pgObj *hcloud.PlacementGroup
-	if placementGroupID != nil {
-		pgObj = &hcloud.PlacementGroup{ID: *placementGroupID}
-	}
-
+	// Determine if server should start after creation
 	var startAfterCreate *bool
 	if networkID != 0 && privateIP != "" {
 		startAfterCreate = hcloud.Ptr(false)
 	}
 
+	// Build server creation options
 	opts := hcloud.ServerCreateOpts{
 		Name:             name,
 		ServerType:       serverTypeObj,
@@ -159,42 +84,15 @@ func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverTy
 		return "", fmt.Errorf("failed to create server: %w", err)
 	}
 
+	// Wait for server creation to complete
 	if err := c.client.Action.WaitFor(ctx, result.Action); err != nil {
 		return "", fmt.Errorf("failed to wait for server creation: %w", err)
 	}
 
-	// Attach to Network if requested
+	// Attach to network if requested
 	if networkID != 0 && privateIP != "" {
-		ip := net.ParseIP(privateIP)
-		if ip == nil {
-			return "", fmt.Errorf("invalid private ip: %s", privateIP)
-		}
-
-		attachOpts := hcloud.ServerAttachToNetworkOpts{
-			Network: &hcloud.Network{ID: networkID},
-			IP:      ip,
-		}
-
-		// Attach to network with retry logic (network might not be ready immediately)
-		err = retry.WithExponentialBackoff(ctx, func() error {
-			action, _, err := c.client.Server.AttachToNetwork(ctx, result.Server, attachOpts)
-			if err != nil {
-				return err
-			}
-			return c.client.Action.WaitFor(ctx, action)
-		}, retry.WithMaxRetries(c.timeouts.RetryMaxAttempts), retry.WithInitialDelay(c.timeouts.RetryInitialDelay))
-
-		if err != nil {
-			return "", fmt.Errorf("failed to attach server to network: %w", err)
-		}
-
-		// Power On
-		action, _, err := c.client.Server.Poweron(ctx, result.Server)
-		if err != nil {
-			return "", fmt.Errorf("failed to power on server: %w", err)
-		}
-		if err := c.client.Action.WaitFor(ctx, action); err != nil {
-			return "", fmt.Errorf("failed to wait for server power on: %w", err)
+		if err := c.attachServerToNetwork(ctx, result.Server, networkID, privateIP); err != nil {
+			return "", err
 		}
 	}
 

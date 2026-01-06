@@ -4,9 +4,7 @@ package e2e
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
-	"net"
 	"os"
 	"testing"
 	"time"
@@ -63,7 +61,6 @@ func TestImageBuildLifecycle(t *testing.T) {
 			defer cancel()
 
 			cleaner := &ResourceCleaner{t: t}
-			// Note: No need for defer cleaner.Cleanup() - t.Cleanup() is called automatically
 
 			// Use shared snapshot from TestMain if available
 			var snapshotID string
@@ -120,7 +117,7 @@ func TestImageBuildLifecycle(t *testing.T) {
 
 			t.Logf("Creating verification server %s...", verifyServerName)
 
-			serverType := "cx23"
+			serverType := "cpx22" // 80 GB disk, enough for Talos snapshot
 			if tc.arch == "arm64" {
 				serverType = "cax11"
 			}
@@ -149,39 +146,11 @@ func TestImageBuildLifecycle(t *testing.T) {
 
 			// 4. Verify Talos is running (Port 50000)
 			t.Logf("Waiting for Talos API (port 50000) on %s...", ip)
-
-			timeout := time.After(5 * time.Minute)
-			ticker := time.NewTicker(10 * time.Second)
-			defer ticker.Stop()
-
-			success := false
-			for {
-				select {
-				case <-timeout:
-					t.Fatalf("Timeout waiting for Talos API on %s", ip)
-				case <-ticker.C:
-					// Check connectivity and TLS handshake.
-					// Talos uses mTLS, so a normal handshake without client certs will fail during verification or return an error,
-					// but establishing the handshake proves the server is listening and speaking TLS.
-					conf := &tls.Config{
-						InsecureSkipVerify: true, // We don't have the CA, we just want to know if it's speaking TLS.
-					}
-					conn, err := tls.DialWithDialer(&net.Dialer{Timeout: 5 * time.Second}, "tcp", ip+":50000", conf)
-					if err == nil {
-						conn.Close()
-						t.Logf("Successfully performed TLS handshake with Talos API on %s:50000", ip)
-						success = true
-						goto VerifyDone
-					} else {
-						// Log the error for debugging (it might be connection refused, or timeout)
-						t.Logf("Waiting for Talos API... last error: %v", err)
-					}
-				}
+			err = WaitForPort(ctx, ip, 50000, 5*time.Minute)
+			if err != nil {
+				t.Fatalf("Failed to verify Talos API: %v", err)
 			}
-		VerifyDone:
-			if !success {
-				t.Fatalf("Failed to verify Talos API")
-			}
+			t.Logf("Successfully established connection with Talos API on %s:50000", ip)
 		})
 	}
 }

@@ -41,15 +41,13 @@ func TestLoadTimeouts_EnvVars(t *testing.T) {
 	clearTimeoutEnvVars()
 
 	// Set custom values
-	os.Setenv("HCLOUD_TIMEOUT_SERVER_CREATE", "15m")
-	os.Setenv("HCLOUD_TIMEOUT_SERVER_IP", "90s")
-	os.Setenv("HCLOUD_TIMEOUT_DELETE", "3m")
-	os.Setenv("HCLOUD_TIMEOUT_BOOTSTRAP", "20m")
-	os.Setenv("HCLOUD_TIMEOUT_IMAGE_WAIT", "7m")
-	os.Setenv("HCLOUD_RETRY_MAX_ATTEMPTS", "10")
-	os.Setenv("HCLOUD_RETRY_INITIAL_DELAY", "2s")
-
-	defer clearTimeoutEnvVars()
+	t.Setenv("HCLOUD_TIMEOUT_SERVER_CREATE", "15m")
+	t.Setenv("HCLOUD_TIMEOUT_SERVER_IP", "90s")
+	t.Setenv("HCLOUD_TIMEOUT_DELETE", "3m")
+	t.Setenv("HCLOUD_TIMEOUT_BOOTSTRAP", "20m")
+	t.Setenv("HCLOUD_TIMEOUT_IMAGE_WAIT", "7m")
+	t.Setenv("HCLOUD_RETRY_MAX_ATTEMPTS", "10")
+	t.Setenv("HCLOUD_RETRY_INITIAL_DELAY", "2s")
 
 	timeouts := LoadTimeouts()
 
@@ -82,11 +80,9 @@ func TestLoadTimeouts_InvalidEnvVars(t *testing.T) {
 	clearTimeoutEnvVars()
 
 	// Set invalid values
-	os.Setenv("HCLOUD_TIMEOUT_SERVER_CREATE", "invalid")
-	os.Setenv("HCLOUD_TIMEOUT_SERVER_IP", "not-a-duration")
-	os.Setenv("HCLOUD_RETRY_MAX_ATTEMPTS", "not-a-number")
-
-	defer clearTimeoutEnvVars()
+	t.Setenv("HCLOUD_TIMEOUT_SERVER_CREATE", "invalid")
+	t.Setenv("HCLOUD_TIMEOUT_SERVER_IP", "not-a-duration")
+	t.Setenv("HCLOUD_RETRY_MAX_ATTEMPTS", "not-a-number")
 
 	timeouts := LoadTimeouts()
 
@@ -107,10 +103,8 @@ func TestLoadTimeouts_PartialEnvVars(t *testing.T) {
 	clearTimeoutEnvVars()
 
 	// Set only some values
-	os.Setenv("HCLOUD_TIMEOUT_SERVER_IP", "120s")
-	os.Setenv("HCLOUD_RETRY_MAX_ATTEMPTS", "3")
-
-	defer clearTimeoutEnvVars()
+	t.Setenv("HCLOUD_TIMEOUT_SERVER_IP", "120s")
+	t.Setenv("HCLOUD_RETRY_MAX_ATTEMPTS", "3")
 
 	timeouts := LoadTimeouts()
 
@@ -172,10 +166,11 @@ func TestParseDuration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.envValue != "" {
-				os.Setenv(tt.envVar, tt.envValue)
-				defer os.Unsetenv(tt.envVar)
+				t.Setenv(tt.envVar, tt.envValue)
 			} else {
-				os.Unsetenv(tt.envVar)
+				if err := os.Unsetenv(tt.envVar); err != nil {
+					t.Fatalf("Failed to unset env var: %v", err)
+				}
 			}
 
 			result := parseDuration(tt.envVar, tt.defaultVal)
@@ -234,10 +229,11 @@ func TestParseInt(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.envValue != "" {
-				os.Setenv(tt.envVar, tt.envValue)
-				defer os.Unsetenv(tt.envVar)
+				t.Setenv(tt.envVar, tt.envValue)
 			} else {
-				os.Unsetenv(tt.envVar)
+				if err := os.Unsetenv(tt.envVar); err != nil {
+					t.Fatalf("Failed to unset env var: %v", err)
+				}
 			}
 
 			result := parseInt(tt.envVar, tt.defaultVal)
@@ -250,11 +246,11 @@ func TestParseInt(t *testing.T) {
 
 // clearTimeoutEnvVars clears all timeout-related environment variables
 func clearTimeoutEnvVars() {
-	os.Unsetenv("HCLOUD_TIMEOUT_SERVER_CREATE")
-	os.Unsetenv("HCLOUD_TIMEOUT_SERVER_IP")
-	os.Unsetenv("HCLOUD_TIMEOUT_DELETE")
-	os.Unsetenv("HCLOUD_TIMEOUT_BOOTSTRAP")
-	os.Unsetenv("HCLOUD_TIMEOUT_IMAGE_WAIT")
-	os.Unsetenv("HCLOUD_RETRY_MAX_ATTEMPTS")
-	os.Unsetenv("HCLOUD_RETRY_INITIAL_DELAY")
+	_ = os.Unsetenv("HCLOUD_TIMEOUT_SERVER_CREATE")
+	_ = os.Unsetenv("HCLOUD_TIMEOUT_SERVER_IP")
+	_ = os.Unsetenv("HCLOUD_TIMEOUT_DELETE")
+	_ = os.Unsetenv("HCLOUD_TIMEOUT_BOOTSTRAP")
+	_ = os.Unsetenv("HCLOUD_TIMEOUT_IMAGE_WAIT")
+	_ = os.Unsetenv("HCLOUD_RETRY_MAX_ATTEMPTS")
+	_ = os.Unsetenv("HCLOUD_RETRY_INITIAL_DELAY")
 }

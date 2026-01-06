@@ -5,7 +5,6 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"net"
 	"os"
 	"testing"
 	"time"
@@ -79,7 +78,6 @@ func TestClusterProvisioning(t *testing.T) {
 	hClient := hcloud_client.NewRealClient(token)
 
 	cleaner := &ResourceCleaner{t: t}
-	defer cleaner.Cleanup()
 
 	// Setup SSH Key
 	sshKeyName, _ := setupSSHKey(t, hClient, cleaner, clusterName)
@@ -108,7 +106,6 @@ func TestClusterProvisioning(t *testing.T) {
 		logger("Deleted Network")
 
 		// Delete Placement Groups
-		hClient.DeletePlacementGroup(ctx, clusterName+"-control-plane-pg")
 		hClient.DeletePlacementGroup(ctx, clusterName+"-control-plane")
 		hClient.DeletePlacementGroup(ctx, clusterName+"-worker-pg-1")
 		logger("Deleted PGs")
@@ -148,14 +145,14 @@ func TestClusterProvisioning(t *testing.T) {
 	t.Logf("Verifying APIs: Talos=%s:50000, Kube=%s:6443", cp1IP, lbIP)
 
 	// Connectivity Check: Talos API
-	if err := waitForPort(cp1IP, 50000, 2*time.Minute); err != nil {
+	if err := WaitForPort(context.Background(), cp1IP, 50000, 2*time.Minute); err != nil {
 		t.Errorf("Talos API not reachable: %v", err)
 	} else {
 		t.Log("Talos API is reachable!")
 	}
 
 	// Connectivity Check: Kube API
-	if err := waitForPort(lbIP, 6443, 10*time.Minute); err != nil {
+	if err := WaitForPort(context.Background(), lbIP, 6443, 10*time.Minute); err != nil {
 		t.Errorf("Kube API not reachable: %v", err)
 	} else {
 		t.Log("Kube API is reachable!")
@@ -182,21 +179,4 @@ func TestClusterProvisioning(t *testing.T) {
 	srvID, err := hClient.GetServerID(ctx, clusterName+"-control-plane-1")
 	assert.NoError(t, err)
 	assert.NotEmpty(t, srvID)
-}
-
-func waitForPort(ip string, port int, timeout time.Duration) error {
-	address := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-	deadline := time.Now().Add(timeout)
-
-	for time.Now().Before(deadline) {
-		conn, err := net.DialTimeout("tcp", address, 2*time.Second)
-		if err == nil {
-			_ = conn.Close()
-			return nil
-		}
-		time.Sleep(5 * time.Second)
-	}
-	return fmt.Errorf("timeout waiting for %s", address)
 }
