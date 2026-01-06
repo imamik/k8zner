@@ -10,6 +10,8 @@ import (
 )
 
 // EnsureLoadBalancer ensures that a load balancer exists with the given specifications.
+// Note: Load balancer creation can take 1-6 minutes depending on Hetzner Cloud backend load.
+// This is normal Hetzner Cloud API behavior, not a bug in this code.
 func (c *RealClient) EnsureLoadBalancer(ctx context.Context, name, location, lbType string, algorithm hcloud.LoadBalancerAlgorithmType, labels map[string]string) (*hcloud.LoadBalancer, error) {
 	lb, _, err := c.client.LoadBalancer.Get(ctx, name)
 	if err != nil {

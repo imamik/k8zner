@@ -52,28 +52,37 @@ func setupSSHKey(t *testing.T, client *hcloud.RealClient, cleaner *ResourceClean
 }
 
 // WaitForPort waits for a TCP port to become accessible.
+// Uses exponential backoff starting at 1s, doubling each time up to 5s max.
 func WaitForPort(ctx context.Context, ip string, port int, timeout time.Duration) error {
 	address := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 	deadline := time.Now().Add(timeout)
 
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
+	// Start with 1 second, exponential backoff up to 5 seconds
+	waitDuration := 1 * time.Second
+	maxWait := 5 * time.Second
 
 	for {
 		if time.Now().After(deadline) {
 			return fmt.Errorf("timeout waiting for %s", address)
 		}
 
+		// Try to connect
+		conn, err := net.DialTimeout("tcp", address, 2*time.Second)
+		if err == nil {
+			_ = conn.Close()
+			return nil
+		}
+
+		// Wait before next attempt with exponential backoff
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-ticker.C:
-			conn, err := net.DialTimeout("tcp", address, 2*time.Second)
-			if err == nil {
-				_ = conn.Close()
-				return nil
+		case <-time.After(waitDuration):
+			// Double the wait time for next iteration, cap at maxWait
+			waitDuration *= 2
+			if waitDuration > maxWait {
+				waitDuration = maxWait
 			}
-			// Continue waiting
 		}
 	}
 }

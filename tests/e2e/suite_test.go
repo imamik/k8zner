@@ -182,7 +182,16 @@ func buildSharedSnapshots(client *hcloud_client.RealClient) error {
 }
 
 // cleanupSharedSnapshots removes the shared snapshots after all tests complete.
+// Set E2E_KEEP_SNAPSHOTS=true to skip cleanup for faster local development.
 func cleanupSharedSnapshots(client *hcloud_client.RealClient) {
+	// Check if snapshots should be kept for faster subsequent runs
+	if os.Getenv("E2E_KEEP_SNAPSHOTS") == "true" {
+		log.Println("=== Skipping snapshot cleanup (E2E_KEEP_SNAPSHOTS=true) ===")
+		log.Printf("Keeping snapshots: amd64=%s, arm64=%s", sharedCtx.SnapshotAMD64, sharedCtx.SnapshotARM64)
+		log.Println("Note: Snapshots will be reused in subsequent test runs")
+		return
+	}
+
 	ctx := context.Background()
 
 	if sharedCtx.SnapshotAMD64 != "" {
