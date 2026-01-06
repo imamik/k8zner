@@ -39,6 +39,9 @@ type Config struct {
 
 	// Kubernetes Configuration
 	Kubernetes KubernetesConfig `mapstructure:"kubernetes" yaml:"kubernetes"`
+
+	// Addons Configuration
+	Addons AddonsConfig `mapstructure:"addons" yaml:"addons"`
 }
 
 // NetworkConfig defines the network-related configuration.
@@ -166,6 +169,73 @@ type OIDCConfig struct {
 // CNIConfig defines the CNI-related configuration.
 type CNIConfig struct {
 	Encryption string `mapstructure:"encryption" yaml:"encryption"` // ipsec, wireguard
+}
+
+// AddonsConfig defines addon-specific configurations.
+type AddonsConfig struct {
+	CCM    CCMConfig    `mapstructure:"ccm" yaml:"ccm"`
+	CSI    CSIConfig    `mapstructure:"csi" yaml:"csi"`
+	Cilium CiliumConfig `mapstructure:"cilium" yaml:"cilium"`
+}
+
+// CCMConfig defines the Hetzner Cloud Controller Manager configuration.
+type CCMConfig struct {
+	Enabled                      bool           `mapstructure:"enabled" yaml:"enabled"`
+	LoadBalancersEnabled         bool           `mapstructure:"load_balancers_enabled" yaml:"load_balancers_enabled"`
+	NetworkRoutesEnabled         bool           `mapstructure:"network_routes_enabled" yaml:"network_routes_enabled"`
+	LoadBalancerAlgorithmType    string         `mapstructure:"load_balancer_algorithm_type" yaml:"load_balancer_algorithm_type"`
+	LoadBalancerType             string         `mapstructure:"load_balancer_type" yaml:"load_balancer_type"`
+	LoadBalancerLocation         string         `mapstructure:"load_balancer_location" yaml:"load_balancer_location"`
+	LoadBalancerDisablePrivate   bool           `mapstructure:"load_balancer_disable_private" yaml:"load_balancer_disable_private"`
+	LoadBalancerDisablePublic    bool           `mapstructure:"load_balancer_disable_public" yaml:"load_balancer_disable_public"`
+	LoadBalancerUsePrivateIP     bool           `mapstructure:"load_balancer_use_private_ip" yaml:"load_balancer_use_private_ip"`
+	LoadBalancerHealthCheckInt   int            `mapstructure:"load_balancer_health_check_interval" yaml:"load_balancer_health_check_interval"`
+	LoadBalancerHealthCheckRetry int            `mapstructure:"load_balancer_health_check_retries" yaml:"load_balancer_health_check_retries"`
+	LoadBalancerHealthCheckTimeout int          `mapstructure:"load_balancer_health_check_timeout" yaml:"load_balancer_health_check_timeout"`
+	HelmRepository               string         `mapstructure:"helm_repository" yaml:"helm_repository"`
+	HelmChart                    string         `mapstructure:"helm_chart" yaml:"helm_chart"`
+	HelmVersion                  string         `mapstructure:"helm_version" yaml:"helm_version"`
+	HelmValues                   map[string]any `mapstructure:"helm_values" yaml:"helm_values,omitempty"`
+}
+
+// CSIConfig defines the Hetzner CSI Driver configuration.
+type CSIConfig struct {
+	Enabled              bool              `mapstructure:"enabled" yaml:"enabled"`
+	EncryptionPassphrase string            `mapstructure:"encryption_passphrase" yaml:"encryption_passphrase,omitempty"`
+	StorageClasses       []StorageClass    `mapstructure:"storage_classes" yaml:"storage_classes,omitempty"`
+	HelmRepository       string            `mapstructure:"helm_repository" yaml:"helm_repository"`
+	HelmChart            string            `mapstructure:"helm_chart" yaml:"helm_chart"`
+	HelmVersion          string            `mapstructure:"helm_version" yaml:"helm_version"`
+	HelmValues           map[string]any    `mapstructure:"helm_values" yaml:"helm_values,omitempty"`
+}
+
+// StorageClass defines a Kubernetes storage class configuration for CSI.
+type StorageClass struct {
+	Name                string            `mapstructure:"name" yaml:"name"`
+	ReclaimPolicy       string            `mapstructure:"reclaim_policy" yaml:"reclaim_policy"`
+	DefaultStorageClass bool              `mapstructure:"default_storage_class" yaml:"default_storage_class"`
+	Encrypted           bool              `mapstructure:"encrypted" yaml:"encrypted"`
+	ExtraLabels         map[string]string `mapstructure:"extra_labels" yaml:"extra_labels,omitempty"`
+}
+
+// CiliumConfig defines the Cilium CNI configuration.
+type CiliumConfig struct {
+	Enabled              bool           `mapstructure:"enabled" yaml:"enabled"`
+	RoutingMode          string         `mapstructure:"routing_mode" yaml:"routing_mode"`
+	KubeProxyReplacement bool           `mapstructure:"kube_proxy_replacement" yaml:"kube_proxy_replacement"`
+	EncryptionEnabled    bool           `mapstructure:"encryption_enabled" yaml:"encryption_enabled"`
+	EncryptionType       string         `mapstructure:"encryption_type" yaml:"encryption_type"`
+	IPSecKeyID           int            `mapstructure:"ipsec_key_id" yaml:"ipsec_key_id,omitempty"`
+	IPSecAlgorithm       string         `mapstructure:"ipsec_algorithm" yaml:"ipsec_algorithm,omitempty"`
+	IPSecKeySize         int            `mapstructure:"ipsec_key_size" yaml:"ipsec_key_size,omitempty"`
+	HubbleEnabled        bool           `mapstructure:"hubble_enabled" yaml:"hubble_enabled"`
+	GatewayAPIEnabled    bool           `mapstructure:"gateway_api_enabled" yaml:"gateway_api_enabled"`
+	BPFDatapathMode      string         `mapstructure:"bpf_datapath_mode" yaml:"bpf_datapath_mode"`
+	PolicyCIDRMatchMode  []string       `mapstructure:"policy_cidr_match_mode" yaml:"policy_cidr_match_mode"`
+	HelmRepository       string         `mapstructure:"helm_repository" yaml:"helm_repository"`
+	HelmChart            string         `mapstructure:"helm_chart" yaml:"helm_chart"`
+	HelmVersion          string         `mapstructure:"helm_version" yaml:"helm_version"`
+	HelmValues           map[string]any `mapstructure:"helm_values" yaml:"helm_values,omitempty"`
 }
 
 // LoadFile reads and parses the configuration from a YAML file.

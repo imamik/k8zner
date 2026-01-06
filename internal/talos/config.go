@@ -2,6 +2,8 @@
 package talos
 
 import (
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -179,6 +181,54 @@ func (g *ConfigGenerator) GetClientConfig() ([]byte, error) {
 	}
 
 	return bytes, nil
+}
+
+// GetKubeconfig returns the kubeconfig for accessing the Kubernetes cluster.
+func (g *ConfigGenerator) GetKubeconfig(ctx context.Context) ([]byte, error) {
+	// Use the secrets bundle to generate kubeconfig
+	// The kubeconfig is embedded in the secrets bundle
+	if g.secretsBundle == nil || g.secretsBundle.Cluster == nil {
+		return nil, fmt.Errorf("secrets bundle not initialized")
+	}
+
+	// Create kubeconfig from secrets
+	kubeconfig := fmt.Sprintf(`apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    certificate-authority-data: %s
+    server: %s
+  name: %s
+contexts:
+- context:
+    cluster: %s
+    user: admin@%s
+  name: admin@%s
+current-context: admin@%s
+users:
+- name: admin@%s
+  user:
+    client-certificate-data: %s
+    client-key-data: %s
+`,
+		encodeBase64(g.secretsBundle.Certs.K8s.Crt),
+		g.endpoint,
+		g.clusterName,
+		g.clusterName,
+		g.clusterName,
+		g.clusterName,
+		g.clusterName,
+		g.clusterName,
+		encodeBase64(g.secretsBundle.Certs.OS.Crt),
+		encodeBase64(g.secretsBundle.Certs.OS.Key),
+	)
+
+	return []byte(kubeconfig), nil
+}
+
+// encodeBase64 encodes bytes to base64 string.
+func encodeBase64(data []byte) string {
+	return base64.StdEncoding.EncodeToString(data)
 }
 
 func stripComments(data []byte) []byte {

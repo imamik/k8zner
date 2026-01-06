@@ -23,6 +23,7 @@ func main() {
 	}
 
 	var configPath string
+	var kubeconfigPath string
 
 	// Apply Command
 	var applyCmd = &cobra.Command{
@@ -97,6 +98,7 @@ func main() {
 
 			// 4. Initialize Reconciler
 			reconciler := cluster.NewReconciler(hClient, talosGen, cfg)
+			reconciler.SetKubeconfigPath(kubeconfigPath)
 
 			// 5. Run Reconcile
 			if err := reconciler.Reconcile(cmd.Context()); err != nil {
@@ -114,14 +116,18 @@ func main() {
 				return fmt.Errorf("failed to write talosconfig: %w", err)
 			}
 
-			fmt.Printf("Reconciliation complete!\n")
-			fmt.Printf("Secrets saved to: %s\n", secretsFile)
-			fmt.Printf("Talos config saved to: %s\n", talosConfigPath)
+			fmt.Printf("\n✓ Reconciliation complete!\n")
+			fmt.Printf("  Secrets saved to: %s\n", secretsFile)
+			fmt.Printf("  Talos config saved to: %s\n", talosConfigPath)
+			fmt.Printf("  Kubeconfig saved to: %s\n", kubeconfigPath)
+			fmt.Printf("\nTo use kubectl, run: export KUBECONFIG=%s\n", kubeconfigPath)
 
 			return nil
 		},
 	}
-	applyCmd.Flags().StringVarP(&configPath, "config", "c", "", "Path to configuration file")
+	applyCmd.Flags().StringVarP(&configPath, "config", "c", "", "Path to configuration file (required)")
+	applyCmd.Flags().StringVar(&kubeconfigPath, "kubeconfig-path", "kubeconfig", "Path to save kubeconfig")
+	applyCmd.MarkFlagRequired("config")
 	rootCmd.AddCommand(applyCmd)
 
 	// Image Command

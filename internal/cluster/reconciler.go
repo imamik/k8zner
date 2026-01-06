@@ -17,6 +17,7 @@ type TalosConfigProducer interface {
 	GenerateControlPlaneConfig(san []string) ([]byte, error)
 	GenerateWorkerConfig() ([]byte, error)
 	GetClientConfig() ([]byte, error)
+	GetKubeconfig(ctx context.Context) ([]byte, error)
 	SetEndpoint(endpoint string)
 }
 
@@ -35,6 +36,7 @@ type Reconciler struct {
 	config            *config.Config
 	bootstrapper      *Bootstrapper
 	timeouts          *config.Timeouts
+	kubeconfigPath    string // Path to save kubeconfig
 
 	// State
 	network  *hcloud.Network
@@ -61,7 +63,13 @@ func NewReconciler(
 		config:            cfg,
 		bootstrapper:      NewBootstrapper(infra),
 		timeouts:          config.LoadTimeouts(),
+		kubeconfigPath:    "kubeconfig", // Default path
 	}
+}
+
+// SetKubeconfigPath sets the path where kubeconfig will be saved.
+func (r *Reconciler) SetKubeconfigPath(path string) {
+	r.kubeconfigPath = path
 }
 
 // Reconcile ensures that the desired state matches the actual state.
@@ -160,5 +168,17 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 		return fmt.Errorf("failed to reconcile workers: %w", err)
 	}
 
+	// 9. Export Kubeconfig
+	exporter := NewKubeconfigExporter(r.talosGenerator, r.kubeconfigPath)
+	if err := exporter.Export(ctx); err != nil {
+		return fmt.Errorf("failed to export kubeconfig: %w", err)
+	}
+
+	// 10. Install Addons
+	if err := r.reconcileAddons(ctx, r.kubeconfigPath); err != nil {
+		return fmt.Errorf("failed to reconcile addons: %w", err)
+	}
+
+	log.Println("✓ Reconciliation complete!")
 	return nil
 }
