@@ -60,7 +60,7 @@ func TestAddonInstallationLightweight(t *testing.T) {
 			NodePools: []config.ControlPlaneNodePool{
 				{
 					Name:       "cp",
-					ServerType: "cpx21", // Smallest viable type for K8s
+					ServerType: "cpx22", // 2 CPU, 4GB RAM, 80GB disk
 					Location:   "nbg1",
 					Count:      1, // Single node for cost optimization
 					Image:      "talos",
@@ -318,7 +318,7 @@ func TestKubeconfigExport(t *testing.T) {
 			NodePools: []config.ControlPlaneNodePool{
 				{
 					Name:       "cp",
-					ServerType: "cpx21",
+					ServerType: "cpx22", // 2 CPU, 4GB RAM, 80GB disk
 					Location:   "nbg1",
 					Count:      1,
 					Image:      "talos",
