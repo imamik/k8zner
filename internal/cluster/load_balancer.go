@@ -19,6 +19,8 @@ func (r *Reconciler) reconcileLoadBalancers(ctx context.Context) error {
 		cpCount += pool.Count
 	}
 
+	var apiLB *hcloud.LoadBalancer
+
 	if cpCount > 0 {
 		// Name: ${cluster_name}-kube-api
 		lbName := fmt.Sprintf("%s-kube-api", r.config.ClusterName)
@@ -34,6 +36,7 @@ func (r *Reconciler) reconcileLoadBalancers(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		apiLB = lb
 
 		// Service: 6443
 		service := hcloud.LoadBalancerAddServiceOpts{
@@ -86,27 +89,39 @@ func (r *Reconciler) reconcileLoadBalancers(ctx context.Context) error {
 
 	// Ingress Load Balancer
 	if r.config.Ingress.Enabled {
-		// Name: ${cluster_name}-ingress
-		lbName := fmt.Sprintf("%s-ingress", r.config.ClusterName)
-		log.Printf("Reconciling Load Balancer %s...", lbName)
+		var lb *hcloud.LoadBalancer
+		var err error
 
-		labels := map[string]string{
-			"cluster": r.config.ClusterName,
-			"role":    "ingress",
-		}
+		if r.config.Ingress.SharedLoadBalancer {
+			// Use API Load Balancer
+			if apiLB == nil {
+				return fmt.Errorf("shared load balancer enabled but API load balancer not found (check control plane count)")
+			}
+			lb = apiLB
+			log.Printf("Using Shared Load Balancer %s for Ingress...", lb.Name)
+		} else {
+			// Name: ${cluster_name}-ingress
+			lbName := fmt.Sprintf("%s-ingress", r.config.ClusterName)
+			log.Printf("Reconciling Load Balancer %s...", lbName)
 
-		lbType := r.config.Ingress.LoadBalancerType
-		if lbType == "" {
-			lbType = "lb11"
-		}
-		algorithm := hcloud.LoadBalancerAlgorithmTypeRoundRobin
-		if r.config.Ingress.Algorithm == "least_connections" {
-			algorithm = hcloud.LoadBalancerAlgorithmTypeLeastConnections
-		}
+			labels := map[string]string{
+				"cluster": r.config.ClusterName,
+				"role":    "ingress",
+			}
 
-		lb, err := r.lbManager.EnsureLoadBalancer(ctx, lbName, r.config.Location, lbType, algorithm, labels)
-		if err != nil {
-			return err
+			lbType := r.config.Ingress.LoadBalancerType
+			if lbType == "" {
+				lbType = "lb11"
+			}
+			algorithm := hcloud.LoadBalancerAlgorithmTypeRoundRobin
+			if r.config.Ingress.Algorithm == "least_connections" {
+				algorithm = hcloud.LoadBalancerAlgorithmTypeLeastConnections
+			}
+
+			lb, err = r.lbManager.EnsureLoadBalancer(ctx, lbName, r.config.Location, lbType, algorithm, labels)
+			if err != nil {
+				return err
+			}
 		}
 
 		// Services
@@ -170,20 +185,23 @@ func (r *Reconciler) reconcileLoadBalancers(ctx context.Context) error {
 		}
 
 		// Attach to Network
-		// Private IP: cidrhost(subnet, -4) from TF
-		lbSubnetCIDR, err := r.config.GetSubnetForRole("load-balancer", 0)
-		if err != nil {
-			return err
-		}
-		privateIPStr, err := config.CIDRHost(lbSubnetCIDR, -4)
-		if err != nil {
-			return fmt.Errorf("failed to calculate Ingress LB private IP: %w", err)
-		}
-		privateIP := net.ParseIP(privateIPStr)
+		// Only attach if NOT shared (API LB is already attached)
+		if !r.config.Ingress.SharedLoadBalancer {
+			// Private IP: cidrhost(subnet, -4) from TF
+			lbSubnetCIDR, err := r.config.GetSubnetForRole("load-balancer", 0)
+			if err != nil {
+				return err
+			}
+			privateIPStr, err := config.CIDRHost(lbSubnetCIDR, -4)
+			if err != nil {
+				return fmt.Errorf("failed to calculate Ingress LB private IP: %w", err)
+			}
+			privateIP := net.ParseIP(privateIPStr)
 
-		err = r.lbManager.AttachToNetwork(ctx, lb, r.network, privateIP)
-		if err != nil {
-			return err
+			err = r.lbManager.AttachToNetwork(ctx, lb, r.network, privateIP)
+			if err != nil {
+				return err
+			}
 		}
 
 		// Targets: Workers

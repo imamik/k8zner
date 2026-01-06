@@ -126,6 +126,7 @@ type AutoscalerNodePool struct {
 // IngressConfig defines the ingress (load balancer) configuration.
 type IngressConfig struct {
 	Enabled            bool   `mapstructure:"enabled" yaml:"enabled"`
+	SharedLoadBalancer bool   `mapstructure:"shared_load_balancer" yaml:"shared_load_balancer"`
 	LoadBalancerType   string `mapstructure:"load_balancer_type" yaml:"load_balancer_type"`
 	PublicNetwork      bool   `mapstructure:"public_network_enabled" yaml:"public_network_enabled"`
 	Algorithm          string `mapstructure:"algorithm" yaml:"algorithm"`
