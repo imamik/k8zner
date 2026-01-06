@@ -13,6 +13,7 @@ type Timeouts struct {
 	ServerCreate      time.Duration // Timeout for server creation operations
 	ServerIP          time.Duration // Timeout for waiting for server IP assignment
 	Delete            time.Duration // Timeout for all delete operations
+	Action            time.Duration // Timeout for generic actions (e.g. enabling backup, assigning floating ip)
 	Bootstrap         time.Duration // Timeout for cluster bootstrap operations
 	ImageWait         time.Duration // Timeout for waiting for image availability
 	RetryMaxAttempts  int           // Maximum number of retry attempts
@@ -26,6 +27,7 @@ type Timeouts struct {
 //   - HCLOUD_TIMEOUT_SERVER_CREATE (default: 10m)
 //   - HCLOUD_TIMEOUT_SERVER_IP (default: 60s)
 //   - HCLOUD_TIMEOUT_DELETE (default: 5m)
+//   - HCLOUD_TIMEOUT_ACTION (default: 5m)
 //   - HCLOUD_TIMEOUT_BOOTSTRAP (default: 10m)
 //   - HCLOUD_TIMEOUT_IMAGE_WAIT (default: 5m)
 //   - HCLOUD_RETRY_MAX_ATTEMPTS (default: 5)
@@ -35,6 +37,7 @@ func LoadTimeouts() *Timeouts {
 		ServerCreate:      parseDuration("HCLOUD_TIMEOUT_SERVER_CREATE", 10*time.Minute),
 		ServerIP:          parseDuration("HCLOUD_TIMEOUT_SERVER_IP", 60*time.Second),
 		Delete:            parseDuration("HCLOUD_TIMEOUT_DELETE", 5*time.Minute),
+		Action:            parseDuration("HCLOUD_TIMEOUT_ACTION", 5*time.Minute),
 		Bootstrap:         parseDuration("HCLOUD_TIMEOUT_BOOTSTRAP", 10*time.Minute),
 		ImageWait:         parseDuration("HCLOUD_TIMEOUT_IMAGE_WAIT", 5*time.Minute),
 		RetryMaxAttempts:  parseInt("HCLOUD_RETRY_MAX_ATTEMPTS", 5),

@@ -10,7 +10,7 @@ import (
 )
 
 // CreateServer creates a new server with the given specifications.
-func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string) (string, error) {
+func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string, backups bool) (string, error) {
 	// Add timeout context for server creation
 	ctx, cancel := context.WithTimeout(ctx, c.timeouts.ServerCreate)
 	defer cancel()
@@ -93,6 +93,21 @@ func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverTy
 	if networkID != 0 && privateIP != "" {
 		if err := c.attachServerToNetwork(ctx, result.Server, networkID, privateIP); err != nil {
 			return "", err
+		}
+	}
+
+	// Enable backups if requested
+	if backups {
+		// Use a separate context for backup enablement as it's a new action
+		backupCtx, backupCancel := context.WithTimeout(context.Background(), c.timeouts.Action)
+		defer backupCancel()
+
+		action, _, err := c.client.Server.EnableBackup(backupCtx, result.Server, "")
+		if err != nil {
+			return "", fmt.Errorf("failed to enable backups: %w", err)
+		}
+		if err := c.client.Action.WaitFor(backupCtx, action); err != nil {
+			return "", fmt.Errorf("failed to wait for backup enablement: %w", err)
 		}
 	}
 

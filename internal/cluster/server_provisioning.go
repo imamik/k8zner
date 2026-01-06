@@ -21,6 +21,7 @@ func (r *Reconciler) ensureServer(
 	userData string,
 	pgID *int64,
 	privateIP string,
+	backups bool,
 ) (string, error) {
 	// Check if exists
 	serverID, err := r.serverProvisioner.GetServerID(ctx, serverName)
@@ -75,6 +76,7 @@ func (r *Reconciler) ensureServer(
 		pgID,
 		networkID,
 		privateIP,
+		backups,
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to create server %s: %w", serverName, err)

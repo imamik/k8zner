@@ -19,7 +19,8 @@ func (r *Reconciler) reconcileLoadBalancers(ctx context.Context) error {
 		cpCount += pool.Count
 	}
 
-	if cpCount > 0 {
+	// Only reconcile kube-api load balancer if we have control plane nodes AND it's not disabled
+	if cpCount > 0 && !r.config.ControlPlane.DisableKubeAPILoadBalancer {
 		// Name: ${cluster_name}-kube-api
 		lbName := fmt.Sprintf("%s-kube-api", r.config.ClusterName)
 		log.Printf("Reconciling Load Balancer %s...", lbName)

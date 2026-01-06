@@ -28,6 +28,7 @@ func (r *Reconciler) reconcileNodePool(
 		name      string
 		privateIP string
 		pgID      *int64
+		backups   bool
 	}
 
 	configs := make([]serverConfig, count)
@@ -43,6 +44,7 @@ func (r *Reconciler) reconcileNodePool(
 		var hostNum int
 		var subnet string
 		var err error
+		var backups bool
 
 		if role == "control-plane" {
 			// Terraform: ipv4_private = cidrhost(subnet, np_index * 10 + cp_index + 1)
@@ -51,6 +53,14 @@ func (r *Reconciler) reconcileNodePool(
 				return nil, err
 			}
 			hostNum = poolIndex*10 + (j - 1) + 1
+
+			// Find backups setting
+			for _, p := range r.config.ControlPlane.NodePools {
+				if p.Name == poolName {
+					backups = p.Backups
+					break
+				}
+			}
 		} else {
 			// Terraform: ipv4_private = cidrhost(subnet, wkr_index + 1)
 			// Note: Terraform iterates worker nodepools and uses separate subnets for each
@@ -61,6 +71,14 @@ func (r *Reconciler) reconcileNodePool(
 				return nil, err
 			}
 			hostNum = (j - 1) + 1
+
+			// Find backups setting
+			for _, p := range r.config.Workers {
+				if p.Name == poolName {
+					backups = p.Backups
+					break
+				}
+			}
 		}
 
 		privateIP, err := config.CIDRHost(subnet, hostNum)
@@ -103,6 +121,7 @@ func (r *Reconciler) reconcileNodePool(
 			name:      serverName,
 			privateIP: privateIP,
 			pgID:      currentPGID,
+			backups:   backups,
 		}
 	}
 
@@ -120,7 +139,7 @@ func (r *Reconciler) reconcileNodePool(
 		cfg := cfg // capture loop variable
 		go func() {
 			log.Printf("[server:%s] Starting at %s", cfg.name, time.Now().Format("15:04:05"))
-			ip, err := r.ensureServer(ctx, cfg.name, serverType, location, image, role, poolName, extraLabels, userData, cfg.pgID, cfg.privateIP)
+			ip, err := r.ensureServer(ctx, cfg.name, serverType, location, image, role, poolName, extraLabels, userData, cfg.pgID, cfg.privateIP, cfg.backups)
 			log.Printf("[server:%s] Completed at %s", cfg.name, time.Now().Format("15:04:05"))
 			resultChan <- serverResult{name: cfg.name, ip: ip, err: err}
 		}()

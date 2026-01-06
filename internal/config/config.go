@@ -75,10 +75,11 @@ type FirewallRule struct {
 
 // ControlPlaneConfig defines the control plane configuration.
 type ControlPlaneConfig struct {
-	NodePools             []ControlPlaneNodePool `mapstructure:"nodepools" yaml:"nodepools"`
-	PublicVIPIPv4Enabled  bool                   `mapstructure:"public_vip_ipv4_enabled" yaml:"public_vip_ipv4_enabled"`
-	PublicVIPIPv4ID       int                    `mapstructure:"public_vip_ipv4_id" yaml:"public_vip_ipv4_id"`
-	PrivateVIPIPv4Enabled bool                   `mapstructure:"private_vip_ipv4_enabled" yaml:"private_vip_ipv4_enabled"`
+	NodePools                  []ControlPlaneNodePool `mapstructure:"nodepools" yaml:"nodepools"`
+	PublicVIPIPv4Enabled       bool                   `mapstructure:"public_vip_ipv4_enabled" yaml:"public_vip_ipv4_enabled"`
+	PublicVIPIPv4ID            int                    `mapstructure:"public_vip_ipv4_id" yaml:"public_vip_ipv4_id"`
+	PrivateVIPIPv4Enabled      bool                   `mapstructure:"private_vip_ipv4_enabled" yaml:"private_vip_ipv4_enabled"`
+	DisableKubeAPILoadBalancer bool                   `mapstructure:"disable_kube_api_load_balancer" yaml:"disable_kube_api_load_balancer"`
 }
 
 // ControlPlaneNodePool defines a node pool for the control plane.
@@ -91,6 +92,7 @@ type ControlPlaneNodePool struct {
 	Annotations map[string]string `mapstructure:"annotations" yaml:"annotations"`
 	Taints      []string          `mapstructure:"taints" yaml:"taints"`
 	Image       string            `mapstructure:"image" yaml:"image"` // Optional override
+	Backups     bool              `mapstructure:"backups" yaml:"backups"`
 }
 
 // WorkerNodePool defines a node pool for workers.
@@ -104,6 +106,7 @@ type WorkerNodePool struct {
 	Taints         []string          `mapstructure:"taints" yaml:"taints"`
 	PlacementGroup bool              `mapstructure:"placement_group" yaml:"placement_group"`
 	Image          string            `mapstructure:"image" yaml:"image"` // Optional override
+	Backups        bool              `mapstructure:"backups" yaml:"backups"`
 }
 
 // AutoscalerConfig defines the autoscaler configuration.

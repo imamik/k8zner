@@ -80,7 +80,7 @@ func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architect
 		b.cleanupServer(serverName)
 	}()
 
-	serverID, err := b.provisioner.CreateServer(ctx, serverName, "debian-13", serverType, location, sshKeys, labels, "", nil, 0, "")
+	serverID, err := b.provisioner.CreateServer(ctx, serverName, "debian-13", serverType, location, sshKeys, labels, "", nil, 0, "", false)
 	if err != nil {
 		return "", fmt.Errorf("failed to create server: %w", err)
 	}

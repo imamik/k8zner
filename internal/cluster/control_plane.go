@@ -38,13 +38,22 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context) (map[string]stri
 		for _, net := range lb.PrivateNet {
 			sans = append(sans, net.IP.String())
 		}
-	}
+	} else if r.config.ControlPlane.DisableKubeAPILoadBalancer && r.config.ControlPlane.PublicVIPIPv4Enabled {
+		// If LB is disabled and FIP is enabled, use FIP as endpoint
+		fipName := names.ControlPlaneFloatingIP()
+		fip, err := r.fipManager.GetFloatingIP(ctx, fipName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get control plane floating IP: %w", err)
+		}
+		if fip != nil {
+			fipIP := fip.IP.String()
+			sans = append(sans, fipIP)
 
-	// Add Floating IPs if any (Control Plane VIP)
-	// if r.config.ControlPlane.PublicVIPIPv4Enabled {
-	// 	// TODO: Implement VIP lookup if ID not provided
-	// 	// For now assume standard pattern
-	// }
+			endpoint := fmt.Sprintf("https://%s:6443", fipIP)
+			log.Printf("Setting Talos Endpoint to Floating IP: %s", endpoint)
+			r.talosGenerator.SetEndpoint(endpoint)
+		}
+	}
 
 	// Generate Talos Config for CP
 	cpConfig, err := r.talosGenerator.GenerateControlPlaneConfig(sans)
@@ -71,6 +80,42 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context) (map[string]stri
 		}
 		for k, v := range poolIPs {
 			ips[k] = v
+		}
+
+		// If single control plane node and LB is disabled and FIP is enabled, assign FIP to the server
+		if pool.Count == 1 && r.config.ControlPlane.DisableKubeAPILoadBalancer && r.config.ControlPlane.PublicVIPIPv4Enabled {
+			// Find the server name (key of poolIPs)
+			var serverName string
+			for k := range poolIPs {
+				serverName = k
+				break
+			}
+
+			if serverName != "" {
+				log.Printf("Assigning Floating IP to single control plane node: %s", serverName)
+				serverID, err := r.serverProvisioner.GetServerID(ctx, serverName)
+				if err != nil {
+					return nil, fmt.Errorf("failed to get server ID for FIP assignment: %w", err)
+				}
+
+				// Parse server ID to int64
+				var sID int64
+				_, err = fmt.Sscanf(serverID, "%d", &sID)
+				if err != nil {
+					return nil, fmt.Errorf("failed to parse server ID: %w", err)
+				}
+
+				fipName := names.ControlPlaneFloatingIP()
+				fip, err := r.fipManager.GetFloatingIP(ctx, fipName)
+				if err != nil {
+					return nil, fmt.Errorf("failed to get floating IP: %w", err)
+				}
+				if fip != nil {
+					if err := r.fipManager.AssignFloatingIP(ctx, fip, sID); err != nil {
+						return nil, fmt.Errorf("failed to assign floating IP to server: %w", err)
+					}
+				}
+			}
 		}
 	}
 

@@ -10,7 +10,7 @@ import (
 
 // ServerProvisioner defines the interface for provisioning servers.
 type ServerProvisioner interface {
-	CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string) (string, error)
+	CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string, backups bool) (string, error)
 	DeleteServer(ctx context.Context, name string) error
 	GetServerIP(ctx context.Context, name string) (string, error)
 	EnableRescue(ctx context.Context, serverID string, sshKeyIDs []string) (string, error)
@@ -69,6 +69,7 @@ type FloatingIPManager interface {
 	EnsureFloatingIP(ctx context.Context, name, homeLocation, ipType string, labels map[string]string) (*hcloud.FloatingIP, error)
 	DeleteFloatingIP(ctx context.Context, name string) error
 	GetFloatingIP(ctx context.Context, name string) (*hcloud.FloatingIP, error)
+	AssignFloatingIP(ctx context.Context, fip *hcloud.FloatingIP, serverID int64) error
 }
 
 // CertificateManager defines the interface for managing certificates.

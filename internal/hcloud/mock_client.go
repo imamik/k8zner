@@ -51,6 +51,7 @@ type MockClient struct {
 	EnsureFloatingIPFunc func(ctx context.Context, name, homeLocation, ipType string, labels map[string]string) (*hcloud.FloatingIP, error)
 	DeleteFloatingIPFunc func(ctx context.Context, name string) error
 	GetFloatingIPFunc    func(ctx context.Context, name string) (*hcloud.FloatingIP, error)
+	AssignFloatingIPFunc func(ctx context.Context, fip *hcloud.FloatingIP, serverID int64) error
 
 	// Certificate
 	EnsureCertificateFunc func(ctx context.Context, name, certificate, privateKey string, labels map[string]string) (*hcloud.Certificate, error)
@@ -65,7 +66,7 @@ type MockClient struct {
 var _ InfrastructureManager = (*MockClient)(nil)
 
 // CreateServer mocks server creation.
-func (m *MockClient) CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string) (string, error) {
+func (m *MockClient) CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string, backups bool) (string, error) {
 	if m.CreateServerFunc != nil {
 		return m.CreateServerFunc(ctx, name, imageType, serverType, location, sshKeys, labels, userData, placementGroupID, networkID, privateIP)
 	}
@@ -190,6 +191,14 @@ func (m *MockClient) GetNetwork(ctx context.Context, name string) (*hcloud.Netwo
 		return m.GetNetworkFunc(ctx, name)
 	}
 	return nil, nil
+}
+
+// AssignFloatingIP mocks assigning a floating IP.
+func (m *MockClient) AssignFloatingIP(ctx context.Context, fip *hcloud.FloatingIP, serverID int64) error {
+	if m.AssignFloatingIPFunc != nil {
+		return m.AssignFloatingIPFunc(ctx, fip, serverID)
+	}
+	return nil
 }
 
 // EnsureFirewall mocks firewall creation.

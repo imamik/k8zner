@@ -70,3 +70,18 @@ func (c *RealClient) GetFloatingIP(ctx context.Context, name string) (*hcloud.Fl
 	fip, _, err := c.client.FloatingIP.Get(ctx, name)
 	return fip, err
 }
+
+// AssignFloatingIP assigns the floating IP to the server.
+func (c *RealClient) AssignFloatingIP(ctx context.Context, fip *hcloud.FloatingIP, serverID int64) error {
+	server := &hcloud.Server{ID: serverID}
+	action, _, err := c.client.FloatingIP.Assign(ctx, fip, server)
+	if err != nil {
+		return fmt.Errorf("failed to assign floating IP: %w", err)
+	}
+
+	if err := c.client.Action.WaitFor(ctx, action); err != nil {
+		return fmt.Errorf("failed to wait for floating IP assignment: %w", err)
+	}
+
+	return nil
+}
