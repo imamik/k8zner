@@ -32,7 +32,7 @@ func (r *Reconciler) reconcileAddons(ctx context.Context, kubeconfigPath string)
 
 	// Wait for API server to be fully ready
 	log.Println("Waiting for Kubernetes API server to be ready...")
-	if err := waitForAPIServer(ctx, k8sClient, 2*time.Minute); err != nil {
+	if err := waitForAPIServer(ctx, k8sClient, 5*time.Minute); err != nil {
 		return fmt.Errorf("kubernetes API server not ready: %w", err)
 	}
 	log.Println("✓ Kubernetes API server is ready")
