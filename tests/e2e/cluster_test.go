@@ -69,6 +69,11 @@ func TestClusterProvisioning(t *testing.T) {
 		Kubernetes: config.KubernetesConfig{
 			Version: "v1.31.0",
 		},
+		Addons: config.AddonsConfig{
+			CCM: config.CCMConfig{
+				Enabled: true,
+			},
+		},
 	}
 
 	// Use shared snapshots if available (built in TestMain)
