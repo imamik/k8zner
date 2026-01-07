@@ -220,7 +220,7 @@ func TestClusterProvisioning(t *testing.T) {
 				t.Logf("Waiting for nodes to appear... (found %d, expecting >= 2)", len(nodeList.Items))
 			}
 		}
-		endNodeCheck:
+	endNodeCheck:
 
 		// Verify CCM is installed and running
 		t.Log("Verifying Hetzner Cloud Controller Manager (CCM) installation...")
