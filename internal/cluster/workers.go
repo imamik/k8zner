@@ -3,7 +3,6 @@ package cluster
 import (
 	"context"
 	"log"
-	"time"
 )
 
 // reconcileWorkers provisions worker node pools in parallel.
@@ -17,7 +16,7 @@ func (r *Reconciler) reconcileWorkers(ctx context.Context) (map[string]string, e
 		return nil, nil
 	}
 
-	log.Printf("=== CREATING %d WORKER POOLS IN PARALLEL at %s ===", len(r.config.Workers), time.Now().Format("15:04:05"))
+	log.Printf("Creating %d worker pools...", len(r.config.Workers))
 
 	// Collect IPs from all worker pools
 	type poolResult struct {
@@ -52,6 +51,6 @@ func (r *Reconciler) reconcileWorkers(ctx context.Context) (map[string]string, e
 		}
 	}
 
-	log.Printf("=== SUCCESSFULLY CREATED ALL WORKER POOLS at %s ===", time.Now().Format("15:04:05"))
+	log.Printf("Successfully created all worker pools")
 	return allWorkerIPs, nil
 }

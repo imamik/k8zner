@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/sak-d/hcloud-k8s/internal/config"
 )
@@ -107,7 +106,7 @@ func (r *Reconciler) reconcileNodePool(
 	}
 
 	// Create all servers in parallel
-	log.Printf("=== CREATING %d SERVERS IN PARALLEL for pool %s at %s ===", count, poolName, time.Now().Format("15:04:05"))
+	log.Printf("Creating %d servers for pool %s...", count, poolName)
 	type serverResult struct {
 		name string
 		ip   string
@@ -119,9 +118,7 @@ func (r *Reconciler) reconcileNodePool(
 	for _, cfg := range configs {
 		cfg := cfg // capture loop variable
 		go func() {
-			log.Printf("[server:%s] Starting at %s", cfg.name, time.Now().Format("15:04:05"))
 			ip, err := r.ensureServer(ctx, cfg.name, serverType, location, image, role, poolName, extraLabels, userData, cfg.pgID, cfg.privateIP)
-			log.Printf("[server:%s] Completed at %s", cfg.name, time.Now().Format("15:04:05"))
 			resultChan <- serverResult{name: cfg.name, ip: ip, err: err}
 		}()
 	}
@@ -136,6 +133,6 @@ func (r *Reconciler) reconcileNodePool(
 		ips[result.name] = result.ip
 	}
 
-	log.Printf("=== SUCCESSFULLY CREATED %d SERVERS for pool %s at %s ===", count, poolName, time.Now().Format("15:04:05"))
+	log.Printf("Successfully created %d servers for pool %s", count, poolName)
 	return ips, nil
 }

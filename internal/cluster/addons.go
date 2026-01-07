@@ -67,14 +67,11 @@ func (r *Reconciler) applyManifests(ctx context.Context, addonName string, kubec
 			}
 
 			processedContent = buf.String()
-			log.Printf("  Processed template: %s", fileName)
 		} else if strings.HasSuffix(fileName, ".yaml") || strings.HasSuffix(fileName, ".yml") {
 			// Use YAML file as-is
 			processedContent = string(content)
-			log.Printf("  Included manifest: %s", fileName)
 		} else {
 			// Skip non-YAML files
-			log.Printf("  Skipped non-YAML file: %s", fileName)
 			continue
 		}
 
@@ -103,15 +100,13 @@ func (r *Reconciler) applyManifests(ctx context.Context, addonName string, kubec
 	tmpfile.Close()
 
 	// Apply manifests using kubectl
-	log.Printf("Applying combined manifests for %s using kubectl...", addonName)
 	cmd := exec.CommandContext(ctx, "kubectl", "--kubeconfig", kubeconfigPath, "apply", "-f", tmpfile.Name())
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("kubectl apply failed for %s: %w\nOutput: %s", addonName, err, string(output))
 	}
 
-	log.Printf("Successfully applied %s addon manifests", addonName)
-	log.Printf("kubectl output:\n%s", string(output))
+	log.Printf("Successfully applied %s addon", addonName)
 
 	return nil
 }

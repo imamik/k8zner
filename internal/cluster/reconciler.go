@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/sak-d/hcloud-k8s/internal/config"
@@ -107,8 +106,6 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 	}
 
 	// 2-5. Parallelize infrastructure setup after network
-	log.Printf("=== PARALLELIZING INFRASTRUCTURE SETUP at %s ===", time.Now().Format("15:04:05"))
-
 	infraTasks := []Task{
 		{
 			Name: "firewall",
@@ -120,11 +117,9 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 		{Name: "floatingIPs", Func: r.reconcileFloatingIPs},
 	}
 
-	if err := RunParallel(ctx, infraTasks, true); err != nil {
+	if err := RunParallel(ctx, infraTasks, false); err != nil {
 		return nil, err
 	}
-
-	log.Printf("=== INFRASTRUCTURE SETUP COMPLETE at %s ===", time.Now().Format("15:04:05"))
 
 	// 6. Control Plane Servers
 	cpIPs, sans, err := r.reconcileControlPlane(ctx)
