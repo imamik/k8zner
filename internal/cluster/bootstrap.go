@@ -315,7 +315,7 @@ func generateDummyCert() (string, string, error) {
 
 // ApplyWorkerConfigs applies Talos machine configurations to worker nodes.
 // This should be called after worker nodes are provisioned but before they're expected to join the cluster.
-func (b *Bootstrapper) ApplyWorkerConfigs(ctx context.Context, workerNodes map[string]string, workerConfig []byte, clientConfigBytes []byte) error {
+func (b *Bootstrapper) ApplyWorkerConfigs(ctx context.Context, workerNodes map[string]string, workerConfigs map[string][]byte, clientConfigBytes []byte) error {
 	if len(workerNodes) == 0 {
 		log.Println("No worker nodes to configure")
 		return nil
@@ -324,8 +324,12 @@ func (b *Bootstrapper) ApplyWorkerConfigs(ctx context.Context, workerNodes map[s
 	log.Printf("Applying machine configurations to %d worker nodes...", len(workerNodes))
 
 	for nodeName, nodeIP := range workerNodes {
+		nodeConfig, ok := workerConfigs[nodeName]
+		if !ok {
+			return fmt.Errorf("no config found for worker node %s", nodeName)
+		}
 		log.Printf("Applying config to worker node %s (%s)...", nodeName, nodeIP)
-		if err := b.applyMachineConfig(ctx, nodeIP, workerConfig, clientConfigBytes); err != nil {
+		if err := b.applyMachineConfig(ctx, nodeIP, nodeConfig, clientConfigBytes); err != nil {
 			return fmt.Errorf("failed to apply config to worker node %s: %w", nodeName, err)
 		}
 	}

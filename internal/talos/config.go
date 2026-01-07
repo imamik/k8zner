@@ -12,6 +12,7 @@ import (
 	"github.com/siderolabs/talos/pkg/machinery/config/generate"
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
 	"github.com/siderolabs/talos/pkg/machinery/config/machine"
+	"gopkg.in/yaml.v3"
 )
 
 // ConfigGenerator handles Talos configuration generation.
@@ -91,7 +92,8 @@ func (g *ConfigGenerator) SetEndpoint(endpoint string) {
 }
 
 // GenerateControlPlaneConfig generates the configuration for a control plane node.
-func (g *ConfigGenerator) GenerateControlPlaneConfig(san []string) ([]byte, error) {
+// If hostname is provided, it will be set in the machine config.
+func (g *ConfigGenerator) GenerateControlPlaneConfig(san []string, hostname string) ([]byte, error) {
 	vc, err := config.ParseContractFromVersion(g.talosVersion)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse version contract: %w", err)
@@ -120,11 +122,20 @@ func (g *ConfigGenerator) GenerateControlPlaneConfig(san []string) ([]byte, erro
 		return nil, err
 	}
 
+	// Set hostname if provided
+	if hostname != "" {
+		bytes, err = setHostnameInBytes(bytes, hostname)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set hostname: %w", err)
+		}
+	}
+
 	return stripComments(bytes), nil
 }
 
 // GenerateWorkerConfig generates the configuration for a worker node.
-func (g *ConfigGenerator) GenerateWorkerConfig() ([]byte, error) {
+// If hostname is provided, it will be set in the machine config.
+func (g *ConfigGenerator) GenerateWorkerConfig(hostname string) ([]byte, error) {
 	vc, err := config.ParseContractFromVersion(g.talosVersion)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse version contract: %w", err)
@@ -150,6 +161,14 @@ func (g *ConfigGenerator) GenerateWorkerConfig() ([]byte, error) {
 	bytes, err := cfg.Bytes()
 	if err != nil {
 		return nil, err
+	}
+
+	// Set hostname if provided
+	if hostname != "" {
+		bytes, err = setHostnameInBytes(bytes, hostname)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set hostname: %w", err)
+		}
 	}
 
 	return stripComments(bytes), nil
@@ -196,4 +215,37 @@ func stripComments(data []byte) []byte {
 		result = append(result, line)
 	}
 	return []byte(strings.Join(result, "\n"))
+}
+
+// setHostnameInBytes sets the hostname in a Talos machine config by modifying the config bytes.
+func setHostnameInBytes(configBytes []byte, hostname string) ([]byte, error) {
+	// Unmarshal YAML into a generic map
+	var configMap map[string]interface{}
+	if err := yaml.Unmarshal(configBytes, &configMap); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	// Navigate to machine.network and set hostname
+	machine, ok := configMap["machine"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("machine section not found in config")
+	}
+
+	// Get or create network section
+	network, ok := machine["network"].(map[string]interface{})
+	if !ok {
+		network = make(map[string]interface{})
+		machine["network"] = network
+	}
+
+	// Set hostname
+	network["hostname"] = hostname
+
+	// Marshal back to YAML
+	modifiedBytes, err := yaml.Marshal(configMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	return modifiedBytes, nil
 }

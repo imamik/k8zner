@@ -7,19 +7,14 @@ import (
 )
 
 // reconcileWorkers provisions worker node pools in parallel.
-// Returns a map of worker node names to their public IPs and the worker machine config.
-func (r *Reconciler) reconcileWorkers(ctx context.Context) (map[string]string, []byte, error) {
+// Returns a map of worker node names to their public IPs.
+func (r *Reconciler) reconcileWorkers(ctx context.Context) (map[string]string, error) {
 	log.Printf("Reconciling Workers...")
-
-	workerConfig, err := r.talosGenerator.GenerateWorkerConfig()
-	if err != nil {
-		return nil, nil, err
-	}
 
 	// Parallelize worker pool provisioning
 	if len(r.config.Workers) == 0 {
 		log.Println("No worker pools configured")
-		return nil, workerConfig, nil
+		return nil, nil
 	}
 
 	log.Printf("=== CREATING %d WORKER POOLS IN PARALLEL at %s ===", len(r.config.Workers), time.Now().Format("15:04:05"))
@@ -38,7 +33,8 @@ func (r *Reconciler) reconcileWorkers(ctx context.Context) (map[string]string, [
 		go func() {
 			// Placement Group (Managed inside reconcileNodePool for Workers due to sharding)
 			// We pass nil here, and handle it inside reconcileNodePool based on pool config and index.
-			ips, err := r.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "worker", pool.Labels, string(workerConfig), nil, poolIndex)
+			// userData is empty as configs will be generated and applied per-node in the reconciler
+			ips, err := r.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "worker", pool.Labels, "", nil, poolIndex)
 			resultChan <- poolResult{ips: ips, err: err}
 		}()
 	}
@@ -48,7 +44,7 @@ func (r *Reconciler) reconcileWorkers(ctx context.Context) (map[string]string, [
 	for i := 0; i < len(r.config.Workers); i++ {
 		result := <-resultChan
 		if result.err != nil {
-			return nil, nil, result.err
+			return nil, result.err
 		}
 		// Merge IPs from this pool
 		for name, ip := range result.ips {
@@ -57,5 +53,5 @@ func (r *Reconciler) reconcileWorkers(ctx context.Context) (map[string]string, [
 	}
 
 	log.Printf("=== SUCCESSFULLY CREATED ALL WORKER POOLS at %s ===", time.Now().Format("15:04:05"))
-	return allWorkerIPs, workerConfig, nil
+	return allWorkerIPs, nil
 }

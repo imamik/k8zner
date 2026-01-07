@@ -21,10 +21,10 @@ import (
 // Mock TalosProducer
 type MockTalosProducer struct{}
 
-func (m *MockTalosProducer) GenerateControlPlaneConfig(san []string) ([]byte, error) {
+func (m *MockTalosProducer) GenerateControlPlaneConfig(san []string, hostname string) ([]byte, error) {
 	return []byte("#cloud-config\nruncmd:\n  - echo hello"), nil
 }
-func (m *MockTalosProducer) GenerateWorkerConfig() ([]byte, error) {
+func (m *MockTalosProducer) GenerateWorkerConfig(hostname string) ([]byte, error) {
 	return []byte("#cloud-config\nruncmd:\n  - echo hello"), nil
 }
 func (m *MockTalosProducer) GetClientConfig() ([]byte, error) {

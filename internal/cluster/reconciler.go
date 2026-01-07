@@ -15,8 +15,8 @@ import (
 
 // TalosConfigProducer defines the interface for generating Talos configurations.
 type TalosConfigProducer interface {
-	GenerateControlPlaneConfig(san []string) ([]byte, error)
-	GenerateWorkerConfig() ([]byte, error)
+	GenerateControlPlaneConfig(san []string, hostname string) ([]byte, error)
+	GenerateWorkerConfig(hostname string) ([]byte, error)
 	GetClientConfig() ([]byte, error)
 	SetEndpoint(endpoint string)
 }
@@ -127,7 +127,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 	log.Printf("=== INFRASTRUCTURE SETUP COMPLETE at %s ===", time.Now().Format("15:04:05"))
 
 	// 6. Control Plane Servers
-	cpIPs, err := r.reconcileControlPlane(ctx)
+	cpIPs, sans, err := r.reconcileControlPlane(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to reconcile control plane: %w", err)
 	}
@@ -142,17 +142,15 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 			return nil, fmt.Errorf("failed to get client config: %w", err)
 		}
 
-		// Generate machine configs for each control plane node
-		// For now, all control plane nodes get the same config
-		// In the future, we could customize per-node if needed
-		cpConfig, err := r.talosGenerator.GenerateControlPlaneConfig(nil) // SANs already set during reconcileControlPlane
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate control plane config: %w", err)
-		}
-
+		// Generate per-node machine configs with hostnames
 		machineConfigs := make(map[string][]byte)
-		for name := range cpIPs {
-			machineConfigs[name] = cpConfig
+		for nodeName := range cpIPs {
+			// Generate config with this node's hostname
+			nodeConfig, err := r.talosGenerator.GenerateControlPlaneConfig(sans, nodeName)
+			if err != nil {
+				return nil, fmt.Errorf("failed to generate control plane config for %s: %w", nodeName, err)
+			}
+			machineConfigs[nodeName] = nodeConfig
 		}
 
 		kubeconfig, err = r.bootstrapper.Bootstrap(ctx, r.config.ClusterName, cpIPs, machineConfigs, clientCfg)
@@ -162,7 +160,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 	}
 
 	// 8. Worker Servers
-	workerIPs, workerConfig, err := r.reconcileWorkers(ctx)
+	workerIPs, err := r.reconcileWorkers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to reconcile workers: %w", err)
 	}
@@ -170,7 +168,18 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 	// 8a. Apply worker configurations (if workers exist and cluster is bootstrapped)
 	if len(workerIPs) > 0 && len(kubeconfig) > 0 {
 		log.Printf("Applying Talos configurations to %d worker nodes...", len(workerIPs))
-		if err := r.bootstrapper.ApplyWorkerConfigs(ctx, workerIPs, workerConfig, clientCfg); err != nil {
+
+		// Generate per-node worker configs with hostnames
+		workerConfigs := make(map[string][]byte)
+		for nodeName := range workerIPs {
+			nodeConfig, err := r.talosGenerator.GenerateWorkerConfig(nodeName)
+			if err != nil {
+				return nil, fmt.Errorf("failed to generate worker config for %s: %w", nodeName, err)
+			}
+			workerConfigs[nodeName] = nodeConfig
+		}
+
+		if err := r.bootstrapper.ApplyWorkerConfigs(ctx, workerIPs, workerConfigs, clientCfg); err != nil {
 			return nil, fmt.Errorf("failed to apply worker configs: %w", err)
 		}
 	}
