@@ -125,7 +125,8 @@ func TestReconciler_Reconcile(t *testing.T) {
 	// Talos
 	mockTalos.On("SetEndpoint", "https://5.6.7.8:6443").Return()
 	mockTalos.On("GenerateControlPlaneConfig", mock.Anything, mock.Anything).Return([]byte("cp-config"), nil)
-	mockTalos.On("GenerateWorkerConfig", mock.Anything).Return([]byte("worker-config"), nil)
+	// Note: GenerateWorkerConfig is not called in this test because cluster already exists (state marker present)
+	// Worker configs are only generated and applied when kubeconfig is available from bootstrap
 	mockTalos.On("GetClientConfig").Return([]byte("client-config"), nil)
 
 	// Servers

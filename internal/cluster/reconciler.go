@@ -186,12 +186,16 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to create temp kubeconfig: %w", err)
 		}
-		defer os.Remove(tmpKubeconfig.Name())
+		defer func() {
+			_ = os.Remove(tmpKubeconfig.Name())
+		}()
 
 		if _, err := tmpKubeconfig.Write(kubeconfig); err != nil {
 			return nil, fmt.Errorf("failed to write temp kubeconfig: %w", err)
 		}
-		tmpKubeconfig.Close()
+		if err := tmpKubeconfig.Close(); err != nil {
+			return nil, fmt.Errorf("failed to close temp kubeconfig: %w", err)
+		}
 
 		// Install CCM if enabled
 		if r.config.Addons.CCM.Enabled {

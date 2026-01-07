@@ -91,15 +91,20 @@ func (r *Reconciler) applyManifests(ctx context.Context, addonName string, kubec
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
-	defer os.Remove(tmpfile.Name())
+	defer func() {
+		_ = os.Remove(tmpfile.Name())
+	}()
 
 	if _, err := tmpfile.Write(combinedYAML.Bytes()); err != nil {
-		tmpfile.Close()
+		_ = tmpfile.Close()
 		return fmt.Errorf("failed to write temp file: %w", err)
 	}
-	tmpfile.Close()
+	if err := tmpfile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp file: %w", err)
+	}
 
 	// Apply manifests using kubectl
+	// #nosec G204 - kubeconfigPath is from internal config, tmpfile.Name() is a secure temp file we created
 	cmd := exec.CommandContext(ctx, "kubectl", "--kubeconfig", kubeconfigPath, "apply", "-f", tmpfile.Name())
 	output, err := cmd.CombinedOutput()
 	if err != nil {
