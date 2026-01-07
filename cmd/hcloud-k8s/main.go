@@ -99,7 +99,8 @@ func main() {
 			reconciler := cluster.NewReconciler(hClient, talosGen, cfg)
 
 			// 5. Run Reconcile
-			if err := reconciler.Reconcile(cmd.Context()); err != nil {
+			kubeconfig, err := reconciler.Reconcile(cmd.Context())
+			if err != nil {
 				return fmt.Errorf("reconciliation failed: %w", err)
 			}
 
@@ -114,9 +115,26 @@ func main() {
 				return fmt.Errorf("failed to write talosconfig: %w", err)
 			}
 
-			fmt.Printf("Reconciliation complete!\n")
-			fmt.Printf("Secrets saved to: %s\n", secretsFile)
-			fmt.Printf("Talos config saved to: %s\n", talosConfigPath)
+			// 7. Output Kubeconfig
+			kubeconfigPath := "kubeconfig"
+			if len(kubeconfig) > 0 {
+				if err := os.WriteFile(kubeconfigPath, kubeconfig, 0600); err != nil {
+					return fmt.Errorf("failed to write kubeconfig: %w", err)
+				}
+				fmt.Printf("\nReconciliation complete!\n")
+				fmt.Printf("Secrets saved to: %s\n", secretsFile)
+				fmt.Printf("Talos config saved to: %s\n", talosConfigPath)
+				fmt.Printf("Kubeconfig saved to: %s\n\n", kubeconfigPath)
+				fmt.Printf("You can now access your cluster with:\n")
+				fmt.Printf("  export KUBECONFIG=%s\n", kubeconfigPath)
+				fmt.Printf("  kubectl get nodes\n")
+			} else {
+				fmt.Printf("\nReconciliation complete!\n")
+				fmt.Printf("Secrets saved to: %s\n", secretsFile)
+				fmt.Printf("Talos config saved to: %s\n", talosConfigPath)
+				fmt.Printf("\nNote: Cluster was already bootstrapped. To retrieve kubeconfig, use talosctl:\n")
+				fmt.Printf("  talosctl --talosconfig %s kubeconfig\n", talosConfigPath)
+			}
 
 			return nil
 		},

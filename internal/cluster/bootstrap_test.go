@@ -31,6 +31,6 @@ func TestBootstrap_StateMarkerPresent(t *testing.T) {
 		"test-cluster-control-plane-1": []byte("machine-config"),
 	}
 
-	err := bootstrapper.Bootstrap(ctx, clusterName, controlPlaneNodes, machineConfigs, []byte("client-config"))
+	_, err := bootstrapper.Bootstrap(ctx, clusterName, controlPlaneNodes, machineConfigs, []byte("client-config"))
 	assert.NoError(t, err)
 }

@@ -163,8 +163,11 @@ func TestReconciler_Reconcile(t *testing.T) {
 	r := NewReconciler(mockInfra, mockTalos, cfg)
 
 	// Run Reconcile
-	err := r.Reconcile(ctx)
+	kubeconfig, err := r.Reconcile(ctx)
 	assert.NoError(t, err)
+	// kubeconfig may be nil if cluster already exists (state marker present)
+	// or may contain the kubeconfig if bootstrap was performed
+	_ = kubeconfig
 
 	// Verify expectations
 	mockTalos.AssertExpectations(t)
@@ -194,7 +197,7 @@ func TestReconciler_Reconcile_NetworkError(t *testing.T) {
 	r := NewReconciler(mockInfra, mockTalos, cfg)
 
 	// Run Reconcile
-	err := r.Reconcile(ctx)
+	_, err := r.Reconcile(ctx)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, expectedErr)
 }
@@ -261,7 +264,7 @@ func TestReconciler_Reconcile_ServerCreationError(t *testing.T) {
 	r := NewReconciler(mockInfra, mockTalos, cfg)
 
 	// Run Reconcile
-	err := r.Reconcile(ctx)
+	_, err := r.Reconcile(ctx)
 	assert.Error(t, err)
 	// The error might be wrapped
 	assert.Contains(t, err.Error(), expectedErr.Error())

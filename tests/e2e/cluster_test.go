@@ -4,8 +4,10 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -129,8 +131,9 @@ func TestClusterProvisioning(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 
-	err = reconciler.Reconcile(ctx)
+	kubeconfig, err := reconciler.Reconcile(ctx)
 	assert.NoError(t, err)
+	assert.NotEmpty(t, kubeconfig, "kubeconfig should be returned after bootstrap")
 
 	// Verify APIs are reachable
 	// We check for Talos API on one of the servers
@@ -158,6 +161,60 @@ func TestClusterProvisioning(t *testing.T) {
 		t.Errorf("Kube API not reachable: %v", err)
 	} else {
 		t.Log("Kube API is reachable!")
+	}
+
+	// Verify cluster with kubectl
+	t.Log("Verifying cluster with kubectl...")
+	kubeconfigPath := fmt.Sprintf("/tmp/kubeconfig-%s", clusterName)
+	if err := os.WriteFile(kubeconfigPath, kubeconfig, 0600); err != nil {
+		t.Errorf("Failed to write kubeconfig: %v", err)
+	} else {
+		defer os.Remove(kubeconfigPath)
+
+		// Try kubectl get nodes (with retries as cluster might still be initializing)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
+		nodeCheckSuccess := false
+		for {
+			select {
+			case <-ctx.Done():
+				if !nodeCheckSuccess {
+					t.Error("Timeout waiting for kubectl get nodes to succeed")
+				}
+				goto endNodeCheck
+			case <-ticker.C:
+				// Run kubectl get nodes
+				cmd := exec.CommandContext(context.Background(), "kubectl",
+					"--kubeconfig", kubeconfigPath,
+					"get", "nodes", "-o", "json")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					t.Logf("kubectl get nodes not ready yet: %v (will retry)", err)
+					continue
+				}
+
+				// Parse output to count nodes
+				var nodeList struct {
+					Items []map[string]interface{} `json:"items"`
+				}
+				if err := json.Unmarshal(output, &nodeList); err != nil {
+					t.Logf("Failed to parse kubectl output: %v (will retry)", err)
+					continue
+				}
+
+				if len(nodeList.Items) >= 2 { // 1 control plane + 1 worker
+					t.Logf("✓ kubectl verified: %d nodes found", len(nodeList.Items))
+					nodeCheckSuccess = true
+					goto endNodeCheck
+				}
+				t.Logf("Waiting for nodes to appear... (found %d, expecting >= 2)", len(nodeList.Items))
+			}
+		}
+		endNodeCheck:
 	}
 
 	// Verify Resources using Interface Getters

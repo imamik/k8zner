@@ -26,6 +26,10 @@ type ConfigGenerator struct {
 // NewConfigGenerator creates a new ConfigGenerator.
 // It attempts to load secrets from secretsFile if it exists, otherwise creates new secrets and saves them.
 func NewConfigGenerator(clusterName, kubernetesVersion, talosVersion, endpoint, secretsFile string) (*ConfigGenerator, error) {
+	// Strip 'v' prefix from kubernetesVersion if present
+	// Talos machinery adds the 'v' prefix automatically, so we need to provide the version without it
+	kubernetesVersion = strings.TrimPrefix(kubernetesVersion, "v")
+
 	vc, err := config.ParseContractFromVersion(talosVersion)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse version contract: %w", err)
