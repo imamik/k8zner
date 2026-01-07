@@ -32,12 +32,16 @@ func Apply(ctx context.Context, configPath string) error {
 		return err
 	}
 
+	if err := writeTalosFiles(talosGen); err != nil {
+		return err
+	}
+
 	kubeconfig, err := reconcileCluster(ctx, client, talosGen, cfg)
 	if err != nil {
 		return err
 	}
 
-	if err := writeOutputFiles(talosGen, kubeconfig); err != nil {
+	if err := writeKubeconfig(kubeconfig); err != nil {
 		return err
 	}
 
@@ -90,7 +94,7 @@ func reconcileCluster(ctx context.Context, client *hcloud.RealClient, talosGen *
 	return kubeconfig, nil
 }
 
-func writeOutputFiles(talosGen *talos.ConfigGenerator, kubeconfig []byte) error {
+func writeTalosFiles(talosGen *talos.ConfigGenerator) error {
 	clientCfgBytes, err := talosGen.GetClientConfig()
 	if err != nil {
 		return fmt.Errorf("failed to generate talosconfig: %w", err)
@@ -100,10 +104,16 @@ func writeOutputFiles(talosGen *talos.ConfigGenerator, kubeconfig []byte) error 
 		return fmt.Errorf("failed to write talosconfig: %w", err)
 	}
 
-	if len(kubeconfig) > 0 {
-		if err := os.WriteFile(kubeconfigPath, kubeconfig, 0600); err != nil {
-			return fmt.Errorf("failed to write kubeconfig: %w", err)
-		}
+	return nil
+}
+
+func writeKubeconfig(kubeconfig []byte) error {
+	if len(kubeconfig) == 0 {
+		return nil
+	}
+
+	if err := os.WriteFile(kubeconfigPath, kubeconfig, 0600); err != nil {
+		return fmt.Errorf("failed to write kubeconfig: %w", err)
 	}
 
 	return nil
