@@ -122,6 +122,12 @@ func (g *ConfigGenerator) GenerateControlPlaneConfig(san []string, hostname stri
 		return nil, err
 	}
 
+	// Apply cloud provider patches for Hetzner CCM (control plane includes controller manager config)
+	bytes, err = applyCloudProviderPatches(bytes, true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to apply cloud provider patches: %w", err)
+	}
+
 	// Set hostname if provided
 	if hostname != "" {
 		bytes, err = setHostnameInBytes(bytes, hostname)
@@ -161,6 +167,12 @@ func (g *ConfigGenerator) GenerateWorkerConfig(hostname string) ([]byte, error) 
 	bytes, err := cfg.Bytes()
 	if err != nil {
 		return nil, err
+	}
+
+	// Apply cloud provider patches for Hetzner CCM (worker nodes don't need controller manager config)
+	bytes, err = applyCloudProviderPatches(bytes, false)
+	if err != nil {
+		return nil, fmt.Errorf("failed to apply cloud provider patches: %w", err)
 	}
 
 	// Set hostname if provided
@@ -215,6 +227,76 @@ func stripComments(data []byte) []byte {
 		result = append(result, line)
 	}
 	return []byte(strings.Join(result, "\n"))
+}
+
+// applyCloudProviderPatches applies necessary patches for Hetzner Cloud Controller Manager.
+// This configures Talos to use external cloud provider mode, which is required for CCM to work.
+// isControlPlane should be true for control plane nodes (to patch controller manager config).
+func applyCloudProviderPatches(configBytes []byte, isControlPlane bool) ([]byte, error) {
+	// Unmarshal YAML into a generic map
+	var configMap map[string]interface{}
+	if err := yaml.Unmarshal(configBytes, &configMap); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	// Get or create machine section
+	machine, ok := configMap["machine"].(map[string]interface{})
+	if !ok {
+		machine = make(map[string]interface{})
+		configMap["machine"] = machine
+	}
+
+	// Get or create cluster section
+	cluster, ok := configMap["cluster"].(map[string]interface{})
+	if !ok {
+		cluster = make(map[string]interface{})
+		configMap["cluster"] = cluster
+	}
+
+	// 1. Enable external cloud provider in cluster config
+	cluster["externalCloudProvider"] = map[string]interface{}{
+		"enabled": true,
+	}
+
+	// 2. Configure kubelet to use external cloud provider
+	kubelet, ok := machine["kubelet"].(map[string]interface{})
+	if !ok {
+		kubelet = make(map[string]interface{})
+		machine["kubelet"] = kubelet
+	}
+
+	extraArgs, ok := kubelet["extraArgs"].(map[string]interface{})
+	if !ok {
+		extraArgs = make(map[string]interface{})
+		kubelet["extraArgs"] = extraArgs
+	}
+
+	extraArgs["cloud-provider"] = "external"
+
+	// 3. Configure controller manager to use external cloud provider (control plane only)
+	if isControlPlane {
+		controllerManager, ok := cluster["controllerManager"].(map[string]interface{})
+		if !ok {
+			controllerManager = make(map[string]interface{})
+			cluster["controllerManager"] = controllerManager
+		}
+
+		cmExtraArgs, ok := controllerManager["extraArgs"].(map[string]interface{})
+		if !ok {
+			cmExtraArgs = make(map[string]interface{})
+			controllerManager["extraArgs"] = cmExtraArgs
+		}
+
+		cmExtraArgs["cloud-provider"] = "external"
+	}
+
+	// Marshal back to YAML
+	modifiedBytes, err := yaml.Marshal(configMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	return modifiedBytes, nil
 }
 
 // setHostnameInBytes sets the hostname in a Talos machine config by modifying the config bytes.
