@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"hcloud-k8s/internal/config"
@@ -179,37 +178,14 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 		}
 	}
 
-	// 9. Install Addons (if cluster was bootstrapped with kubeconfig)
-	if len(kubeconfig) > 0 {
-		// Write kubeconfig to temp file for kubectl
-		tmpKubeconfig, err := os.CreateTemp("", "kubeconfig-*.yaml")
-		if err != nil {
-			return nil, fmt.Errorf("failed to create temp kubeconfig: %w", err)
-		}
-		defer func() {
-			_ = os.Remove(tmpKubeconfig.Name())
-		}()
-
-		if _, err := tmpKubeconfig.Write(kubeconfig); err != nil {
-			return nil, fmt.Errorf("failed to write temp kubeconfig: %w", err)
-		}
-		if err := tmpKubeconfig.Close(); err != nil {
-			return nil, fmt.Errorf("failed to close temp kubeconfig: %w", err)
-		}
-
-		// Install CCM if enabled
-		if r.config.Addons.CCM.Enabled {
-			log.Println("Installing Hetzner Cloud Controller Manager (CCM)...")
-			templateData := map[string]string{
-				"Token":     r.config.HCloudToken,
-				"NetworkID": fmt.Sprintf("%d", r.network.ID),
-			}
-			if err := r.applyManifests(ctx, "hcloud-ccm", tmpKubeconfig.Name(), templateData); err != nil {
-				return nil, fmt.Errorf("failed to install CCM addon: %w", err)
-			}
-			log.Println("CCM installation completed")
-		}
-	}
-
 	return kubeconfig, nil
+}
+
+// GetNetworkID returns the ID of the reconciled network.
+// Returns 0 if network has not been reconciled yet.
+func (r *Reconciler) GetNetworkID() int64 {
+	if r.network == nil {
+		return 0
+	}
+	return r.network.ID
 }

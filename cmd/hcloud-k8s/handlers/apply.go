@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 
+	"hcloud-k8s/internal/addons"
 	"hcloud-k8s/internal/cluster"
 	"hcloud-k8s/internal/config"
 	"hcloud-k8s/internal/hcloud"
@@ -55,13 +56,19 @@ func Apply(ctx context.Context, configPath string) error {
 		return err
 	}
 
-	kubeconfig, err := reconcileCluster(ctx, client, talosGen, cfg)
+	reconciler, kubeconfig, err := reconcileInfrastructure(ctx, client, talosGen, cfg)
 	if err != nil {
 		return err
 	}
 
 	if err := writeKubeconfig(kubeconfig); err != nil {
 		return err
+	}
+
+	if len(kubeconfig) > 0 {
+		if err := applyAddons(ctx, cfg, kubeconfig, reconciler.GetNetworkID()); err != nil {
+			return err
+		}
 	}
 
 	printSuccess(kubeconfig)
@@ -108,16 +115,30 @@ func initializeTalosGenerator(cfg *config.Config) (*talos.ConfigGenerator, error
 	return gen, nil
 }
 
-// reconcileCluster provisions infrastructure and bootstraps the Kubernetes cluster.
-// Returns kubeconfig bytes if bootstrap completed, empty slice if cluster was already bootstrapped.
-func reconcileCluster(ctx context.Context, client *hcloud.RealClient, talosGen *talos.ConfigGenerator, cfg *config.Config) ([]byte, error) {
+// reconcileInfrastructure provisions infrastructure and bootstraps the Kubernetes cluster.
+// Returns the reconciler instance and kubeconfig bytes if bootstrap completed.
+// Kubeconfig will be empty if cluster was already bootstrapped.
+func reconcileInfrastructure(ctx context.Context, client *hcloud.RealClient, talosGen *talos.ConfigGenerator, cfg *config.Config) (*cluster.Reconciler, []byte, error) {
 	reconciler := cluster.NewReconciler(client, talosGen, cfg)
 	kubeconfig, err := reconciler.Reconcile(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("reconciliation failed: %w", err)
+		return nil, nil, fmt.Errorf("reconciliation failed: %w", err)
 	}
 
-	return kubeconfig, nil
+	return reconciler, kubeconfig, nil
+}
+
+// applyAddons installs configured cluster addons like CCM, CSI drivers, etc.
+// Only called if cluster bootstrap completed successfully (kubeconfig is non-empty).
+func applyAddons(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID int64) error {
+	log.Println("Installing cluster addons...")
+
+	if err := addons.Apply(ctx, cfg, kubeconfig, networkID); err != nil {
+		return fmt.Errorf("failed to install addons: %w", err)
+	}
+
+	log.Println("Addon installation completed")
+	return nil
 }
 
 // writeTalosFiles persists Talos secrets and client config to disk.
