@@ -12,10 +12,6 @@ import (
 
 func Build(ctx context.Context, imageName, talosVersion, arch, location string) error {
 	token := os.Getenv("HCLOUD_TOKEN")
-	if token == "" {
-		return fmt.Errorf("HCLOUD_TOKEN environment variable is required")
-	}
-
 	client := hcloud.NewRealClient(token)
 	builder := image.NewBuilder(client, nil) // use default SSH communicator
 

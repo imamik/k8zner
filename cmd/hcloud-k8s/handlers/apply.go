@@ -23,18 +23,11 @@ func Apply(ctx context.Context, configPath string) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Override token from env if present, else expect it in config
-	if envToken := os.Getenv("HCLOUD_TOKEN"); envToken != "" {
-		cfg.HCloudToken = envToken
-	}
-	if cfg.HCloudToken == "" {
-		return fmt.Errorf("hcloud_token is required (in config or env HCLOUD_TOKEN)")
-	}
-
 	log.Printf("Applying configuration for cluster: %s", cfg.ClusterName)
 
 	// 2. Initialize Clients
-	hClient := hcloud.NewRealClient(cfg.HCloudToken)
+	token := os.Getenv("HCLOUD_TOKEN")
+	hClient := hcloud.NewRealClient(token)
 
 	// 3. Initialize Talos Generator
 	// Use local file for secrets persistence
