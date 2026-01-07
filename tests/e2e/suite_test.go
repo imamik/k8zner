@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	hcloud_client "github.com/sak-d/hcloud-k8s/internal/hcloud"
-	"github.com/sak-d/hcloud-k8s/internal/image"
+	hcloud_client "hcloud-k8s/internal/hcloud"
+	"hcloud-k8s/internal/image"
 )
 
 // SharedTestContext holds resources shared across E2E tests.

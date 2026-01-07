@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/sak-d/hcloud-k8s/internal/retry"
+	"hcloud-k8s/internal/retry"
 )
 
 // ensureServer ensures a server exists and returns its IP.

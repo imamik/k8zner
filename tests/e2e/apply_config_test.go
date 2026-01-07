@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	hcloud_internal "github.com/sak-d/hcloud-k8s/internal/hcloud"
-	talos_config "github.com/sak-d/hcloud-k8s/internal/talos"
+	hcloud_internal "hcloud-k8s/internal/hcloud"
+	talos_config "hcloud-k8s/internal/talos"
 	"github.com/siderolabs/talos/pkg/machinery/api/machine"
 	"github.com/siderolabs/talos/pkg/machinery/client"
 	"github.com/siderolabs/talos/pkg/machinery/client/config"

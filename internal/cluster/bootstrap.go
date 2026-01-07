@@ -13,8 +13,8 @@ import (
 	"math/big"
 	"time"
 
-	hcloud_internal "github.com/sak-d/hcloud-k8s/internal/hcloud"
-	"github.com/sak-d/hcloud-k8s/internal/netutil"
+	hcloud_internal "hcloud-k8s/internal/hcloud"
+	"hcloud-k8s/internal/netutil"
 	"github.com/siderolabs/talos/pkg/machinery/api/machine"
 	"github.com/siderolabs/talos/pkg/machinery/client"
 	"github.com/siderolabs/talos/pkg/machinery/client/config"

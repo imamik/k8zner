@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	hcloud_internal "github.com/sak-d/hcloud-k8s/internal/hcloud"
+	hcloud_internal "hcloud-k8s/internal/hcloud"
 	"github.com/siderolabs/talos/pkg/machinery/client"
 	"github.com/stretchr/testify/require"
 )

@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sak-d/hcloud-k8s/internal/cluster"
-	"github.com/sak-d/hcloud-k8s/internal/config"
-	hcloud_client "github.com/sak-d/hcloud-k8s/internal/hcloud"
-	"github.com/sak-d/hcloud-k8s/internal/talos"
+	"hcloud-k8s/internal/cluster"
+	"hcloud-k8s/internal/config"
+	hcloud_client "hcloud-k8s/internal/hcloud"
+	"hcloud-k8s/internal/talos"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

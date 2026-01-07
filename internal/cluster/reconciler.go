@@ -8,8 +8,8 @@ import (
 	"os"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
-	"github.com/sak-d/hcloud-k8s/internal/config"
-	hcloud_internal "github.com/sak-d/hcloud-k8s/internal/hcloud"
+	"hcloud-k8s/internal/config"
+	hcloud_internal "hcloud-k8s/internal/hcloud"
 )
 
 // TalosConfigProducer defines the interface for generating Talos configurations.

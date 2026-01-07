@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sak-d/hcloud-k8s/internal/hcloud"
-	"github.com/sak-d/hcloud-k8s/internal/image"
+	"hcloud-k8s/internal/hcloud"
+	"hcloud-k8s/internal/image"
 )
 
 // TestSnapshotCreation tests the snapshot build process from scratch.

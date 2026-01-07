@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
-	"github.com/sak-d/hcloud-k8s/internal/cluster"
-	"github.com/sak-d/hcloud-k8s/internal/config"
-	hcloud_internal "github.com/sak-d/hcloud-k8s/internal/hcloud"
+	"hcloud-k8s/internal/cluster"
+	"hcloud-k8s/internal/config"
+	hcloud_internal "hcloud-k8s/internal/hcloud"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

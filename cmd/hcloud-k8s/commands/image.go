@@ -3,7 +3,7 @@ package commands
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/sak-d/hcloud-k8s/cmd/hcloud-k8s/handlers"
+	"hcloud-k8s/cmd/hcloud-k8s/handlers"
 )
 
 // Image returns the parent command for managing Talos Linux images.

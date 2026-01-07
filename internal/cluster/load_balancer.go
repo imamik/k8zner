@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
-	"github.com/sak-d/hcloud-k8s/internal/config"
+	"hcloud-k8s/internal/config"
 )
 
 func (r *Reconciler) reconcileLoadBalancers(ctx context.Context) error {

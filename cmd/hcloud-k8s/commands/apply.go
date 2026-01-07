@@ -3,7 +3,7 @@ package commands
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/sak-d/hcloud-k8s/cmd/hcloud-k8s/handlers"
+	"hcloud-k8s/cmd/hcloud-k8s/handlers"
 )
 
 // Apply returns the command for provisioning and managing Kubernetes clusters.

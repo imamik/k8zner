@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sak-d/hcloud-k8s/cmd/hcloud-k8s/commands"
+	"hcloud-k8s/cmd/hcloud-k8s/commands"
 )
 
 func main() {

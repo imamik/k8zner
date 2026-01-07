@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
-	"github.com/sak-d/hcloud-k8s/internal/retry"
+	"hcloud-k8s/internal/retry"
 )
 
 // EnsureCertificate ensures that a certificate exists with the given specifications.

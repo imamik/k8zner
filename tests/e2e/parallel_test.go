@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sak-d/hcloud-k8s/internal/cluster"
-	"github.com/sak-d/hcloud-k8s/internal/config"
-	"github.com/sak-d/hcloud-k8s/internal/talos"
+	"hcloud-k8s/internal/cluster"
+	"hcloud-k8s/internal/config"
+	"hcloud-k8s/internal/talos"
 )
 
 // TestParallelProvisioning tests cluster provisioning with MULTIPLE servers to validate parallelization.

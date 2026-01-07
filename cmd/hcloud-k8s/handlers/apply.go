@@ -11,10 +11,10 @@ import (
 	"log"
 	"os"
 
-	"github.com/sak-d/hcloud-k8s/internal/cluster"
-	"github.com/sak-d/hcloud-k8s/internal/config"
-	"github.com/sak-d/hcloud-k8s/internal/hcloud"
-	"github.com/sak-d/hcloud-k8s/internal/talos"
+	"hcloud-k8s/internal/cluster"
+	"hcloud-k8s/internal/config"
+	"hcloud-k8s/internal/hcloud"
+	"hcloud-k8s/internal/talos"
 )
 
 const (

@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
-	"github.com/sak-d/hcloud-k8s/internal/retry"
+	"hcloud-k8s/internal/retry"
 )
 
 // CreateServer creates a new server with the given specifications.

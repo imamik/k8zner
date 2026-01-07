@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/sak-d/hcloud-k8s/internal/config"
+	"hcloud-k8s/internal/config"
 )
 
 // reconcileNodePool provisions a pool of servers in parallel.
