@@ -97,7 +97,7 @@ func TestInfraProvisioning(t *testing.T) {
 
 	// RUN RECONCILE
 	t.Logf("Running Reconcile for %s...", clusterName)
-	err := reconciler.Reconcile(ctx)
+	_, err := reconciler.Reconcile(ctx)
 	if err != nil {
 		t.Logf("Reconcile returned error: %v", err)
 	}

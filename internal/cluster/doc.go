@@ -51,7 +51,11 @@
 //	talosGen := talos.NewGenerator(config)
 //	reconciler := cluster.NewReconciler(infra, talosGen, config)
 //
-//	if err := reconciler.Reconcile(ctx); err != nil {
+//	kubeconfig, err := reconciler.Reconcile(ctx)
+//	if err != nil {
 //	    log.Fatal(err)
 //	}
+//
+//	// Save kubeconfig
+//	os.WriteFile("kubeconfig", kubeconfig, 0600)
 package cluster

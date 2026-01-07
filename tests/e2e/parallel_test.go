@@ -101,7 +101,7 @@ func TestParallelProvisioning(t *testing.T) {
 	defer cancel()
 
 	startTime := time.Now()
-	err = reconciler.Reconcile(ctx)
+	_, err = reconciler.Reconcile(ctx)
 	duration := time.Since(startTime)
 
 	t.Logf("Reconciliation took: %s", duration)

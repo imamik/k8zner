@@ -65,17 +65,18 @@ func NewReconciler(
 }
 
 // Reconcile ensures that the desired state matches the actual state.
-func (r *Reconciler) Reconcile(ctx context.Context) error {
+// Returns the kubeconfig bytes if bootstrap was performed, or nil if cluster already existed.
+func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 	log.Println("Starting reconciliation...")
 
 	// 0. Calculate Subnets.
 	if err := r.config.CalculateSubnets(); err != nil {
-		return fmt.Errorf("failed to calculate subnets: %w", err)
+		return nil, fmt.Errorf("failed to calculate subnets: %w", err)
 	}
 
 	// 1. Network.
 	if err := r.reconcileNetwork(ctx); err != nil {
-		return fmt.Errorf("failed to reconcile network: %w", err)
+		return nil, fmt.Errorf("failed to reconcile network: %w", err)
 	}
 
 	// 1.5. Pre-build all required Talos images in parallel with public IP fetch
@@ -101,7 +102,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 	}
 
 	if err := RunParallel(ctx, imageTasks, false); err != nil {
-		return err
+		return nil, err
 	}
 
 	// 2-5. Parallelize infrastructure setup after network
@@ -119,7 +120,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 	}
 
 	if err := RunParallel(ctx, infraTasks, true); err != nil {
-		return err
+		return nil, err
 	}
 
 	log.Printf("=== INFRASTRUCTURE SETUP COMPLETE at %s ===", time.Now().Format("15:04:05"))
@@ -127,14 +128,15 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 	// 6. Control Plane Servers
 	cpIPs, err := r.reconcileControlPlane(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to reconcile control plane: %w", err)
+		return nil, fmt.Errorf("failed to reconcile control plane: %w", err)
 	}
 
-	// 7. Bootstrap
+	// 7. Bootstrap and retrieve kubeconfig
+	var kubeconfig []byte
 	if len(cpIPs) > 0 {
 		clientCfg, err := r.talosGenerator.GetClientConfig()
 		if err != nil {
-			return fmt.Errorf("failed to get client config: %w", err)
+			return nil, fmt.Errorf("failed to get client config: %w", err)
 		}
 
 		// Generate machine configs for each control plane node
@@ -142,7 +144,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 		// In the future, we could customize per-node if needed
 		cpConfig, err := r.talosGenerator.GenerateControlPlaneConfig(nil) // SANs already set during reconcileControlPlane
 		if err != nil {
-			return fmt.Errorf("failed to generate control plane config: %w", err)
+			return nil, fmt.Errorf("failed to generate control plane config: %w", err)
 		}
 
 		machineConfigs := make(map[string][]byte)
@@ -150,15 +152,16 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 			machineConfigs[name] = cpConfig
 		}
 
-		if err := r.bootstrapper.Bootstrap(ctx, r.config.ClusterName, cpIPs, machineConfigs, clientCfg); err != nil {
-			return fmt.Errorf("failed to bootstrap cluster: %w", err)
+		kubeconfig, err = r.bootstrapper.Bootstrap(ctx, r.config.ClusterName, cpIPs, machineConfigs, clientCfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to bootstrap cluster: %w", err)
 		}
 	}
 
 	// 8. Worker Servers
 	if err := r.reconcileWorkers(ctx); err != nil {
-		return fmt.Errorf("failed to reconcile workers: %w", err)
+		return nil, fmt.Errorf("failed to reconcile workers: %w", err)
 	}
 
-	return nil
+	return kubeconfig, nil
 }
