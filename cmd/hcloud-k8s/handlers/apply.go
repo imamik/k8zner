@@ -30,11 +30,15 @@ const (
 //  1. Loads and validates cluster configuration from the specified YAML file
 //  2. Initializes Hetzner Cloud client using HCLOUD_TOKEN environment variable
 //  3. Generates Talos machine configurations and persists secrets immediately
-//  4. Reconciles cluster infrastructure (networks, servers, load balancers)
+//  4. Reconciles cluster infrastructure (networks, servers, load balancers, bootstrap)
 //  5. Writes kubeconfig if cluster bootstrap completed successfully
+//  6. Installs configured cluster addons (CCM, CSI, etc.) if bootstrap succeeded
 //
 // Secrets and Talos config are written before reconciliation to ensure they're
 // preserved even if reconciliation fails, enabling retry without data loss.
+//
+// Addon installation is performed separately after infrastructure provisioning
+// to maintain clean separation between infrastructure and cluster components.
 //
 // The function expects HCLOUD_TOKEN to be set in the environment and will
 // delegate validation to the Hetzner Cloud client.
