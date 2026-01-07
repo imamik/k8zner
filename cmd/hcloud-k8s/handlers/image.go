@@ -10,6 +10,17 @@ import (
 	"github.com/sak-d/hcloud-k8s/internal/image"
 )
 
+// Build creates a custom Talos Linux snapshot on Hetzner Cloud.
+//
+// This function provisions a temporary build server, installs Talos Linux
+// with the specified version and architecture, creates a snapshot, and
+// cleans up the build resources.
+//
+// The resulting snapshot can be used as the base image for cluster nodes
+// when provisioning with the apply command.
+//
+// The function expects HCLOUD_TOKEN to be set in the environment and will
+// delegate validation to the Hetzner Cloud client.
 func Build(ctx context.Context, imageName, talosVersion, arch, location string) error {
 	token := os.Getenv("HCLOUD_TOKEN")
 	client := hcloud.NewRealClient(token)

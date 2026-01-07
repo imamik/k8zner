@@ -6,6 +6,17 @@ import (
 	"github.com/sak-d/hcloud-k8s/cmd/hcloud-k8s/handlers"
 )
 
+// Apply returns the command for provisioning and managing Kubernetes clusters.
+//
+// This command handles the complete lifecycle of cluster provisioning:
+// loading configuration, initializing infrastructure, generating secrets,
+// and bootstrapping Kubernetes using Talos Linux.
+//
+// Required flags:
+//   --config, -c: Path to cluster configuration YAML file
+//
+// Environment variables:
+//   HCLOUD_TOKEN: Hetzner Cloud API token (required)
 func Apply() *cobra.Command {
 	var configPath string
 

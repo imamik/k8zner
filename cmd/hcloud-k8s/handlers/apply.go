@@ -1,3 +1,8 @@
+// Package handlers implements the business logic for CLI commands.
+//
+// This package contains handler functions that are called by command definitions
+// in the commands package. Handlers are framework-agnostic and can be tested
+// independently of the CLI framework.
 package handlers
 
 import (
@@ -13,11 +18,25 @@ import (
 )
 
 const (
-	secretsFile      = "secrets.yaml"
-	talosConfigPath  = "talosconfig"
-	kubeconfigPath   = "kubeconfig"
+	secretsFile     = "secrets.yaml"
+	talosConfigPath = "talosconfig"
+	kubeconfigPath  = "kubeconfig"
 )
 
+// Apply provisions a Kubernetes cluster on Hetzner Cloud using Talos Linux.
+//
+// This function orchestrates the complete cluster provisioning workflow:
+//  1. Loads and validates cluster configuration from the specified YAML file
+//  2. Initializes Hetzner Cloud client using HCLOUD_TOKEN environment variable
+//  3. Generates Talos machine configurations and persists secrets immediately
+//  4. Reconciles cluster infrastructure (networks, servers, load balancers)
+//  5. Writes kubeconfig if cluster bootstrap completed successfully
+//
+// Secrets and Talos config are written before reconciliation to ensure they're
+// preserved even if reconciliation fails, enabling retry without data loss.
+//
+// The function expects HCLOUD_TOKEN to be set in the environment and will
+// delegate validation to the Hetzner Cloud client.
 func Apply(ctx context.Context, configPath string) error {
 	cfg, err := loadConfig(configPath)
 	if err != nil {
@@ -49,6 +68,7 @@ func Apply(ctx context.Context, configPath string) error {
 	return nil
 }
 
+// loadConfig loads and validates cluster configuration from a YAML file.
 func loadConfig(configPath string) (*config.Config, error) {
 	if configPath == "" {
 		return nil, fmt.Errorf("config file is required (use --config)")
@@ -62,11 +82,15 @@ func loadConfig(configPath string) (*config.Config, error) {
 	return cfg, nil
 }
 
+// initializeClient creates a Hetzner Cloud client using HCLOUD_TOKEN from environment.
+// Token validation is delegated to the client.
 func initializeClient() *hcloud.RealClient {
 	token := os.Getenv("HCLOUD_TOKEN")
 	return hcloud.NewRealClient(token)
 }
 
+// initializeTalosGenerator creates a Talos configuration generator for the cluster.
+// Generates machine configs, certificates, and client secrets for cluster access.
 func initializeTalosGenerator(cfg *config.Config) (*talos.ConfigGenerator, error) {
 	endpoint := fmt.Sprintf("https://%s-kube-api:6443", cfg.ClusterName)
 
@@ -84,6 +108,8 @@ func initializeTalosGenerator(cfg *config.Config) (*talos.ConfigGenerator, error
 	return gen, nil
 }
 
+// reconcileCluster provisions infrastructure and bootstraps the Kubernetes cluster.
+// Returns kubeconfig bytes if bootstrap completed, empty slice if cluster was already bootstrapped.
 func reconcileCluster(ctx context.Context, client *hcloud.RealClient, talosGen *talos.ConfigGenerator, cfg *config.Config) ([]byte, error) {
 	reconciler := cluster.NewReconciler(client, talosGen, cfg)
 	kubeconfig, err := reconciler.Reconcile(ctx)
@@ -94,6 +120,8 @@ func reconcileCluster(ctx context.Context, client *hcloud.RealClient, talosGen *
 	return kubeconfig, nil
 }
 
+// writeTalosFiles persists Talos secrets and client config to disk.
+// Must be called before reconciliation to ensure secrets survive failures.
 func writeTalosFiles(talosGen *talos.ConfigGenerator) error {
 	clientCfgBytes, err := talosGen.GetClientConfig()
 	if err != nil {
@@ -107,6 +135,8 @@ func writeTalosFiles(talosGen *talos.ConfigGenerator) error {
 	return nil
 }
 
+// writeKubeconfig persists the Kubernetes client config to disk.
+// Only writes if kubeconfig is non-empty (i.e., cluster bootstrap succeeded).
 func writeKubeconfig(kubeconfig []byte) error {
 	if len(kubeconfig) == 0 {
 		return nil
@@ -119,6 +149,8 @@ func writeKubeconfig(kubeconfig []byte) error {
 	return nil
 }
 
+// printSuccess outputs completion message and next steps for the user.
+// Message varies depending on whether this was initial bootstrap or re-apply.
 func printSuccess(kubeconfig []byte) {
 	fmt.Printf("\nReconciliation complete!\n")
 	fmt.Printf("Secrets saved to: %s\n", secretsFile)

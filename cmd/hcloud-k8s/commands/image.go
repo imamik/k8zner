@@ -6,6 +6,10 @@ import (
 	"github.com/sak-d/hcloud-k8s/cmd/hcloud-k8s/handlers"
 )
 
+// Image returns the parent command for managing Talos Linux images.
+//
+// This command provides subcommands for building and managing custom
+// Talos Linux snapshots that can be used for cluster node provisioning.
 func Image() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "image",
@@ -17,6 +21,20 @@ func Image() *cobra.Command {
 	return cmd
 }
 
+// Build returns the command for building custom Talos Linux snapshots.
+//
+// This command creates a Hetzner Cloud snapshot with a specific Talos Linux
+// version and architecture. The snapshot can then be referenced in cluster
+// configuration files for node provisioning.
+//
+// Flags:
+//   --name: Snapshot name (default: "talos")
+//   --version: Talos version to install (default: "v1.7.0")
+//   --arch: CPU architecture - amd64 or arm64 (default: "amd64")
+//   --location: Hetzner datacenter location (default: "nbg1")
+//
+// Environment variables:
+//   HCLOUD_TOKEN: Hetzner Cloud API token (required)
 func Build() *cobra.Command {
 	var (
 		imageName    string
