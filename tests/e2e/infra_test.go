@@ -30,7 +30,17 @@ func (m *MockTalosProducer) GenerateWorkerConfig() ([]byte, error) {
 func (m *MockTalosProducer) GetClientConfig() ([]byte, error) {
 	return []byte("mock-client-config"), nil
 }
+func (m *MockTalosProducer) GetKubeconfig(ctx context.Context, nodeIP string) ([]byte, error) {
+	return []byte("mock-kubeconfig"), nil
+}
 func (m *MockTalosProducer) SetEndpoint(endpoint string) {}
+
+// Mock AddonManager
+type MockAddonManager struct{}
+
+func (m *MockAddonManager) EnsureAddons(ctx context.Context) error {
+	return nil
+}
 
 func TestInfraProvisioning(t *testing.T) {
 	t.Parallel() // Run in parallel with other tests
@@ -80,6 +90,7 @@ func TestInfraProvisioning(t *testing.T) {
 	cfg.SSHKeys = []string{sshKeyName}
 
 	reconciler := cluster.NewReconciler(client, &MockTalosProducer{}, cfg)
+	reconciler.SetAddonManager(&MockAddonManager{})
 
 	// CLEANUP
 	defer func() {
@@ -141,7 +152,7 @@ func TestInfraProvisioning(t *testing.T) {
 	// Check Service
 	assert.Equal(t, 1, len(lb.Services))
 	assert.Equal(t, 6443, lb.Services[0].ListenPort)
-	assert.Equal(t, "401", lb.Services[0].HealthCheck.HTTP.StatusCodes[0])
+	assert.Equal(t, hcloud.LoadBalancerServiceProtocolTCP, lb.Services[0].HealthCheck.Protocol)
 	// Check Private IP
 	require.Equal(t, 1, len(lb.PrivateNet))
 	t.Logf("LB Private IP: %s", lb.PrivateNet[0].IP.String())

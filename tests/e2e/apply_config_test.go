@@ -60,7 +60,7 @@ func TestApplyConfig(t *testing.T) {
 		"purpose": "config-application-test",
 	}
 
-	serverID, err := hcloudClient.CreateServer(ctx, serverName, snapshotID, "cpx22", "nbg1", []string{sshKeyName}, labels, "", nil, 0, "")
+	serverID, err := hcloudClient.CreateServer(ctx, serverName, snapshotID, "cpx22", "nbg1", []string{sshKeyName}, labels, "", nil, 0, "", nil)
 	require.NoError(t, err, "Failed to create server")
 	require.NotEmpty(t, serverID, "Server ID should not be empty")
 
@@ -93,6 +93,8 @@ func TestApplyConfig(t *testing.T) {
 		"v1.31.0", // Kubernetes version
 		"v1.8.3",  // Talos version
 		endpoint,  // Control plane endpoint with port
+		"none",    // CNI type
+		nil,       // Registry mirrors
 		"",        // No existing secrets file, will generate new
 	)
 	require.NoError(t, err, "Should be able to create config generator")

@@ -57,7 +57,7 @@ func TestSimpleTalosNode(t *testing.T) {
 		"purpose": "connectivity-test",
 	}
 
-	serverID, err := hcloudClient.CreateServer(ctx, serverName, snapshotID, "cpx22", "nbg1", []string{sshKeyName}, labels, "", nil, 0, "")
+	serverID, err := hcloudClient.CreateServer(ctx, serverName, snapshotID, "cpx22", "nbg1", []string{sshKeyName}, labels, "", nil, 0, "", nil)
 	require.NoError(t, err, "Failed to create server")
 	require.NotEmpty(t, serverID, "Server ID should not be empty")
 

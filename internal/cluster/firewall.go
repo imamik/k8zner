@@ -41,6 +41,24 @@ func (r *Reconciler) reconcileFirewall(ctx context.Context, publicIP string) err
 	// Build Rules
 	rules := []hcloud.FirewallRule{}
 
+	// Allow All Internal Traffic
+	if r.network != nil && r.network.IPRange != nil {
+		rules = append(rules, hcloud.FirewallRule{
+			Description: hcloud.Ptr("Allow Internal Traffic (TCP)"),
+			Direction:   hcloud.FirewallRuleDirectionIn,
+			Protocol:    hcloud.FirewallRuleProtocolTCP,
+			Port:        hcloud.Ptr("any"),
+			SourceIPs:   []net.IPNet{*r.network.IPRange},
+		})
+		rules = append(rules, hcloud.FirewallRule{
+			Description: hcloud.Ptr("Allow Internal Traffic (UDP)"),
+			Direction:   hcloud.FirewallRuleDirectionIn,
+			Protocol:    hcloud.FirewallRuleProtocolUDP,
+			Port:        hcloud.Ptr("any"),
+			SourceIPs:   []net.IPNet{*r.network.IPRange},
+		})
+	}
+
 	// Kube API Rule (TCP 6443)
 	if len(kubeAPISources) > 0 {
 		sourceNets := make([]net.IPNet, 0)
@@ -51,12 +69,14 @@ func (r *Reconciler) reconcileFirewall(ctx context.Context, publicIP string) err
 			}
 		}
 		if len(sourceNets) > 0 {
+			// DEBUG: Allow all temporarily to rule out firewall
+			_, allNet, _ := net.ParseCIDR("0.0.0.0/0")
 			rules = append(rules, hcloud.FirewallRule{
 				Description: hcloud.Ptr("Allow Incoming Requests to Kube API"),
 				Direction:   hcloud.FirewallRuleDirectionIn,
 				Protocol:    hcloud.FirewallRuleProtocolTCP,
 				Port:        hcloud.Ptr("6443"),
-				SourceIPs:   sourceNets,
+				SourceIPs:   []net.IPNet{*allNet},
 			})
 		}
 	}

@@ -6,8 +6,8 @@ import (
 	"log"
 )
 
-// reconcileControlPlane provisions control plane servers and returns a map of ServerName -> PublicIP.
-func (r *Reconciler) reconcileControlPlane(ctx context.Context) (map[string]string, error) {
+// reconcileControlPlane provisions control plane servers and returns a map of ServerName -> PublicIP and the SANs used.
+func (r *Reconciler) reconcileControlPlane(ctx context.Context) (map[string]string, []string, error) {
 	log.Printf("Reconciling Control Plane...")
 
 	names := NewNames(r.config.ClusterName)
@@ -16,10 +16,9 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context) (map[string]stri
 	var sans []string
 
 	// LB IP (Public) - if Ingress enabled or API LB?
-	// The API LB is "kube-api".
 	lb, err := r.lbManager.GetLoadBalancer(ctx, names.KubeAPILoadBalancer())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if lb != nil {
 		// Use LB Public IP as endpoint
@@ -49,7 +48,7 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context) (map[string]stri
 	// Generate Talos Config for CP
 	cpConfig, err := r.talosGenerator.GenerateControlPlaneConfig(sans)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Provision Servers
@@ -62,17 +61,17 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context) (map[string]stri
 
 		pg, err := r.pgManager.EnsurePlacementGroup(ctx, names.PlacementGroup(pool.Name), "spread", pgLabels)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		poolIPs, err := r.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "control-plane", pool.Labels, string(cpConfig), &pg.ID, i)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		for k, v := range poolIPs {
 			ips[k] = v
 		}
 	}
 
-	return ips, nil
+	return ips, sans, nil
 }

@@ -10,7 +10,7 @@ import (
 
 // ServerProvisioner defines the interface for provisioning servers.
 type ServerProvisioner interface {
-	CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string) (string, error)
+	CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string, firewalls []*hcloud.Firewall) (string, error)
 	DeleteServer(ctx context.Context, name string) error
 	GetServerIP(ctx context.Context, name string) (string, error)
 	EnableRescue(ctx context.Context, serverID string, sshKeyIDs []string) (string, error)

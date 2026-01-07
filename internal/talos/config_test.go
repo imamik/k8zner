@@ -23,7 +23,7 @@ func TestGenerateControlPlaneConfig(t *testing.T) {
 		_ = os.Remove(secretsFile)
 	}()
 
-	gen, err := NewConfigGenerator(clusterName, k8sVersion, talosVersion, endpoint, secretsFile)
+	gen, err := NewConfigGenerator(clusterName, k8sVersion, talosVersion, endpoint, "none", nil, secretsFile)
 	assert.NoError(t, err)
 	assert.NotNil(t, gen)
 
@@ -58,7 +58,7 @@ func TestGenerateWorkerConfig(t *testing.T) {
 		_ = os.Remove(secretsFile)
 	}()
 
-	gen, err := NewConfigGenerator(clusterName, k8sVersion, talosVersion, endpoint, secretsFile)
+	gen, err := NewConfigGenerator(clusterName, k8sVersion, talosVersion, endpoint, "none", nil, secretsFile)
 	assert.NoError(t, err)
 	assert.NotNil(t, gen)
 

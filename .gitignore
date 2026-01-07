@@ -9,3 +9,9 @@ hcloud-k8s
 # Logs
 logs/
 *.log
+
+# Kubeconfig/Talosconfig
+kubeconfig
+talosconfig
+**/kubeconfig
+**/talosconfig

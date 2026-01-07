@@ -4,14 +4,15 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sak-d/hcloud-k8s/internal/hcloud"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	hcloud_internal "github.com/sak-d/hcloud-k8s/internal/hcloud"
 	"github.com/sak-d/hcloud-k8s/internal/image"
 	"github.com/sak-d/hcloud-k8s/internal/ssh"
 )
 
 func TestBuild(t *testing.T) {
-	mockClient := &hcloud.MockClient{
-		CreateServerFunc: func(_ context.Context, _ string, _ string, _ string, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string) (string, error) {
+	mockClient := &hcloud_internal.MockClient{
+		CreateServerFunc: func(_ context.Context, _ string, _ string, _ string, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string, _ []*hcloud.Firewall) (string, error) {
 			return "123", nil
 		},
 		GetServerIPFunc: func(_ context.Context, _ string) (string, error) {

@@ -89,6 +89,8 @@ func main() {
 				cfg.Kubernetes.Version,
 				cfg.Talos.Version,
 				endpoint,
+				cfg.Kubernetes.CNI.Type,
+				cfg.Talos.RegistryMirrors,
 				secretsFile,
 			)
 			if err != nil {

@@ -136,9 +136,16 @@ type IngressConfig struct {
 
 // TalosConfig defines the Talos-specific configuration.
 type TalosConfig struct {
-	Version    string        `mapstructure:"version" yaml:"version"`
-	Extensions []string      `mapstructure:"extensions" yaml:"extensions"`
-	Upgrade    UpgradeConfig `mapstructure:"upgrade" yaml:"upgrade"`
+	Version         string           `mapstructure:"version" yaml:"version"`
+	Extensions      []string         `mapstructure:"extensions" yaml:"extensions"`
+	RegistryMirrors []RegistryMirror `mapstructure:"registry_mirrors" yaml:"registry_mirrors"`
+	Upgrade         UpgradeConfig    `mapstructure:"upgrade" yaml:"upgrade"`
+}
+
+// RegistryMirror defines a container registry mirror.
+type RegistryMirror struct {
+	Endpoint string   `mapstructure:"endpoint" yaml:"endpoint"`
+	Mirrors  []string `mapstructure:"mirrors" yaml:"mirrors"`
 }
 
 // UpgradeConfig defines the upgrade-related configuration.
@@ -151,9 +158,10 @@ type UpgradeConfig struct {
 
 // KubernetesConfig defines the Kubernetes-specific configuration.
 type KubernetesConfig struct {
-	Version string     `mapstructure:"version" yaml:"version"`
-	OIDC    OIDCConfig `mapstructure:"oidc" yaml:"oidc"`
-	CNI     CNIConfig  `mapstructure:"cni" yaml:"cni"`
+	Version  string     `mapstructure:"version" yaml:"version"`
+	OIDC     OIDCConfig `mapstructure:"oidc" yaml:"oidc"`
+	CNI      CNIConfig  `mapstructure:"cni" yaml:"cni"`
+	Endpoint string     `mapstructure:"endpoint" yaml:"endpoint"` // Custom endpoint override
 }
 
 // OIDCConfig defines the OIDC authentication configuration.
@@ -165,6 +173,7 @@ type OIDCConfig struct {
 
 // CNIConfig defines the CNI-related configuration.
 type CNIConfig struct {
+	Type       string `mapstructure:"type" yaml:"type"`             // cilium, none, etc.
 	Encryption string `mapstructure:"encryption" yaml:"encryption"` // ipsec, wireguard
 }
 

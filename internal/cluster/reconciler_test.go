@@ -33,14 +33,30 @@ func (m *MockTalosProducer) GetClientConfig() ([]byte, error) {
 	return args.Get(0).([]byte), args.Error(1)
 }
 
+func (m *MockTalosProducer) GetKubeconfig(ctx context.Context, nodeIP string) ([]byte, error) {
+	args := m.Called(ctx, nodeIP)
+	return args.Get(0).([]byte), args.Error(1)
+}
+
 func (m *MockTalosProducer) SetEndpoint(endpoint string) {
 	m.Called(endpoint)
+}
+
+// MockAddonManager implementation.
+type MockAddonManager struct {
+	mock.Mock
+}
+
+func (m *MockAddonManager) EnsureAddons(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
 }
 
 func TestReconciler_Reconcile(t *testing.T) {
 	// Setup Mocks
 	mockInfra := &hcloud_internal.MockClient{}
 	mockTalos := &MockTalosProducer{}
+	mockAddons := &MockAddonManager{}
 
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
@@ -127,12 +143,16 @@ func TestReconciler_Reconcile(t *testing.T) {
 	mockTalos.On("GenerateControlPlaneConfig", mock.Anything).Return([]byte("cp-config"), nil)
 	mockTalos.On("GenerateWorkerConfig").Return([]byte("worker-config"), nil)
 	mockTalos.On("GetClientConfig").Return([]byte("client-config"), nil)
+	mockTalos.On("GetKubeconfig", mock.Anything, "10.0.1.2").Return([]byte("apiVersion: v1\nclusters:\n- cluster:\n    server: https://127.0.0.1\n  name: test\ncontexts:\n- context:\n    cluster: test\n    user: test\n  name: test\ncurrent-context: test\nkind: Config\nusers:\n- name: test"), nil)
+
+	// Addons
+	mockAddons.On("EnsureAddons", mock.Anything).Return(nil)
 
 	// Servers
 	mockInfra.GetServerIDFunc = func(_ context.Context, _ string) (string, error) {
 		return "", nil // Does not exist
 	}
-	mockInfra.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string) (string, error) {
+	mockInfra.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string, _ []*hcloud.Firewall) (string, error) {
 		return "server-id", nil
 	}
 	mockInfra.GetServerIPFunc = func(_ context.Context, _ string) (string, error) {
@@ -161,6 +181,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 	}
 
 	r := NewReconciler(mockInfra, mockTalos, cfg)
+	r.SetAddonManager(mockAddons)
 
 	// Run Reconcile
 	err := r.Reconcile(ctx)
@@ -168,6 +189,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 
 	// Verify expectations
 	mockTalos.AssertExpectations(t)
+	mockAddons.AssertExpectations(t)
 }
 
 func TestReconciler_Reconcile_NetworkError(t *testing.T) {
@@ -247,7 +269,7 @@ func TestReconciler_Reconcile_ServerCreationError(t *testing.T) {
 	mockInfra.EnsurePlacementGroupFunc = func(_ context.Context, _, _ string, _ map[string]string) (*hcloud.PlacementGroup, error) {
 		return &hcloud.PlacementGroup{ID: 1}, nil
 	}
-	mockInfra.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string) (string, error) {
+	mockInfra.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string, _ []*hcloud.Firewall) (string, error) {
 		return "", expectedErr
 	}
 	mockInfra.GetSnapshotByLabelsFunc = func(_ context.Context, labels map[string]string) (*hcloud.Image, error) {

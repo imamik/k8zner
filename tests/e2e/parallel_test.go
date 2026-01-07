@@ -87,7 +87,7 @@ func TestParallelProvisioning(t *testing.T) {
 	}
 
 	// Create Talos generator
-	talosGen, err := talos.NewConfigGenerator(cfg.ClusterName, cfg.Kubernetes.Version, cfg.Talos.Version, "", "")
+	talosGen, err := talos.NewConfigGenerator(cfg.ClusterName, cfg.Kubernetes.Version, cfg.Talos.Version, "", cfg.Kubernetes.CNI.Type, cfg.Talos.RegistryMirrors, "")
 	if err != nil {
 		t.Fatalf("Failed to create Talos generator: %v", err)
 	}

@@ -3,6 +3,7 @@ package hcloud
 import (
 	"context"
 	"fmt"
+	"log"
 	"strconv"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
@@ -10,7 +11,7 @@ import (
 )
 
 // CreateServer creates a new server with the given specifications.
-func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string) (string, error) {
+func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string, firewalls []*hcloud.Firewall) (string, error) {
 	// Add timeout context for server creation
 	ctx, cancel := context.WithTimeout(ctx, c.timeouts.ServerCreate)
 	defer cancel()
@@ -53,16 +54,27 @@ func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverTy
 
 	// Build server creation options
 	opts := hcloud.ServerCreateOpts{
-		Name:             name,
-		ServerType:       serverTypeObj,
-		Image:            imageObj,
-		SSHKeys:          sshKeyObjs,
-		Labels:           labels,
-		UserData:         userData,
-		Location:         locObj,
-		PlacementGroup:   pgObj,
-		StartAfterCreate: startAfterCreate,
+		Name:           name,
+		ServerType:     serverTypeObj,
+		Image:          imageObj,
+		SSHKeys:        sshKeyObjs,
+		Labels:         labels,
+		UserData:       userData,
+		Location:       locObj,
+		PlacementGroup: pgObj,
 	}
+
+	if len(firewalls) > 0 {
+		log.Printf("[hcloud:client] Creating server %s with %d firewalls", name, len(firewalls))
+		opts.Firewalls = make([]*hcloud.ServerCreateFirewall, len(firewalls))
+		for i, fw := range firewalls {
+			opts.Firewalls[i] = &hcloud.ServerCreateFirewall{
+				Firewall: *fw,
+			}
+		}
+	}
+
+	opts.StartAfterCreate = startAfterCreate
 
 	// Create server with retry logic
 	var result hcloud.ServerCreateResult

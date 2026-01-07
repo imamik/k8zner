@@ -120,7 +120,7 @@ func TestClusterProvisioning(t *testing.T) {
 
 	// Initialize Managers
 	// Use real Talos generator for a "real" E2E run
-	talosGen, err := talos.NewConfigGenerator(clusterName, cfg.Kubernetes.Version, cfg.Talos.Version, "", "")
+	talosGen, err := talos.NewConfigGenerator(clusterName, cfg.Kubernetes.Version, cfg.Talos.Version, "", cfg.Kubernetes.CNI.Type, cfg.Talos.RegistryMirrors, "")
 	assert.NoError(t, err)
 
 	reconciler := cluster.NewReconciler(hClient, talosGen, cfg)

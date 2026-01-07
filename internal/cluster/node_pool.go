@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/sak-d/hcloud-k8s/internal/config"
 )
 
@@ -120,7 +121,14 @@ func (r *Reconciler) reconcileNodePool(
 		cfg := cfg // capture loop variable
 		go func() {
 			log.Printf("[server:%s] Starting at %s", cfg.name, time.Now().Format("15:04:05"))
-			ip, err := r.ensureServer(ctx, cfg.name, serverType, location, image, role, poolName, extraLabels, userData, cfg.pgID, cfg.privateIP)
+			var fws []*hcloud.Firewall
+			if r.firewall != nil {
+				log.Printf("[node_pool] Attaching firewall %s to server %s", r.firewall.Name, cfg.name)
+				fws = []*hcloud.Firewall{r.firewall}
+			} else {
+				log.Printf("[node_pool] WARNING: r.firewall is nil, no firewall attached to server %s", cfg.name)
+			}
+			ip, err := r.ensureServer(ctx, cfg.name, serverType, location, image, role, poolName, extraLabels, userData, cfg.pgID, cfg.privateIP, fws)
 			log.Printf("[server:%s] Completed at %s", cfg.name, time.Now().Format("15:04:05"))
 			resultChan <- serverResult{name: cfg.name, ip: ip, err: err}
 		}()

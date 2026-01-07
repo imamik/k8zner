@@ -5,11 +5,14 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	"github.com/sak-d/hcloud-k8s/internal/addons"
 	"github.com/sak-d/hcloud-k8s/internal/config"
 	hcloud_internal "github.com/sak-d/hcloud-k8s/internal/hcloud"
+	"github.com/sak-d/hcloud-k8s/internal/k8s"
 )
 
 // TalosConfigProducer defines the interface for generating Talos configurations.
@@ -17,6 +20,7 @@ type TalosConfigProducer interface {
 	GenerateControlPlaneConfig(san []string) ([]byte, error)
 	GenerateWorkerConfig() ([]byte, error)
 	GetClientConfig() ([]byte, error)
+	GetKubeconfig(ctx context.Context, nodeIP string) ([]byte, error)
 	SetEndpoint(endpoint string)
 }
 
@@ -32,6 +36,7 @@ type Reconciler struct {
 	snapshotManager   hcloud_internal.SnapshotManager
 	infra             hcloud_internal.InfrastructureManager // Combined interface for Bootstrapper
 	talosGenerator    TalosConfigProducer
+	addonManager      addons.AddonManager // Optional, set during reconcileAddons
 	config            *config.Config
 	bootstrapper      *Bootstrapper
 	timeouts          *config.Timeouts
@@ -62,6 +67,11 @@ func NewReconciler(
 		bootstrapper:      NewBootstrapper(infra),
 		timeouts:          config.LoadTimeouts(),
 	}
+}
+
+// SetAddonManager injects a custom addon manager (mostly for testing).
+func (r *Reconciler) SetAddonManager(mgr addons.AddonManager) {
+	r.addonManager = mgr
 }
 
 // Reconcile ensures that the desired state matches the actual state.
@@ -125,7 +135,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 	log.Printf("=== INFRASTRUCTURE SETUP COMPLETE at %s ===", time.Now().Format("15:04:05"))
 
 	// 6. Control Plane Servers
-	cpIPs, err := r.reconcileControlPlane(ctx)
+	cpIPs, cpSANs, err := r.reconcileControlPlane(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to reconcile control plane: %w", err)
 	}
@@ -138,9 +148,8 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 		}
 
 		// Generate machine configs for each control plane node
-		// For now, all control plane nodes get the same config
-		// In the future, we could customize per-node if needed
-		cpConfig, err := r.talosGenerator.GenerateControlPlaneConfig(nil) // SANs already set during reconcileControlPlane
+		// Use the SANs gathered during control plane reconciliation
+		cpConfig, err := r.talosGenerator.GenerateControlPlaneConfig(cpSANs)
 		if err != nil {
 			return fmt.Errorf("failed to generate control plane config: %w", err)
 		}
@@ -160,5 +169,94 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 		return fmt.Errorf("failed to reconcile workers: %w", err)
 	}
 
+	// 9. Addons (CCM, CSI, CNI)
+	if err := r.reconcileAddons(ctx, cpIPs); err != nil {
+		return fmt.Errorf("failed to reconcile addons: %w", err)
+	}
+
 	return nil
+}
+func (r *Reconciler) reconcileAddons(ctx context.Context, cpIPs map[string]string) error {
+	if len(cpIPs) == 0 {
+		return nil
+	}
+
+	log.Println("Reconciling Kubernetes addons...")
+
+	// 1. Get first CP IP
+	var nodeIP string
+	for _, ip := range cpIPs {
+		nodeIP = ip
+		break
+	}
+
+	// 2. Retrieve Kubeconfig
+	kubeconfig, err := r.talosGenerator.GetKubeconfig(ctx, nodeIP)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve kubeconfig: %w", err)
+	}
+
+	// 3. Save Kubeconfig locally
+	kubeconfigPath := "kubeconfig"
+	if err := os.WriteFile(kubeconfigPath, kubeconfig, 0600); err != nil {
+		log.Printf("Warning: Failed to write kubeconfig to %s: %v", kubeconfigPath, err)
+	} else {
+		log.Printf("Kubeconfig saved to %s", kubeconfigPath)
+	}
+
+	// 3.5 Save talosconfig for debug
+	if talosconfig, err := r.talosGenerator.GetClientConfig(); err == nil {
+		if err := os.WriteFile("talosconfig", talosconfig, 0600); err == nil {
+			log.Printf("Talosconfig saved to talosconfig for debug")
+		}
+	}
+
+	// 4. Wait for Kubernetes API to be ready
+	log.Println("Waiting for Kubernetes API to be ready...")
+	if err := r.waitForKubeAPI(ctx, kubeconfig); err != nil {
+		return fmt.Errorf("kubernetes API failed to become ready: %w", err)
+	}
+
+	// 5. Initialize Addon Manager if not already set
+	if r.addonManager == nil {
+		addonMgr, err := addons.NewManager(kubeconfig, r.config, r.network.ID)
+		if err != nil {
+			return fmt.Errorf("failed to initialize addon manager: %w", err)
+		}
+		r.addonManager = addonMgr
+	}
+
+	// 6. Ensure Addons
+	return r.addonManager.EnsureAddons(ctx)
+}
+
+func (r *Reconciler) waitForKubeAPI(ctx context.Context, kubeconfig []byte) error {
+	kClient, err := k8s.NewClient(kubeconfig)
+	if err != nil {
+		return err
+	}
+
+	timeout := 10 * time.Minute
+	deadline := time.Now().Add(timeout)
+	backoff := 5 * time.Second
+
+	for {
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timeout waiting for Kubernetes API")
+		}
+
+		_, err := kClient.Clientset.Discovery().ServerVersion()
+		if err == nil {
+			log.Println("Kubernetes API is ready!")
+			return nil
+		}
+
+		log.Printf("Waiting for Kubernetes API... (%v)", err)
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(backoff):
+		}
+	}
 }

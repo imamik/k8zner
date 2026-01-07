@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/sak-d/hcloud-k8s/internal/retry"
 )
 
@@ -21,6 +22,7 @@ func (r *Reconciler) ensureServer(
 	userData string,
 	pgID *int64,
 	privateIP string,
+	firewalls []*hcloud.Firewall,
 ) (string, error) {
 	// Check if exists
 	serverID, err := r.serverProvisioner.GetServerID(ctx, serverName)
@@ -75,6 +77,7 @@ func (r *Reconciler) ensureServer(
 		pgID,
 		networkID,
 		privateIP,
+		firewalls,
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to create server %s: %w", serverName, err)

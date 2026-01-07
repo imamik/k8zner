@@ -2,16 +2,21 @@
 package talos
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/siderolabs/talos/pkg/machinery/config"
+	hcloud_config "github.com/sak-d/hcloud-k8s/internal/config"
+	"github.com/siderolabs/talos/pkg/machinery/client"
+	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
+	talos_config "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/generate"
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
 	"github.com/siderolabs/talos/pkg/machinery/config/machine"
+	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
 )
 
 // ConfigGenerator handles Talos configuration generation.
@@ -20,13 +25,14 @@ type ConfigGenerator struct {
 	kubernetesVersion string
 	talosVersion      string
 	endpoint          string
+	cniType           string
+	registryMirrors   []hcloud_config.RegistryMirror
 	secretsBundle     *secrets.Bundle
 }
 
 // NewConfigGenerator creates a new ConfigGenerator.
-// It attempts to load secrets from secretsFile if it exists, otherwise creates new secrets and saves them.
-func NewConfigGenerator(clusterName, kubernetesVersion, talosVersion, endpoint, secretsFile string) (*ConfigGenerator, error) {
-	vc, err := config.ParseContractFromVersion(talosVersion)
+func NewConfigGenerator(clusterName, kubernetesVersion, talosVersion, endpoint, cniType string, registryMirrors []hcloud_config.RegistryMirror, secretsFile string) (*ConfigGenerator, error) {
+	vc, err := talos_config.ParseContractFromVersion(talosVersion)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse version contract: %w", err)
 	}
@@ -77,6 +83,8 @@ func NewConfigGenerator(clusterName, kubernetesVersion, talosVersion, endpoint, 
 		kubernetesVersion: kubernetesVersion,
 		talosVersion:      talosVersion,
 		endpoint:          endpoint,
+		cniType:           cniType,
+		registryMirrors:   registryMirrors,
 		secretsBundle:     sb,
 	}, nil
 }
@@ -88,30 +96,60 @@ func (g *ConfigGenerator) SetEndpoint(endpoint string) {
 
 // GenerateControlPlaneConfig generates the configuration for a control plane node.
 func (g *ConfigGenerator) GenerateControlPlaneConfig(san []string) ([]byte, error) {
-	vc, err := config.ParseContractFromVersion(g.talosVersion)
+	vc, err := talos_config.ParseContractFromVersion(g.talosVersion)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse version contract: %w", err)
+	}
+
+	opts := []generate.Option{
+		generate.WithVersionContract(vc),
+		generate.WithSecretsBundle(g.secretsBundle),
+		generate.WithAdditionalSubjectAltNames(san),
+		generate.WithInstallDisk("/dev/sda"),
+	}
+
+	// Disable CNI if requested (required for Cilium/external CNI)
+	if g.cniType == "none" || g.cniType == "cilium" {
+		opts = append(opts, generate.WithClusterCNIConfig(&v1alpha1.CNIConfig{CNIName: "none"}))
+	}
+
+	// Add Registry Mirrors
+	for _, m := range g.registryMirrors {
+		opts = append(opts, generate.WithRegistryMirror(m.Endpoint, m.Mirrors...))
 	}
 
 	input, err := generate.NewInput(
 		g.clusterName,
 		g.endpoint,
 		g.kubernetesVersion,
-		generate.WithVersionContract(vc),
-		generate.WithSecretsBundle(g.secretsBundle),
-		generate.WithAdditionalSubjectAltNames(san),
-		generate.WithInstallDisk("/dev/sda"), // Hetzner Cloud uses /dev/sda
+		opts...,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create input: %w", err)
 	}
 
-	cfg, err := input.Config(machine.TypeControlPlane)
+	p, err := input.Config(machine.TypeControlPlane)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate control plane config: %w", err)
 	}
 
-	bytes, err := cfg.Bytes()
+	// Enable external cloud provider
+	p, err = p.PatchV1Alpha1(func(cfg *v1alpha1.Config) error {
+		if cfg.ClusterConfig == nil {
+			cfg.ClusterConfig = &v1alpha1.ClusterConfig{}
+		}
+		if cfg.ClusterConfig.ExternalCloudProviderConfig == nil {
+			cfg.ClusterConfig.ExternalCloudProviderConfig = &v1alpha1.ExternalCloudProviderConfig{}
+		}
+		enabled := true
+		cfg.ClusterConfig.ExternalCloudProviderConfig.ExternalEnabled = &enabled
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to patch control plane config: %w", err)
+	}
+
+	bytes, err := p.Bytes()
 	if err != nil {
 		return nil, err
 	}
@@ -121,29 +159,59 @@ func (g *ConfigGenerator) GenerateControlPlaneConfig(san []string) ([]byte, erro
 
 // GenerateWorkerConfig generates the configuration for a worker node.
 func (g *ConfigGenerator) GenerateWorkerConfig() ([]byte, error) {
-	vc, err := config.ParseContractFromVersion(g.talosVersion)
+	vc, err := talos_config.ParseContractFromVersion(g.talosVersion)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse version contract: %w", err)
+	}
+
+	opts := []generate.Option{
+		generate.WithVersionContract(vc),
+		generate.WithSecretsBundle(g.secretsBundle),
+		generate.WithInstallDisk("/dev/sda"),
+	}
+
+	// Disable CNI if requested
+	if g.cniType == "none" || g.cniType == "cilium" {
+		opts = append(opts, generate.WithClusterCNIConfig(&v1alpha1.CNIConfig{CNIName: "none"}))
+	}
+
+	// Add Registry Mirrors
+	for _, m := range g.registryMirrors {
+		opts = append(opts, generate.WithRegistryMirror(m.Endpoint, m.Mirrors...))
 	}
 
 	input, err := generate.NewInput(
 		g.clusterName,
 		g.endpoint,
 		g.kubernetesVersion,
-		generate.WithVersionContract(vc),
-		generate.WithSecretsBundle(g.secretsBundle),
-		generate.WithInstallDisk("/dev/sda"), // Hetzner Cloud uses /dev/sda
+		opts...,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create input: %w", err)
 	}
 
-	cfg, err := input.Config(machine.TypeWorker)
+	p, err := input.Config(machine.TypeWorker)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate worker config: %w", err)
 	}
 
-	bytes, err := cfg.Bytes()
+	// Enable external cloud provider
+	p, err = p.PatchV1Alpha1(func(cfg *v1alpha1.Config) error {
+		if cfg.ClusterConfig == nil {
+			cfg.ClusterConfig = &v1alpha1.ClusterConfig{}
+		}
+		if cfg.ClusterConfig.ExternalCloudProviderConfig == nil {
+			cfg.ClusterConfig.ExternalCloudProviderConfig = &v1alpha1.ExternalCloudProviderConfig{}
+		}
+		enabled := true
+		cfg.ClusterConfig.ExternalCloudProviderConfig.ExternalEnabled = &enabled
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to patch worker config: %w", err)
+	}
+
+	bytes, err := p.Bytes()
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +221,7 @@ func (g *ConfigGenerator) GenerateWorkerConfig() ([]byte, error) {
 
 // GetClientConfig returns the talosconfig for the cluster.
 func (g *ConfigGenerator) GetClientConfig() ([]byte, error) {
-	vc, err := config.ParseContractFromVersion(g.talosVersion)
+	vc, err := talos_config.ParseContractFromVersion(g.talosVersion)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse version contract: %w", err)
 	}
@@ -179,6 +247,32 @@ func (g *ConfigGenerator) GetClientConfig() ([]byte, error) {
 	}
 
 	return bytes, nil
+}
+
+// GetKubeconfig retrieves the admin kubeconfig from a control plane node.
+func (g *ConfigGenerator) GetKubeconfig(ctx context.Context, nodeIP string) ([]byte, error) {
+	clientCfgBytes, err := g.GetClientConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	cfg, err := clientconfig.FromBytes(clientCfgBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load client config: %w", err)
+	}
+
+	talosClient, err := client.New(ctx, client.WithConfig(cfg), client.WithEndpoints(nodeIP))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create talos client: %w", err)
+	}
+	defer func() { _ = talosClient.Close() }()
+
+	kubeconfig, err := talosClient.Kubeconfig(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve kubeconfig: %w", err)
+	}
+
+	return kubeconfig, nil
 }
 
 func stripComments(data []byte) []byte {
