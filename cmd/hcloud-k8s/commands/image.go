@@ -12,12 +12,12 @@ func Image() *cobra.Command {
 		Short: "Manage Talos images",
 	}
 
-	cmd.AddCommand(build())
+	cmd.AddCommand(Build())
 
 	return cmd
 }
 
-func build() *cobra.Command {
+func Build() *cobra.Command {
 	var (
 		imageName    string
 		talosVersion string
