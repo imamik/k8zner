@@ -215,6 +215,49 @@ func TestClusterProvisioning(t *testing.T) {
 			}
 		}
 		endNodeCheck:
+
+		// Verify CCM is installed and running
+		t.Log("Verifying Hetzner Cloud Controller Manager (CCM) installation...")
+
+		// Check if CCM deployment exists
+		cmd := exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"get", "deployment", "-n", "kube-system", "hcloud-cloud-controller-manager", "-o", "json")
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Errorf("CCM deployment not found: %v\nOutput: %s", err, string(output))
+		} else {
+			t.Log("✓ CCM deployment exists")
+		}
+
+		// Check if hcloud secret exists
+		cmd = exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"get", "secret", "-n", "kube-system", "hcloud", "-o", "json")
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			t.Errorf("hcloud secret not found: %v\nOutput: %s", err, string(output))
+		} else {
+			t.Log("✓ hcloud secret exists")
+
+			// Verify secret contains required keys
+			var secret struct {
+				Data map[string]string `json:"data"`
+			}
+			if err := json.Unmarshal(output, &secret); err != nil {
+				t.Errorf("Failed to parse secret: %v", err)
+			} else {
+				if _, ok := secret.Data["token"]; !ok {
+					t.Error("hcloud secret missing 'token' key")
+				}
+				if _, ok := secret.Data["network"]; !ok {
+					t.Error("hcloud secret missing 'network' key")
+				}
+				if len(secret.Data) >= 2 {
+					t.Log("✓ hcloud secret contains required keys")
+				}
+			}
+		}
 	}
 
 	// Verify Resources using Interface Getters

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
@@ -133,8 +134,10 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 
 	// 7. Bootstrap and retrieve kubeconfig
 	var kubeconfig []byte
+	var clientCfg []byte
 	if len(cpIPs) > 0 {
-		clientCfg, err := r.talosGenerator.GetClientConfig()
+		var err error
+		clientCfg, err = r.talosGenerator.GetClientConfig()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get client config: %w", err)
 		}
@@ -159,8 +162,45 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 	}
 
 	// 8. Worker Servers
-	if err := r.reconcileWorkers(ctx); err != nil {
+	workerIPs, workerConfig, err := r.reconcileWorkers(ctx)
+	if err != nil {
 		return nil, fmt.Errorf("failed to reconcile workers: %w", err)
+	}
+
+	// 8a. Apply worker configurations (if workers exist and cluster is bootstrapped)
+	if len(workerIPs) > 0 && len(kubeconfig) > 0 {
+		log.Printf("Applying Talos configurations to %d worker nodes...", len(workerIPs))
+		if err := r.bootstrapper.ApplyWorkerConfigs(ctx, workerIPs, workerConfig, clientCfg); err != nil {
+			return nil, fmt.Errorf("failed to apply worker configs: %w", err)
+		}
+	}
+
+	// 9. Install Addons (if cluster was bootstrapped with kubeconfig)
+	if len(kubeconfig) > 0 {
+		// Write kubeconfig to temp file for kubectl
+		tmpKubeconfig, err := os.CreateTemp("", "kubeconfig-*.yaml")
+		if err != nil {
+			return nil, fmt.Errorf("failed to create temp kubeconfig: %w", err)
+		}
+		defer os.Remove(tmpKubeconfig.Name())
+
+		if _, err := tmpKubeconfig.Write(kubeconfig); err != nil {
+			return nil, fmt.Errorf("failed to write temp kubeconfig: %w", err)
+		}
+		tmpKubeconfig.Close()
+
+		// Install CCM if enabled
+		if r.config.Addons.CCM.Enabled {
+			log.Println("Installing Hetzner Cloud Controller Manager (CCM)...")
+			templateData := map[string]string{
+				"Token":     r.config.HCloudToken,
+				"NetworkID": fmt.Sprintf("%d", r.network.ID),
+			}
+			if err := r.applyManifests(ctx, "hcloud-ccm", tmpKubeconfig.Name(), templateData); err != nil {
+				return nil, fmt.Errorf("failed to install CCM addon: %w", err)
+			}
+			log.Println("CCM installation completed")
+		}
 	}
 
 	return kubeconfig, nil

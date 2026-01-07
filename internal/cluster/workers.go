@@ -2,47 +2,60 @@ package cluster
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"time"
 )
 
 // reconcileWorkers provisions worker node pools in parallel.
-func (r *Reconciler) reconcileWorkers(ctx context.Context) error {
+// Returns a map of worker node names to their public IPs and the worker machine config.
+func (r *Reconciler) reconcileWorkers(ctx context.Context) (map[string]string, []byte, error) {
 	log.Printf("Reconciling Workers...")
 
 	workerConfig, err := r.talosGenerator.GenerateWorkerConfig()
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 
 	// Parallelize worker pool provisioning
 	if len(r.config.Workers) == 0 {
 		log.Println("No worker pools configured")
-		return nil
+		return nil, workerConfig, nil
 	}
 
 	log.Printf("=== CREATING %d WORKER POOLS IN PARALLEL at %s ===", len(r.config.Workers), time.Now().Format("15:04:05"))
 
+	// Collect IPs from all worker pools
+	type poolResult struct {
+		ips map[string]string
+		err error
+	}
+	resultChan := make(chan poolResult, len(r.config.Workers))
+
 	// Build tasks for parallel execution
-	tasks := make([]Task, len(r.config.Workers))
 	for i, pool := range r.config.Workers {
-		tasks[i] = Task{
-			Name: fmt.Sprintf("workerPool:%s", pool.Name),
-			Func: func(ctx context.Context) error {
-				// Placement Group (Managed inside reconcileNodePool for Workers due to sharding)
-				// We pass nil here, and handle it inside reconcileNodePool based on pool config and index.
-				_, err := r.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "worker", pool.Labels, string(workerConfig), nil, i)
-				return err
-			},
+		pool := pool // capture loop variable
+		poolIndex := i
+		go func() {
+			// Placement Group (Managed inside reconcileNodePool for Workers due to sharding)
+			// We pass nil here, and handle it inside reconcileNodePool based on pool config and index.
+			ips, err := r.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "worker", pool.Labels, string(workerConfig), nil, poolIndex)
+			resultChan <- poolResult{ips: ips, err: err}
+		}()
+	}
+
+	// Collect results from all worker pools
+	allWorkerIPs := make(map[string]string)
+	for i := 0; i < len(r.config.Workers); i++ {
+		result := <-resultChan
+		if result.err != nil {
+			return nil, nil, result.err
+		}
+		// Merge IPs from this pool
+		for name, ip := range result.ips {
+			allWorkerIPs[name] = ip
 		}
 	}
 
-	// Execute all worker pools in parallel with logging
-	if err := RunParallel(ctx, tasks, true); err != nil {
-		return err
-	}
-
 	log.Printf("=== SUCCESSFULLY CREATED ALL WORKER POOLS at %s ===", time.Now().Format("15:04:05"))
-	return nil
+	return allWorkerIPs, workerConfig, nil
 }

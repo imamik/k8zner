@@ -312,3 +312,34 @@ func generateDummyCert() (string, string, error) {
 
 	return string(certPEM), string(keyPEM), nil
 }
+
+// ApplyWorkerConfigs applies Talos machine configurations to worker nodes.
+// This should be called after worker nodes are provisioned but before they're expected to join the cluster.
+func (b *Bootstrapper) ApplyWorkerConfigs(ctx context.Context, workerNodes map[string]string, workerConfig []byte, clientConfigBytes []byte) error {
+	if len(workerNodes) == 0 {
+		log.Println("No worker nodes to configure")
+		return nil
+	}
+
+	log.Printf("Applying machine configurations to %d worker nodes...", len(workerNodes))
+
+	for nodeName, nodeIP := range workerNodes {
+		log.Printf("Applying config to worker node %s (%s)...", nodeName, nodeIP)
+		if err := b.applyMachineConfig(ctx, nodeIP, workerConfig, clientConfigBytes); err != nil {
+			return fmt.Errorf("failed to apply config to worker node %s: %w", nodeName, err)
+		}
+	}
+
+	// Wait for all worker nodes to reboot and become ready
+	log.Println("Waiting for worker nodes to reboot and become ready...")
+	for nodeName, nodeIP := range workerNodes {
+		log.Printf("Waiting for worker node %s (%s) to be ready...", nodeName, nodeIP)
+		if err := b.waitForNodeReady(ctx, nodeIP, clientConfigBytes); err != nil {
+			return fmt.Errorf("worker node %s failed to become ready: %w", nodeName, err)
+		}
+		log.Printf("Worker node %s is ready", nodeName)
+	}
+
+	log.Println("All worker nodes configured successfully")
+	return nil
+}
