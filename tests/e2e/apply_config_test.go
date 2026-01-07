@@ -97,8 +97,8 @@ func TestApplyConfig(t *testing.T) {
 	)
 	require.NoError(t, err, "Should be able to create config generator")
 
-	// Generate control plane config
-	machineConfigBytes, err := configGenerator.GenerateControlPlaneConfig([]string{nodeIP})
+	// Generate control plane config with hostname matching server name
+	machineConfigBytes, err := configGenerator.GenerateControlPlaneConfig([]string{nodeIP}, serverName)
 	require.NoError(t, err, "Should be able to generate control plane config")
 	require.NotEmpty(t, machineConfigBytes, "Machine config should not be empty")
 

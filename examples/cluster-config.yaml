@@ -39,3 +39,11 @@ talos:
 
   # The Kubernetes version to run.
   k8s_version: "1.32.0"
+
+# Addons Configuration
+addons:
+  # Hetzner Cloud Controller Manager (CCM)
+  # Provides cloud provider integration for Kubernetes on Hetzner Cloud.
+  # Enabled by default - set to false to disable.
+  ccm:
+    enabled: true

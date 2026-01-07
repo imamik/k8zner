@@ -18,13 +18,13 @@ type MockTalosProducer struct {
 	mock.Mock
 }
 
-func (m *MockTalosProducer) GenerateControlPlaneConfig(san []string) ([]byte, error) {
-	args := m.Called(san)
+func (m *MockTalosProducer) GenerateControlPlaneConfig(san []string, hostname string) ([]byte, error) {
+	args := m.Called(san, hostname)
 	return args.Get(0).([]byte), args.Error(1)
 }
 
-func (m *MockTalosProducer) GenerateWorkerConfig() ([]byte, error) {
-	args := m.Called()
+func (m *MockTalosProducer) GenerateWorkerConfig(hostname string) ([]byte, error) {
+	args := m.Called(hostname)
 	return args.Get(0).([]byte), args.Error(1)
 }
 
@@ -124,8 +124,9 @@ func TestReconciler_Reconcile(t *testing.T) {
 
 	// Talos
 	mockTalos.On("SetEndpoint", "https://5.6.7.8:6443").Return()
-	mockTalos.On("GenerateControlPlaneConfig", mock.Anything).Return([]byte("cp-config"), nil)
-	mockTalos.On("GenerateWorkerConfig").Return([]byte("worker-config"), nil)
+	mockTalos.On("GenerateControlPlaneConfig", mock.Anything, mock.Anything).Return([]byte("cp-config"), nil)
+	// Note: GenerateWorkerConfig is not called in this test because cluster already exists (state marker present)
+	// Worker configs are only generated and applied when kubeconfig is available from bootstrap
 	mockTalos.On("GetClientConfig").Return([]byte("client-config"), nil)
 
 	// Servers
@@ -240,7 +241,7 @@ func TestReconciler_Reconcile_ServerCreationError(t *testing.T) {
 	}
 
 	// Talos config generation success
-	mockTalos.On("GenerateControlPlaneConfig", mock.Anything).Return([]byte("cp-config"), nil)
+	mockTalos.On("GenerateControlPlaneConfig", mock.Anything, mock.Anything).Return([]byte("cp-config"), nil)
 
 	// Server Creation Error
 	expectedErr := errors.New("server creation failed")

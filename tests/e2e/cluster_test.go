@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -68,6 +69,11 @@ func TestClusterProvisioning(t *testing.T) {
 		},
 		Kubernetes: config.KubernetesConfig{
 			Version: "v1.31.0",
+		},
+		Addons: config.AddonsConfig{
+			CCM: config.CCMConfig{
+				Enabled: true,
+			},
 		},
 	}
 
@@ -215,6 +221,166 @@ func TestClusterProvisioning(t *testing.T) {
 			}
 		}
 		endNodeCheck:
+
+		// Verify CCM is installed and running
+		t.Log("Verifying Hetzner Cloud Controller Manager (CCM) installation...")
+
+		// Check if CCM deployment exists
+		cmd := exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"get", "deployment", "-n", "kube-system", "hcloud-cloud-controller-manager", "-o", "json")
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Errorf("CCM deployment not found: %v\nOutput: %s", err, string(output))
+		} else {
+			t.Log("✓ CCM deployment exists")
+		}
+
+		// Check if hcloud secret exists
+		cmd = exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"get", "secret", "-n", "kube-system", "hcloud", "-o", "json")
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			t.Errorf("hcloud secret not found: %v\nOutput: %s", err, string(output))
+		} else {
+			t.Log("✓ hcloud secret exists")
+
+			// Verify secret contains required keys
+			var secret struct {
+				Data map[string]string `json:"data"`
+			}
+			if err := json.Unmarshal(output, &secret); err != nil {
+				t.Errorf("Failed to parse secret: %v", err)
+			} else {
+				if _, ok := secret.Data["token"]; !ok {
+					t.Error("hcloud secret missing 'token' key")
+				}
+				if _, ok := secret.Data["network"]; !ok {
+					t.Error("hcloud secret missing 'network' key")
+				}
+				if len(secret.Data) >= 2 {
+					t.Log("✓ hcloud secret contains required keys")
+				}
+			}
+		}
+
+		// Verify CCM functional checks
+		t.Log("Verifying CCM functionality...")
+
+		// Wait for CCM pod to be running
+		t.Log("Waiting for CCM pod to be Running...")
+		ccmRunning := false
+		for i := 0; i < 30; i++ { // Wait up to 5 minutes
+			cmd = exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "pods", "-n", "kube-system", "-l", "app=hcloud-cloud-controller-manager",
+				"-o", "jsonpath={.items[0].status.phase}")
+			output, err = cmd.CombinedOutput()
+			if err == nil && string(output) == "Running" {
+				ccmRunning = true
+				break
+			}
+			t.Logf("CCM pod not running yet (phase: %s), waiting...", string(output))
+			time.Sleep(10 * time.Second)
+		}
+		if !ccmRunning {
+			t.Error("CCM pod failed to reach Running state")
+		} else {
+			t.Log("✓ CCM pod is Running")
+		}
+
+		// Check CCM logs for successful initialization
+		t.Log("Checking CCM logs for successful initialization...")
+		cmd = exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"logs", "-n", "kube-system", "-l", "app=hcloud-cloud-controller-manager", "--tail=100")
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			t.Errorf("Failed to get CCM logs: %v", err)
+		} else {
+			logs := string(output)
+			if strings.Contains(logs, "Started") || strings.Contains(logs, "successfully") {
+				t.Log("✓ CCM initialized successfully")
+			}
+			// Check for errors in logs
+			if strings.Contains(logs, "Error") || strings.Contains(logs, "Failed") {
+				t.Logf("Warning: CCM logs contain errors:\n%s", logs)
+			}
+		}
+
+		// Verify nodes have cloud provider IDs (providerID)
+		// CCM needs time to discover nodes and set providerIDs, so retry for up to 2 minutes
+		t.Log("Verifying nodes have cloud provider IDs (will wait for CCM to set them)...")
+		providerIDsSet := false
+		for i := 0; i < 24; i++ { // Wait up to 2 minutes (24 * 5 seconds)
+			cmd = exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "nodes", "-o", "json")
+			output, err = cmd.CombinedOutput()
+			if err != nil {
+				t.Logf("Attempt %d: Failed to get nodes: %v (will retry)", i+1, err)
+				time.Sleep(5 * time.Second)
+				continue
+			}
+
+			var nodeList struct {
+				Items []struct {
+					Metadata struct {
+						Name   string            `json:"name"`
+						Labels map[string]string `json:"labels"`
+					} `json:"metadata"`
+					Spec struct {
+						ProviderID string `json:"providerID"`
+					} `json:"spec"`
+				} `json:"items"`
+			}
+			if err := json.Unmarshal(output, &nodeList); err != nil {
+				t.Logf("Attempt %d: Failed to parse nodes: %v (will retry)", i+1, err)
+				time.Sleep(5 * time.Second)
+				continue
+			}
+
+			allNodesHaveProviderID := true
+			for _, node := range nodeList.Items {
+				if node.Spec.ProviderID == "" {
+					allNodesHaveProviderID = false
+					break
+				}
+			}
+
+			if allNodesHaveProviderID {
+				// All nodes have providerIDs, now verify them
+				for _, node := range nodeList.Items {
+					if !strings.HasPrefix(node.Spec.ProviderID, "hcloud://") {
+						t.Errorf("Node %s has invalid providerID format: %s (expected hcloud://...)", node.Metadata.Name, node.Spec.ProviderID)
+					} else {
+						t.Logf("✓ Node %s has providerID: %s", node.Metadata.Name, node.Spec.ProviderID)
+					}
+
+					// Check for cloud provider labels
+					if region, ok := node.Metadata.Labels["topology.kubernetes.io/region"]; ok {
+						t.Logf("  ✓ Node %s has region label: %s", node.Metadata.Name, region)
+					}
+					if zone, ok := node.Metadata.Labels["topology.kubernetes.io/zone"]; ok {
+						t.Logf("  ✓ Node %s has zone label: %s", node.Metadata.Name, zone)
+					}
+					if instanceType, ok := node.Metadata.Labels["node.kubernetes.io/instance-type"]; ok {
+						t.Logf("  ✓ Node %s has instance-type label: %s", node.Metadata.Name, instanceType)
+					}
+				}
+				t.Log("✓ All nodes have valid cloud provider IDs")
+				providerIDsSet = true
+				break
+			}
+
+			t.Logf("Attempt %d: Some nodes still missing providerIDs, waiting...", i+1)
+			time.Sleep(5 * time.Second)
+		}
+
+		if !providerIDsSet {
+			t.Error("Timeout: Not all nodes received providerIDs from CCM within 2 minutes")
+		}
 	}
 
 	// Verify Resources using Interface Getters

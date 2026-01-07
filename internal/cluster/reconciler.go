@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"time"
+	"os"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/sak-d/hcloud-k8s/internal/config"
@@ -14,8 +14,8 @@ import (
 
 // TalosConfigProducer defines the interface for generating Talos configurations.
 type TalosConfigProducer interface {
-	GenerateControlPlaneConfig(san []string) ([]byte, error)
-	GenerateWorkerConfig() ([]byte, error)
+	GenerateControlPlaneConfig(san []string, hostname string) ([]byte, error)
+	GenerateWorkerConfig(hostname string) ([]byte, error)
 	GetClientConfig() ([]byte, error)
 	SetEndpoint(endpoint string)
 }
@@ -106,8 +106,6 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 	}
 
 	// 2-5. Parallelize infrastructure setup after network
-	log.Printf("=== PARALLELIZING INFRASTRUCTURE SETUP at %s ===", time.Now().Format("15:04:05"))
-
 	infraTasks := []Task{
 		{
 			Name: "firewall",
@@ -119,37 +117,35 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 		{Name: "floatingIPs", Func: r.reconcileFloatingIPs},
 	}
 
-	if err := RunParallel(ctx, infraTasks, true); err != nil {
+	if err := RunParallel(ctx, infraTasks, false); err != nil {
 		return nil, err
 	}
 
-	log.Printf("=== INFRASTRUCTURE SETUP COMPLETE at %s ===", time.Now().Format("15:04:05"))
-
 	// 6. Control Plane Servers
-	cpIPs, err := r.reconcileControlPlane(ctx)
+	cpIPs, sans, err := r.reconcileControlPlane(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to reconcile control plane: %w", err)
 	}
 
 	// 7. Bootstrap and retrieve kubeconfig
 	var kubeconfig []byte
+	var clientCfg []byte
 	if len(cpIPs) > 0 {
-		clientCfg, err := r.talosGenerator.GetClientConfig()
+		var err error
+		clientCfg, err = r.talosGenerator.GetClientConfig()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get client config: %w", err)
 		}
 
-		// Generate machine configs for each control plane node
-		// For now, all control plane nodes get the same config
-		// In the future, we could customize per-node if needed
-		cpConfig, err := r.talosGenerator.GenerateControlPlaneConfig(nil) // SANs already set during reconcileControlPlane
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate control plane config: %w", err)
-		}
-
+		// Generate per-node machine configs with hostnames
 		machineConfigs := make(map[string][]byte)
-		for name := range cpIPs {
-			machineConfigs[name] = cpConfig
+		for nodeName := range cpIPs {
+			// Generate config with this node's hostname
+			nodeConfig, err := r.talosGenerator.GenerateControlPlaneConfig(sans, nodeName)
+			if err != nil {
+				return nil, fmt.Errorf("failed to generate control plane config for %s: %w", nodeName, err)
+			}
+			machineConfigs[nodeName] = nodeConfig
 		}
 
 		kubeconfig, err = r.bootstrapper.Bootstrap(ctx, r.config.ClusterName, cpIPs, machineConfigs, clientCfg)
@@ -159,8 +155,60 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 	}
 
 	// 8. Worker Servers
-	if err := r.reconcileWorkers(ctx); err != nil {
+	workerIPs, err := r.reconcileWorkers(ctx)
+	if err != nil {
 		return nil, fmt.Errorf("failed to reconcile workers: %w", err)
+	}
+
+	// 8a. Apply worker configurations (if workers exist and cluster is bootstrapped)
+	if len(workerIPs) > 0 && len(kubeconfig) > 0 {
+		log.Printf("Applying Talos configurations to %d worker nodes...", len(workerIPs))
+
+		// Generate per-node worker configs with hostnames
+		workerConfigs := make(map[string][]byte)
+		for nodeName := range workerIPs {
+			nodeConfig, err := r.talosGenerator.GenerateWorkerConfig(nodeName)
+			if err != nil {
+				return nil, fmt.Errorf("failed to generate worker config for %s: %w", nodeName, err)
+			}
+			workerConfigs[nodeName] = nodeConfig
+		}
+
+		if err := r.bootstrapper.ApplyWorkerConfigs(ctx, workerIPs, workerConfigs, clientCfg); err != nil {
+			return nil, fmt.Errorf("failed to apply worker configs: %w", err)
+		}
+	}
+
+	// 9. Install Addons (if cluster was bootstrapped with kubeconfig)
+	if len(kubeconfig) > 0 {
+		// Write kubeconfig to temp file for kubectl
+		tmpKubeconfig, err := os.CreateTemp("", "kubeconfig-*.yaml")
+		if err != nil {
+			return nil, fmt.Errorf("failed to create temp kubeconfig: %w", err)
+		}
+		defer func() {
+			_ = os.Remove(tmpKubeconfig.Name())
+		}()
+
+		if _, err := tmpKubeconfig.Write(kubeconfig); err != nil {
+			return nil, fmt.Errorf("failed to write temp kubeconfig: %w", err)
+		}
+		if err := tmpKubeconfig.Close(); err != nil {
+			return nil, fmt.Errorf("failed to close temp kubeconfig: %w", err)
+		}
+
+		// Install CCM if enabled
+		if r.config.Addons.CCM.Enabled {
+			log.Println("Installing Hetzner Cloud Controller Manager (CCM)...")
+			templateData := map[string]string{
+				"Token":     r.config.HCloudToken,
+				"NetworkID": fmt.Sprintf("%d", r.network.ID),
+			}
+			if err := r.applyManifests(ctx, "hcloud-ccm", tmpKubeconfig.Name(), templateData); err != nil {
+				return nil, fmt.Errorf("failed to install CCM addon: %w", err)
+			}
+			log.Println("CCM installation completed")
+		}
 	}
 
 	return kubeconfig, nil

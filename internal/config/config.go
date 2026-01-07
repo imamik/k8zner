@@ -39,6 +39,9 @@ type Config struct {
 
 	// Kubernetes Configuration
 	Kubernetes KubernetesConfig `mapstructure:"kubernetes" yaml:"kubernetes"`
+
+	// Addons Configuration
+	Addons AddonsConfig `mapstructure:"addons" yaml:"addons"`
 }
 
 // NetworkConfig defines the network-related configuration.
@@ -168,6 +171,16 @@ type CNIConfig struct {
 	Encryption string `mapstructure:"encryption" yaml:"encryption"` // ipsec, wireguard
 }
 
+// AddonsConfig defines the addon-related configuration.
+type AddonsConfig struct {
+	CCM CCMConfig `mapstructure:"ccm" yaml:"ccm"`
+}
+
+// CCMConfig defines the Hetzner Cloud Controller Manager configuration.
+type CCMConfig struct {
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+}
+
 // LoadFile reads and parses the configuration from a YAML file.
 func LoadFile(path string) (*Config, error) {
 	// #nosec G304
@@ -192,6 +205,22 @@ func LoadFile(path string) (*Config, error) {
 	}
 	if cfg.Network.Zone == "" {
 		cfg.Network.Zone = "eu-central" // Default used in terraform usually
+	}
+
+	// Default CCM to enabled (matches Terraform behavior and provides cloud integration)
+	if !cfg.Addons.CCM.Enabled {
+		// Check if addons.ccm.enabled was explicitly set to false
+		if addonsMap, ok := rawConfig["addons"].(map[string]interface{}); ok {
+			if ccmMap, ok := addonsMap["ccm"].(map[string]interface{}); ok {
+				if _, explicitlySet := ccmMap["enabled"]; !explicitlySet {
+					cfg.Addons.CCM.Enabled = true
+				}
+			} else {
+				cfg.Addons.CCM.Enabled = true
+			}
+		} else {
+			cfg.Addons.CCM.Enabled = true
+		}
 	}
 
 	// Validate

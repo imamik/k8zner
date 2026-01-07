@@ -28,7 +28,8 @@ func TestGenerateControlPlaneConfig(t *testing.T) {
 	assert.NotNil(t, gen)
 
 	san := []string{"api.test-cluster.com"}
-	configBytes, err := gen.GenerateControlPlaneConfig(san)
+	hostname := "test-control-plane-1"
+	configBytes, err := gen.GenerateControlPlaneConfig(san, hostname)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, configBytes)
 
@@ -62,7 +63,8 @@ func TestGenerateWorkerConfig(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, gen)
 
-	configBytes, err := gen.GenerateWorkerConfig()
+	hostname := "test-worker-1"
+	configBytes, err := gen.GenerateWorkerConfig(hostname)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, configBytes)
 
