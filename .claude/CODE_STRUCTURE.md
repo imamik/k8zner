@@ -19,6 +19,10 @@ This document defines the structural patterns and quality standards for the hclo
 - **Operation functions**: Do one thing, return early on errors
 - Keep functions < 50 lines; split at logical boundaries if larger
 - Function names describe what they do: `reconcileInfrastructure()` not `process()`
+- When splitting large functions, extract by responsibility:
+  - Read/process data → separate from write/execute
+  - Template rendering → separate from applying results
+  - File I/O → separate from business logic
 
 ## 3. Separation of Concerns
 
@@ -49,6 +53,15 @@ This document defines the structural patterns and quality standards for the hclo
 - Return errors, don't log and continue
 - No defensive checks for impossible states
 - Let clients handle validation, don't duplicate it
+- Provide context in error messages: what operation failed, what was being operated on
+- Example: `fmt.Errorf("failed to read manifests for addon %s at %s: %w", name, path, err)`
+
+## 6.1. Logging
+
+- **Library code** (internal/): Return errors, let callers decide logging
+- **Command handlers** (cmd/handlers/): Log significant operations and errors
+- Use standard `log` package unless structured logging is needed
+- Avoid logging and returning the same error (caller will log it)
 
 ## 7. Naming Conventions
 
@@ -97,6 +110,22 @@ Create a new package when:
 - **Small is OK**: 1-2 files if clear, focused responsibility
 - **Too large**: 15+ files suggests multiple concerns - consider splitting
 
+### When to Split a Single-File Package:
+
+Split when a single file exceeds ~200 lines AND has clear sub-responsibilities:
+
+**✅ DO split when**:
+- File has multiple distinct responsibilities
+- Functions group naturally by purpose (read/process/apply, infrastructure/compute)
+- Would improve readability without adding abstraction overhead
+- Different functions interact with different external systems
+
+**❌ DON'T split when**:
+- File is < 150 lines and cohesive
+- Splitting would create circular dependencies
+- Functions are tightly coupled and frequently call each other
+- Only splitting to hit an arbitrary file count target
+
 ### Examples from our codebase:
 - ✅ `internal/provisioning` - Cohesive domain (cluster provisioning), all related operations together
 - ✅ `internal/addons` - Clear domain (cluster addons), reusable, external boundary (kubectl)
@@ -107,6 +136,42 @@ Create a new package when:
 
 ### Why provisioning/ is a flat package:
 The provisioning package contains ~17 files but represents a single cohesive domain: **cluster provisioning**. All files work together to provision infrastructure, compute resources, images, and bootstrap Talos clusters. Splitting into subpackages (compute/, infrastructure/, etc.) would require creating separate types and complex cross-package dependencies due to Go's package system. The flat structure keeps the codebase simple while maintaining clear file organization through descriptive naming (control_plane.go, network.go, bootstrap.go, etc.).
+
+## 9. External Commands & Resources
+
+### Executing External Commands
+- Use `exec.CommandContext` for external tools (kubectl, ssh, etc.)
+- Pass context for cancellation and timeouts
+- Capture and include output in error messages
+- Add security comments for linters: `// #nosec G204 - path is validated/internal`
+
+**Example**:
+```go
+// #nosec G204 - kubeconfigPath from internal config, tmpfile from secure temp creation
+cmd := exec.CommandContext(ctx, "kubectl", "--kubeconfig", kubeconfigPath, "apply", "-f", tmpfile)
+output, err := cmd.CombinedOutput()
+if err != nil {
+    return fmt.Errorf("kubectl apply failed: %w\nOutput: %s", err, string(output))
+}
+```
+
+### Embedded Resources
+- Use `//go:embed` for manifests, templates, and config files
+- Structure: `package_name/resources/` or `package_name/manifests/`
+- Templates use `.tmpl` extension: `secret.yaml.tmpl`
+- Include version and source in embedded manifests
+
+**Example**:
+```go
+//go:embed manifests/*
+var manifestsFS embed.FS
+```
+
+### Temporary Files
+- Use `os.CreateTemp` with descriptive patterns
+- Always defer cleanup: `defer func() { _ = os.Remove(tmpfile.Name()) }()`
+- Close files before using them with external commands
+- Consider extracting if pattern is reused 3+ times
 
 ---
 
