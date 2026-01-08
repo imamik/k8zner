@@ -45,11 +45,9 @@ func readAndProcessManifests(addonName string, data any) ([]byte, error) {
 	return combined.Bytes(), nil
 }
 
-// isManifestFile checks if a filename is a valid manifest file.
+// isManifestFile checks if a filename is a YAML manifest file.
 func isManifestFile(name string) bool {
-	return strings.HasSuffix(name, ".yaml") ||
-		strings.HasSuffix(name, ".yml") ||
-		strings.HasSuffix(name, ".yaml.tmpl")
+	return strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml")
 }
 
 // readManifestFile reads a single manifest file from the embedded filesystem.
@@ -62,12 +60,11 @@ func readManifestFile(addonPath, fileName string) ([]byte, error) {
 	return content, nil
 }
 
-// processManifestContent processes manifest content, applying templates if needed.
+// processManifestContent processes manifest content as a Go template.
+// This allows variable substitution in all YAML files, whether they contain
+// template variables or not. Static files are processed safely without modification.
 func processManifestContent(fileName string, content []byte, data any) (string, error) {
-	if strings.HasSuffix(fileName, ".yaml.tmpl") {
-		return processTemplate(fileName, content, data)
-	}
-	return string(content), nil
+	return processTemplate(fileName, content, data)
 }
 
 // appendYAML appends a YAML document to the buffer with appropriate separators.
