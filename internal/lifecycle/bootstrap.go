@@ -1,3 +1,8 @@
+// Package lifecycle handles cluster lifecycle operations including bootstrap and upgrade.
+//
+// This package manages the lifecycle of Talos clusters, primarily focused on the
+// bootstrap process which initializes a new cluster by applying machine configs,
+// waiting for nodes to be ready, and retrieving the kubeconfig.
 package lifecycle
 
 import (
