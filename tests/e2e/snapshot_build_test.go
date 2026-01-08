@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"hcloud-k8s/internal/imagebuilder"
 	"hcloud-k8s/internal/platform/hcloud"
+	"hcloud-k8s/internal/provisioning/image"
 )
 
 // TestSnapshotCreation tests the snapshot build process from scratch.
