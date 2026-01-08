@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sak-d/hcloud-k8s/internal/hcloud"
-	"github.com/sak-d/hcloud-k8s/internal/keygen"
+	"hcloud-k8s/internal/platform/hcloud"
+	"hcloud-k8s/internal/util/keygen"
 )
 
 // ResourceCleaner helps track and clean up resources.

@@ -1,4 +1,4 @@
-module github.com/sak-d/hcloud-k8s
+module hcloud-k8s
 
 go 1.25.5
 

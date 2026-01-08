@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sak-d/hcloud-k8s/internal/cluster"
-	"github.com/sak-d/hcloud-k8s/internal/config"
-	hcloud_client "github.com/sak-d/hcloud-k8s/internal/hcloud"
-	"github.com/sak-d/hcloud-k8s/internal/talos"
 	"github.com/stretchr/testify/assert"
+	"hcloud-k8s/internal/config"
+	"hcloud-k8s/internal/orchestration"
+	hcloud_client "hcloud-k8s/internal/platform/hcloud"
+	"hcloud-k8s/internal/platform/talos"
 )
 
 // TestClusterProvisioning is an end-to-end test that provisions a cluster and verifies resources.
@@ -131,7 +131,7 @@ func TestClusterProvisioning(t *testing.T) {
 	talosGen, err := talos.NewConfigGenerator(clusterName, cfg.Kubernetes.Version, cfg.Talos.Version, "", "")
 	assert.NoError(t, err)
 
-	reconciler := cluster.NewReconciler(hClient, talosGen, cfg)
+	reconciler := orchestration.NewReconciler(hClient, talosGen, cfg)
 
 	// Run Reconcile
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
