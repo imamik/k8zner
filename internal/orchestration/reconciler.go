@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 
+	"hcloud-k8s/internal/addons"
 	"hcloud-k8s/internal/config"
 	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
 	"hcloud-k8s/internal/provisioning/cluster"
@@ -173,6 +174,15 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 
 		if err := r.clusterProvisioner.ApplyWorkerConfigs(ctx, workerIPs, workerConfigs, clientCfg); err != nil {
 			return nil, fmt.Errorf("failed to apply worker configs: %w", err)
+		}
+	}
+
+	// 8. Install addons
+	if len(kubeconfig) > 0 {
+		log.Println("Installing cluster addons...")
+		networkID := r.GetNetworkID()
+		if err := addons.Apply(ctx, r.config, kubeconfig, networkID); err != nil {
+			return nil, fmt.Errorf("failed to install addons: %w", err)
 		}
 	}
 
