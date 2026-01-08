@@ -1,6 +1,6 @@
 // Package provisioning provides the logic for building Talos disk images on Hetzner Cloud.
 // This file handles image building operations.
-package provisioning
+package image
 
 import (
 	"context"
@@ -24,7 +24,7 @@ type Builder struct {
 	sshKeyManager    hcloud.SSHKeyManager
 }
 
-// NewBuilder creates a new Builder.
+// NewBuilder creates a new Buildep.
 func NewBuilder(client interface{}, commFact CommunicatorFactory) *Builder {
 	p, _ := client.(hcloud.ServerProvisioner)
 	s, _ := client.(hcloud.SnapshotManager)
@@ -68,10 +68,10 @@ func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architect
 
 	defer b.cleanupSSHKey(keyName)
 
-	// 1. Create Server.
+	// 1. Create Servep.
 	log.Printf("Creating server %s in location %s...", serverName, location)
 
-	// We need to pass the ssh key NAME to CreateServer.
+	// We need to pass the ssh key NAME to CreateServep.
 	sshKeys := []string{keyName}
 
 	// Select appropriate server type for the architecture
@@ -139,7 +139,7 @@ func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architect
 		return "", fmt.Errorf("failed to provision talos: %w, output: %s", err, output)
 	}
 
-	// 5. Poweroff Server.
+	// 5. Poweroff Servep.
 	log.Printf("Powering off server for snapshot...")
 	if err := b.provisioner.PoweroffServer(ctx, serverID); err != nil {
 		return "", fmt.Errorf("failed to poweroff server: %w", err)

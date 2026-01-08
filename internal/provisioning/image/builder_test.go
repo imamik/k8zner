@@ -1,4 +1,4 @@
-package provisioning
+package image
 
 import (
 	"context"

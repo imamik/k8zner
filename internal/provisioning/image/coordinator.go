@@ -1,4 +1,4 @@
-package provisioning
+package image
 
 import (
 	"context"
@@ -10,21 +10,21 @@ import (
 
 // ensureAllImages pre-builds all required Talos images in parallel.
 // This is called early in reconciliation to avoid sequential image building during server creation.
-func (r *Reconciler) ensureAllImages(ctx context.Context) error {
+func (p *Provisioner) EnsureAllImages(ctx context.Context) error {
 	log.Println("Pre-building all required Talos images...")
 
 	// Collect all unique server types from control plane and worker pools
 	serverTypes := make(map[string]bool)
 
 	// Control plane server types
-	for _, pool := range r.config.ControlPlane.NodePools {
+	for _, pool := range p.config.ControlPlane.NodePools {
 		if pool.Image == "" || pool.Image == "talos" {
 			serverTypes[pool.ServerType] = true
 		}
 	}
 
 	// Worker server types
-	for _, pool := range r.config.Workers {
+	for _, pool := range p.config.Workers {
 		if pool.Image == "" || pool.Image == "talos" {
 			serverTypes[pool.ServerType] = true
 		}
@@ -45,8 +45,8 @@ func (r *Reconciler) ensureAllImages(ctx context.Context) error {
 	log.Printf("Building images for architectures: %v", getKeys(architectures))
 
 	// Get versions from config
-	talosVersion := r.config.Talos.Version
-	k8sVersion := r.config.Kubernetes.Version
+	talosVersion := p.config.Talos.Version
+	k8sVersion := p.config.Kubernetes.Version
 	if talosVersion == "" {
 		talosVersion = "v1.8.3"
 	}
@@ -56,8 +56,8 @@ func (r *Reconciler) ensureAllImages(ctx context.Context) error {
 
 	// Get location from first control plane node, or default to nbg1
 	location := "nbg1"
-	if len(r.config.ControlPlane.NodePools) > 0 && r.config.ControlPlane.NodePools[0].Location != "" {
-		location = r.config.ControlPlane.NodePools[0].Location
+	if len(p.config.ControlPlane.NodePools) > 0 && p.config.ControlPlane.NodePools[0].Location != "" {
+		location = p.config.ControlPlane.NodePools[0].Location
 	}
 
 	// Build images in parallel
@@ -79,7 +79,7 @@ func (r *Reconciler) ensureAllImages(ctx context.Context) error {
 			}
 
 			// Check if snapshot already exists
-			snapshot, err := r.snapshotManager.GetSnapshotByLabels(ctx, labels)
+			snapshot, err := p.snapshotManager.GetSnapshotByLabels(ctx, labels)
 			if err != nil {
 				resultChan <- buildResult{arch: arch, err: fmt.Errorf("failed to check for existing snapshot: %w", err)}
 				return
@@ -93,7 +93,7 @@ func (r *Reconciler) ensureAllImages(ctx context.Context) error {
 
 			// Build image
 			log.Printf("Building Talos image for %s/%s/%s in location %s...", talosVersion, k8sVersion, arch, location)
-			builder := r.createImageBuilder()
+			builder := p.createImageBuilder()
 			if builder == nil {
 				resultChan <- buildResult{arch: arch, err: fmt.Errorf("image builder not available")}
 				return
@@ -137,13 +137,13 @@ func getKeys(m map[string]bool) []string {
 }
 
 // ensureImage ensures the required Talos image exists, building it if necessary.
-func (r *Reconciler) ensureImage(ctx context.Context, serverType, location string) (string, error) {
+func (p *Provisioner) ensureImage(ctx context.Context, serverType, location string) (string, error) {
 	// Determine architecture from server type
 	arch := string(hcloud_internal.DetectArchitecture(serverType))
 
 	// Get versions from config
-	talosVersion := r.config.Talos.Version
-	k8sVersion := r.config.Kubernetes.Version
+	talosVersion := p.config.Talos.Version
+	k8sVersion := p.config.Kubernetes.Version
 
 	// Set defaults if not configured
 	if talosVersion == "" {
@@ -166,7 +166,7 @@ func (r *Reconciler) ensureImage(ctx context.Context, serverType, location strin
 		"arch":          arch,
 	}
 
-	snapshot, err := r.snapshotManager.GetSnapshotByLabels(ctx, labels)
+	snapshot, err := p.snapshotManager.GetSnapshotByLabels(ctx, labels)
 	if err != nil {
 		return "", fmt.Errorf("failed to check for existing snapshot: %w", err)
 	}
@@ -181,7 +181,7 @@ func (r *Reconciler) ensureImage(ctx context.Context, serverType, location strin
 	log.Printf("Talos snapshot not found for %s/%s/%s, building in location %s...", talosVersion, k8sVersion, arch, location)
 
 	// Import image builder
-	builder := r.createImageBuilder()
+	builder := p.createImageBuilder()
 	if builder == nil {
 		return "", fmt.Errorf("image builder not available")
 	}
@@ -197,8 +197,8 @@ func (r *Reconciler) ensureImage(ctx context.Context, serverType, location strin
 }
 
 // createImageBuilder creates an image builder instance.
-func (r *Reconciler) createImageBuilder() *Builder {
+func (p *Provisioner) createImageBuilder() *Builder {
 	// Pass nil for communicator factory - the builder will use its internal
 	// SSH key generation and create its own SSH client with those keys
-	return NewBuilder(r.infra, nil)
+	return NewBuilder(p.infra, nil)
 }

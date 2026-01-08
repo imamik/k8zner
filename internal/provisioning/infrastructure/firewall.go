@@ -1,4 +1,4 @@
-package provisioning
+package infrastructure
 
 import (
 	"context"
@@ -8,33 +8,34 @@ import (
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
-func (r *Reconciler) reconcileFirewall(ctx context.Context, publicIP string) error {
-	log.Printf("Reconciling Firewall %s...", r.config.ClusterName)
+// ProvisionFirewall provisions the cluster firewall with rules.
+func (p *Provisioner) ProvisionFirewall(ctx context.Context, publicIP string) error {
+	log.Printf("Reconciling Firewall %s...", p.config.ClusterName)
 
 	// Collect Allow Sources
 	// 1. Kube API
 	kubeAPISources := []string{}
 	// Add config sources
-	if len(r.config.Firewall.KubeAPISource) > 0 {
-		kubeAPISources = append(kubeAPISources, r.config.Firewall.KubeAPISource...)
-	} else if len(r.config.Firewall.APISource) > 0 {
-		kubeAPISources = append(kubeAPISources, r.config.Firewall.APISource...)
+	if len(p.config.Firewall.KubeAPISource) > 0 {
+		kubeAPISources = append(kubeAPISources, p.config.Firewall.KubeAPISource...)
+	} else if len(p.config.Firewall.APISource) > 0 {
+		kubeAPISources = append(kubeAPISources, p.config.Firewall.APISource...)
 	}
 	// Add current IP if detected and allowed
-	// Logic matches terraform: !firewall_external && network_public_ipv4_enabled && coalesce(var.firewall_use_current_ipv4, cluster_access == "public" && source == null)
+	// Logic matches terraform: !firewall_external && network_public_ipv4_enabled && coalesce(vap.firewall_use_current_ipv4, cluster_access == "public" && source == null)
 	// Simplified: if we have public IP and we assume public access/defaults, add it.
-	if publicIP != "" && r.config.Firewall.UseCurrentIPv4 {
+	if publicIP != "" && p.config.Firewall.UseCurrentIPv4 {
 		kubeAPISources = append(kubeAPISources, publicIP+"/32")
 	}
 
 	// 2. Talos API
 	talosAPISources := []string{}
-	if len(r.config.Firewall.TalosAPISource) > 0 {
-		talosAPISources = append(talosAPISources, r.config.Firewall.TalosAPISource...)
-	} else if len(r.config.Firewall.APISource) > 0 {
-		talosAPISources = append(talosAPISources, r.config.Firewall.APISource...)
+	if len(p.config.Firewall.TalosAPISource) > 0 {
+		talosAPISources = append(talosAPISources, p.config.Firewall.TalosAPISource...)
+	} else if len(p.config.Firewall.APISource) > 0 {
+		talosAPISources = append(talosAPISources, p.config.Firewall.APISource...)
 	}
-	if publicIP != "" && r.config.Firewall.UseCurrentIPv4 {
+	if publicIP != "" && p.config.Firewall.UseCurrentIPv4 {
 		talosAPISources = append(talosAPISources, publicIP+"/32")
 	}
 
@@ -82,7 +83,7 @@ func (r *Reconciler) reconcileFirewall(ctx context.Context, publicIP string) err
 	}
 
 	// Extra Rules
-	for _, rule := range r.config.Firewall.ExtraRules {
+	for _, rule := range p.config.Firewall.ExtraRules {
 		// Helper to parse IPs
 		parseIPs := func(ips []string) []net.IPNet {
 			var nets []net.IPNet
@@ -126,13 +127,13 @@ func (r *Reconciler) reconcileFirewall(ctx context.Context, publicIP string) err
 	}
 
 	labels := map[string]string{
-		"cluster": r.config.ClusterName,
+		"cluster": p.config.ClusterName,
 	}
 
-	fw, err := r.firewallManager.EnsureFirewall(ctx, r.config.ClusterName, rules, labels)
+	fw, err := p.firewallManager.EnsureFirewall(ctx, p.config.ClusterName, rules, labels)
 	if err != nil {
 		return err
 	}
-	r.firewall = fw
+	p.firewall = fw
 	return nil
 }

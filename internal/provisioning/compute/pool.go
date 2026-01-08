@@ -1,4 +1,4 @@
-package provisioning
+package compute
 
 import (
 	"hcloud-k8s/internal/util/labels"
@@ -11,7 +11,7 @@ import (
 )
 
 // reconcileNodePool provisions a pool of servers in parallel.
-func (r *Reconciler) reconcileNodePool(
+func (p *Provisioner) reconcileNodePool(
 	ctx context.Context,
 	poolName string,
 	count int,
@@ -35,7 +35,7 @@ func (r *Reconciler) reconcileNodePool(
 
 	for j := 1; j <= count; j++ {
 		// Name: <cluster>-<pool>-<index> (e.g. cluster-control-plane-1)
-		srvName := naming.Server(r.config.ClusterName, poolName, j)
+		srvName := naming.Server(p.config.ClusterName, poolName, j)
 
 		// Calculate global index for subnet calculations
 		// For CP: 10 * np_index + cp_index + 1
@@ -46,7 +46,7 @@ func (r *Reconciler) reconcileNodePool(
 
 		if role == "control-plane" {
 			// Terraform: ipv4_private = cidrhost(subnet, np_index * 10 + cp_index + 1)
-			subnet, err = r.config.GetSubnetForRole("control-plane", 0)
+			subnet, err = p.config.GetSubnetForRole("control-plane", 0)
 			if err != nil {
 				return nil, err
 			}
@@ -54,9 +54,9 @@ func (r *Reconciler) reconcileNodePool(
 		} else {
 			// Terraform: ipv4_private = cidrhost(subnet, wkr_index + 1)
 			// Note: Terraform iterates worker nodepools and uses separate subnets for each
-			// hcloud_network_subnet.worker[nr.name]
+			// hcloud_network_subnet.worker[np.name]
 			// The config.GetSubnetForRole("worker", i) handles the subnet iteration.
-			subnet, err = r.config.GetSubnetForRole("worker", poolIndex)
+			subnet, err = p.config.GetSubnetForRole("worker", poolIndex)
 			if err != nil {
 				return nil, err
 			}
@@ -75,7 +75,7 @@ func (r *Reconciler) reconcileNodePool(
 			// Check if enabled in config for this pool
 			usePG := false
 			// Find the pool config again (slightly inefficient but safe)
-			for _, p := range r.config.Workers {
+			for _, p := range p.config.Workers {
 				if p.Name == poolName {
 					usePG = p.PlacementGroup
 					break
@@ -84,12 +84,12 @@ func (r *Reconciler) reconcileNodePool(
 
 			if usePG {
 				pgIndex := int((j-1)/10) + 1
-				pgLabels := labels.NewLabelBuilder(r.config.ClusterName).
+				pgLabels := labels.NewLabelBuilder(p.config.ClusterName).
 					WithRole("worker").
 					WithPool(poolName).
 					WithNodePool(poolName).
 					Build()
-				pg, err := r.pgManager.EnsurePlacementGroup(ctx, naming.WorkerPlacementGroupShard(r.config.ClusterName, poolName, pgIndex), "spread", pgLabels)
+				pg, err := p.pgManager.EnsurePlacementGroup(ctx, naming.WorkerPlacementGroupShard(p.config.ClusterName, poolName, pgIndex), "spread", pgLabels)
 				if err != nil {
 					return nil, err
 				}
@@ -119,7 +119,7 @@ func (r *Reconciler) reconcileNodePool(
 	for _, cfg := range configs {
 		cfg := cfg // capture loop variable
 		go func() {
-			ip, err := r.ensureServer(ctx, cfg.name, serverType, location, image, role, poolName, extraLabels, userData, cfg.pgID, cfg.privateIP)
+			ip, err := p.ensureServer(ctx, cfg.name, serverType, location, image, role, poolName, extraLabels, userData, cfg.pgID, cfg.privateIP)
 			resultChan <- serverResult{name: cfg.name, ip: ip, err: err}
 		}()
 	}

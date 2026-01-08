@@ -1,4 +1,4 @@
-package provisioning
+package infrastructure
 
 import (
 	"context"
@@ -12,26 +12,26 @@ import (
 	"hcloud-k8s/internal/util/naming"
 )
 
-func (r *Reconciler) reconcileLoadBalancers(ctx context.Context) error {
+func (p *Provisioner) ProvisionLoadBalancers(ctx context.Context) error {
 	// API Load Balancer
 	// Sum up control plane nodes
 	cpCount := 0
-	for _, pool := range r.config.ControlPlane.NodePools {
+	for _, pool := range p.config.ControlPlane.NodePools {
 		cpCount += pool.Count
 	}
 
 	if cpCount > 0 {
 		// Name: ${cluster_name}-kube-api
-		lbName := naming.KubeAPILoadBalancer(r.config.ClusterName)
+		lbName := naming.KubeAPILoadBalancer(p.config.ClusterName)
 		log.Printf("Reconciling Load Balancer %s...", lbName)
 
 		labels := map[string]string{
-			"cluster": r.config.ClusterName,
+			"cluster": p.config.ClusterName,
 			"role":    "kube-api",
 		}
 
 		// Algorithm: round_robin
-		lb, err := r.lbManager.EnsureLoadBalancer(ctx, lbName, r.config.Location, "lb11", hcloud.LoadBalancerAlgorithmTypeRoundRobin, labels)
+		lb, err := p.lbManager.EnsureLoadBalancer(ctx, lbName, p.config.Location, "lb11", hcloud.LoadBalancerAlgorithmTypeRoundRobin, labels)
 		if err != nil {
 			return err
 		}
@@ -54,14 +54,14 @@ func (r *Reconciler) reconcileLoadBalancers(ctx context.Context) error {
 				},
 			},
 		}
-		err = r.lbManager.ConfigureService(ctx, lb, service)
+		err = p.lbManager.ConfigureService(ctx, lb, service)
 		if err != nil {
 			return err
 		}
 
 		// Attach to Network with Private IP
 		// Private IP: cidrhost(subnet, -2)
-		lbSubnetCIDR, err := r.config.GetSubnetForRole("load-balancer", 0)
+		lbSubnetCIDR, err := p.config.GetSubnetForRole("load-balancer", 0)
 		if err != nil {
 			return err
 		}
@@ -71,41 +71,41 @@ func (r *Reconciler) reconcileLoadBalancers(ctx context.Context) error {
 		}
 		privateIP := net.ParseIP(privateIPStr)
 
-		err = r.lbManager.AttachToNetwork(ctx, lb, r.network, privateIP)
+		err = p.lbManager.AttachToNetwork(ctx, lb, p.network, privateIP)
 		if err != nil {
 			return err
 		}
 
 		// Add Targets
 		// Label Selector: "cluster=<cluster_name>,role=control-plane"
-		targetSelector := fmt.Sprintf("cluster=%s,role=control-plane", r.config.ClusterName)
-		err = r.lbManager.AddTarget(ctx, lb, hcloud.LoadBalancerTargetTypeLabelSelector, targetSelector)
+		targetSelector := fmt.Sprintf("cluster=%s,role=control-plane", p.config.ClusterName)
+		err = p.lbManager.AddTarget(ctx, lb, hcloud.LoadBalancerTargetTypeLabelSelector, targetSelector)
 		if err != nil {
 			return fmt.Errorf("failed to add target to LB: %w", err)
 		}
 	}
 
 	// Ingress Load Balancer
-	if r.config.Ingress.Enabled {
+	if p.config.Ingress.Enabled {
 		// Name: ${cluster_name}-ingress
-		lbName := naming.IngressLoadBalancer(r.config.ClusterName)
+		lbName := naming.IngressLoadBalancer(p.config.ClusterName)
 		log.Printf("Reconciling Load Balancer %s...", lbName)
 
 		labels := map[string]string{
-			"cluster": r.config.ClusterName,
+			"cluster": p.config.ClusterName,
 			"role":    "ingress",
 		}
 
-		lbType := r.config.Ingress.LoadBalancerType
+		lbType := p.config.Ingress.LoadBalancerType
 		if lbType == "" {
 			lbType = "lb11"
 		}
 		algorithm := hcloud.LoadBalancerAlgorithmTypeRoundRobin
-		if r.config.Ingress.Algorithm == "least_connections" {
+		if p.config.Ingress.Algorithm == "least_connections" {
 			algorithm = hcloud.LoadBalancerAlgorithmTypeLeastConnections
 		}
 
-		lb, err := r.lbManager.EnsureLoadBalancer(ctx, lbName, r.config.Location, lbType, algorithm, labels)
+		lb, err := p.lbManager.EnsureLoadBalancer(ctx, lbName, p.config.Location, lbType, algorithm, labels)
 		if err != nil {
 			return err
 		}
@@ -127,7 +127,7 @@ func (r *Reconciler) reconcileLoadBalancers(ctx context.Context) error {
 		// I will hardcode typical NodePorts for now: 30080 and 30443, which are standard for many setups,
 		// OR better, I should check if config has these ports. It doesn't seem to have specific ports in IngressConfig.
 		// I will use 80 -> 80 and 443 -> 443 assuming the Ingress controller uses HostNetwork or LoadBalancer service sync.
-		// Actually, `load_balancer.tf` uses `local.ingress_nginx_service_node_port_http`.
+		// Actually, `load_balancep.tf` uses `local.ingress_nginx_service_node_port_http`.
 		// Let's assume 80->80 for now as a safe default for "HostPort" style which is common on bare metal / Talos.
 
 		services := []hcloud.LoadBalancerAddServiceOpts{
@@ -149,9 +149,9 @@ func (r *Reconciler) reconcileLoadBalancers(ctx context.Context) error {
 			svc.HealthCheck = &hcloud.LoadBalancerAddServiceOptsHealthCheck{
 				Protocol: hcloud.LoadBalancerServiceProtocolTCP,
 				Port:     svc.DestinationPort,
-				Interval: hcloud.Ptr(time.Second * time.Duration(r.config.Ingress.HealthCheckInt)),
-				Timeout:  hcloud.Ptr(time.Second * time.Duration(r.config.Ingress.HealthCheckTimeout)),
-				Retries:  hcloud.Ptr(r.config.Ingress.HealthCheckRetry),
+				Interval: hcloud.Ptr(time.Second * time.Duration(p.config.Ingress.HealthCheckInt)),
+				Timeout:  hcloud.Ptr(time.Second * time.Duration(p.config.Ingress.HealthCheckTimeout)),
+				Retries:  hcloud.Ptr(p.config.Ingress.HealthCheckRetry),
 			}
 			// Defaults if 0
 			if *svc.HealthCheck.Interval == 0 {
@@ -164,7 +164,7 @@ func (r *Reconciler) reconcileLoadBalancers(ctx context.Context) error {
 				svc.HealthCheck.Retries = hcloud.Ptr(3)
 			}
 
-			err = r.lbManager.ConfigureService(ctx, lb, svc)
+			err = p.lbManager.ConfigureService(ctx, lb, svc)
 			if err != nil {
 				return err
 			}
@@ -172,7 +172,7 @@ func (r *Reconciler) reconcileLoadBalancers(ctx context.Context) error {
 
 		// Attach to Network
 		// Private IP: cidrhost(subnet, -4) from TF
-		lbSubnetCIDR, err := r.config.GetSubnetForRole("load-balancer", 0)
+		lbSubnetCIDR, err := p.config.GetSubnetForRole("load-balancer", 0)
 		if err != nil {
 			return err
 		}
@@ -182,7 +182,7 @@ func (r *Reconciler) reconcileLoadBalancers(ctx context.Context) error {
 		}
 		privateIP := net.ParseIP(privateIPStr)
 
-		err = r.lbManager.AttachToNetwork(ctx, lb, r.network, privateIP)
+		err = p.lbManager.AttachToNetwork(ctx, lb, p.network, privateIP)
 		if err != nil {
 			return err
 		}
@@ -190,8 +190,8 @@ func (r *Reconciler) reconcileLoadBalancers(ctx context.Context) error {
 		// Targets: Workers
 		// "cluster=<name>,role=worker"
 		// TF also includes CP if scheduling enabled, but let's stick to workers for now.
-		targetSelector := fmt.Sprintf("cluster=%s,role=worker", r.config.ClusterName)
-		err = r.lbManager.AddTarget(ctx, lb, hcloud.LoadBalancerTargetTypeLabelSelector, targetSelector)
+		targetSelector := fmt.Sprintf("cluster=%s,role=worker", p.config.ClusterName)
+		err = p.lbManager.AddTarget(ctx, lb, hcloud.LoadBalancerTargetTypeLabelSelector, targetSelector)
 		if err != nil {
 			return fmt.Errorf("failed to add target to Ingress LB: %w", err)
 		}

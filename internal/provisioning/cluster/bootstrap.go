@@ -1,8 +1,7 @@
-// Package provisioning handles cluster lifecycle operations including bootstrap and upgrade.
+package cluster
 //
 // This file manages the bootstrap process which initializes a new cluster by applying
 // machine configs, waiting for nodes to be ready, and retrieving the kubeconfig.
-package provisioning
 
 import (
 	"context"

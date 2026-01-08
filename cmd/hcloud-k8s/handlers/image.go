@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"hcloud-k8s/internal/platform/hcloud"
-	"hcloud-k8s/internal/provisioning"
+	"hcloud-k8s/internal/provisioning/image"
 )
 
 // Build creates a custom Talos Linux snapshot on Hetzner Cloud.
@@ -24,7 +24,7 @@ import (
 func Build(ctx context.Context, imageName, talosVersion, arch, location string) error {
 	token := os.Getenv("HCLOUD_TOKEN")
 	client := hcloud.NewRealClient(token)
-	builder := provisioning.NewBuilder(client, nil) // use default SSH communicator
+	builder := image.NewBuilder(client, nil) // use default SSH communicator
 
 	log.Printf("Building image %s (Talos %s, Arch %s) in location %s...", imageName, talosVersion, arch, location)
 
