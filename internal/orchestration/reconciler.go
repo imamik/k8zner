@@ -6,17 +6,13 @@ package orchestration
 
 import (
 	"context"
-	"fmt"
-	"log"
 
-	"hcloud-k8s/internal/addons"
 	"hcloud-k8s/internal/config"
 	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
 	"hcloud-k8s/internal/provisioning/cluster"
 	"hcloud-k8s/internal/provisioning/compute"
 	"hcloud-k8s/internal/provisioning/image"
 	"hcloud-k8s/internal/provisioning/infrastructure"
-	"hcloud-k8s/internal/util/async"
 )
 
 // TalosConfigProducer defines the interface for generating Talos configurations.
@@ -35,9 +31,11 @@ type Reconciler struct {
 	config         *config.Config
 
 	// Provisioners
-	infraProvisioner   *infrastructure.Provisioner
+	infraProvisioner *infrastructure.Provisioner
+	imageProvisioner *image.Provisioner
+	// computeProvisioner is created after network provisioning in provisionPrerequisites()
+	// since it requires the provisioned network reference.
 	computeProvisioner *compute.Provisioner
-	imageProvisioner   *image.Provisioner
 	clusterProvisioner *cluster.Bootstrapper
 }
 
@@ -61,129 +59,37 @@ func NewReconciler(
 // Reconcile ensures that the desired state matches the actual state.
 // Returns the kubeconfig bytes if bootstrap was performed, or nil if cluster already existed.
 func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
-	log.Println("Starting reconciliation...")
-
-	// 0. Calculate Subnets
-	if err := r.config.CalculateSubnets(); err != nil {
-		return nil, fmt.Errorf("failed to calculate subnets: %w", err)
-	}
-
-	// 1. Provision Network (must be first)
-	if err := r.infraProvisioner.ProvisionNetwork(ctx); err != nil {
-		return nil, fmt.Errorf("failed to provision network: %w", err)
-	}
-
-	// Now create compute provisioner with the provisioned network
-	r.computeProvisioner = compute.NewProvisioner(
-		r.infra,
-		r.talosGenerator,
-		r.config,
-		r.infraProvisioner.GetNetwork(),
-	)
-
-	// 2. Pre-build images and fetch public IP in parallel
-	var publicIP string
-	imageTasks := []async.Task{
-		{
-			Name: "images",
-			Func: r.imageProvisioner.EnsureAllImages,
-		},
-		{
-			Name: "publicIP",
-			Func: func(ctx context.Context) error {
-				ip, err := r.infra.GetPublicIP(ctx)
-				if err == nil {
-					publicIP = ip
-					return nil
-				}
-				log.Printf("Warning: Failed to detect public IP: %v", err)
-				return nil
-			},
-		},
-	}
-
-	if err := async.RunParallel(ctx, imageTasks, false); err != nil {
+	// 1. Prerequisites (network, compute provisioner setup)
+	if err := r.provisionPrerequisites(ctx); err != nil {
 		return nil, err
 	}
 
-	// 3. Provision infrastructure in parallel
-	infraTasks := []async.Task{
-		{
-			Name: "firewall",
-			Func: func(ctx context.Context) error {
-				return r.infraProvisioner.ProvisionFirewall(ctx, publicIP)
-			},
-		},
-		{Name: "loadBalancers", Func: r.infraProvisioner.ProvisionLoadBalancers},
-		{Name: "floatingIPs", Func: r.infraProvisioner.ProvisionFloatingIPs},
-	}
-
-	if err := async.RunParallel(ctx, infraTasks, false); err != nil {
+	// 2. Resources (images, firewall, load balancers, floating IPs)
+	if err := r.provisionResources(ctx); err != nil {
 		return nil, err
 	}
 
-	// 4. Provision Control Plane
-	cpIPs, sans, err := r.computeProvisioner.ProvisionControlPlane(ctx)
+	// 3. Control plane nodes
+	cpIPs, sans, err := r.provisionControlPlane(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to provision control plane: %w", err)
+		return nil, err
 	}
 
-	// 5. Bootstrap cluster
-	var kubeconfig []byte
-	var clientCfg []byte
-	if len(cpIPs) > 0 {
-		clientCfg, err = r.talosGenerator.GetClientConfig()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get client config: %w", err)
-		}
-
-		// Generate per-node machine configs
-		machineConfigs := make(map[string][]byte)
-		for nodeName := range cpIPs {
-			nodeConfig, err := r.talosGenerator.GenerateControlPlaneConfig(sans, nodeName)
-			if err != nil {
-				return nil, fmt.Errorf("failed to generate control plane config for %s: %w", nodeName, err)
-			}
-			machineConfigs[nodeName] = nodeConfig
-		}
-
-		kubeconfig, err = r.clusterProvisioner.Bootstrap(ctx, r.config.ClusterName, cpIPs, machineConfigs, clientCfg)
-		if err != nil {
-			return nil, fmt.Errorf("failed to bootstrap cluster: %w", err)
-		}
-	}
-
-	// 6. Provision Workers
-	workerIPs, err := r.computeProvisioner.ProvisionWorkers(ctx)
+	// 4. Bootstrap cluster (if needed)
+	kubeconfig, clientCfg, err := r.bootstrapCluster(ctx, cpIPs, sans)
 	if err != nil {
-		return nil, fmt.Errorf("failed to provision workers: %w", err)
+		return nil, err
 	}
 
-	// 7. Apply worker configurations
-	if len(workerIPs) > 0 && len(kubeconfig) > 0 {
-		log.Printf("Applying Talos configurations to %d worker nodes...", len(workerIPs))
-
-		workerConfigs := make(map[string][]byte)
-		for nodeName := range workerIPs {
-			nodeConfig, err := r.talosGenerator.GenerateWorkerConfig(nodeName)
-			if err != nil {
-				return nil, fmt.Errorf("failed to generate worker config for %s: %w", nodeName, err)
-			}
-			workerConfigs[nodeName] = nodeConfig
-		}
-
-		if err := r.clusterProvisioner.ApplyWorkerConfigs(ctx, workerIPs, workerConfigs, clientCfg); err != nil {
-			return nil, fmt.Errorf("failed to apply worker configs: %w", err)
-		}
+	// 5. Worker nodes
+	workerIPs, err := r.provisionWorkers(ctx)
+	if err != nil {
+		return nil, err
 	}
 
-	// 8. Install addons
-	if len(kubeconfig) > 0 {
-		log.Println("Installing cluster addons...")
-		networkID := r.GetNetworkID()
-		if err := addons.Apply(ctx, r.config, kubeconfig, networkID); err != nil {
-			return nil, fmt.Errorf("failed to install addons: %w", err)
-		}
+	// 6. Apply worker configs (if needed)
+	if err := r.applyWorkerConfigs(ctx, workerIPs, kubeconfig, clientCfg); err != nil {
+		return nil, err
 	}
 
 	return kubeconfig, nil
