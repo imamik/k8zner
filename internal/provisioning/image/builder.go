@@ -1,4 +1,4 @@
-// Package provisioning provides the logic for building Talos disk images on Hetzner Cloud.
+// Package image provides the logic for building Talos disk images on Hetzner Cloud.
 // This file handles image building operations.
 package image
 
@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"hcloud-k8s/internal/platform/hcloud"
-	"hcloud-k8s/internal/util/keygen"
 	"hcloud-k8s/internal/platform/ssh"
+	"hcloud-k8s/internal/util/keygen"
 )
 
 // CommunicatorFactory creates a Communicator for a given host.

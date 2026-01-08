@@ -1,9 +1,9 @@
 package compute
 
 import (
-	"hcloud-k8s/internal/util/labels"
 	"context"
 	"fmt"
+	"hcloud-k8s/internal/util/labels"
 	"log"
 
 	"hcloud-k8s/internal/config"

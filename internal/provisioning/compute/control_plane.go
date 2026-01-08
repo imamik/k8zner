@@ -1,3 +1,5 @@
+// Package compute provides compute resource provisioning functionality including
+// servers, control plane, workers, and node pool management.
 package compute
 
 import (
@@ -9,7 +11,7 @@ import (
 	"hcloud-k8s/internal/util/naming"
 )
 
-// reconcileControlPlane provisions control plane servers and returns a map of ServerName -> PublicIP and the SANs to use.
+// ProvisionControlPlane provisions control plane servers and returns a map of ServerName -> PublicIP and the SANs to use.
 func (p *Provisioner) ProvisionControlPlane(ctx context.Context) (map[string]string, []string, error) {
 	log.Printf("Reconciling Control Plane...")
 

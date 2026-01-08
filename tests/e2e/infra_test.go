@@ -13,8 +13,8 @@ import (
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"hcloud-k8s/internal/orchestration"
 	"hcloud-k8s/internal/config"
+	"hcloud-k8s/internal/orchestration"
 	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
 )
 

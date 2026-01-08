@@ -1,7 +1,7 @@
-package cluster
-//
+// Package cluster provides cluster bootstrap and configuration functionality.
 // This file manages the bootstrap process which initializes a new cluster by applying
 // machine configs, waiting for nodes to be ready, and retrieving the kubeconfig.
+package cluster
 
 import (
 	"context"

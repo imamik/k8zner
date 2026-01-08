@@ -12,8 +12,8 @@ import (
 	"os"
 
 	"hcloud-k8s/internal/addons"
-	"hcloud-k8s/internal/orchestration"
 	"hcloud-k8s/internal/config"
+	"hcloud-k8s/internal/orchestration"
 	"hcloud-k8s/internal/platform/hcloud"
 	"hcloud-k8s/internal/platform/talos"
 )

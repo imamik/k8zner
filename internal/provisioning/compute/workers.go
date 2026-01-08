@@ -5,8 +5,7 @@ import (
 	"log"
 )
 
-// reconcileWorkers provisions worker node pools in parallel.
-// Returns a map of worker node names to their public IPs.
+// ProvisionWorkers provisions worker node pools in parallel and returns a map of worker node names to their public IPs.
 func (p *Provisioner) ProvisionWorkers(ctx context.Context) (map[string]string, error) {
 	log.Printf("Reconciling Workers...")
 

@@ -12,6 +12,7 @@ import (
 	"hcloud-k8s/internal/util/naming"
 )
 
+// ProvisionLoadBalancers creates and configures load balancers for the cluster including API and ingress load balancers.
 func (p *Provisioner) ProvisionLoadBalancers(ctx context.Context) error {
 	// API Load Balancer
 	// Sum up control plane nodes

@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"hcloud-k8s/internal/orchestration"
 	"hcloud-k8s/internal/config"
+	"hcloud-k8s/internal/orchestration"
 	hcloud_client "hcloud-k8s/internal/platform/hcloud"
 	"hcloud-k8s/internal/platform/talos"
 )

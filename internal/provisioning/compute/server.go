@@ -108,7 +108,7 @@ func (p *Provisioner) ensureServer(
 
 // ensureImage ensures the required Talos image exists and returns its ID.
 // It checks for an existing snapshot and builds it if necessary.
-func (p *Provisioner) ensureImage(ctx context.Context, serverType, location string) (string, error) {
+func (p *Provisioner) ensureImage(ctx context.Context, serverType, _ string) (string, error) {
 	// Determine architecture from server type
 	arch := string(hcloud_internal.DetectArchitecture(serverType))
 
@@ -122,11 +122,6 @@ func (p *Provisioner) ensureImage(ctx context.Context, serverType, location stri
 	}
 	if k8sVersion == "" {
 		k8sVersion = "v1.31.0"
-	}
-
-	// Default location if not provided
-	if location == "" {
-		location = "nbg1"
 	}
 
 	// Check if snapshot already exists

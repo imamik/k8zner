@@ -8,7 +8,7 @@ import (
 	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
 )
 
-// ensureAllImages pre-builds all required Talos images in parallel.
+// EnsureAllImages pre-builds all required Talos images in parallel.
 // This is called early in reconciliation to avoid sequential image building during server creation.
 func (p *Provisioner) EnsureAllImages(ctx context.Context) error {
 	log.Println("Pre-building all required Talos images...")
@@ -134,66 +134,6 @@ func getKeys(m map[string]bool) []string {
 		keys = append(keys, k)
 	}
 	return keys
-}
-
-// ensureImage ensures the required Talos image exists, building it if necessary.
-func (p *Provisioner) ensureImage(ctx context.Context, serverType, location string) (string, error) {
-	// Determine architecture from server type
-	arch := string(hcloud_internal.DetectArchitecture(serverType))
-
-	// Get versions from config
-	talosVersion := p.config.Talos.Version
-	k8sVersion := p.config.Kubernetes.Version
-
-	// Set defaults if not configured
-	if talosVersion == "" {
-		talosVersion = "v1.8.3"
-	}
-	if k8sVersion == "" {
-		k8sVersion = "v1.31.0"
-	}
-
-	// Default location if not provided
-	if location == "" {
-		location = "nbg1"
-	}
-
-	// Check if snapshot already exists
-	labels := map[string]string{
-		"os":            "talos",
-		"talos-version": talosVersion,
-		"k8s-version":   k8sVersion,
-		"arch":          arch,
-	}
-
-	snapshot, err := p.snapshotManager.GetSnapshotByLabels(ctx, labels)
-	if err != nil {
-		return "", fmt.Errorf("failed to check for existing snapshot: %w", err)
-	}
-
-	if snapshot != nil {
-		snapshotID := fmt.Sprintf("%d", snapshot.ID)
-		log.Printf("Found existing Talos snapshot: %s (ID: %s)", snapshot.Description, snapshotID)
-		return snapshotID, nil
-	}
-
-	// Snapshot doesn't exist, build it
-	log.Printf("Talos snapshot not found for %s/%s/%s, building in location %s...", talosVersion, k8sVersion, arch, location)
-
-	// Import image builder
-	builder := p.createImageBuilder()
-	if builder == nil {
-		return "", fmt.Errorf("image builder not available")
-	}
-
-	snapshotID, err := builder.Build(ctx, talosVersion, k8sVersion, arch, location, labels)
-	if err != nil {
-		return "", fmt.Errorf("failed to build Talos image: %w", err)
-	}
-
-	// Return the snapshot ID that was just created
-	log.Printf("Successfully built Talos snapshot ID: %s", snapshotID)
-	return snapshotID, nil
 }
 
 // createImageBuilder creates an image builder instance.

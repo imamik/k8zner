@@ -1,3 +1,5 @@
+// Package infrastructure provides infrastructure provisioning functionality including
+// network, firewall, load balancers, and floating IP management.
 package infrastructure
 
 import (

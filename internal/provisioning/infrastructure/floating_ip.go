@@ -6,6 +6,7 @@ import (
 	"hcloud-k8s/internal/util/naming"
 )
 
+// ProvisionFloatingIPs creates floating IPs for the control plane if enabled in the configuration.
 func (p *Provisioner) ProvisionFloatingIPs(ctx context.Context) error {
 	if p.config.ControlPlane.PublicVIPIPv4Enabled {
 		name := naming.ControlPlaneFloatingIP(p.config.ClusterName)

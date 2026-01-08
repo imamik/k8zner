@@ -34,10 +34,10 @@ type Reconciler struct {
 	config         *config.Config
 
 	// Provisioners
-	infraProvisioner    *infrastructure.Provisioner
-	computeProvisioner  *compute.Provisioner
-	imageProvisioner    *image.Provisioner
-	clusterProvisioner  *cluster.Bootstrapper
+	infraProvisioner   *infrastructure.Provisioner
+	computeProvisioner *compute.Provisioner
+	imageProvisioner   *image.Provisioner
+	clusterProvisioner *cluster.Bootstrapper
 }
 
 // NewReconciler creates a new orchestration reconciler.
@@ -47,12 +47,12 @@ func NewReconciler(
 	cfg *config.Config,
 ) *Reconciler {
 	return &Reconciler{
-		infra:               infra,
-		talosGenerator:      talosGenerator,
-		config:              cfg,
-		infraProvisioner:    infrastructure.NewProvisioner(infra, cfg),
-		imageProvisioner:    image.NewProvisioner(infra, cfg),
-		clusterProvisioner:  cluster.NewBootstrapper(infra),
+		infra:              infra,
+		talosGenerator:     talosGenerator,
+		config:             cfg,
+		infraProvisioner:   infrastructure.NewProvisioner(infra, cfg),
+		imageProvisioner:   image.NewProvisioner(infra, cfg),
+		clusterProvisioner: cluster.NewBootstrapper(infra),
 		// Note: computeProvisioner will be created after network provisioning
 	}
 }

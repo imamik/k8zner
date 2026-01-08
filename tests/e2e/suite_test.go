@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	hcloud_client "hcloud-k8s/internal/platform/hcloud"
 	"hcloud-k8s/internal/imagebuilder"
+	hcloud_client "hcloud-k8s/internal/platform/hcloud"
 )
 
 // SharedTestContext holds resources shared across E2E tests.
