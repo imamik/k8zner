@@ -1,7 +1,6 @@
 package config
 
 import (
-	"log"
 	"os"
 	"strconv"
 	"time"
@@ -43,7 +42,8 @@ func LoadTimeouts() *Timeouts {
 }
 
 // parseDuration parses a duration from an environment variable.
-// If the variable is not set or parsing fails, the default value is returned.
+// If the variable is not set or parsing fails, the default value is returned silently.
+// This implements graceful degradation - invalid configuration does not cause errors.
 func parseDuration(envVar string, defaultVal time.Duration) time.Duration {
 	val := os.Getenv(envVar)
 	if val == "" {
@@ -52,7 +52,6 @@ func parseDuration(envVar string, defaultVal time.Duration) time.Duration {
 
 	d, err := time.ParseDuration(val)
 	if err != nil {
-		log.Printf("Warning: Invalid duration for %s: %v, using default %s", envVar, err, defaultVal)
 		return defaultVal
 	}
 
@@ -60,7 +59,8 @@ func parseDuration(envVar string, defaultVal time.Duration) time.Duration {
 }
 
 // parseInt parses an integer from an environment variable.
-// If the variable is not set or parsing fails, the default value is returned.
+// If the variable is not set or parsing fails, the default value is returned silently.
+// This implements graceful degradation - invalid configuration does not cause errors.
 func parseInt(envVar string, defaultVal int) int {
 	val := os.Getenv(envVar)
 	if val == "" {
@@ -69,7 +69,6 @@ func parseInt(envVar string, defaultVal int) int {
 
 	i, err := strconv.Atoi(val)
 	if err != nil {
-		log.Printf("Warning: Invalid integer for %s: %v, using default %d", envVar, err, defaultVal)
 		return defaultVal
 	}
 

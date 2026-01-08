@@ -1,4 +1,4 @@
-.PHONY: fmt lint test build e2e e2e-fast e2e-snapshot-only clean
+.PHONY: fmt lint test build check e2e e2e-fast e2e-snapshot-only clean
 
 fmt:
 	go fmt ./...
@@ -11,6 +11,10 @@ test:
 
 build:
 	go build -o bin/hcloud-k8s ./cmd/hcloud-k8s
+
+# Run all checks: format, lint, test, and build
+check: fmt lint test build
+	@echo "✅ All checks passed!"
 
 # Full e2e test suite (use in CI)
 # Builds snapshots, runs all tests, cleans up

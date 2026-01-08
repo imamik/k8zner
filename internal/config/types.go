@@ -1,14 +1,6 @@
 // Package config defines the configuration structure and methods for the application.
 package config
 
-import (
-	"fmt"
-	"os"
-
-	"github.com/mitchellh/mapstructure"
-	"gopkg.in/yaml.v3"
-)
-
 // Config holds the application configuration.
 type Config struct {
 	ClusterName string   `mapstructure:"cluster_name" yaml:"cluster_name"`
@@ -179,54 +171,4 @@ type AddonsConfig struct {
 // CCMConfig defines the Hetzner Cloud Controller Manager configuration.
 type CCMConfig struct {
 	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
-}
-
-// LoadFile reads and parses the configuration from a YAML file.
-func LoadFile(path string) (*Config, error) {
-	// #nosec G304
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
-	}
-
-	var rawConfig map[string]interface{}
-	if err := yaml.Unmarshal(data, &rawConfig); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal yaml: %w", err)
-	}
-
-	var cfg Config
-	if err := mapstructure.Decode(rawConfig, &cfg); err != nil {
-		return nil, fmt.Errorf("failed to decode config: %w", err)
-	}
-
-	// Set defaults
-	if cfg.Network.IPv4CIDR == "" {
-		cfg.Network.IPv4CIDR = "10.0.0.0/16"
-	}
-	if cfg.Network.Zone == "" {
-		cfg.Network.Zone = "eu-central" // Default used in terraform usually
-	}
-
-	// Default CCM to enabled (matches Terraform behavior and provides cloud integration)
-	if !cfg.Addons.CCM.Enabled {
-		// Check if addons.ccm.enabled was explicitly set to false
-		if addonsMap, ok := rawConfig["addons"].(map[string]interface{}); ok {
-			if ccmMap, ok := addonsMap["ccm"].(map[string]interface{}); ok {
-				if _, explicitlySet := ccmMap["enabled"]; !explicitlySet {
-					cfg.Addons.CCM.Enabled = true
-				}
-			} else {
-				cfg.Addons.CCM.Enabled = true
-			}
-		} else {
-			cfg.Addons.CCM.Enabled = true
-		}
-	}
-
-	// Validate
-	if cfg.ClusterName == "" {
-		return nil, fmt.Errorf("cluster_name is required")
-	}
-
-	return &cfg, nil
 }
