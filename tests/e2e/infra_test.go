@@ -13,7 +13,7 @@ import (
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"hcloud-k8s/internal/cluster"
+	"hcloud-k8s/internal/orchestration"
 	"hcloud-k8s/internal/config"
 	hcloud_internal "hcloud-k8s/internal/hcloud"
 )
@@ -79,7 +79,7 @@ func TestInfraProvisioning(t *testing.T) {
 	sshKeyName, _ := setupSSHKey(t, client, cleaner, clusterName)
 	cfg.SSHKeys = []string{sshKeyName}
 
-	reconciler := cluster.NewReconciler(client, &MockTalosProducer{}, cfg)
+	reconciler := orchestration.NewReconciler(client, &MockTalosProducer{}, cfg)
 
 	// CLEANUP
 	defer func() {

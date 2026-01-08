@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"hcloud-k8s/internal/cluster"
+	"hcloud-k8s/internal/orchestration"
 	"hcloud-k8s/internal/config"
 	"hcloud-k8s/internal/talos"
 )
@@ -93,7 +93,7 @@ func TestParallelProvisioning(t *testing.T) {
 	}
 
 	// Create reconciler
-	reconciler := cluster.NewReconciler(sharedCtx.Client, talosGen, cfg)
+	reconciler := orchestration.NewReconciler(sharedCtx.Client, talosGen, cfg)
 
 	// Run reconciliation
 	t.Log("Starting reconciliation with MULTIPLE servers...")

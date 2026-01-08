@@ -1,5 +1,8 @@
-// Package cluster provides the reconciliation logic for provisioning and managing Hetzner Cloud resources.
-package cluster
+// Package orchestration provides high-level reconciliation orchestration for cluster provisioning.
+//
+// This package coordinates the workflow of provisioning infrastructure and managing
+// cluster state by delegating to lifecycle and platform packages.
+package orchestration
 
 import (
 	"context"
@@ -9,6 +12,7 @@ import (
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"hcloud-k8s/internal/config"
 	hcloud_internal "hcloud-k8s/internal/hcloud"
+	"hcloud-k8s/internal/lifecycle"
 )
 
 // TalosConfigProducer defines the interface for generating Talos configurations.
@@ -32,7 +36,7 @@ type Reconciler struct {
 	infra             hcloud_internal.InfrastructureManager // Combined interface for Bootstrapper
 	talosGenerator    TalosConfigProducer
 	config            *config.Config
-	bootstrapper      *Bootstrapper
+	bootstrapper      *lifecycle.Bootstrapper
 	timeouts          *config.Timeouts
 
 	// State
@@ -58,7 +62,7 @@ func NewReconciler(
 		infra:             infra,
 		talosGenerator:    talosGenerator,
 		config:            cfg,
-		bootstrapper:      NewBootstrapper(infra),
+		bootstrapper:      lifecycle.NewBootstrapper(infra),
 		timeouts:          config.LoadTimeouts(),
 	}
 }

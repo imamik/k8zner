@@ -12,7 +12,7 @@ import (
 	"os"
 
 	"hcloud-k8s/internal/addons"
-	"hcloud-k8s/internal/cluster"
+	"hcloud-k8s/internal/orchestration"
 	"hcloud-k8s/internal/config"
 	"hcloud-k8s/internal/hcloud"
 	"hcloud-k8s/internal/talos"
@@ -100,7 +100,7 @@ func initializeClient() *hcloud.RealClient {
 	return hcloud.NewRealClient(token)
 }
 
-// initializeTalosGenerator creates a Talos configuration generator for the cluster.
+// initializeTalosGenerator creates a Talos configuration generator for the orchestration.
 // Generates machine configs, certificates, and client secrets for cluster access.
 func initializeTalosGenerator(cfg *config.Config) (*talos.ConfigGenerator, error) {
 	endpoint := fmt.Sprintf("https://%s-kube-api:6443", cfg.ClusterName)
@@ -119,11 +119,11 @@ func initializeTalosGenerator(cfg *config.Config) (*talos.ConfigGenerator, error
 	return gen, nil
 }
 
-// reconcileInfrastructure provisions infrastructure and bootstraps the Kubernetes cluster.
+// reconcileInfrastructure provisions infrastructure and bootstraps the Kubernetes orchestration.
 // Returns the reconciler instance and kubeconfig bytes if bootstrap completed.
 // Kubeconfig will be empty if cluster was already bootstrapped.
-func reconcileInfrastructure(ctx context.Context, client *hcloud.RealClient, talosGen *talos.ConfigGenerator, cfg *config.Config) (*cluster.Reconciler, []byte, error) {
-	reconciler := cluster.NewReconciler(client, talosGen, cfg)
+func reconcileInfrastructure(ctx context.Context, client *hcloud.RealClient, talosGen *talos.ConfigGenerator, cfg *config.Config) (*orchestration.Reconciler, []byte, error) {
+	reconciler := orchestration.NewReconciler(client, talosGen, cfg)
 	kubeconfig, err := reconciler.Reconcile(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("reconciliation failed: %w", err)

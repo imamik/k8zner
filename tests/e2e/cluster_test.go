@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"hcloud-k8s/internal/cluster"
+	"hcloud-k8s/internal/orchestration"
 	"hcloud-k8s/internal/config"
 	hcloud_client "hcloud-k8s/internal/hcloud"
 	"hcloud-k8s/internal/talos"
@@ -131,7 +131,7 @@ func TestClusterProvisioning(t *testing.T) {
 	talosGen, err := talos.NewConfigGenerator(clusterName, cfg.Kubernetes.Version, cfg.Talos.Version, "", "")
 	assert.NoError(t, err)
 
-	reconciler := cluster.NewReconciler(hClient, talosGen, cfg)
+	reconciler := orchestration.NewReconciler(hClient, talosGen, cfg)
 
 	// Run Reconcile
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)

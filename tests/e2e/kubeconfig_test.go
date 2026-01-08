@@ -13,7 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"hcloud-k8s/internal/cluster"
+	"hcloud-k8s/internal/orchestration"
 	"hcloud-k8s/internal/config"
 	hcloud_client "hcloud-k8s/internal/hcloud"
 	"hcloud-k8s/internal/talos"
@@ -106,7 +106,7 @@ func TestKubeconfigRetrieval(t *testing.T) {
 	)
 	require.NoError(t, err, "Failed to create Talos generator")
 
-	reconciler := cluster.NewReconciler(hClient, talosGen, cfg)
+	reconciler := orchestration.NewReconciler(hClient, talosGen, cfg)
 
 	// Run Reconcile with generous timeout
 	t.Log("Starting reconciliation (this will take 15-20 minutes)...")
@@ -236,7 +236,7 @@ func TestKubeconfigRetrieval(t *testing.T) {
 	// === KUBECTL VALIDATION PHASE ===
 	t.Log("=== Starting kubectl validation phase ===")
 	t.Log("Waiting for Kubernetes cluster to be fully ready...")
-	t.Log("This may take 10-15 minutes for a fresh cluster...")
+	t.Log("This may take 10-15 minutes for a fresh orchestration...")
 
 	kubectlCtx, kubectlCancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer kubectlCancel()

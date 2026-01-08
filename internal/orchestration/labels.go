@@ -1,4 +1,4 @@
-package cluster
+package orchestration
 
 // LabelBuilder provides a fluent interface for building Hetzner Cloud resource labels.
 // Labels are used to identify and group resources belonging to the same cluster.
