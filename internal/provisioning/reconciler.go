@@ -1,8 +1,9 @@
-// Package orchestration provides high-level reconciliation orchestration for cluster provisioning.
+// Package provisioning handles all cluster provisioning operations.
 //
-// This package coordinates the workflow of provisioning infrastructure and managing
-// cluster state by delegating to lifecycle and platform packages.
-package orchestration
+// This package manages the complete workflow of provisioning infrastructure,
+// compute resources, and cluster bootstrapping. It coordinates network setup,
+// server provisioning, image building, and Talos cluster initialization.
+package provisioning
 
 import (
 	"context"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"hcloud-k8s/internal/config"
-	"hcloud-k8s/internal/lifecycle"
 	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
 	"hcloud-k8s/internal/util/async"
 )
@@ -37,7 +37,7 @@ type Reconciler struct {
 	infra             hcloud_internal.InfrastructureManager // Combined interface for Bootstrapper
 	talosGenerator    TalosConfigProducer
 	config            *config.Config
-	bootstrapper      *lifecycle.Bootstrapper
+	bootstrapper      *Bootstrapper
 	timeouts          *config.Timeouts
 
 	// State
@@ -63,7 +63,7 @@ func NewReconciler(
 		infra:             infra,
 		talosGenerator:    talosGenerator,
 		config:            cfg,
-		bootstrapper:      lifecycle.NewBootstrapper(infra),
+		bootstrapper:      NewBootstrapper(infra),
 		timeouts:          config.LoadTimeouts(),
 	}
 }

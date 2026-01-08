@@ -5,8 +5,13 @@ This document defines the structural patterns and quality standards for the hclo
 ## 1. Package Structure
 
 - **cmd/**: Split commands (CLI definitions) from handlers (business logic)
-- **internal/**: Organize by domain (cluster, addons, hcloud, config) not by layer
-- One package = one responsibility (infrastructure ≠ addons)
+- **internal/**: Organize by domain and responsibility:
+  - **provisioning/**: All cluster provisioning (compute, infrastructure, images, bootstrap)
+  - **addons/**: Addon installation
+  - **config/**: Configuration management
+  - **platform/**: External system integrations (hcloud, talos, ssh)
+  - **util/**: Reusable utilities (async, labels, naming, retry, etc.)
+- One package = one responsibility - provisioning is acceptable as a larger package when the domain is cohesive
 
 ## 2. Function Design
 
@@ -93,10 +98,15 @@ Create a new package when:
 - **Too large**: 15+ files suggests multiple concerns - consider splitting
 
 ### Examples from our codebase:
+- ✅ `internal/provisioning` - Cohesive domain (cluster provisioning), all related operations together
 - ✅ `internal/addons` - Clear domain (cluster addons), reusable, external boundary (kubectl)
-- ✅ `internal/hcloud` - External system boundary, many operations
+- ✅ `internal/platform/hcloud` - External system boundary, many operations
 - ✅ `cmd/hcloud-k8s/commands` - CLI commands separate from handlers
 - ✅ `cmd/hcloud-k8s/handlers` - Business logic separate from CLI framework
+- ✅ `internal/util/*` - Small, focused utilities (async, naming, labels, retry)
+
+### Why provisioning/ is a flat package:
+The provisioning package contains ~17 files but represents a single cohesive domain: **cluster provisioning**. All files work together to provision infrastructure, compute resources, images, and bootstrap Talos clusters. Splitting into subpackages (compute/, infrastructure/, etc.) would require creating separate types and complex cross-package dependencies due to Go's package system. The flat structure keeps the codebase simple while maintaining clear file organization through descriptive naming (control_plane.go, network.go, bootstrap.go, etc.).
 
 ---
 

@@ -1,10 +1,11 @@
-package orchestration
+package provisioning
 
 import (
 	"context"
 	"fmt"
 	"log"
 
+	"hcloud-k8s/internal/util/labels"
 	"hcloud-k8s/internal/util/naming"
 )
 
@@ -50,7 +51,7 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context) (map[string]stri
 	ips := make(map[string]string)
 	for i, pool := range r.config.ControlPlane.NodePools {
 		// Placement Group for Control Plane
-		pgLabels := NewLabelBuilder(r.config.ClusterName).
+		pgLabels := labels.NewLabelBuilder(r.config.ClusterName).
 			WithPool(pool.Name).
 			Build()
 

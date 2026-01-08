@@ -1,6 +1,7 @@
-package orchestration
+package provisioning
 
 import (
+	"hcloud-k8s/internal/util/labels"
 	"context"
 	"fmt"
 	"log"
@@ -41,7 +42,7 @@ func (r *Reconciler) ensureServer(
 	log.Printf("Creating %s Server %s...", role, serverName)
 
 	// Labels
-	labels := NewLabelBuilder(r.config.ClusterName).
+	labels := labels.NewLabelBuilder(r.config.ClusterName).
 		WithRole(role).
 		WithPool(poolName).
 		Merge(extraLabels).

@@ -1,11 +1,10 @@
-package image_test
+package provisioning
 
 import (
 	"context"
 	"testing"
 
 	"hcloud-k8s/internal/platform/hcloud"
-	"hcloud-k8s/internal/imagebuilder"
 	"hcloud-k8s/internal/platform/ssh"
 )
 
@@ -35,7 +34,7 @@ func TestBuild(t *testing.T) {
 		return &MockSSH{}
 	}
 
-	builder := image.NewBuilder(mockClient, mockSSHFactory)
+	builder := NewBuilder(mockClient, mockSSHFactory)
 	snapshotID, err := builder.Build(context.Background(), "test-image", "v1.8.0", "amd64", "nbg1", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

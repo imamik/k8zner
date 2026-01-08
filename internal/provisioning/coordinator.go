@@ -1,4 +1,4 @@
-package orchestration
+package provisioning
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"log"
 
 	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
-	"hcloud-k8s/internal/imagebuilder"
 )
 
 // ensureAllImages pre-builds all required Talos images in parallel.
@@ -198,8 +197,8 @@ func (r *Reconciler) ensureImage(ctx context.Context, serverType, location strin
 }
 
 // createImageBuilder creates an image builder instance.
-func (r *Reconciler) createImageBuilder() *image.Builder {
+func (r *Reconciler) createImageBuilder() *Builder {
 	// Pass nil for communicator factory - the builder will use its internal
 	// SSH key generation and create its own SSH client with those keys
-	return image.NewBuilder(r.infra, nil)
+	return NewBuilder(r.infra, nil)
 }

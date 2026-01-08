@@ -1,6 +1,7 @@
-package orchestration
+package provisioning
 
 import (
+	"hcloud-k8s/internal/util/labels"
 	"context"
 	"fmt"
 	"log"
@@ -53,7 +54,7 @@ func (r *Reconciler) reconcileNodePool(
 		} else {
 			// Terraform: ipv4_private = cidrhost(subnet, wkr_index + 1)
 			// Note: Terraform iterates worker nodepools and uses separate subnets for each
-			// hcloud_network_subnet.worker[np.name]
+			// hcloud_network_subnet.worker[nr.name]
 			// The config.GetSubnetForRole("worker", i) handles the subnet iteration.
 			subnet, err = r.config.GetSubnetForRole("worker", poolIndex)
 			if err != nil {
@@ -83,7 +84,7 @@ func (r *Reconciler) reconcileNodePool(
 
 			if usePG {
 				pgIndex := int((j-1)/10) + 1
-				pgLabels := NewLabelBuilder(r.config.ClusterName).
+				pgLabels := labels.NewLabelBuilder(r.config.ClusterName).
 					WithRole("worker").
 					WithPool(poolName).
 					WithNodePool(poolName).

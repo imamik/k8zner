@@ -1,5 +1,6 @@
-// Package image provides the logic for building Talos disk images on Hetzner Cloud.
-package image
+// Package provisioning provides the logic for building Talos disk images on Hetzner Cloud.
+// This file handles image building operations.
+package provisioning
 
 import (
 	"context"

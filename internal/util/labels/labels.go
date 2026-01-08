@@ -1,4 +1,9 @@
-package orchestration
+// Package labels provides consistent labeling utilities for Hetzner Cloud resources.
+//
+// This package enforces uniform labeling patterns across all infrastructure resources,
+// enabling easy identification, grouping, and management of resources belonging to
+// the same cluster.
+package labels
 
 // LabelBuilder provides a fluent interface for building Hetzner Cloud resource labels.
 // Labels are used to identify and group resources belonging to the same cluster.
