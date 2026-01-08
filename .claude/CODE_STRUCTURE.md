@@ -33,11 +33,13 @@ This document defines the structural patterns and quality standards for the hclo
 
 ## 4. Documentation
 
-- Package-level comments explain purpose and scope
+- Package-level comments explain purpose and scope (keep to ~10-15 lines max)
 - All exported functions have godoc comments with:
   - What it does (one-line summary)
-  - Key behavior details
-  - Required inputs/environment variables
+  - Key behavior details (1-2 additional lines if needed)
+  - Required inputs/environment variables (only if non-obvious)
+- **Keep function comments concise (1-3 lines)** - verbose docs make code hard to scan
+- Internal/unexported functions don't need comments unless logic is non-obvious
 - Comments explain "why", not "what" (code shows what)
 - Remove verbose thinking/planning comments from final code
 
