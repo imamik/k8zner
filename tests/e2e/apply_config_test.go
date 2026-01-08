@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	hcloud_internal "hcloud-k8s/internal/hcloud"
-	talos_config "hcloud-k8s/internal/talos"
 	"github.com/siderolabs/talos/pkg/machinery/api/machine"
 	"github.com/siderolabs/talos/pkg/machinery/client"
 	"github.com/siderolabs/talos/pkg/machinery/client/config"
 	"github.com/stretchr/testify/require"
+	hcloud_internal "hcloud-k8s/internal/hcloud"
+	talos_config "hcloud-k8s/internal/talos"
 )
 
 // TestApplyConfig - Test 2: Apply machine configuration to a single Talos node

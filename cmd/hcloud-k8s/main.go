@@ -10,7 +10,8 @@
 //   - image: Build custom Talos Linux snapshots
 //
 // For detailed usage information, run:
-//   hcloud-k8s --help
+//
+//	hcloud-k8s --help
 package main
 
 import (

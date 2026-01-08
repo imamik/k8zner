@@ -13,10 +13,12 @@ import (
 // and bootstrapping Kubernetes using Talos Linux.
 //
 // Required flags:
-//   --config, -c: Path to cluster configuration YAML file
+//
+//	--config, -c: Path to cluster configuration YAML file
 //
 // Environment variables:
-//   HCLOUD_TOKEN: Hetzner Cloud API token (required)
+//
+//	HCLOUD_TOKEN: Hetzner Cloud API token (required)
 func Apply() *cobra.Command {
 	var configPath string
 

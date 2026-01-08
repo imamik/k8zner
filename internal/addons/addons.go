@@ -41,7 +41,9 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 	if err != nil {
 		return err
 	}
-	defer os.Remove(tmpKubeconfig)
+	defer func() {
+		_ = os.Remove(tmpKubeconfig)
+	}()
 
 	if cfg.Addons.CCM.Enabled {
 		if err := applyCCM(ctx, tmpKubeconfig, cfg.HCloudToken, networkID); err != nil {
@@ -136,10 +138,12 @@ func applyManifests(ctx context.Context, addonName string, kubeconfigPath string
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
-	defer os.Remove(tmpfile.Name())
+	defer func() {
+		_ = os.Remove(tmpfile.Name())
+	}()
 
 	if _, err := tmpfile.Write(combinedYAML.Bytes()); err != nil {
-		tmpfile.Close()
+		_ = tmpfile.Close()
 		return fmt.Errorf("failed to write temp file: %w", err)
 	}
 	if err := tmpfile.Close(); err != nil {
@@ -165,13 +169,13 @@ func writeTempKubeconfig(kubeconfig []byte) (string, error) {
 	}
 
 	if _, err := tmpfile.Write(kubeconfig); err != nil {
-		tmpfile.Close()
-		os.Remove(tmpfile.Name())
+		_ = tmpfile.Close()
+		_ = os.Remove(tmpfile.Name())
 		return "", fmt.Errorf("failed to write temp kubeconfig: %w", err)
 	}
 
 	if err := tmpfile.Close(); err != nil {
-		os.Remove(tmpfile.Name())
+		_ = os.Remove(tmpfile.Name())
 		return "", fmt.Errorf("failed to close temp kubeconfig: %w", err)
 	}
 

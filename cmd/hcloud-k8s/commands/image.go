@@ -28,13 +28,15 @@ func Image() *cobra.Command {
 // configuration files for node provisioning.
 //
 // Flags:
-//   --name: Snapshot name (default: "talos")
-//   --version: Talos version to install (default: "v1.7.0")
-//   --arch: CPU architecture - amd64 or arm64 (default: "amd64")
-//   --location: Hetzner datacenter location (default: "nbg1")
+//
+//	--name: Snapshot name (default: "talos")
+//	--version: Talos version to install (default: "v1.7.0")
+//	--arch: CPU architecture - amd64 or arm64 (default: "amd64")
+//	--location: Hetzner datacenter location (default: "nbg1")
 //
 // Environment variables:
-//   HCLOUD_TOKEN: Hetzner Cloud API token (required)
+//
+//	HCLOUD_TOKEN: Hetzner Cloud API token (required)
 func Build() *cobra.Command {
 	var (
 		imageName    string

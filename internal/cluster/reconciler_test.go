@@ -7,10 +7,10 @@ import (
 	"testing"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
-	"hcloud-k8s/internal/config"
-	hcloud_internal "hcloud-k8s/internal/hcloud"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"hcloud-k8s/internal/config"
+	hcloud_internal "hcloud-k8s/internal/hcloud"
 )
 
 // MockTalosProducer implementation.

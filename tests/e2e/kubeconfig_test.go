@@ -11,12 +11,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"hcloud-k8s/internal/cluster"
 	"hcloud-k8s/internal/config"
 	hcloud_client "hcloud-k8s/internal/hcloud"
 	"hcloud-k8s/internal/talos"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // TestKubeconfigRetrieval is a minimal E2E test focused on validating kubeconfig retrieval.
