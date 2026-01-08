@@ -9,8 +9,8 @@ import (
 )
 
 // readAndProcessManifests reads manifest files for an addon from the embedded
-// filesystem, processes templates with the provided data, and combines them
-// into a single YAML document.
+// filesystem, processes them as Go templates with the provided data, and combines
+// them into a single YAML document.
 func readAndProcessManifests(addonName string, data any) ([]byte, error) {
 	addonPath := filepath.Join("manifests", addonName)
 	entries, err := manifestsFS.ReadDir(addonPath)
@@ -30,7 +30,7 @@ func readAndProcessManifests(addonName string, data any) ([]byte, error) {
 			return nil, err
 		}
 
-		processed, err := processManifestContent(entry.Name(), content, data)
+		processed, err := processTemplate(entry.Name(), content, data)
 		if err != nil {
 			return nil, err
 		}
@@ -58,13 +58,6 @@ func readManifestFile(addonPath, fileName string) ([]byte, error) {
 		return nil, fmt.Errorf("failed to read manifest file %s: %w", filePath, err)
 	}
 	return content, nil
-}
-
-// processManifestContent processes manifest content as a Go template.
-// This allows variable substitution in all YAML files, whether they contain
-// template variables or not. Static files are processed safely without modification.
-func processManifestContent(fileName string, content []byte, data any) (string, error) {
-	return processTemplate(fileName, content, data)
 }
 
 // appendYAML appends a YAML document to the buffer with appropriate separators.
