@@ -18,45 +18,64 @@ func readAndProcessManifests(addonName string, data any) ([]byte, error) {
 		return nil, fmt.Errorf("failed to read manifests for addon %s at %s: %w", addonName, addonPath, err)
 	}
 
-	var combinedYAML bytes.Buffer
+	var combined bytes.Buffer
 
 	for _, entry := range entries {
-		if entry.IsDir() {
+		if entry.IsDir() || !isManifestFile(entry.Name()) {
 			continue
 		}
 
-		fileName := entry.Name()
-		filePath := filepath.Join(addonPath, fileName)
-
-		content, err := manifestsFS.ReadFile(filePath)
+		content, err := readManifestFile(addonPath, entry.Name())
 		if err != nil {
-			return nil, fmt.Errorf("failed to read manifest file %s: %w", filePath, err)
+			return nil, err
 		}
 
-		var processedContent string
-
-		if strings.HasSuffix(fileName, ".yaml.tmpl") {
-			processedContent, err = processTemplate(fileName, content, data)
-			if err != nil {
-				return nil, err
-			}
-		} else if strings.HasSuffix(fileName, ".yaml") || strings.HasSuffix(fileName, ".yml") {
-			processedContent = string(content)
-		} else {
-			continue
+		processed, err := processManifestContent(entry.Name(), content, data)
+		if err != nil {
+			return nil, err
 		}
 
-		if combinedYAML.Len() > 0 {
-			combinedYAML.WriteString("\n---\n")
-		}
-		combinedYAML.WriteString(processedContent)
+		appendYAML(&combined, processed)
 	}
 
-	if combinedYAML.Len() == 0 {
+	if combined.Len() == 0 {
 		return nil, fmt.Errorf("no YAML manifests found for addon %s", addonName)
 	}
 
-	return combinedYAML.Bytes(), nil
+	return combined.Bytes(), nil
+}
+
+// isManifestFile checks if a filename is a valid manifest file.
+func isManifestFile(name string) bool {
+	return strings.HasSuffix(name, ".yaml") ||
+		strings.HasSuffix(name, ".yml") ||
+		strings.HasSuffix(name, ".yaml.tmpl")
+}
+
+// readManifestFile reads a single manifest file from the embedded filesystem.
+func readManifestFile(addonPath, fileName string) ([]byte, error) {
+	filePath := filepath.Join(addonPath, fileName)
+	content, err := manifestsFS.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read manifest file %s: %w", filePath, err)
+	}
+	return content, nil
+}
+
+// processManifestContent processes manifest content, applying templates if needed.
+func processManifestContent(fileName string, content []byte, data any) (string, error) {
+	if strings.HasSuffix(fileName, ".yaml.tmpl") {
+		return processTemplate(fileName, content, data)
+	}
+	return string(content), nil
+}
+
+// appendYAML appends a YAML document to the buffer with appropriate separators.
+func appendYAML(buffer *bytes.Buffer, content string) {
+	if buffer.Len() > 0 {
+		buffer.WriteString("\n---\n")
+	}
+	buffer.WriteString(content)
 }
 
 // processTemplate processes a template file with the provided data.
