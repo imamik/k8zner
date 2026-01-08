@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"hcloud-k8s/internal/orchestration"
 	"hcloud-k8s/internal/config"
-	hcloud_internal "hcloud-k8s/internal/hcloud"
+	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
 )
 
 // Mock TalosProducer

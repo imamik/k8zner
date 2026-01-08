@@ -7,9 +7,9 @@ import (
 	"log"
 	"time"
 
-	"hcloud-k8s/internal/hcloud"
-	"hcloud-k8s/internal/keygen"
-	"hcloud-k8s/internal/ssh"
+	"hcloud-k8s/internal/platform/hcloud"
+	"hcloud-k8s/internal/util/keygen"
+	"hcloud-k8s/internal/platform/ssh"
 )
 
 // CommunicatorFactory creates a Communicator for a given host.

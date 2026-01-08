@@ -6,7 +6,7 @@ import (
 	"net"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
-	"hcloud-k8s/internal/retry"
+	"hcloud-k8s/internal/util/retry"
 )
 
 // EnsureNetwork ensures that a network exists with the given specifications.

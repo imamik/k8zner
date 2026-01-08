@@ -15,8 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"hcloud-k8s/internal/orchestration"
 	"hcloud-k8s/internal/config"
-	hcloud_client "hcloud-k8s/internal/hcloud"
-	"hcloud-k8s/internal/talos"
+	hcloud_client "hcloud-k8s/internal/platform/hcloud"
+	"hcloud-k8s/internal/platform/talos"
 )
 
 // TestClusterProvisioning is an end-to-end test that provisions a cluster and verifies resources.

@@ -11,7 +11,7 @@ import (
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"hcloud-k8s/internal/config"
-	hcloud_internal "hcloud-k8s/internal/hcloud"
+	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
 	"hcloud-k8s/internal/lifecycle"
 )
 

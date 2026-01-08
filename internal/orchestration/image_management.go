@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log"
 
-	hcloud_internal "hcloud-k8s/internal/hcloud"
-	"hcloud-k8s/internal/image"
+	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
+	"hcloud-k8s/internal/imagebuilder"
 )
 
 // ensureAllImages pre-builds all required Talos images in parallel.

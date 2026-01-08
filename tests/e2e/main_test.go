@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"hcloud-k8s/internal/hcloud"
+	"hcloud-k8s/internal/platform/hcloud"
 )
 
 // TestImageBuildLifecycle verifies that servers can boot from Talos snapshots

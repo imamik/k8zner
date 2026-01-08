@@ -11,7 +11,7 @@ import (
 
 	"hcloud-k8s/internal/orchestration"
 	"hcloud-k8s/internal/config"
-	"hcloud-k8s/internal/talos"
+	"hcloud-k8s/internal/platform/talos"
 )
 
 // TestParallelProvisioning tests cluster provisioning with MULTIPLE servers to validate parallelization.

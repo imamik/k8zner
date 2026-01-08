@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"hcloud-k8s/internal/hcloud"
-	"hcloud-k8s/internal/image"
-	"hcloud-k8s/internal/ssh"
+	"hcloud-k8s/internal/platform/hcloud"
+	"hcloud-k8s/internal/imagebuilder"
+	"hcloud-k8s/internal/platform/ssh"
 )
 
 func TestBuild(t *testing.T) {

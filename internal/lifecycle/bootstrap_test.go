@@ -6,7 +6,7 @@ import (
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
-	hcloud_internal "hcloud-k8s/internal/hcloud"
+	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
 )
 
 func TestBootstrap_StateMarkerPresent(t *testing.T) {

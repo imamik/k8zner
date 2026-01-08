@@ -6,8 +6,8 @@ import (
 	"log"
 	"os"
 
-	"hcloud-k8s/internal/hcloud"
-	"hcloud-k8s/internal/image"
+	"hcloud-k8s/internal/platform/hcloud"
+	"hcloud-k8s/internal/imagebuilder"
 )
 
 // Build creates a custom Talos Linux snapshot on Hetzner Cloud.

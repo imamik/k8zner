@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"hcloud-k8s/internal/hcloud"
-	"hcloud-k8s/internal/keygen"
+	"hcloud-k8s/internal/platform/hcloud"
+	"hcloud-k8s/internal/util/keygen"
 )
 
 // ResourceCleaner helps track and clean up resources.

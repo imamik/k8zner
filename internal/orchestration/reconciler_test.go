@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"hcloud-k8s/internal/config"
-	hcloud_internal "hcloud-k8s/internal/hcloud"
+	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
 )
 
 // MockTalosProducer implementation.

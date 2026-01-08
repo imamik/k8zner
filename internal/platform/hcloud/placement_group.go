@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
-	"hcloud-k8s/internal/retry"
+	"hcloud-k8s/internal/util/retry"
 )
 
 // EnsurePlacementGroup ensures that a placement group exists with the given specifications.

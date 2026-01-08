@@ -13,7 +13,7 @@ import (
 
 	"github.com/siderolabs/talos/pkg/machinery/client"
 	"github.com/stretchr/testify/require"
-	hcloud_internal "hcloud-k8s/internal/hcloud"
+	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
 )
 
 // TestSimpleTalosNode - Test 1: Create server from snapshot and verify basic Talos API connectivity

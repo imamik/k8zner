@@ -16,8 +16,8 @@ import (
 	"github.com/siderolabs/talos/pkg/machinery/api/machine"
 	"github.com/siderolabs/talos/pkg/machinery/client"
 	"github.com/siderolabs/talos/pkg/machinery/client/config"
-	hcloud_internal "hcloud-k8s/internal/hcloud"
-	"hcloud-k8s/internal/netutil"
+	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
+	"hcloud-k8s/internal/util/netutil"
 )
 
 // Bootstrapper handles the cluster bootstrapping process.
