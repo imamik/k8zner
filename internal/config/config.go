@@ -208,20 +208,7 @@ func LoadFile(path string) (*Config, error) {
 	}
 
 	// Default CCM to enabled (matches Terraform behavior and provides cloud integration)
-	if !cfg.Addons.CCM.Enabled {
-		// Check if addons.ccm.enabled was explicitly set to false
-		if addonsMap, ok := rawConfig["addons"].(map[string]interface{}); ok {
-			if ccmMap, ok := addonsMap["ccm"].(map[string]interface{}); ok {
-				if _, explicitlySet := ccmMap["enabled"]; !explicitlySet {
-					cfg.Addons.CCM.Enabled = true
-				}
-			} else {
-				cfg.Addons.CCM.Enabled = true
-			}
-		} else {
-			cfg.Addons.CCM.Enabled = true
-		}
-	}
+	cfg.Addons.CCM.Enabled = shouldEnableCCMByDefault(rawConfig, cfg.Addons.CCM.Enabled)
 
 	// Validate
 	if cfg.ClusterName == "" {
@@ -229,4 +216,30 @@ func LoadFile(path string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// shouldEnableCCMByDefault determines if CCM should be enabled when not explicitly configured.
+// Returns true if CCM is already enabled OR if it was not explicitly set to false in the raw config.
+func shouldEnableCCMByDefault(rawConfig map[string]interface{}, currentEnabled bool) bool {
+	if currentEnabled {
+		return true
+	}
+
+	// Check if addons.ccm.enabled was explicitly set to false
+	addonsMap, ok := rawConfig["addons"].(map[string]interface{})
+	if !ok {
+		return true // No addons section, default to enabled
+	}
+
+	ccmMap, ok := addonsMap["ccm"].(map[string]interface{})
+	if !ok {
+		return true // No ccm section, default to enabled
+	}
+
+	_, explicitlySet := ccmMap["enabled"]
+	if !explicitlySet {
+		return true // CCM section exists but enabled not set, default to enabled
+	}
+
+	return false // Explicitly set to false, respect it
 }
