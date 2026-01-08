@@ -8,13 +8,22 @@ import (
 
 // CIDRSubnet calculates a subnet address given a network address, a netmask size increase, and a subnet number.
 // This mimics the behavior of Terraform's cidrsubnet function.
-// prefix: The network prefix (e.g., "10.0.0.0/16")
-// newbits: The number of additional bits to add to the prefix length (e.g., 8 for /24 inside /16)
-// netnum: The zero-based index of the subnet to calculate.
+//
+// Parameters:
+//   - prefix: The network prefix (e.g., "10.0.0.0/16")
+//   - newbits: The number of additional bits to add to the prefix length (e.g., 8 for /24 inside /16)
+//   - netnum: The zero-based index of the subnet to calculate
+//
+// Note: Only IPv4 addresses are supported. IPv6 addresses will return an error.
 func CIDRSubnet(prefix string, newbits int, netnum int) (string, error) {
 	_, network, err := net.ParseCIDR(prefix)
 	if err != nil {
 		return "", fmt.Errorf("invalid CIDR prefix: %w", err)
+	}
+
+	// Validate IPv4
+	if network.IP.To4() == nil {
+		return "", fmt.Errorf("only IPv4 addresses are supported, got IPv6: %s", prefix)
 	}
 
 	maskSize, totalBits := network.Mask.Size()
@@ -49,19 +58,28 @@ func CIDRSubnet(prefix string, newbits int, netnum int) (string, error) {
 	ipInt = ipInt + uint64(offset)
 
 	// Convert back to IP
-	newIP := ipFromBigInt(ipInt, len(ip))
+	newIP := ipFromBigInt(ipInt)
 
 	return fmt.Sprintf("%s/%d", newIP.String(), newMaskSize), nil
 }
 
 // CIDRHost calculates a full host IP address for a given network address and host number.
 // This mimics the behavior of Terraform's cidrhost function.
-// prefix: The network prefix (e.g., "10.0.0.0/16")
-// hostnum: The host number to calculate. Can be negative.
+//
+// Parameters:
+//   - prefix: The network prefix (e.g., "10.0.0.0/16")
+//   - hostnum: The host number to calculate. Can be negative to count from the end
+//
+// Note: Only IPv4 addresses are supported. IPv6 addresses will return an error.
 func CIDRHost(prefix string, hostnum int) (string, error) {
 	_, network, err := net.ParseCIDR(prefix)
 	if err != nil {
 		return "", fmt.Errorf("invalid CIDR prefix: %w", err)
+	}
+
+	// Validate IPv4
+	if network.IP.To4() == nil {
+		return "", fmt.Errorf("only IPv4 addresses are supported, got IPv6: %s", prefix)
 	}
 
 	maskSize, totalBits := network.Mask.Size()
@@ -92,7 +110,7 @@ func CIDRHost(prefix string, hostnum int) (string, error) {
 	ipInt := bigIntFromIP(ip)
 	ipInt = ipInt + offset
 
-	newIP := ipFromBigInt(ipInt, len(ip))
+	newIP := ipFromBigInt(ipInt)
 	return newIP.String(), nil
 }
 
@@ -108,8 +126,8 @@ func bigIntFromIP(ip net.IP) uint64 {
 	return uint64(binary.BigEndian.Uint32(ip))
 }
 
-// ipFromBigInt converts a uint64 value back to an IP address.
-func ipFromBigInt(val uint64, _ int) net.IP {
+// ipFromBigInt converts a uint64 value back to an IPv4 address.
+func ipFromBigInt(val uint64) net.IP {
 	ip := make(net.IP, 4)
 	// #nosec G115
 	binary.BigEndian.PutUint32(ip, uint32(val))

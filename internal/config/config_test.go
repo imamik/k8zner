@@ -12,11 +12,13 @@ func TestLoadFile(t *testing.T) {
 	content := `
 cluster_name: "test-cluster"
 hcloud_token: "token"
+location: "nbg1"
 network:
   ipv4_cidr: "10.0.0.0/16"
 control_plane:
   nodepools:
     - name: "control-plane-1"
+      type: "cx11"
       count: 3
 talos:
   version: "v1.7.0"

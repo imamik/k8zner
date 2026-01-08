@@ -5,6 +5,24 @@ import (
 	"net"
 )
 
+const (
+	// defaultPodSubnetMaskSize is the default pod subnet mask size used in Terraform.
+	// This value is used when calculating the node subnet mask size.
+	defaultPodSubnetMaskSize = 24
+)
+
+// Node role constants for subnet allocation.
+const (
+	// RoleControlPlane identifies control plane nodes in subnet allocation.
+	RoleControlPlane = "control-plane"
+	// RoleLoadBalancer identifies load balancer nodes in subnet allocation.
+	RoleLoadBalancer = "load-balancer"
+	// RoleWorker identifies worker nodes in subnet allocation.
+	RoleWorker = "worker"
+	// RoleAutoscaler identifies autoscaler nodes in subnet allocation.
+	RoleAutoscaler = "autoscaler"
+)
+
 // CalculateSubnets calculates the standard subnets used in hcloud-k8s based on the main network CIDR.
 func (c *Config) CalculateSubnets() error {
 	if c.Network.IPv4CIDR == "" {
@@ -90,8 +108,7 @@ func (c *Config) calculateNodeSubnetMask() error {
 	}
 
 	podSize, _ := podNet.Mask.Size()
-	podSubnetMaskSize := 24 // Terraform default
-	c.Network.NodeIPv4SubnetMask = 32 - (podSubnetMaskSize - podSize)
+	c.Network.NodeIPv4SubnetMask = 32 - (defaultPodSubnetMaskSize - podSize)
 
 	return nil
 }
@@ -121,15 +138,16 @@ func (c *Config) GetSubnetForRole(role string, index int) (string, error) {
 // Autoscaler: last available subnet
 func calculateSubnetIndex(role string, index int, newBits int) (int, error) {
 	switch role {
-	case "control-plane":
+	case RoleControlPlane:
 		return 0, nil
-	case "load-balancer":
+	case RoleLoadBalancer:
 		return 1, nil
-	case "worker":
+	case RoleWorker:
 		return 2 + index, nil
-	case "autoscaler":
+	case RoleAutoscaler:
 		return (1 << newBits) - 1, nil
 	default:
-		return 0, fmt.Errorf("unknown role: %s", role)
+		return 0, fmt.Errorf("unknown role: %s (valid roles: %s, %s, %s, %s)",
+			role, RoleControlPlane, RoleLoadBalancer, RoleWorker, RoleAutoscaler)
 	}
 }
