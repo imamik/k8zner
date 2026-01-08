@@ -9,6 +9,7 @@ import (
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"hcloud-k8s/internal/config"
+	"hcloud-k8s/internal/util/naming"
 )
 
 func (r *Reconciler) reconcileLoadBalancers(ctx context.Context) error {
@@ -21,7 +22,7 @@ func (r *Reconciler) reconcileLoadBalancers(ctx context.Context) error {
 
 	if cpCount > 0 {
 		// Name: ${cluster_name}-kube-api
-		lbName := fmt.Sprintf("%s-kube-api", r.config.ClusterName)
+		lbName := naming.KubeAPILoadBalancer(r.config.ClusterName)
 		log.Printf("Reconciling Load Balancer %s...", lbName)
 
 		labels := map[string]string{
@@ -87,7 +88,7 @@ func (r *Reconciler) reconcileLoadBalancers(ctx context.Context) error {
 	// Ingress Load Balancer
 	if r.config.Ingress.Enabled {
 		// Name: ${cluster_name}-ingress
-		lbName := fmt.Sprintf("%s-ingress", r.config.ClusterName)
+		lbName := naming.IngressLoadBalancer(r.config.ClusterName)
 		log.Printf("Reconciling Load Balancer %s...", lbName)
 
 		labels := map[string]string{

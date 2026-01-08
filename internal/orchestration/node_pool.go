@@ -6,6 +6,7 @@ import (
 	"log"
 
 	"hcloud-k8s/internal/config"
+	"hcloud-k8s/internal/util/naming"
 )
 
 // reconcileNodePool provisions a pool of servers in parallel.
@@ -30,11 +31,10 @@ func (r *Reconciler) reconcileNodePool(
 	}
 
 	configs := make([]serverConfig, count)
-	names := NewNames(r.config.ClusterName)
 
 	for j := 1; j <= count; j++ {
 		// Name: <cluster>-<pool>-<index> (e.g. cluster-control-plane-1)
-		serverName := names.Server(poolName, j)
+		srvName := naming.Server(r.config.ClusterName, poolName, j)
 
 		// Calculate global index for subnet calculations
 		// For CP: 10 * np_index + cp_index + 1
@@ -88,7 +88,7 @@ func (r *Reconciler) reconcileNodePool(
 					WithPool(poolName).
 					WithNodePool(poolName).
 					Build()
-				pg, err := r.pgManager.EnsurePlacementGroup(ctx, names.WorkerPlacementGroupShard(poolName, pgIndex), "spread", pgLabels)
+				pg, err := r.pgManager.EnsurePlacementGroup(ctx, naming.WorkerPlacementGroupShard(r.config.ClusterName, poolName, pgIndex), "spread", pgLabels)
 				if err != nil {
 					return nil, err
 				}
@@ -99,7 +99,7 @@ func (r *Reconciler) reconcileNodePool(
 		}
 
 		configs[j-1] = serverConfig{
-			name:      serverName,
+			name:      srvName,
 			privateIP: privateIP,
 			pgID:      currentPGID,
 		}

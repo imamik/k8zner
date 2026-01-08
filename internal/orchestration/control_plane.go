@@ -4,20 +4,20 @@ import (
 	"context"
 	"fmt"
 	"log"
+
+	"hcloud-k8s/internal/util/naming"
 )
 
 // reconcileControlPlane provisions control plane servers and returns a map of ServerName -> PublicIP and the SANs to use.
 func (r *Reconciler) reconcileControlPlane(ctx context.Context) (map[string]string, []string, error) {
 	log.Printf("Reconciling Control Plane...")
 
-	names := NewNames(r.config.ClusterName)
-
 	// Collect all SANs
 	var sans []string
 
 	// LB IP (Public) - if Ingress enabled or API LB?
 	// The API LB is "kube-api".
-	lb, err := r.lbManager.GetLoadBalancer(ctx, names.KubeAPILoadBalancer())
+	lb, err := r.lbManager.GetLoadBalancer(ctx, naming.KubeAPILoadBalancer(r.config.ClusterName))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -54,7 +54,7 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context) (map[string]stri
 			WithPool(pool.Name).
 			Build()
 
-		pg, err := r.pgManager.EnsurePlacementGroup(ctx, names.PlacementGroup(pool.Name), "spread", pgLabels)
+		pg, err := r.pgManager.EnsurePlacementGroup(ctx, naming.PlacementGroup(r.config.ClusterName, pool.Name), "spread", pgLabels)
 		if err != nil {
 			return nil, nil, err
 		}
