@@ -1,4 +1,9 @@
-package orchestration
+// Package async provides utilities for parallel task execution.
+//
+// This package contains generic helpers for running multiple operations concurrently,
+// collecting results, and handling errors. It's used across the codebase for parallel
+// infrastructure provisioning and other concurrent workflows.
+package async
 
 import (
 	"context"

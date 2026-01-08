@@ -11,8 +11,9 @@ import (
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"hcloud-k8s/internal/config"
-	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
 	"hcloud-k8s/internal/lifecycle"
+	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
+	"hcloud-k8s/internal/util/async"
 )
 
 // TalosConfigProducer defines the interface for generating Talos configurations.
@@ -84,7 +85,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 
 	// 1.5. Pre-build all required Talos images in parallel with public IP fetch
 	var publicIP string
-	imageTasks := []Task{
+	imageTasks := []async.Task{
 		{
 			Name: "images",
 			Func: r.ensureAllImages,
@@ -104,12 +105,12 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 		},
 	}
 
-	if err := RunParallel(ctx, imageTasks, false); err != nil {
+	if err := async.RunParallel(ctx, imageTasks, false); err != nil {
 		return nil, err
 	}
 
 	// 2-5. Parallelize infrastructure setup after network
-	infraTasks := []Task{
+	infraTasks := []async.Task{
 		{
 			Name: "firewall",
 			Func: func(ctx context.Context) error {
@@ -120,7 +121,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 		{Name: "floatingIPs", Func: r.reconcileFloatingIPs},
 	}
 
-	if err := RunParallel(ctx, infraTasks, false); err != nil {
+	if err := async.RunParallel(ctx, infraTasks, false); err != nil {
 		return nil, err
 	}
 
