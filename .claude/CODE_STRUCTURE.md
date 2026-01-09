@@ -145,7 +145,81 @@ Split when a single file exceeds ~200 lines AND has clear sub-responsibilities:
 ### Why provisioning/ is a flat package:
 The provisioning package contains ~17 files but represents a single cohesive domain: **cluster provisioning**. All files work together to provision infrastructure, compute resources, images, and bootstrap Talos clusters. Splitting into subpackages (compute/, infrastructure/, etc.) would require creating separate types and complex cross-package dependencies due to Go's package system. The flat structure keeps the codebase simple while maintaining clear file organization through descriptive naming (control_plane.go, network.go, bootstrap.go, etc.).
 
-## 9. External Commands & Resources
+## 9. Generic Operations & Code Reuse
+
+### When to Use Go Generics
+
+Use generics to eliminate code duplication when you have:
+- **Identical logic** across multiple types (3+ instances)
+- **Type-safe operations** that work on different resource types
+- **Clear abstraction boundaries** where the generic type doesn't leak
+
+**Example from internal/platform/hcloud:**
+The `DeleteOperation[T]` generic eliminated ~150 lines of duplicated delete logic across 9 resource types (firewalls, networks, servers, etc.). Each resource now uses a simple 7-line function instead of 27 lines of boilerplate.
+
+### Generic Operation Patterns
+
+**Delete Pattern:**
+```go
+func (c *RealClient) DeleteFirewall(ctx context.Context, name string) error {
+    return (&DeleteOperation[*hcloud.Firewall]{
+        Name:         name,
+        ResourceType: "firewall",
+        Get:          c.client.Firewall.Get,
+        Delete:       c.client.Firewall.Delete,
+    }).Execute(ctx, c)
+}
+```
+
+**Ensure Pattern (Simple):**
+```go
+return (&EnsureOperation[*hcloud.Certificate, hcloud.CertificateCreateOpts, any]{
+    Name:         name,
+    ResourceType: "certificate",
+    Get:          c.client.Certificate.Get,
+    Create:       func(ctx context.Context, opts hcloud.CertificateCreateOpts) (*CreateResult[*hcloud.Certificate], *hcloud.Response, error) { ... },
+    CreateOptsMapper: func() hcloud.CertificateCreateOpts { ... },
+}).Execute(ctx, c)
+```
+
+**Ensure Pattern (with Update):**
+```go
+return (&EnsureOperation[*hcloud.Firewall, hcloud.FirewallCreateOpts, hcloud.FirewallSetRulesOpts]{
+    // ... fields as above
+    Update: c.client.Firewall.SetRules,
+    UpdateOptsMapper: func(fw *hcloud.Firewall) hcloud.FirewallSetRulesOpts { ... },
+}).Execute(ctx, c)
+```
+
+**Ensure Pattern (with Validation):**
+```go
+return (&EnsureOperation[*hcloud.Network, hcloud.NetworkCreateOpts, any]{
+    // ... fields as above
+    Validate: func(network *hcloud.Network) error {
+        if network.IPRange.String() != ipRange {
+            return fmt.Errorf("network exists with different IP range")
+        }
+        return nil
+    },
+}).Execute(ctx, c)
+```
+
+### When NOT to Use Generics
+
+- Logic differs significantly between types
+- Only 1-2 instances of the pattern
+- Generic abstraction makes code harder to understand
+- Resource has unique requirements (e.g., snapshot.DeleteImage uses ID instead of name)
+
+### Benefits of Generic Operations
+
+1. **Consistency:** All resources use identical retry/timeout/error handling
+2. **DRY:** Single source of truth for common patterns
+3. **Maintainability:** Changes to retry logic apply to all resources
+4. **Type Safety:** Full compile-time type checking
+5. **Testability:** Generic operations can be unit tested independently
+
+## 10. External Commands & Resources
 
 ### Executing External Commands
 - Use `exec.CommandContext` for external tools (kubectl, ssh, etc.)

@@ -2,67 +2,70 @@ package hcloud
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
-	"hcloud-k8s/internal/util/retry"
 )
+
+// floatingIPCreateParams holds parameters for creating a floating IP.
+type floatingIPCreateParams struct {
+	name         string
+	homeLocation string
+	ipType       string
+	labels       map[string]string
+}
 
 // EnsureFloatingIP ensures that a floating IP exists with the given specifications.
 func (c *RealClient) EnsureFloatingIP(ctx context.Context, name, homeLocation, ipType string, labels map[string]string) (*hcloud.FloatingIP, error) {
-	fip, _, err := c.client.FloatingIP.Get(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-	if fip != nil {
-		return fip, nil
-	}
-
-	loc, _, err := c.client.Location.Get(ctx, homeLocation)
-	if err != nil {
-		return nil, err
+	params := floatingIPCreateParams{
+		name:         name,
+		homeLocation: homeLocation,
+		ipType:       ipType,
+		labels:       labels,
 	}
 
+	return (&EnsureOperation[*hcloud.FloatingIP, floatingIPCreateParams, any]{
+		Name:         name,
+		ResourceType: "floating IP",
+		Get:          c.client.FloatingIP.Get,
+		Create:       c.createFloatingIPWithDeps,
+		CreateOptsMapper: func() floatingIPCreateParams {
+			return params
+		},
+	}).Execute(ctx, c)
+}
+
+// createFloatingIPWithDeps resolves dependencies and creates a floating IP.
+func (c *RealClient) createFloatingIPWithDeps(ctx context.Context, params floatingIPCreateParams) (*CreateResult[*hcloud.FloatingIP], *hcloud.Response, error) {
+	// Resolve location dependency (only when creating)
+	loc, _, err := c.client.Location.Get(ctx, params.homeLocation)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Build final opts with resolved dependencies
 	opts := hcloud.FloatingIPCreateOpts{
-		Name:         &name,
-		Type:         hcloud.FloatingIPType(ipType),
+		Name:         &params.name,
+		Type:         hcloud.FloatingIPType(params.ipType),
 		HomeLocation: loc,
-		Labels:       labels,
+		Labels:       params.labels,
 	}
-	res, _, err := c.client.FloatingIP.Create(ctx, opts)
+
+	// Create the floating IP
+	res, resp, err := c.client.FloatingIP.Create(ctx, opts)
 	if err != nil {
-		return nil, err
+		return nil, resp, err
 	}
-	return res.FloatingIP, nil
+	return &CreateResult[*hcloud.FloatingIP]{Resource: res.FloatingIP}, resp, nil
 }
 
 // DeleteFloatingIP deletes the floating IP with the given name.
 func (c *RealClient) DeleteFloatingIP(ctx context.Context, name string) error {
-	// Add timeout context for delete operation
-	ctx, cancel := context.WithTimeout(ctx, c.timeouts.Delete)
-	defer cancel()
-
-	// Delete with retry logic (resource might be locked)
-	return retry.WithExponentialBackoff(ctx, func() error {
-		fip, _, err := c.client.FloatingIP.Get(ctx, name)
-		if err != nil {
-			return retry.Fatal(fmt.Errorf("failed to get floating IP: %w", err))
-		}
-		if fip == nil {
-			return nil // Floating IP already deleted
-		}
-
-		_, err = c.client.FloatingIP.Delete(ctx, fip)
-		if err != nil {
-			// Check if resource is locked (retryable)
-			if isResourceLocked(err) {
-				return err
-			}
-			// Other errors are fatal
-			return retry.Fatal(err)
-		}
-		return nil
-	}, retry.WithMaxRetries(c.timeouts.RetryMaxAttempts), retry.WithInitialDelay(c.timeouts.RetryInitialDelay))
+	return (&DeleteOperation[*hcloud.FloatingIP]{
+		Name:         name,
+		ResourceType: "floating IP",
+		Get:          c.client.FloatingIP.Get,
+		Delete:       c.client.FloatingIP.Delete,
+	}).Execute(ctx, c)
 }
 
 // GetFloatingIP returns the floating IP with the given name.
