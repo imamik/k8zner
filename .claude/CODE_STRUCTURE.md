@@ -77,6 +77,12 @@ This document defines the structural patterns and quality standards for the hclo
 - Verb-first naming: `reconcileCluster()` not `clusterReconcile()`
 - Boolean functions: `isReady()`, `hasBootstrapped()`
 
+### Function Naming Clarity
+- **Avoid nested similar terminology**: `provisionResources()` → `provisionInfrastructure()` is confusing; use distinct names like `buildImages()` → `setupFirewall()`
+- **Action-based for specificity**: `buildCacheAndFetchUsers()` over `prepareUsers()`
+- **Match names to purpose**: If you're validating and saving, name it `validateAndSave()` not `process()`
+- **Colocate by domain**: `getNetworkID()` belongs in network file, not orchestrator file
+
 ### Variables
 - Descriptive names in wider scopes: `reconciler`, `kubeconfig`, `talosGenerator`
 - Short names in tight scopes: `for i, cfg := range configs`
