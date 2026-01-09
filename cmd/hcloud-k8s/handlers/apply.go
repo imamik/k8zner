@@ -123,12 +123,15 @@ func initializeTalosGenerator(cfg *config.Config) (*talos.ConfigGenerator, error
 // Returns the reconciler instance and kubeconfig bytes if bootstrap completed.
 // Kubeconfig will be empty if cluster was already bootstrapped.
 func reconcileInfrastructure(ctx context.Context, client *hcloud.RealClient, talosGen *talos.ConfigGenerator, cfg *config.Config) (*orchestration.Reconciler, []byte, error) {
+	log.Println("Starting infrastructure reconciliation...")
+
 	reconciler := orchestration.NewReconciler(client, talosGen, cfg)
 	kubeconfig, err := reconciler.Reconcile(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("reconciliation failed: %w", err)
 	}
 
+	log.Println("Infrastructure reconciliation completed")
 	return reconciler, kubeconfig, nil
 }
 
