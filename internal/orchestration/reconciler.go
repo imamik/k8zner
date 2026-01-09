@@ -33,7 +33,7 @@ type Reconciler struct {
 	// Provisioners
 	infraProvisioner *infrastructure.Provisioner
 	imageProvisioner *image.Provisioner
-	// computeProvisioner is created after network provisioning in provisionPrerequisites()
+	// computeProvisioner is created during Reconcile() after network provisioning
 	// since it requires the provisioned network reference.
 	computeProvisioner *compute.Provisioner
 	clusterProvisioner *cluster.Bootstrapper
@@ -59,13 +59,21 @@ func NewReconciler(
 // Reconcile ensures that the desired state matches the actual state.
 // Returns the kubeconfig bytes if bootstrap was performed, or nil if cluster already existed.
 func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
-	// 1. Prerequisites (network, compute provisioner setup)
-	if err := r.provisionPrerequisites(ctx); err != nil {
+	// 1. Network provisioning
+	if err := r.provisionNetwork(ctx); err != nil {
 		return nil, err
 	}
 
-	// 2. Resources (images, firewall, load balancers, floating IPs)
-	if err := r.provisionResources(ctx); err != nil {
+	// Create compute provisioner with the provisioned network
+	r.computeProvisioner = compute.NewProvisioner(
+		r.infra,
+		r.talosGenerator,
+		r.config,
+		r.infraProvisioner.GetNetwork(),
+	)
+
+	// 2. Images and infrastructure (parallel)
+	if err := r.provisionImagesAndInfrastructure(ctx); err != nil {
 		return nil, err
 	}
 
@@ -93,13 +101,4 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 	}
 
 	return kubeconfig, nil
-}
-
-// GetNetworkID returns the ID of the provisioned network.
-func (r *Reconciler) GetNetworkID() int64 {
-	network := r.infraProvisioner.GetNetwork()
-	if network == nil {
-		return 0
-	}
-	return network.ID
 }

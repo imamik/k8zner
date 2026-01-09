@@ -6,22 +6,22 @@ import (
 	"hcloud-k8s/internal/util/async"
 )
 
-// provisionResources provisions infrastructure resources in parallel.
-func (r *Reconciler) provisionResources(ctx context.Context) error {
+// provisionImagesAndInfrastructure provisions images, firewall, load balancers, and floating IPs in parallel.
+func (r *Reconciler) provisionImagesAndInfrastructure(ctx context.Context) error {
 	// Pre-build images and fetch public IP in parallel
-	publicIP, err := r.provisionImagesAndIP(ctx)
+	publicIP, err := r.buildImagesAndFetchPublicIP(ctx)
 	if err != nil {
 		return err
 	}
 
-	// Provision infrastructure resources in parallel
-	return r.provisionInfrastructure(ctx, publicIP)
+	// Provision firewall, load balancers, and floating IPs in parallel
+	return r.provisionFirewallAndLoadBalancers(ctx, publicIP)
 }
 
-// provisionImagesAndIP pre-builds images and fetches public IP in parallel.
-func (r *Reconciler) provisionImagesAndIP(ctx context.Context) (string, error) {
+// buildImagesAndFetchPublicIP pre-builds Talos images and fetches public IP in parallel.
+func (r *Reconciler) buildImagesAndFetchPublicIP(ctx context.Context) (string, error) {
 	var publicIP string
-	imageTasks := []async.Task{
+	tasks := []async.Task{
 		{
 			Name: "images",
 			Func: r.imageProvisioner.EnsureAllImages,
@@ -38,16 +38,16 @@ func (r *Reconciler) provisionImagesAndIP(ctx context.Context) (string, error) {
 		},
 	}
 
-	if err := async.RunParallel(ctx, imageTasks, false); err != nil {
+	if err := async.RunParallel(ctx, tasks, false); err != nil {
 		return "", err
 	}
 
 	return publicIP, nil
 }
 
-// provisionInfrastructure provisions firewall, load balancers, and floating IPs in parallel.
-func (r *Reconciler) provisionInfrastructure(ctx context.Context, publicIP string) error {
-	infraTasks := []async.Task{
+// provisionFirewallAndLoadBalancers provisions firewall, load balancers, and floating IPs in parallel.
+func (r *Reconciler) provisionFirewallAndLoadBalancers(ctx context.Context, publicIP string) error {
+	tasks := []async.Task{
 		{
 			Name: "firewall",
 			Func: func(ctx context.Context) error {
@@ -58,5 +58,5 @@ func (r *Reconciler) provisionInfrastructure(ctx context.Context, publicIP strin
 		{Name: "floatingIPs", Func: r.infraProvisioner.ProvisionFloatingIPs},
 	}
 
-	return async.RunParallel(ctx, infraTasks, false)
+	return async.RunParallel(ctx, tasks, false)
 }
