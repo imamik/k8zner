@@ -142,8 +142,15 @@ Split when a single file exceeds ~200 lines AND has clear sub-responsibilities:
 - ✅ `cmd/hcloud-k8s/handlers` - Business logic separate from CLI framework
 - ✅ `internal/util/*` - Small, focused utilities (async, naming, labels, retry)
 
-### Why provisioning/ is a flat package:
-The provisioning package contains ~17 files but represents a single cohesive domain: **cluster provisioning**. All files work together to provision infrastructure, compute resources, images, and bootstrap Talos clusters. Splitting into subpackages (compute/, infrastructure/, etc.) would require creating separate types and complex cross-package dependencies due to Go's package system. The flat structure keeps the codebase simple while maintaining clear file organization through descriptive naming (control_plane.go, network.go, bootstrap.go, etc.).
+### Provisioning subpackage structure:
+The provisioning domain is organized into focused subpackages, each with a clear single responsibility:
+
+- **`infrastructure/`** — Network, Firewall, Load Balancers, Floating IPs
+- **`compute/`** — Servers, Control Plane, Workers, Node Pools  
+- **`image/`** — Talos image building and snapshot management
+- **`cluster/`** — Bootstrap and Talos configuration application
+
+Each subpackage interacts with the `internal/platform/hcloud` layer for cloud operations. The `internal/orchestration` package coordinates these provisioners in the correct order, managing state flow between them. Shared interfaces and state types live at the `internal/provisioning` root level.
 
 ## 9. Generic Operations & Code Reuse
 
