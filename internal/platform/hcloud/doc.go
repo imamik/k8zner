@@ -6,6 +6,7 @@
 // The package is organized into domain-specific modules:
 //
 //   - client.go: Main client initialization and configuration
+//   - operations.go: Generic operations for Delete and Ensure patterns
 //   - server.go: Server lifecycle management (create, delete, power operations)
 //   - server_helpers.go: Server creation helper functions (image resolution, network attachment)
 //   - network.go: Network and subnet management
@@ -18,6 +19,21 @@
 //   - sshkey.go: SSH key management
 //   - architecture.go: Architecture detection and server type mapping
 //   - errors.go: Error classification for retry logic
+//
+// # Generic Operations
+//
+// The package uses Go generics to provide consistent Delete and Ensure operations
+// across all resource types, eliminating code duplication while maintaining type safety.
+//
+// DeleteOperation provides idempotent resource deletion with automatic retry logic:
+//   - Handles resource locking with exponential backoff
+//   - Returns success if resource doesn't exist
+//   - Configurable timeouts and retry parameters
+//
+// EnsureOperation provides get-or-create semantics with optional update/validation:
+//   - Simple Ensure: Get → return if exists → Create if not
+//   - Ensure with Update: Get → Update if exists → Create if not
+//   - Ensure with Validation: Get → Validate if exists → Create if not
 //
 // # Key Features
 //
