@@ -6,50 +6,72 @@ import (
 	"net"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
-	"hcloud-k8s/internal/util/retry"
 )
+
+// loadBalancerCreateParams holds parameters for creating a load balancer.
+type loadBalancerCreateParams struct {
+	name      string
+	location  string
+	lbType    string
+	algorithm hcloud.LoadBalancerAlgorithmType
+	labels    map[string]string
+}
 
 // EnsureLoadBalancer ensures that a load balancer exists with the given specifications.
 // Note: Load balancer creation can take 1-6 minutes depending on Hetzner Cloud backend load.
 // This is normal Hetzner Cloud API behavior, not a bug in this code.
 func (c *RealClient) EnsureLoadBalancer(ctx context.Context, name, location, lbType string, algorithm hcloud.LoadBalancerAlgorithmType, labels map[string]string) (*hcloud.LoadBalancer, error) {
-	lb, _, err := c.client.LoadBalancer.Get(ctx, name)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get lb: %w", err)
+	params := loadBalancerCreateParams{
+		name:      name,
+		location:  location,
+		lbType:    lbType,
+		algorithm: algorithm,
+		labels:    labels,
 	}
 
-	if lb != nil {
-		// Check if updates needed (omitted for brevity, can implement update logic)
-		return lb, nil
+	return (&EnsureOperation[*hcloud.LoadBalancer, loadBalancerCreateParams, any]{
+		Name:         name,
+		ResourceType: "load balancer",
+		Get:          c.client.LoadBalancer.Get,
+		Create:       c.createLoadBalancerWithDeps,
+		CreateOptsMapper: func() loadBalancerCreateParams {
+			return params
+		},
+	}).Execute(ctx, c)
+}
+
+// createLoadBalancerWithDeps resolves dependencies and creates a load balancer.
+func (c *RealClient) createLoadBalancerWithDeps(ctx context.Context, params loadBalancerCreateParams) (*CreateResult[*hcloud.LoadBalancer], *hcloud.Response, error) {
+	// Resolve load balancer type dependency (only when creating)
+	lbTypeObj, _, err := c.client.LoadBalancerType.Get(ctx, params.lbType)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get lb type: %w", err)
 	}
 
-	// Create
-	lbTypeObj, _, err := c.client.LoadBalancerType.Get(ctx, lbType)
+	// Resolve location dependency (only when creating)
+	locObj, _, err := c.client.Location.Get(ctx, params.location)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get lb type: %w", err)
-	}
-	locObj, _, err := c.client.Location.Get(ctx, location)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get location: %w", err)
+		return nil, nil, fmt.Errorf("failed to get location: %w", err)
 	}
 
+	// Build final opts with resolved dependencies
 	opts := hcloud.LoadBalancerCreateOpts{
-		Name:             name,
+		Name:             params.name,
 		LoadBalancerType: lbTypeObj,
 		Location:         locObj,
-		Algorithm:        &hcloud.LoadBalancerAlgorithm{Type: algorithm},
-		Labels:           labels,
+		Algorithm:        &hcloud.LoadBalancerAlgorithm{Type: params.algorithm},
+		Labels:           params.labels,
 	}
 
-	res, _, err := c.client.LoadBalancer.Create(ctx, opts)
+	// Create the load balancer
+	res, resp, err := c.client.LoadBalancer.Create(ctx, opts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create lb: %w", err)
+		return nil, resp, err
 	}
-	if err := c.client.Action.WaitFor(ctx, res.Action); err != nil {
-		return nil, fmt.Errorf("failed to wait for lb creation: %w", err)
-	}
-
-	return res.LoadBalancer, nil
+	return &CreateResult[*hcloud.LoadBalancer]{
+		Resource: res.LoadBalancer,
+		Action:   res.Action,
+	}, resp, nil
 }
 
 // ConfigureService configures a service on the load balancer.
@@ -119,31 +141,12 @@ func (c *RealClient) AttachToNetwork(ctx context.Context, lb *hcloud.LoadBalance
 
 // DeleteLoadBalancer deletes the load balancer with the given name.
 func (c *RealClient) DeleteLoadBalancer(ctx context.Context, name string) error {
-	// Add timeout context for delete operation
-	ctx, cancel := context.WithTimeout(ctx, c.timeouts.Delete)
-	defer cancel()
-
-	// Delete with retry logic (resource might be locked)
-	return retry.WithExponentialBackoff(ctx, func() error {
-		lb, _, err := c.client.LoadBalancer.Get(ctx, name)
-		if err != nil {
-			return retry.Fatal(fmt.Errorf("failed to get load balancer: %w", err))
-		}
-		if lb == nil {
-			return nil // Load balancer already deleted
-		}
-
-		_, err = c.client.LoadBalancer.Delete(ctx, lb)
-		if err != nil {
-			// Check if resource is locked (retryable)
-			if isResourceLocked(err) {
-				return err
-			}
-			// Other errors are fatal
-			return retry.Fatal(err)
-		}
-		return nil
-	}, retry.WithMaxRetries(c.timeouts.RetryMaxAttempts), retry.WithInitialDelay(c.timeouts.RetryInitialDelay))
+	return (&DeleteOperation[*hcloud.LoadBalancer]{
+		Name:         name,
+		ResourceType: "load balancer",
+		Get:          c.client.LoadBalancer.Get,
+		Delete:       c.client.LoadBalancer.Delete,
+	}).Execute(ctx, c)
 }
 
 // GetLoadBalancer returns the load balancer with the given name.
