@@ -58,7 +58,7 @@ func buildSharedSnapshots(client *hcloud_client.RealClient) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
-	builder := image.NewBuilder(client, nil)
+	builder := image.NewBuilder(client)
 
 	// Check if snapshots already exist
 	labelsAMD64 := map[string]string{

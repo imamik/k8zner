@@ -36,7 +36,7 @@ func TestSnapshotCreation(t *testing.T) {
 	}
 
 	client := hcloud.NewRealClient(token)
-	builder := image.NewBuilder(client, nil)
+	builder := image.NewBuilder(client)
 
 	tests := []struct {
 		name string

@@ -24,7 +24,7 @@ import (
 func Build(ctx context.Context, imageName, talosVersion, arch, location string) error {
 	token := os.Getenv("HCLOUD_TOKEN")
 	client := hcloud.NewRealClient(token)
-	builder := image.NewBuilder(client, nil) // use default SSH communicator
+	builder := image.NewBuilder(client)
 
 	log.Printf("Building image %s (Talos %s, Arch %s) in location %s...", imageName, talosVersion, arch, location)
 

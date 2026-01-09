@@ -140,5 +140,5 @@ func getKeys(m map[string]bool) []string {
 func (p *Provisioner) createImageBuilder() *Builder {
 	// Pass nil for communicator factory - the builder will use its internal
 	// SSH key generation and create its own SSH client with those keys
-	return NewBuilder(p.infra, nil)
+	return NewBuilder(p.infra)
 }

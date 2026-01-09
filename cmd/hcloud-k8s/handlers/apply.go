@@ -102,27 +102,27 @@ func initializeClient() *hcloud.RealClient {
 
 // initializeTalosGenerator creates a Talos configuration generator for the orchestration.
 // Generates machine configs, certificates, and client secrets for cluster access.
-func initializeTalosGenerator(cfg *config.Config) (*talos.ConfigGenerator, error) {
+func initializeTalosGenerator(cfg *config.Config) (*talos.Generator, error) {
 	endpoint := fmt.Sprintf("https://%s-kube-api:6443", cfg.ClusterName)
 
-	gen, err := talos.NewConfigGenerator(
+	sb, err := talos.GetOrGenerateSecrets(secretsFile, cfg.Talos.Version)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize secrets: %w", err)
+	}
+
+	return talos.NewGenerator(
 		cfg.ClusterName,
 		cfg.Kubernetes.Version,
 		cfg.Talos.Version,
 		endpoint,
-		secretsFile,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize talos generator: %w", err)
-	}
-
-	return gen, nil
+		sb,
+	), nil
 }
 
 // reconcileInfrastructure provisions infrastructure and bootstraps the Kubernetes orchestration.
 // Returns the reconciler instance and kubeconfig bytes if bootstrap completed.
 // Kubeconfig will be empty if cluster was already bootstrapped.
-func reconcileInfrastructure(ctx context.Context, client *hcloud.RealClient, talosGen *talos.ConfigGenerator, cfg *config.Config) (*orchestration.Reconciler, []byte, error) {
+func reconcileInfrastructure(ctx context.Context, client *hcloud.RealClient, talosGen *talos.Generator, cfg *config.Config) (*orchestration.Reconciler, []byte, error) {
 	log.Println("Starting infrastructure reconciliation...")
 
 	reconciler := orchestration.NewReconciler(client, talosGen, cfg)
@@ -150,7 +150,7 @@ func applyAddons(ctx context.Context, cfg *config.Config, kubeconfig []byte, net
 
 // writeTalosFiles persists Talos secrets and client config to disk.
 // Must be called before reconciliation to ensure secrets survive failures.
-func writeTalosFiles(talosGen *talos.ConfigGenerator) error {
+func writeTalosFiles(talosGen *talos.Generator) error {
 	clientCfgBytes, err := talosGen.GetClientConfig()
 	if err != nil {
 		return fmt.Errorf("failed to generate talosconfig: %w", err)

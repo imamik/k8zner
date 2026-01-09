@@ -13,28 +13,23 @@ import (
 	"hcloud-k8s/internal/util/keygen"
 )
 
-// CommunicatorFactory creates a Communicator for a given host.
-type CommunicatorFactory func(host string) ssh.Communicator
-
 // Builder builds a Talos image on Hetzner Cloud.
 type Builder struct {
-	provisioner      hcloud.ServerProvisioner
-	snapshotManager  hcloud.SnapshotManager
-	communicatorFact CommunicatorFactory
-	sshKeyManager    hcloud.SSHKeyManager
+	provisioner     hcloud.ServerProvisioner
+	snapshotManager hcloud.SnapshotManager
+	sshKeyManager   hcloud.SSHKeyManager
 }
 
-// NewBuilder creates a new Buildep.
-func NewBuilder(client interface{}, commFact CommunicatorFactory) *Builder {
+// NewBuilder creates a new Builder.
+func NewBuilder(client interface{}) *Builder {
 	p, _ := client.(hcloud.ServerProvisioner)
 	s, _ := client.(hcloud.SnapshotManager)
 	k, _ := client.(hcloud.SSHKeyManager)
 
 	return &Builder{
-		provisioner:      p,
-		snapshotManager:  s,
-		communicatorFact: commFact,
-		sshKeyManager:    k,
+		provisioner:     p,
+		snapshotManager: s,
+		sshKeyManager:   k,
 	}
 }
 
@@ -110,16 +105,18 @@ func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architect
 	}
 
 	// 4. Provision Talos (SSH)
-	// We need to wait for SSH to come back up. The `SSHCommunicator` handles retries,
+	// We need to wait for SSH to come back up. The SSH client handles retries,
 	// but after a reboot it might take a moment.
 	log.Printf("Waiting for Rescue System...")
 	time.Sleep(10 * time.Second) // Give it a head start.
 
-	var comm ssh.Communicator
-	if b.communicatorFact != nil {
-		comm = b.communicatorFact(ip)
-	} else {
-		comm = ssh.NewClient(ip, "root", keyPair.PrivateKey)
+	client, err := ssh.NewClient(&ssh.Config{
+		Host:       ip,
+		User:       "root",
+		PrivateKey: keyPair.PrivateKey,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to create SSH client: %w", err)
 	}
 
 	// URL generation.
@@ -134,7 +131,7 @@ func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architect
 	installCmd := fmt.Sprintf("DISK=$(lsblk -d -n -o NAME | grep -E '^sda|^vda' | head -n 1) && if [ -z \"$DISK\" ]; then echo 'No disk found'; exit 1; fi && echo \"Writing to /dev/$DISK\" && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y zstd wget && wget -qO- %s | zstd -d | dd of=/dev/$DISK bs=4M && sync", talosURL)
 
 	log.Printf("Provisioning Talos (Command: %s)...", installCmd)
-	output, err := comm.Execute(ctx, installCmd)
+	output, err := client.Execute(ctx, installCmd)
 	if err != nil {
 		return "", fmt.Errorf("failed to provision talos: %w, output: %s", err, output)
 	}
