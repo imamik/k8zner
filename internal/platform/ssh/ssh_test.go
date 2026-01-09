@@ -269,12 +269,12 @@ func TestClient_AppliesDefaults(t *testing.T) {
 	keyPair := generateTestKey(t)
 
 	tests := []struct {
-		name             string
-		cfg              *Config
-		wantPort         int
-		wantDialTimeout  time.Duration
-		wantMaxRetries   int
-		wantRetryDelay   time.Duration
+		name            string
+		cfg             *Config
+		wantPort        int
+		wantDialTimeout time.Duration
+		wantMaxRetries  int
+		wantRetryDelay  time.Duration
 	}{
 		{
 			name: "zero values get defaults",
