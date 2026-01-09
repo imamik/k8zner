@@ -6,7 +6,10 @@ package orchestration
 
 import (
 	"context"
+	"fmt"
+	"log"
 
+	"hcloud-k8s/internal/addons"
 	"hcloud-k8s/internal/config"
 	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
 	"hcloud-k8s/internal/provisioning/cluster"
@@ -98,6 +101,15 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 	// 6. Apply worker configs (if needed)
 	if err := r.applyWorkerConfigs(ctx, workerIPs, kubeconfig, clientCfg); err != nil {
 		return nil, err
+	}
+
+	// 7. Install addons (if cluster was bootstrapped)
+	if len(kubeconfig) > 0 {
+		log.Println("Installing cluster addons...")
+		networkID := r.GetNetworkID()
+		if err := addons.Apply(ctx, r.config, kubeconfig, networkID); err != nil {
+			return nil, fmt.Errorf("failed to install addons: %w", err)
+		}
 	}
 
 	return kubeconfig, nil
