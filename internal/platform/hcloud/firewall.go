@@ -21,7 +21,7 @@ func (c *RealClient) EnsureFirewall(ctx context.Context, name string, rules []hc
 				Labels: labels,
 			}
 		},
-		UpdateOptsMapper: func(fw *hcloud.Firewall) hcloud.FirewallSetRulesOpts {
+		UpdateOptsMapper: func(_ *hcloud.Firewall) hcloud.FirewallSetRulesOpts {
 			return hcloud.FirewallSetRulesOpts{
 				Rules: rules,
 			}
