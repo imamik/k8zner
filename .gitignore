@@ -1,5 +1,5 @@
 bin/
-hcloud-k8s
+/hcloud-k8s
 
 .envrc
 
@@ -9,3 +9,4 @@ hcloud-k8s
 # Logs
 logs/
 *.log
+test_output.txt
