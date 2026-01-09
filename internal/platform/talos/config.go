@@ -87,6 +87,24 @@ func NewSecrets(talosVersion string) (*secrets.Bundle, error) {
 	return sb, nil
 }
 
+// GetOrGenerateSecrets attempts to load secrets from path, or generates and saves them if they don't exist.
+func GetOrGenerateSecrets(path string, talosVersion string) (*SecretsBundle, error) {
+	if _, err := os.Stat(path); err == nil {
+		return LoadSecrets(path)
+	}
+
+	sb, err := NewSecrets(talosVersion)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := SaveSecrets(path, sb); err != nil {
+		return nil, err
+	}
+
+	return sb, nil
+}
+
 // SetEndpoint updates the control plane endpoint.
 func (g *Generator) SetEndpoint(endpoint string) {
 	g.endpoint = endpoint

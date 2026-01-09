@@ -105,20 +105,9 @@ func initializeClient() *hcloud.RealClient {
 func initializeTalosGenerator(cfg *config.Config) (*talos.Generator, error) {
 	endpoint := fmt.Sprintf("https://%s-kube-api:6443", cfg.ClusterName)
 
-	var sb *talos.SecretsBundle
-	if _, err := os.Stat(secretsFile); err == nil {
-		sb, err = talos.LoadSecrets(secretsFile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load secrets: %w", err)
-		}
-	} else {
-		sb, err = talos.NewSecrets(cfg.Talos.Version)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create secrets: %w", err)
-		}
-		if err := talos.SaveSecrets(secretsFile, sb); err != nil {
-			return nil, fmt.Errorf("failed to save secrets: %w", err)
-		}
+	sb, err := talos.GetOrGenerateSecrets(secretsFile, cfg.Talos.Version)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize secrets: %w", err)
 	}
 
 	return talos.NewGenerator(
