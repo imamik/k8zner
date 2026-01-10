@@ -3,26 +3,27 @@
 package compute
 
 import (
-	"context"
 	"fmt"
-	"log"
 
+	"hcloud-k8s/internal/provisioning"
 	"hcloud-k8s/internal/util/labels"
 	"hcloud-k8s/internal/util/naming"
 )
 
-// ProvisionControlPlane provisions control plane servers and returns a map of ServerName -> PublicIP and the SANs to use.
-func (p *Provisioner) ProvisionControlPlane(ctx context.Context) (map[string]string, []string, error) {
-	log.Printf("Reconciling Control Plane...")
+const phase = "compute"
+
+// ProvisionControlPlane provisions control plane servers.
+func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
+	ctx.Logger.Printf("[%s] Reconciling control plane...", phase)
 
 	// Collect all SANs
 	var sans []string
 
 	// LB IP (Public) - if Ingress enabled or API LB?
 	// The API LB is "kube-api".
-	lb, err := p.lbManager.GetLoadBalancer(ctx, naming.KubeAPILoadBalancer(p.config.ClusterName))
+	lb, err := ctx.Infra.GetLoadBalancer(ctx, naming.KubeAPILoadBalancer(ctx.Config.ClusterName))
 	if err != nil {
-		return nil, nil, err
+		return fmt.Errorf("failed to get load balancer: %w", err)
 	}
 	if lb != nil {
 		// Use LB Public IP as endpoint
@@ -33,8 +34,8 @@ func (p *Provisioner) ProvisionControlPlane(ctx context.Context) (map[string]str
 			// UPDATE TALOS ENDPOINT
 			// We use the LB IP as the control plane endpoint.
 			endpoint := fmt.Sprintf("https://%s:6443", lbIP)
-			log.Printf("Setting Talos Endpoint to: %s", endpoint)
-			p.talosGenerator.SetEndpoint(endpoint)
+			ctx.Logger.Printf("[%s] Setting Talos endpoint to: %s", phase, endpoint)
+			ctx.Talos.SetEndpoint(endpoint)
 		}
 
 		// Also add private IP of LB
@@ -43,33 +44,27 @@ func (p *Provisioner) ProvisionControlPlane(ctx context.Context) (map[string]str
 		}
 	}
 
-	// Add Floating IPs if any (Control Plane VIP)
-	// if p.config.ControlPlane.PublicVIPIPv4Enabled {
-	// 	// TODO: Implement VIP lookup if ID not provided
-	// 	// For now assume standard pattern
-	// }
-
 	// Provision Servers (configs will be generated per-node in reconciler)
-	ips := make(map[string]string)
-	for i, pool := range p.config.ControlPlane.NodePools {
+	for i, pool := range ctx.Config.ControlPlane.NodePools {
 		// Placement Group for Control Plane
-		pgLabels := labels.NewLabelBuilder(p.config.ClusterName).
+		pgLabels := labels.NewLabelBuilder(ctx.Config.ClusterName).
 			WithPool(pool.Name).
 			Build()
 
-		pg, err := p.pgManager.EnsurePlacementGroup(ctx, naming.PlacementGroup(p.config.ClusterName, pool.Name), "spread", pgLabels)
+		pg, err := ctx.Infra.EnsurePlacementGroup(ctx, naming.PlacementGroup(ctx.Config.ClusterName, pool.Name), "spread", pgLabels)
 		if err != nil {
-			return nil, nil, err
+			return fmt.Errorf("failed to ensure placement group for pool %s: %w", pool.Name, err)
 		}
 
 		poolIPs, err := p.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "control-plane", pool.Labels, "", &pg.ID, i)
 		if err != nil {
-			return nil, nil, err
+			return fmt.Errorf("failed to reconcile node pool %s: %w", pool.Name, err)
 		}
 		for k, v := range poolIPs {
-			ips[k] = v
+			ctx.State.ControlPlaneIPs[k] = v
 		}
 	}
 
-	return ips, sans, nil
+	ctx.State.SANs = sans
+	return nil
 }

@@ -1,19 +1,23 @@
 package infrastructure
 
 import (
-	"context"
+	"fmt"
 
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+
+	"hcloud-k8s/internal/provisioning"
 	"hcloud-k8s/internal/util/naming"
 )
 
-// ProvisionFloatingIPs creates floating IPs for the control plane if enabled in the configuration.
-func (p *Provisioner) ProvisionFloatingIPs(ctx context.Context) error {
-	if p.config.ControlPlane.PublicVIPIPv4Enabled {
-		name := naming.ControlPlaneFloatingIP(p.config.ClusterName)
-		labels := map[string]string{"cluster": p.config.ClusterName, "role": "control-plane"}
-		_, err := p.fipManager.EnsureFloatingIP(ctx, name, p.config.Location, "ipv4", labels)
+// ProvisionFloatingIPs provisions floating IPs for the control plane.
+func (p *Provisioner) ProvisionFloatingIPs(ctx *provisioning.Context) error {
+	ctx.Logger.Printf("[%s] Reconciling floating IPs for %s...", phase, ctx.Config.ClusterName)
+	if ctx.Config.ControlPlane.PublicVIPIPv4Enabled {
+		name := naming.ControlPlaneFloatingIP(ctx.Config.ClusterName)
+		labels := map[string]string{"cluster": ctx.Config.ClusterName, "role": "control-plane"}
+		_, err := ctx.Infra.EnsureFloatingIP(ctx, name, ctx.Config.Network.Zone, string(hcloud.FloatingIPTypeIPv4), labels)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to ensure floating IP %s: %w", name, err)
 		}
 	}
 	return nil

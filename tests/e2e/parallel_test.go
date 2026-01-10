@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"testing"
 	"time"
 
@@ -87,10 +88,13 @@ func TestParallelProvisioning(t *testing.T) {
 	}
 
 	// Create Talos generator
-	talosGen, err := talos.NewConfigGenerator(cfg.ClusterName, cfg.Kubernetes.Version, cfg.Talos.Version, "", "")
+	secrets, err := talos.GetOrGenerateSecrets("/tmp/talos-secrets-"+cfg.ClusterName+".json", cfg.Talos.Version)
 	if err != nil {
-		t.Fatalf("Failed to create Talos generator: %v", err)
+		t.Fatalf("Failed to get secrets: %v", err)
 	}
+	defer os.Remove("/tmp/talos-secrets-" + cfg.ClusterName + ".json")
+
+	talosGen := talos.NewGenerator(cfg.ClusterName, cfg.Kubernetes.Version, cfg.Talos.Version, "", secrets)
 
 	// Create reconciler
 	reconciler := orchestration.NewReconciler(sharedCtx.Client, talosGen, cfg)

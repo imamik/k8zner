@@ -3,16 +3,18 @@ package compute
 import (
 	"context"
 	"fmt"
-	"hcloud-k8s/internal/util/labels"
-	"log"
+	"sync"
 
 	"hcloud-k8s/internal/config"
+	"hcloud-k8s/internal/provisioning"
+	"hcloud-k8s/internal/util/async"
+	"hcloud-k8s/internal/util/labels"
 	"hcloud-k8s/internal/util/naming"
 )
 
 // reconcileNodePool provisions a pool of servers in parallel.
 func (p *Provisioner) reconcileNodePool(
-	ctx context.Context,
+	ctx *provisioning.Context,
 	poolName string,
 	count int,
 	serverType string,
@@ -35,7 +37,7 @@ func (p *Provisioner) reconcileNodePool(
 
 	for j := 1; j <= count; j++ {
 		// Name: <cluster>-<pool>-<index> (e.g. cluster-control-plane-1)
-		srvName := naming.Server(p.config.ClusterName, poolName, j)
+		srvName := naming.Server(ctx.Config.ClusterName, poolName, j)
 
 		// Calculate global index for subnet calculations
 		// For CP: 10 * np_index + cp_index + 1
@@ -46,7 +48,7 @@ func (p *Provisioner) reconcileNodePool(
 
 		if role == "control-plane" {
 			// Terraform: ipv4_private = cidrhost(subnet, np_index * 10 + cp_index + 1)
-			subnet, err = p.config.GetSubnetForRole("control-plane", 0)
+			subnet, err = ctx.Config.GetSubnetForRole("control-plane", 0)
 			if err != nil {
 				return nil, err
 			}
@@ -56,7 +58,7 @@ func (p *Provisioner) reconcileNodePool(
 			// Note: Terraform iterates worker nodepools and uses separate subnets for each
 			// hcloud_network_subnet.worker[np.name]
 			// The config.GetSubnetForRole("worker", i) handles the subnet iteration.
-			subnet, err = p.config.GetSubnetForRole("worker", poolIndex)
+			subnet, err = ctx.Config.GetSubnetForRole("worker", poolIndex)
 			if err != nil {
 				return nil, err
 			}
@@ -75,21 +77,21 @@ func (p *Provisioner) reconcileNodePool(
 			// Check if enabled in config for this pool
 			usePG := false
 			// Find the pool config again (slightly inefficient but safe)
-			for _, p := range p.config.Workers {
-				if p.Name == poolName {
-					usePG = p.PlacementGroup
+			for _, pool := range ctx.Config.Workers {
+				if pool.Name == poolName {
+					usePG = pool.PlacementGroup
 					break
 				}
 			}
 
 			if usePG {
 				pgIndex := int((j-1)/10) + 1
-				pgLabels := labels.NewLabelBuilder(p.config.ClusterName).
+				pgLabels := labels.NewLabelBuilder(ctx.Config.ClusterName).
 					WithRole("worker").
 					WithPool(poolName).
 					WithNodePool(poolName).
 					Build()
-				pg, err := p.pgManager.EnsurePlacementGroup(ctx, naming.WorkerPlacementGroupShard(p.config.ClusterName, poolName, pgIndex), "spread", pgLabels)
+				pg, err := ctx.Infra.EnsurePlacementGroup(ctx, naming.WorkerPlacementGroupShard(ctx.Config.ClusterName, poolName, pgIndex), "spread", pgLabels)
 				if err != nil {
 					return nil, err
 				}
@@ -107,33 +109,34 @@ func (p *Provisioner) reconcileNodePool(
 	}
 
 	// Create all servers in parallel
-	log.Printf("Creating %d servers for pool %s...", count, poolName)
-	type serverResult struct {
-		name string
-		ip   string
-		err  error
-	}
+	ctx.Logger.Printf("[%s] Creating %d servers for pool %s...", phase, count, poolName)
 
-	resultChan := make(chan serverResult, count)
-
-	for _, cfg := range configs {
-		cfg := cfg // capture loop variable
-		go func() {
-			ip, err := p.ensureServer(ctx, cfg.name, serverType, location, image, role, poolName, extraLabels, userData, cfg.pgID, cfg.privateIP)
-			resultChan <- serverResult{name: cfg.name, ip: ip, err: err}
-		}()
-	}
-
-	// Collect results
+	// Collect IPs in a thread-safe way
+	var mu sync.Mutex
 	ips := make(map[string]string)
-	for i := 0; i < count; i++ {
-		result := <-resultChan
-		if result.err != nil {
-			return nil, fmt.Errorf("failed to create server %s: %w", result.name, result.err)
+
+	tasks := make([]async.Task, len(configs))
+	for i, cfg := range configs {
+		cfg := cfg // capture loop variable
+		tasks[i] = async.Task{
+			Name: fmt.Sprintf("server-%s", cfg.name),
+			Func: func(_ context.Context) error {
+				ip, err := p.ensureServer(ctx, cfg.name, serverType, location, image, role, poolName, extraLabels, userData, cfg.pgID, cfg.privateIP)
+				if err != nil {
+					return err
+				}
+				mu.Lock()
+				ips[cfg.name] = ip
+				mu.Unlock()
+				return nil
+			},
 		}
-		ips[result.name] = result.ip
 	}
 
-	log.Printf("Successfully created %d servers for pool %s", count, poolName)
+	if err := async.RunParallel(ctx, tasks, false); err != nil {
+		return nil, fmt.Errorf("failed to provision pool %s: %w", poolName, err)
+	}
+
+	ctx.Logger.Printf("[%s] Successfully created %d servers for pool %s", phase, count, poolName)
 	return ips, nil
 }

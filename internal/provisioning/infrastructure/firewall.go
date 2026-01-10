@@ -3,41 +3,44 @@
 package infrastructure
 
 import (
-	"context"
-	"log"
+	"fmt"
 	"net"
+
+	"hcloud-k8s/internal/provisioning"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
+const phase = "infrastructure"
+
 // ProvisionFirewall provisions the cluster firewall with rules.
-func (p *Provisioner) ProvisionFirewall(ctx context.Context, publicIP string) error {
-	log.Printf("Reconciling Firewall %s...", p.config.ClusterName)
+func (p *Provisioner) ProvisionFirewall(ctx *provisioning.Context) error {
+	ctx.Logger.Printf("[%s] Reconciling firewall %s...", phase, ctx.Config.ClusterName)
+
+	publicIP := ctx.State.PublicIP
 
 	// Collect Allow Sources
 	// 1. Kube API
 	kubeAPISources := []string{}
 	// Add config sources
-	if len(p.config.Firewall.KubeAPISource) > 0 {
-		kubeAPISources = append(kubeAPISources, p.config.Firewall.KubeAPISource...)
-	} else if len(p.config.Firewall.APISource) > 0 {
-		kubeAPISources = append(kubeAPISources, p.config.Firewall.APISource...)
+	if len(ctx.Config.Firewall.KubeAPISource) > 0 {
+		kubeAPISources = append(kubeAPISources, ctx.Config.Firewall.KubeAPISource...)
+	} else if len(ctx.Config.Firewall.APISource) > 0 {
+		kubeAPISources = append(kubeAPISources, ctx.Config.Firewall.APISource...)
 	}
 	// Add current IP if detected and allowed
-	// Logic matches terraform: !firewall_external && network_public_ipv4_enabled && coalesce(vap.firewall_use_current_ipv4, cluster_access == "public" && source == null)
-	// Simplified: if we have public IP and we assume public access/defaults, add it.
-	if publicIP != "" && p.config.Firewall.UseCurrentIPv4 {
+	if publicIP != "" && ctx.Config.Firewall.UseCurrentIPv4 {
 		kubeAPISources = append(kubeAPISources, publicIP+"/32")
 	}
 
 	// 2. Talos API
 	talosAPISources := []string{}
-	if len(p.config.Firewall.TalosAPISource) > 0 {
-		talosAPISources = append(talosAPISources, p.config.Firewall.TalosAPISource...)
-	} else if len(p.config.Firewall.APISource) > 0 {
-		talosAPISources = append(talosAPISources, p.config.Firewall.APISource...)
+	if len(ctx.Config.Firewall.TalosAPISource) > 0 {
+		talosAPISources = append(talosAPISources, ctx.Config.Firewall.TalosAPISource...)
+	} else if len(ctx.Config.Firewall.APISource) > 0 {
+		talosAPISources = append(talosAPISources, ctx.Config.Firewall.APISource...)
 	}
-	if publicIP != "" && p.config.Firewall.UseCurrentIPv4 {
+	if publicIP != "" && ctx.Config.Firewall.UseCurrentIPv4 {
 		talosAPISources = append(talosAPISources, publicIP+"/32")
 	}
 
@@ -85,7 +88,7 @@ func (p *Provisioner) ProvisionFirewall(ctx context.Context, publicIP string) er
 	}
 
 	// Extra Rules
-	for _, rule := range p.config.Firewall.ExtraRules {
+	for _, rule := range ctx.Config.Firewall.ExtraRules {
 		// Helper to parse IPs
 		parseIPs := func(ips []string) []net.IPNet {
 			var nets []net.IPNet
@@ -129,13 +132,13 @@ func (p *Provisioner) ProvisionFirewall(ctx context.Context, publicIP string) er
 	}
 
 	labels := map[string]string{
-		"cluster": p.config.ClusterName,
+		"cluster": ctx.Config.ClusterName,
 	}
 
-	fw, err := p.firewallManager.EnsureFirewall(ctx, p.config.ClusterName, rules, labels)
+	fw, err := ctx.Infra.EnsureFirewall(ctx, ctx.Config.ClusterName, rules, labels)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to ensure firewall: %w", err)
 	}
-	p.firewall = fw
+	ctx.State.Firewall = fw
 	return nil
 }

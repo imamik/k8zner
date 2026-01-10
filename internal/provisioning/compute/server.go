@@ -3,16 +3,16 @@ package compute
 import (
 	"context"
 	"fmt"
-	"log"
 
-	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
+	"hcloud-k8s/internal/platform/hcloud"
+	"hcloud-k8s/internal/provisioning"
 	"hcloud-k8s/internal/util/labels"
 	"hcloud-k8s/internal/util/retry"
 )
 
 // ensureServer ensures a server exists and returns its IP.
 func (p *Provisioner) ensureServer(
-	ctx context.Context,
+	ctx *provisioning.Context,
 	serverName string,
 	serverType string,
 	location string,
@@ -25,14 +25,14 @@ func (p *Provisioner) ensureServer(
 	privateIP string,
 ) (string, error) {
 	// Check if exists
-	serverID, err := p.serverProvisioner.GetServerID(ctx, serverName)
+	serverID, err := ctx.Infra.GetServerID(ctx, serverName)
 	if err != nil {
 		return "", err
 	}
 
 	if serverID != "" {
 		// Server exists, get IP
-		ip, err := p.serverProvisioner.GetServerIP(ctx, serverName)
+		ip, err := ctx.Infra.GetServerIP(ctx, serverName)
 		if err != nil {
 			return "", err
 		}
@@ -40,10 +40,10 @@ func (p *Provisioner) ensureServer(
 	}
 
 	// Create
-	log.Printf("Creating %s Server %s...", role, serverName)
+	ctx.Logger.Printf("[%s] Creating %s server %s...", phase, role, serverName)
 
 	// Labels
-	labels := labels.NewLabelBuilder(p.config.ClusterName).
+	labels := labels.NewLabelBuilder(ctx.Config.ClusterName).
 		WithRole(role).
 		WithPool(poolName).
 		Merge(extraLabels).
@@ -56,22 +56,22 @@ func (p *Provisioner) ensureServer(
 		if err != nil {
 			return "", fmt.Errorf("failed to ensure Talos image: %w", err)
 		}
-		log.Printf("Using Talos image: %s", image)
+		ctx.Logger.Printf("[%s] Using Talos image: %s", phase, image)
 	}
 
 	// Get Network ID
-	if p.state == nil || p.state.Network == nil {
+	if ctx.State == nil || ctx.State.Network == nil {
 		return "", fmt.Errorf("network not initialized in provisioning state")
 	}
-	networkID := p.state.Network.ID
+	networkID := ctx.State.Network.ID
 
-	_, err = p.serverProvisioner.CreateServer(
+	_, err = ctx.Infra.CreateServer(
 		ctx,
 		serverName,
 		image,
 		serverType,
 		location,
-		p.config.SSHKeys,
+		ctx.Config.SSHKeys,
 		labels,
 		userData,
 		pgID,
@@ -83,13 +83,13 @@ func (p *Provisioner) ensureServer(
 	}
 
 	// Get IP after creation with retry logic and configurable timeout
-	ipCtx, cancel := context.WithTimeout(ctx, p.timeouts.ServerIP)
+	ipCtx, cancel := context.WithTimeout(ctx, ctx.Timeouts.ServerIP)
 	defer cancel()
 
 	var ip string
 	err = retry.WithExponentialBackoff(ipCtx, func() error {
 		var getErr error
-		ip, getErr = p.serverProvisioner.GetServerIP(ctx, serverName)
+		ip, getErr = ctx.Infra.GetServerIP(ctx, serverName)
 		if getErr != nil {
 			return getErr
 		}
@@ -97,7 +97,7 @@ func (p *Provisioner) ensureServer(
 			return fmt.Errorf("server IP not yet assigned")
 		}
 		return nil
-	}, retry.WithMaxRetries(p.timeouts.RetryMaxAttempts), retry.WithInitialDelay(p.timeouts.RetryInitialDelay))
+	}, retry.WithMaxRetries(ctx.Timeouts.RetryMaxAttempts), retry.WithInitialDelay(ctx.Timeouts.RetryInitialDelay))
 
 	if err != nil {
 		return "", fmt.Errorf("failed to get server IP for %s: %w", serverName, err)
@@ -108,13 +108,13 @@ func (p *Provisioner) ensureServer(
 
 // ensureImage ensures the required Talos image exists and returns its ID.
 // It checks for an existing snapshot and builds it if necessary.
-func (p *Provisioner) ensureImage(ctx context.Context, serverType, _ string) (string, error) {
+func (p *Provisioner) ensureImage(ctx *provisioning.Context, serverType, _ string) (string, error) {
 	// Determine architecture from server type
-	arch := string(hcloud_internal.DetectArchitecture(serverType))
+	arch := string(hcloud.DetectArchitecture(serverType))
 
 	// Get versions from config
-	talosVersion := p.config.Talos.Version
-	k8sVersion := p.config.Kubernetes.Version
+	talosVersion := ctx.Config.Talos.Version
+	k8sVersion := ctx.Config.Kubernetes.Version
 
 	// Set defaults if not configured
 	if talosVersion == "" {
@@ -132,14 +132,14 @@ func (p *Provisioner) ensureImage(ctx context.Context, serverType, _ string) (st
 		"arch":          arch,
 	}
 
-	snapshot, err := p.snapshotManager.GetSnapshotByLabels(ctx, labels)
+	snapshot, err := ctx.Infra.GetSnapshotByLabels(ctx, labels)
 	if err != nil {
 		return "", fmt.Errorf("failed to check for existing snapshot: %w", err)
 	}
 
 	if snapshot != nil {
 		snapshotID := fmt.Sprintf("%d", snapshot.ID)
-		log.Printf("Found existing Talos snapshot: %s (ID: %s)", snapshot.Description, snapshotID)
+		ctx.Logger.Printf("[%s] Found existing Talos snapshot: %s (ID: %s)", phase, snapshot.Description, snapshotID)
 		return snapshotID, nil
 	}
 

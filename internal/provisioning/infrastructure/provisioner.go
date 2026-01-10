@@ -1,39 +1,50 @@
 package infrastructure
 
 import (
+	"hcloud-k8s/internal/provisioning"
+
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
-	"hcloud-k8s/internal/config"
-	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
 )
 
 // Provisioner handles infrastructure provisioning (network, firewall, load balancers).
-type Provisioner struct {
-	networkManager  hcloud_internal.NetworkManager
-	firewallManager hcloud_internal.FirewallManager
-	lbManager       hcloud_internal.LoadBalancerManager
-	fipManager      hcloud_internal.FloatingIPManager
-	config          *config.Config
-
-	// State
-	network  *hcloud.Network
-	firewall *hcloud.Firewall
-}
+type Provisioner struct{}
 
 // NewProvisioner creates a new infrastructure provisioner.
-func NewProvisioner(
-	infra hcloud_internal.InfrastructureManager,
-	cfg *config.Config,
-) *Provisioner {
-	return &Provisioner{
-		networkManager:  infra,
-		firewallManager: infra,
-		lbManager:       infra,
-		fipManager:      infra,
-		config:          cfg,
-	}
+func NewProvisioner() *Provisioner {
+	return &Provisioner{}
 }
 
-// GetNetwork returns the provisioned network (to be passed to compute provisioner).
-func (p *Provisioner) GetNetwork() *hcloud.Network {
-	return p.network
+// Name implements the provisioning.Phase interface.
+func (p *Provisioner) Name() string {
+	return "infrastructure"
+}
+
+// Provision implements the provisioning.Phase interface.
+func (p *Provisioner) Provision(ctx *provisioning.Context) error {
+	// 1. Network
+	if err := p.ProvisionNetwork(ctx); err != nil {
+		return err
+	}
+
+	// 2. Firewall
+	if err := p.ProvisionFirewall(ctx); err != nil {
+		return err
+	}
+
+	// 3. Load Balancers
+	if err := p.ProvisionLoadBalancers(ctx); err != nil {
+		return err
+	}
+
+	// 4. Floating IPs
+	if err := p.ProvisionFloatingIPs(ctx); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// GetNetwork returns the provisioned network from state.
+func (p *Provisioner) GetNetwork(ctx *provisioning.Context) *hcloud.Network {
+	return ctx.State.Network
 }

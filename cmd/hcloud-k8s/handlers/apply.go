@@ -11,7 +11,6 @@ import (
 	"log"
 	"os"
 
-	"hcloud-k8s/internal/addons"
 	"hcloud-k8s/internal/config"
 	"hcloud-k8s/internal/orchestration"
 	"hcloud-k8s/internal/platform/hcloud"
@@ -60,19 +59,13 @@ func Apply(ctx context.Context, configPath string) error {
 		return err
 	}
 
-	reconciler, kubeconfig, err := reconcileInfrastructure(ctx, client, talosGen, cfg)
+	_, kubeconfig, err := reconcileInfrastructure(ctx, client, talosGen, cfg)
 	if err != nil {
 		return err
 	}
 
 	if err := writeKubeconfig(kubeconfig); err != nil {
 		return err
-	}
-
-	if len(kubeconfig) > 0 {
-		if err := applyAddons(ctx, cfg, kubeconfig, reconciler.GetNetworkID()); err != nil {
-			return err
-		}
 	}
 
 	printSuccess(kubeconfig)
@@ -133,19 +126,6 @@ func reconcileInfrastructure(ctx context.Context, client *hcloud.RealClient, tal
 
 	log.Println("Infrastructure reconciliation completed")
 	return reconciler, kubeconfig, nil
-}
-
-// applyAddons installs configured cluster addons like CCM, CSI drivers, etc.
-// Only called if cluster bootstrap completed successfully (kubeconfig is non-empty).
-func applyAddons(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID int64) error {
-	log.Println("Installing cluster addons...")
-
-	if err := addons.Apply(ctx, cfg, kubeconfig, networkID); err != nil {
-		return fmt.Errorf("failed to install addons: %w", err)
-	}
-
-	log.Println("Addon installation completed")
-	return nil
 }
 
 // writeTalosFiles persists Talos secrets and client config to disk.

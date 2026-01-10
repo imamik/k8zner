@@ -11,12 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"hcloud-k8s/internal/config"
 	"hcloud-k8s/internal/orchestration"
 	hcloud_client "hcloud-k8s/internal/platform/hcloud"
 	"hcloud-k8s/internal/platform/talos"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestKubeconfigRetrieval is a minimal E2E test focused on validating kubeconfig retrieval.
@@ -97,14 +98,11 @@ func TestKubeconfigRetrieval(t *testing.T) {
 	defer cleanup()
 
 	// Initialize Talos Generator
-	talosGen, err := talos.NewConfigGenerator(
-		clusterName,
-		cfg.Kubernetes.Version,
-		cfg.Talos.Version,
-		"",
-		"",
-	)
-	require.NoError(t, err, "Failed to create Talos generator")
+	secrets, err := talos.GetOrGenerateSecrets("/tmp/talos-secrets-"+clusterName+".json", cfg.Talos.Version)
+	require.NoError(t, err, "Failed to get secrets")
+	defer os.Remove("/tmp/talos-secrets-" + clusterName + ".json")
+
+	talosGen := talos.NewGenerator(clusterName, cfg.Kubernetes.Version, cfg.Talos.Version, "", secrets)
 
 	reconciler := orchestration.NewReconciler(hClient, talosGen, cfg)
 
