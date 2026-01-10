@@ -4,14 +4,17 @@ import (
 	"context"
 	"testing"
 
+	"hcloud-k8s/internal/config"
+	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
+	"hcloud-k8s/internal/provisioning"
+
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
-	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
 )
 
 func TestBootstrap_StateMarkerPresent(t *testing.T) {
 	mockInfra := new(hcloud_internal.MockClient)
-	bootstrapper := NewBootstrapper(mockInfra)
+	p := NewProvisioner()
 
 	ctx := context.Background()
 	clusterName := "test-cluster"
@@ -24,13 +27,19 @@ func TestBootstrap_StateMarkerPresent(t *testing.T) {
 		return nil, nil
 	}
 
-	controlPlaneNodes := map[string]string{
+	pCtx := &provisioning.Context{
+		Context: ctx,
+		Config: &config.Config{
+			ClusterName: clusterName,
+		},
+		State: provisioning.NewState(),
+		Infra: mockInfra,
+	}
+	pCtx.State.ControlPlaneIPs = map[string]string{
 		"test-cluster-control-plane-1": "1.2.3.4",
 	}
-	machineConfigs := map[string][]byte{
-		"test-cluster-control-plane-1": []byte("machine-config"),
-	}
+	pCtx.State.TalosConfig = []byte("client-config")
 
-	_, err := bootstrapper.Bootstrap(ctx, clusterName, controlPlaneNodes, machineConfigs, []byte("client-config"))
+	err := p.BootstrapCluster(pCtx)
 	assert.NoError(t, err)
 }

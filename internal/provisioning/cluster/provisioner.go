@@ -1,17 +1,18 @@
 package cluster
 
 import (
-	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
+	"hcloud-k8s/internal/provisioning"
 )
 
 // Provisioner handles cluster lifecycle operations (bootstrap, upgrade).
-type Provisioner struct {
-	hClient hcloud_internal.InfrastructureManager
-}
+type Provisioner struct{}
 
 // NewProvisioner creates a new cluster provisioner.
-func NewProvisioner(infra hcloud_internal.InfrastructureManager) *Provisioner {
-	return &Provisioner{
-		hClient: infra,
-	}
+func NewProvisioner() *Provisioner {
+	return &Provisioner{}
+}
+
+// Provision implements the provisioning.Phase interface.
+func (p *Provisioner) Provision(ctx *provisioning.Context) error {
+	return p.BootstrapCluster(ctx)
 }

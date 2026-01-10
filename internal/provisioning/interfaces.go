@@ -9,6 +9,12 @@
 // This root package contains shared interfaces and state types used across subpackages.
 package provisioning
 
+// Phase defines the interface for a provisioning phase.
+type Phase interface {
+	// Provision executes the provisioning logic for this phase.
+	Provision(ctx *Context) error
+}
+
 // TalosConfigProducer defines the interface for generating Talos configurations.
 // Implemented by internal/platform/talos.Generator.
 type TalosConfigProducer interface {

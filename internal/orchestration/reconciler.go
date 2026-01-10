@@ -20,20 +20,17 @@ import (
 )
 
 // Reconciler orchestrates the cluster provisioning workflow.
-// It delegates actual provisioning to specialized provisioners.
 type Reconciler struct {
 	infra          hcloud_internal.InfrastructureManager
 	talosGenerator provisioning.TalosConfigProducer
 	config         *config.Config
 	state          *provisioning.State
 
-	// Provisioners
-	infraProvisioner *infrastructure.Provisioner
-	imageProvisioner *image.Provisioner
-	// computeProvisioner is created during Reconcile() after network provisioning
-	// since it requires the provisioned network reference via state.
+	// Phases
+	infraProvisioner   *infrastructure.Provisioner
+	imageProvisioner   *image.Provisioner
 	computeProvisioner *compute.Provisioner
-	clusterProvisioner *cluster.Bootstrapper
+	clusterProvisioner *cluster.Provisioner
 }
 
 // NewReconciler creates a new orchestration reconciler.
@@ -42,74 +39,56 @@ func NewReconciler(
 	talosGenerator provisioning.TalosConfigProducer,
 	cfg *config.Config,
 ) *Reconciler {
-	state := provisioning.NewState()
 	return &Reconciler{
 		infra:              infra,
 		talosGenerator:     talosGenerator,
 		config:             cfg,
-		state:              state,
-		infraProvisioner:   infrastructure.NewProvisioner(infra, cfg),
-		imageProvisioner:   image.NewProvisioner(infra, cfg),
-		clusterProvisioner: cluster.NewBootstrapper(infra),
-		// Note: computeProvisioner will be created after network provisioning
+		state:              provisioning.NewState(),
+		infraProvisioner:   infrastructure.NewProvisioner(),
+		imageProvisioner:   image.NewProvisioner(),
+		computeProvisioner: compute.NewProvisioner(),
+		clusterProvisioner: cluster.NewProvisioner(),
 	}
 }
 
 // Reconcile ensures that the desired state matches the actual state.
 // Returns the kubeconfig bytes if bootstrap was performed, or nil if cluster already existed.
 func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
-	// 1. Network provisioning
-	if err := r.provisionNetwork(ctx); err != nil {
-		return nil, err
+	// 1. Setup Provisioning Context
+	pCtx := &provisioning.Context{
+		Context: ctx,
+		Config:  r.config,
+		State:   r.state,
+		Infra:   r.infra,
+		Talos:   r.talosGenerator,
 	}
 
-	// Populate state with provisioned network
-	r.state.Network = r.infraProvisioner.GetNetwork()
-
-	// Create compute provisioner with shared state
-	r.computeProvisioner = compute.NewProvisioner(
-		r.infra,
-		r.talosGenerator,
-		r.config,
-		r.state,
-	)
-
-	// 2. Images and infrastructure (parallel)
-	if err := r.provisionImagesAndInfrastructure(ctx); err != nil {
-		return nil, err
+	// 2. Sequential Execution of Provisioning Phases
+	phases := []struct {
+		name  string
+		phase provisioning.Phase
+	}{
+		{"infrastructure", r.infraProvisioner},
+		{"image", r.imageProvisioner},
+		{"compute", r.computeProvisioner},
+		{"cluster", r.clusterProvisioner},
 	}
 
-	// 3. Control plane nodes
-	cpIPs, sans, err := r.provisionControlPlane(ctx)
-	if err != nil {
-		return nil, err
+	for _, p := range phases {
+		log.Printf("Starting phase: %s", p.name)
+		if err := p.phase.Provision(pCtx); err != nil {
+			return nil, fmt.Errorf("phase %s failed: %w", p.name, err)
+		}
 	}
 
-	// 4. Bootstrap cluster (if needed)
-	kubeconfig, clientCfg, err := r.bootstrapCluster(ctx, cpIPs, sans)
-	if err != nil {
-		return nil, err
-	}
-
-	// 5. Worker nodes
-	workerIPs, err := r.provisionWorkers(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// 6. Apply worker configs (if needed)
-	if err := r.applyWorkerConfigs(ctx, workerIPs, kubeconfig, clientCfg); err != nil {
-		return nil, err
-	}
-
-	// 7. Install addons (if cluster was bootstrapped)
-	if len(kubeconfig) > 0 {
+	// 3. Install addons (if cluster was bootstrapped)
+	if len(r.state.Kubeconfig) > 0 {
 		log.Println("Installing cluster addons...")
-		networkID := r.GetNetworkID()
-		if err := addons.Apply(ctx, r.config, kubeconfig, networkID); err != nil {
+		networkID := r.state.Network.ID
+		if err := addons.Apply(ctx, r.config, r.state.Kubeconfig, networkID); err != nil {
 			return nil, fmt.Errorf("failed to install addons: %w", err)
 		}
 	}
 
-	return kubeconfig, nil
+	return r.state.Kubeconfig, nil
 }

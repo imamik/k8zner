@@ -1,6 +1,13 @@
 package provisioning
 
-import "github.com/hetznercloud/hcloud-go/v2/hcloud"
+import (
+	"context"
+
+	"hcloud-k8s/internal/config"
+	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
+
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+)
 
 // State holds the shared results of provisioning phases.
 // It is progressively populated as each phase completes and is passed
@@ -18,6 +25,15 @@ type State struct {
 	// Cluster results (populated by cluster bootstrapper)
 	Kubeconfig  []byte
 	TalosConfig []byte
+}
+
+// Context wraps all dependencies and state needed for a provisioning phase.
+type Context struct {
+	context.Context
+	Config *config.Config
+	State  *State
+	Infra  hcloud_internal.InfrastructureManager
+	Talos  TalosConfigProducer
 }
 
 // NewState creates an empty provisioning state.

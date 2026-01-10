@@ -16,48 +16,48 @@ import (
 	"math/big"
 	"time"
 
+	"hcloud-k8s/internal/provisioning"
+	"hcloud-k8s/internal/util/netutil"
+
 	"github.com/siderolabs/talos/pkg/machinery/api/machine"
 	"github.com/siderolabs/talos/pkg/machinery/client"
 	"github.com/siderolabs/talos/pkg/machinery/client/config"
-	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
-	"hcloud-k8s/internal/util/netutil"
 )
 
-// Bootstrapper handles the cluster bootstrapping process.
-type Bootstrapper struct {
-	hClient hcloud_internal.InfrastructureManager
-}
-
-// NewBootstrapper creates a new Bootstrapper.
-func NewBootstrapper(hClient hcloud_internal.InfrastructureManager) *Bootstrapper {
-	return &Bootstrapper{
-		hClient: hClient,
-	}
-}
-
-// Bootstrap performs the bootstrap process.
+// BootstrapCluster performs the bootstrap process.
 // It checks for the state marker, applies machine configs to all control plane nodes,
 // waits for them to be ready, calls bootstrap on the first node, creates the state marker,
 // and retrieves the kubeconfig.
-// Returns the kubeconfig bytes and any error encountered.
-func (b *Bootstrapper) Bootstrap(ctx context.Context, clusterName string, controlPlaneNodes map[string]string, machineConfigs map[string][]byte, clientConfigBytes []byte) ([]byte, error) {
+func (p *Provisioner) BootstrapCluster(ctx *provisioning.Context) error {
+	clusterName := ctx.Config.ClusterName
+	controlPlaneNodes := ctx.State.ControlPlaneIPs
+
+	// Ensure we have the client config in state
+	if len(ctx.State.TalosConfig) == 0 {
+		clientCfg, err := ctx.Talos.GetClientConfig()
+		if err != nil {
+			return fmt.Errorf("failed to get client config: %w", err)
+		}
+		ctx.State.TalosConfig = clientCfg
+	}
+
 	markerName := fmt.Sprintf("%s-state", clusterName)
 
 	// 1. Check for State Marker
-	cert, err := b.hClient.GetCertificate(ctx, markerName)
+	cert, err := ctx.Infra.GetCertificate(ctx, markerName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check for state marker: %w", err)
+		return fmt.Errorf("failed to check for state marker: %w", err)
 	}
 	if cert != nil {
 		log.Printf("Cluster %s is already initialized (state marker found). Skipping bootstrap.", clusterName)
 		// Cluster already bootstrapped, try to retrieve kubeconfig
-		// If retrieval fails (e.g., in tests or if cluster isn't ready), return nil kubeconfig
-		kubeconfig, err := b.retrieveKubeconfig(ctx, controlPlaneNodes, clientConfigBytes)
+		kubeconfig, err := p.retrieveKubeconfig(ctx, controlPlaneNodes, ctx.State.TalosConfig)
 		if err != nil {
 			log.Printf("Note: Could not retrieve kubeconfig from existing cluster: %v", err)
-			return nil, nil
+			return nil
 		}
-		return kubeconfig, nil
+		ctx.State.Kubeconfig = kubeconfig
+		return nil
 	}
 
 	log.Printf("Bootstrapping cluster %s with %d control plane nodes...", clusterName, len(controlPlaneNodes))
@@ -65,14 +65,15 @@ func (b *Bootstrapper) Bootstrap(ctx context.Context, clusterName string, contro
 	// 2. Apply machine configurations to all control plane nodes
 	log.Println("Applying machine configurations to control plane nodes...")
 	for nodeName, nodeIP := range controlPlaneNodes {
-		machineConfig, ok := machineConfigs[nodeName]
-		if !ok {
-			return nil, fmt.Errorf("missing machine config for node %s", nodeName)
+		// Generate config for node
+		machineConfig, err := ctx.Talos.GenerateControlPlaneConfig(ctx.State.SANs, nodeName)
+		if err != nil {
+			return fmt.Errorf("failed to generate machine config for node %s: %w", nodeName, err)
 		}
 
 		log.Printf("Applying config to node %s (%s)...", nodeName, nodeIP)
-		if err := b.applyMachineConfig(ctx, nodeIP, machineConfig, clientConfigBytes); err != nil {
-			return nil, fmt.Errorf("failed to apply config to node %s: %w", nodeName, err)
+		if err := p.applyMachineConfig(ctx, nodeIP, machineConfig, ctx.State.TalosConfig); err != nil {
+			return fmt.Errorf("failed to apply config to node %s: %w", nodeName, err)
 		}
 	}
 
@@ -80,17 +81,14 @@ func (b *Bootstrapper) Bootstrap(ctx context.Context, clusterName string, contro
 	log.Println("Waiting for nodes to reboot and become ready...")
 	for nodeName, nodeIP := range controlPlaneNodes {
 		log.Printf("Waiting for node %s (%s) to be ready...", nodeName, nodeIP)
-		if err := b.waitForNodeReady(ctx, nodeIP, clientConfigBytes); err != nil {
-			return nil, fmt.Errorf("node %s failed to become ready: %w", nodeName, err)
+		if err := p.waitForNodeReady(ctx, nodeIP, ctx.State.TalosConfig); err != nil {
+			return fmt.Errorf("node %s failed to become ready: %w", nodeName, err)
 		}
 		log.Printf("Node %s is ready", nodeName)
 	}
 
-	// 4. Initialize Talos Client for bootstrap
-	cfg, err := config.FromString(string(clientConfigBytes))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse client config: %w", err)
-	}
+	// Initialize Talos Client for bootstrap
+	clientConfigBytes := ctx.State.TalosConfig
 
 	// Get first control plane IP for bootstrap
 	var firstCPIP string
@@ -100,10 +98,10 @@ func (b *Bootstrapper) Bootstrap(ctx context.Context, clusterName string, contro
 	}
 
 	// Create Talos Client Context
-	// Use config which includes proper TLS setup with client certificates for mTLS
+	cfg, _ := config.FromString(string(clientConfigBytes))
 	clientCtx, err := client.New(ctx, client.WithConfig(cfg), client.WithEndpoints(firstCPIP))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create talos client: %w", err)
+		return fmt.Errorf("failed to create talos client: %w", err)
 	}
 	defer func() {
 		_ = clientCtx.Close()
@@ -114,7 +112,7 @@ func (b *Bootstrapper) Bootstrap(ctx context.Context, clusterName string, contro
 	req := &machine.BootstrapRequest{}
 
 	if err := clientCtx.Bootstrap(ctx, req); err != nil {
-		return nil, fmt.Errorf("failed to bootstrap: %w", err)
+		return fmt.Errorf("failed to bootstrap: %w", err)
 	}
 
 	// 6. Create State Marker
@@ -126,31 +124,29 @@ func (b *Bootstrapper) Bootstrap(ctx context.Context, clusterName string, contro
 
 	dummyCert, dummyKey, err := generateDummyCert()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate dummy cert for marker: %w", err)
+		return fmt.Errorf("failed to generate dummy cert for marker: %w", err)
 	}
 
-	_, err = b.hClient.EnsureCertificate(ctx, markerName, dummyCert, dummyKey, labels)
+	_, err = ctx.Infra.EnsureCertificate(ctx, markerName, dummyCert, dummyKey, labels)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create state marker: %w", err)
+		return fmt.Errorf("failed to create state marker: %w", err)
 	}
 
 	log.Println("Bootstrap complete!")
 
 	// 7. Retrieve Kubeconfig
 	log.Println("Retrieving kubeconfig...")
-	kubeconfig, err := b.retrieveKubeconfig(ctx, controlPlaneNodes, clientConfigBytes)
+	kubeconfig, err := p.retrieveKubeconfig(ctx, controlPlaneNodes, clientConfigBytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve kubeconfig: %w", err)
+		return fmt.Errorf("failed to retrieve kubeconfig: %w", err)
 	}
 
-	log.Println("Kubeconfig retrieved successfully!")
-	return kubeconfig, nil
+	ctx.State.Kubeconfig = kubeconfig
+	return nil
 }
 
 // applyMachineConfig applies a machine configuration to a Talos node.
-// For pre-installed Talos (from snapshots), nodes boot into maintenance mode
-// and require an insecure connection to apply the initial configuration.
-func (b *Bootstrapper) applyMachineConfig(ctx context.Context, nodeIP string, machineConfig []byte, _ []byte) error {
+func (p *Provisioner) applyMachineConfig(ctx context.Context, nodeIP string, machineConfig []byte, _ []byte) error {
 	// Wait for Talos API to be available
 	if err := netutil.WaitForPort(ctx, nodeIP, 50000, netutil.TalosAPIWaitTimeout); err != nil {
 		return fmt.Errorf("failed to wait for Talos API: %w", err)
@@ -187,7 +183,7 @@ func (b *Bootstrapper) applyMachineConfig(ctx context.Context, nodeIP string, ma
 }
 
 // waitForNodeReady waits for a node to reboot and become ready after applying configuration.
-func (b *Bootstrapper) waitForNodeReady(ctx context.Context, nodeIP string, clientConfigBytes []byte) error {
+func (p *Provisioner) waitForNodeReady(ctx context.Context, nodeIP string, clientConfigBytes []byte) error {
 	// Parse client config
 	cfg, err := config.FromString(string(clientConfigBytes))
 	if err != nil {
@@ -237,8 +233,7 @@ func (b *Bootstrapper) waitForNodeReady(ctx context.Context, nodeIP string, clie
 }
 
 // retrieveKubeconfig retrieves the kubeconfig from the cluster after bootstrap.
-// It waits for the Kubernetes API to become available before retrieving.
-func (b *Bootstrapper) retrieveKubeconfig(ctx context.Context, controlPlaneNodes map[string]string, clientConfigBytes []byte) ([]byte, error) {
+func (p *Provisioner) retrieveKubeconfig(ctx context.Context, controlPlaneNodes map[string]string, clientConfigBytes []byte) ([]byte, error) {
 	// Parse client config
 	cfg, err := config.FromString(string(clientConfigBytes))
 	if err != nil {
@@ -317,8 +312,8 @@ func generateDummyCert() (string, string, error) {
 }
 
 // ApplyWorkerConfigs applies Talos machine configurations to worker nodes.
-// This should be called after worker nodes are provisioned but before they're expected to join the cluster.
-func (b *Bootstrapper) ApplyWorkerConfigs(ctx context.Context, workerNodes map[string]string, workerConfigs map[string][]byte, clientConfigBytes []byte) error {
+func (p *Provisioner) ApplyWorkerConfigs(ctx *provisioning.Context) error {
+	workerNodes := ctx.State.WorkerIPs
 	if len(workerNodes) == 0 {
 		log.Println("No worker nodes to configure")
 		return nil
@@ -327,12 +322,12 @@ func (b *Bootstrapper) ApplyWorkerConfigs(ctx context.Context, workerNodes map[s
 	log.Printf("Applying machine configurations to %d worker nodes...", len(workerNodes))
 
 	for nodeName, nodeIP := range workerNodes {
-		nodeConfig, ok := workerConfigs[nodeName]
-		if !ok {
-			return fmt.Errorf("no config found for worker node %s", nodeName)
+		nodeConfig, err := ctx.Talos.GenerateWorkerConfig(nodeName)
+		if err != nil {
+			return fmt.Errorf("failed to generate worker config for %s: %w", nodeName, err)
 		}
 		log.Printf("Applying config to worker node %s (%s)...", nodeName, nodeIP)
-		if err := b.applyMachineConfig(ctx, nodeIP, nodeConfig, clientConfigBytes); err != nil {
+		if err := p.applyMachineConfig(ctx, nodeIP, nodeConfig, ctx.State.TalosConfig); err != nil {
 			return fmt.Errorf("failed to apply config to worker node %s: %w", nodeName, err)
 		}
 	}
@@ -341,7 +336,7 @@ func (b *Bootstrapper) ApplyWorkerConfigs(ctx context.Context, workerNodes map[s
 	log.Println("Waiting for worker nodes to reboot and become ready...")
 	for nodeName, nodeIP := range workerNodes {
 		log.Printf("Waiting for worker node %s (%s) to be ready...", nodeName, nodeIP)
-		if err := b.waitForNodeReady(ctx, nodeIP, clientConfigBytes); err != nil {
+		if err := p.waitForNodeReady(ctx, nodeIP, ctx.State.TalosConfig); err != nil {
 			return fmt.Errorf("worker node %s failed to become ready: %w", nodeName, err)
 		}
 		log.Printf("Worker node %s is ready", nodeName)

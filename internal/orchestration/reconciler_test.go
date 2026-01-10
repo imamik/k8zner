@@ -6,11 +6,12 @@ import (
 	"net"
 	"testing"
 
+	"hcloud-k8s/internal/config"
+	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
+
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"hcloud-k8s/internal/config"
-	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
 )
 
 // MockTalosProducer implementation.
@@ -124,10 +125,9 @@ func TestReconciler_Reconcile(t *testing.T) {
 
 	// Talos
 	mockTalos.On("SetEndpoint", "https://5.6.7.8:6443").Return()
-	mockTalos.On("GenerateControlPlaneConfig", mock.Anything, mock.Anything).Return([]byte("cp-config"), nil)
-	// Note: GenerateWorkerConfig is not called in this test because cluster already exists (state marker present)
-	// Worker configs are only generated and applied when kubeconfig is available from bootstrap
 	mockTalos.On("GetClientConfig").Return([]byte("client-config"), nil)
+	// GenerateControlPlaneConfig is NOT called if cluster already exists (state marker present)
+	// and we skip bootstrap.
 
 	// Servers
 	mockInfra.GetServerIDFunc = func(_ context.Context, _ string) (string, error) {
@@ -139,6 +139,9 @@ func TestReconciler_Reconcile(t *testing.T) {
 	mockInfra.GetServerIPFunc = func(_ context.Context, _ string) (string, error) {
 		return "10.0.1.2", nil
 	}
+
+	// TalosConfig for retrieval
+	mockTalos.On("GetClientConfig").Return([]byte("client-config"), nil)
 
 	// Snapshots - Return existing snapshot so auto-build is skipped in tests
 	mockInfra.GetSnapshotByLabelsFunc = func(_ context.Context, labels map[string]string) (*hcloud.Image, error) {
@@ -218,6 +221,10 @@ func TestReconciler_Reconcile_ServerCreationError(t *testing.T) {
 					Count:      1,
 				},
 			},
+		},
+		Network: config.NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+			Zone:     "eu-central",
 		},
 	}
 
