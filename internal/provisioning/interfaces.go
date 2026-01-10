@@ -11,6 +11,9 @@ package provisioning
 
 // Phase defines the interface for a provisioning phase.
 type Phase interface {
+	// Name returns the human-readable name of this phase.
+	Name() string
+
 	// Provision executes the provisioning logic for this phase.
 	Provision(ctx *Context) error
 }

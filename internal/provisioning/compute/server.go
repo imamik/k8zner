@@ -3,7 +3,6 @@ package compute
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"hcloud-k8s/internal/platform/hcloud"
 	"hcloud-k8s/internal/provisioning"
@@ -41,7 +40,7 @@ func (p *Provisioner) ensureServer(
 	}
 
 	// Create
-	log.Printf("[Compute:Server] Creating %s Server %s...", role, serverName)
+	ctx.Logger.Printf("[%s] Creating %s server %s...", phase, role, serverName)
 
 	// Labels
 	labels := labels.NewLabelBuilder(ctx.Config.ClusterName).
@@ -57,7 +56,7 @@ func (p *Provisioner) ensureServer(
 		if err != nil {
 			return "", fmt.Errorf("failed to ensure Talos image: %w", err)
 		}
-		log.Printf("[Compute:Server] Using Talos image: %s", image)
+		ctx.Logger.Printf("[%s] Using Talos image: %s", phase, image)
 	}
 
 	// Get Network ID
@@ -140,7 +139,7 @@ func (p *Provisioner) ensureImage(ctx *provisioning.Context, serverType, _ strin
 
 	if snapshot != nil {
 		snapshotID := fmt.Sprintf("%d", snapshot.ID)
-		log.Printf("[Compute:Image] Found existing Talos snapshot: %s (ID: %s)", snapshot.Description, snapshotID)
+		ctx.Logger.Printf("[%s] Found existing Talos snapshot: %s (ID: %s)", phase, snapshot.Description, snapshotID)
 		return snapshotID, nil
 	}
 

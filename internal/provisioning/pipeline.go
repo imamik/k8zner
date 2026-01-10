@@ -24,13 +24,13 @@ func (p *Pipeline) Run(ctx *Context) error {
 
 	for i, phase := range p.Phases {
 		startPhase := time.Now()
-		phaseName := fmt.Sprintf("Phase %d/%d", i+1, len(p.Phases))
+		phaseName := fmt.Sprintf("%s (%d/%d)", phase.Name(), i+1, len(p.Phases))
 
 		LogPhaseStart(ctx.Observer, phaseName)
 
 		if err := phase.Provision(ctx); err != nil {
 			LogPhaseFailed(ctx.Observer, phaseName, err)
-			return fmt.Errorf("phase %d failed: %w", i+1, err)
+			return fmt.Errorf("%s phase failed: %w", phase.Name(), err)
 		}
 
 		LogPhaseComplete(ctx.Observer, phaseName, time.Since(startPhase))

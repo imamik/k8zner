@@ -46,6 +46,11 @@ func NewValidationPhase() *ValidationPhase {
 	}
 }
 
+// Name implements the Phase interface.
+func (vp *ValidationPhase) Name() string {
+	return "validation"
+}
+
 // Provision implements the Phase interface.
 func (vp *ValidationPhase) Provision(ctx *Context) error {
 	ctx.Logger.Printf("[Validation] Running pre-flight validation...")

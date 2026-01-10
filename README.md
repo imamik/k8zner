@@ -70,10 +70,35 @@ This will:
 
 ### Architecture
 
-The project follows a standard Go layout:
-- `cmd/`: Entry points for the application.
-- `internal/`: Private application logic (`cluster`, `hcloud`, `talos`, `config`).
-- `pkg/`: Shared library code.
+The project follows a domain-driven Go layout:
+
+```
+cmd/
+├── hcloud-k8s/
+│   ├── commands/     # CLI command definitions (cobra)
+│   └── handlers/     # Business logic for commands
+
+internal/
+├── config/           # Configuration loading and validation
+├── orchestration/    # High-level workflow coordination
+├── provisioning/     # Cluster provisioning domain
+│   ├── infrastructure/  # Network, Firewall, Load Balancers
+│   ├── compute/         # Servers, Control Plane, Workers
+│   ├── image/           # Talos image building
+│   └── cluster/         # Bootstrap and configuration
+├── platform/         # External system integrations
+│   ├── hcloud/          # Hetzner Cloud API client
+│   ├── talos/           # Talos configuration generator
+│   └── ssh/             # SSH connectivity
+├── addons/           # Kubernetes addon installation
+└── util/             # Reusable utilities (async, naming, retry)
+```
+
+Key design principles:
+- **Pipeline-based provisioning**: Phases execute sequentially with shared context
+- **Structured observability**: Consistent logging via Observer interface
+- **Idempotent operations**: Safe to run multiple times
+- **Validation-first**: Pre-flight checks before resource creation
 
 ### Testing
 
@@ -87,3 +112,7 @@ Run End-to-End (E2E) tests (requires `HCLOUD_TOKEN`):
 export HCLOUD_TOKEN="your-token"
 go test -v -tags=e2e ./tests/e2e/...
 ```
+
+### Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines and code style.

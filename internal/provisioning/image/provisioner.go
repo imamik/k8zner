@@ -12,6 +12,11 @@ func NewProvisioner() *Provisioner {
 	return &Provisioner{}
 }
 
+// Name implements the provisioning.Phase interface.
+func (p *Provisioner) Name() string {
+	return "image"
+}
+
 // Provision implements the provisioning.Phase interface.
 func (p *Provisioner) Provision(ctx *provisioning.Context) error {
 	return p.EnsureAllImages(ctx)

@@ -7,7 +7,6 @@ package orchestration
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"hcloud-k8s/internal/addons"
 	"hcloud-k8s/internal/config"
@@ -18,6 +17,8 @@ import (
 	"hcloud-k8s/internal/provisioning/image"
 	"hcloud-k8s/internal/provisioning/infrastructure"
 )
+
+const phase = "orchestrator"
 
 // Reconciler orchestrates the cluster provisioning workflow.
 type Reconciler struct {
@@ -75,7 +76,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 
 	// 3. Install addons (if cluster was bootstrapped)
 	if len(r.state.Kubeconfig) > 0 {
-		log.Println("[Orchestrator] Installing cluster addons...")
+		pCtx.Logger.Printf("[%s] Installing cluster addons...", phase)
 		networkID := r.state.Network.ID
 		if err := addons.Apply(ctx, r.config, r.state.Kubeconfig, networkID); err != nil {
 			return nil, fmt.Errorf("failed to install addons: %w", err)

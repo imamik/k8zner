@@ -27,13 +27,14 @@ func TestBootstrap_StateMarkerPresent(t *testing.T) {
 		return nil, nil
 	}
 
+	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
-		Context: ctx,
-		Config: &config.Config{
-			ClusterName: clusterName,
-		},
-		State: provisioning.NewState(),
-		Infra: mockInfra,
+		Context:  ctx,
+		Config:   &config.Config{ClusterName: clusterName},
+		State:    provisioning.NewState(),
+		Infra:    mockInfra,
+		Observer: observer,
+		Logger:   observer,
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{
 		"test-cluster-control-plane-1": "1.2.3.4",

@@ -3,7 +3,6 @@ package compute
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 
 	"hcloud-k8s/internal/provisioning"
@@ -12,14 +11,14 @@ import (
 
 // ProvisionWorkers provisions worker node pools.
 func (p *Provisioner) ProvisionWorkers(ctx *provisioning.Context) error {
-	log.Printf("[Compute:Workers] Reconciling Worker Pools...")
+	ctx.Logger.Printf("[%s] Reconciling worker pools...", phase)
 
 	// Parallelize worker pool provisioning
 	if len(ctx.Config.Workers) == 0 {
 		return nil
 	}
 
-	log.Printf("[Compute:Workers] Creating %d worker pools...", len(ctx.Config.Workers))
+	ctx.Logger.Printf("[%s] Creating %d worker pools...", phase, len(ctx.Config.Workers))
 
 	// Collect IPs from all worker pools using mutex for thread-safe access
 	var mu sync.Mutex
@@ -53,6 +52,6 @@ func (p *Provisioner) ProvisionWorkers(ctx *provisioning.Context) error {
 		return fmt.Errorf("failed to provision worker pools: %w", err)
 	}
 
-	log.Printf("[Compute:Workers] Successfully created all worker pools")
+	ctx.Logger.Printf("[%s] Successfully created all worker pools", phase)
 	return nil
 }

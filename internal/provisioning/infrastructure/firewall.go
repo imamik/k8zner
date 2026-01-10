@@ -4,7 +4,6 @@ package infrastructure
 
 import (
 	"fmt"
-	"log"
 	"net"
 
 	"hcloud-k8s/internal/provisioning"
@@ -12,9 +11,11 @@ import (
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
+const phase = "infrastructure"
+
 // ProvisionFirewall provisions the cluster firewall with rules.
 func (p *Provisioner) ProvisionFirewall(ctx *provisioning.Context) error {
-	log.Printf("Reconciling Firewall %s...", ctx.Config.ClusterName)
+	ctx.Logger.Printf("[%s] Reconciling firewall %s...", phase, ctx.Config.ClusterName)
 
 	publicIP := ctx.State.PublicIP
 

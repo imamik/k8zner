@@ -2,7 +2,6 @@ package infrastructure
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"time"
 
@@ -15,7 +14,7 @@ import (
 
 // ProvisionLoadBalancers provisions API and Ingress load balancers.
 func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
-	log.Printf("[Infra:LB] Reconciling Load Balancers for %s...", ctx.Config.ClusterName)
+	ctx.Logger.Printf("[%s] Reconciling load balancers for %s...", phase, ctx.Config.ClusterName)
 	// API Load Balancer
 	// Sum up control plane nodes
 	cpCount := 0
@@ -26,7 +25,7 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 	if cpCount > 0 {
 		// Name: ${cluster_name}-kube-api
 		lbName := naming.KubeAPILoadBalancer(ctx.Config.ClusterName)
-		log.Printf("[Infra:LB] Reconciling Load Balancer %s...", lbName)
+		ctx.Logger.Printf("[%s] Reconciling load balancer %s...", phase, lbName)
 
 		labels := map[string]string{
 			"cluster": ctx.Config.ClusterName,
@@ -92,7 +91,7 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 	if ctx.Config.Ingress.Enabled {
 		// Name: ${cluster_name}-ingress
 		lbName := naming.IngressLoadBalancer(ctx.Config.ClusterName)
-		log.Printf("Reconciling Load Balancer %s...", lbName)
+		ctx.Logger.Printf("[%s] Reconciling ingress load balancer %s...", phase, lbName)
 
 		labels := map[string]string{
 			"cluster": ctx.Config.ClusterName,

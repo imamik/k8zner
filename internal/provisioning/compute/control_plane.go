@@ -4,16 +4,17 @@ package compute
 
 import (
 	"fmt"
-	"log"
 
 	"hcloud-k8s/internal/provisioning"
 	"hcloud-k8s/internal/util/labels"
 	"hcloud-k8s/internal/util/naming"
 )
 
+const phase = "compute"
+
 // ProvisionControlPlane provisions control plane servers.
 func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
-	log.Printf("[Compute:CP] Reconciling Control Plane...")
+	ctx.Logger.Printf("[%s] Reconciling control plane...", phase)
 
 	// Collect all SANs
 	var sans []string
@@ -33,7 +34,7 @@ func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
 			// UPDATE TALOS ENDPOINT
 			// We use the LB IP as the control plane endpoint.
 			endpoint := fmt.Sprintf("https://%s:6443", lbIP)
-			log.Printf("[Compute:CP] Setting Talos Endpoint to: %s", endpoint)
+			ctx.Logger.Printf("[%s] Setting Talos endpoint to: %s", phase, endpoint)
 			ctx.Talos.SetEndpoint(endpoint)
 		}
 

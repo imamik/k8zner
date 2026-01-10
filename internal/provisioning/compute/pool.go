@@ -3,13 +3,12 @@ package compute
 import (
 	"context"
 	"fmt"
-	"hcloud-k8s/internal/util/labels"
-	"log"
 	"sync"
 
 	"hcloud-k8s/internal/config"
 	"hcloud-k8s/internal/provisioning"
 	"hcloud-k8s/internal/util/async"
+	"hcloud-k8s/internal/util/labels"
 	"hcloud-k8s/internal/util/naming"
 )
 
@@ -110,7 +109,7 @@ func (p *Provisioner) reconcileNodePool(
 	}
 
 	// Create all servers in parallel
-	log.Printf("[Compute:Pool] Creating %d servers for pool %s...", count, poolName)
+	ctx.Logger.Printf("[%s] Creating %d servers for pool %s...", phase, count, poolName)
 
 	// Collect IPs in a thread-safe way
 	var mu sync.Mutex
@@ -138,6 +137,6 @@ func (p *Provisioner) reconcileNodePool(
 		return nil, fmt.Errorf("failed to provision pool %s: %w", poolName, err)
 	}
 
-	log.Printf("Successfully created %d servers for pool %s", count, poolName)
+	ctx.Logger.Printf("[%s] Successfully created %d servers for pool %s", phase, count, poolName)
 	return ips, nil
 }

@@ -3,17 +3,18 @@ package image
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"hcloud-k8s/internal/platform/hcloud"
 	"hcloud-k8s/internal/provisioning"
 	"hcloud-k8s/internal/util/async"
 )
 
+const phase = "image"
+
 // EnsureAllImages pre-builds all required Talos images in parallel.
 // This is called early in reconciliation to avoid sequential image building during server creation.
 func (p *Provisioner) EnsureAllImages(ctx *provisioning.Context) error {
-	log.Println("Pre-building all required Talos images...")
+	ctx.Logger.Printf("[%s] Pre-building all required Talos images...", phase)
 
 	// Collect all unique server types from control plane and worker pools
 	serverTypes := make(map[string]bool)
@@ -33,7 +34,7 @@ func (p *Provisioner) EnsureAllImages(ctx *provisioning.Context) error {
 	}
 
 	if len(serverTypes) == 0 {
-		log.Println("No Talos images needed (all pools use custom images)")
+		ctx.Logger.Printf("[%s] No Talos images needed (all pools use custom images)", phase)
 		return nil
 	}
 
@@ -44,7 +45,7 @@ func (p *Provisioner) EnsureAllImages(ctx *provisioning.Context) error {
 		architectures[string(arch)] = true
 	}
 
-	log.Printf("Building images for architectures: %v", getKeys(architectures))
+	ctx.Logger.Printf("[%s] Building images for architectures: %v", phase, getKeys(architectures))
 
 	// Get versions from config
 	talosVersion := ctx.Config.Talos.Version
@@ -80,7 +81,7 @@ func (p *Provisioner) EnsureAllImages(ctx *provisioning.Context) error {
 		return err
 	}
 
-	log.Println("All required Talos images are ready")
+	ctx.Logger.Printf("[%s] All required Talos images are ready", phase)
 	return nil
 }
 
@@ -109,12 +110,12 @@ func (p *Provisioner) ensureImageForArch(ctx *provisioning.Context, arch, talosV
 	}
 
 	if snapshot != nil {
-		log.Printf("Found existing Talos snapshot for %s: %s (ID: %d)", arch, snapshot.Description, snapshot.ID)
+		ctx.Logger.Printf("[%s] Found existing Talos snapshot for %s: %s (ID: %d)", phase, arch, snapshot.Description, snapshot.ID)
 		return nil
 	}
 
 	// Build image
-	log.Printf("Building Talos image for %s/%s/%s in location %s...", talosVersion, k8sVersion, arch, location)
+	ctx.Logger.Printf("[%s] Building Talos image for %s/%s/%s in location %s...", phase, talosVersion, k8sVersion, arch, location)
 	builder := p.createImageBuilder(ctx)
 	if builder == nil {
 		return fmt.Errorf("image builder not available")
@@ -125,7 +126,7 @@ func (p *Provisioner) ensureImageForArch(ctx *provisioning.Context, arch, talosV
 		return fmt.Errorf("failed to build image: %w", err)
 	}
 
-	log.Printf("Successfully built Talos snapshot for %s: ID %s", arch, snapshotID)
+	ctx.Logger.Printf("[%s] Successfully built Talos snapshot for %s: ID %s", phase, arch, snapshotID)
 	return nil
 }
 

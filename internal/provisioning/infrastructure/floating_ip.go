@@ -2,7 +2,6 @@ package infrastructure
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 
@@ -12,7 +11,7 @@ import (
 
 // ProvisionFloatingIPs provisions floating IPs for the control plane.
 func (p *Provisioner) ProvisionFloatingIPs(ctx *provisioning.Context) error {
-	log.Printf("[Infra:FIP] Reconciling Floating IPs for %s...", ctx.Config.ClusterName)
+	ctx.Logger.Printf("[%s] Reconciling floating IPs for %s...", phase, ctx.Config.ClusterName)
 	if ctx.Config.ControlPlane.PublicVIPIPv4Enabled {
 		name := naming.ControlPlaneFloatingIP(ctx.Config.ClusterName)
 		labels := map[string]string{"cluster": ctx.Config.ClusterName, "role": "control-plane"}
