@@ -5,6 +5,26 @@ import (
 	"net"
 )
 
+// ValidLocations contains all valid Hetzner Cloud datacenter locations.
+// https://docs.hetzner.com/cloud/general/locations/
+var ValidLocations = map[string]bool{
+	"nbg1": true, // Nuremberg, Germany
+	"fsn1": true, // Falkenstein, Germany
+	"hel1": true, // Helsinki, Finland
+	"ash":  true, // Ashburn, USA
+	"hil":  true, // Hillsboro, USA
+	"sin":  true, // Singapore
+}
+
+// ValidNetworkZones contains all valid Hetzner Cloud network zones.
+// https://docs.hetzner.com/cloud/networks/overview/
+var ValidNetworkZones = map[string]bool{
+	"eu-central":   true, // Europe
+	"us-east":      true, // US East
+	"us-west":      true, // US West
+	"ap-southeast": true, // Asia Pacific
+}
+
 // Validate checks the configuration for common errors and returns a detailed error if validation fails.
 func (c *Config) Validate() error {
 	// Required fields
@@ -16,6 +36,11 @@ func (c *Config) Validate() error {
 	}
 	if c.Location == "" {
 		return fmt.Errorf("location is required")
+	}
+
+	// Location/Zone validation
+	if err := c.validateLocations(); err != nil {
+		return fmt.Errorf("location validation failed: %w", err)
 	}
 
 	// Network validation
@@ -34,6 +59,46 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+// validateLocations validates that all locations and network zones are valid Hetzner Cloud values.
+func (c *Config) validateLocations() error {
+	// Validate cluster-wide location
+	if !ValidLocations[c.Location] {
+		return fmt.Errorf("invalid location %q: must be one of %v", c.Location, getMapKeys(ValidLocations))
+	}
+
+	// Validate network zone if set
+	if c.Network.Zone != "" && !ValidNetworkZones[c.Network.Zone] {
+		return fmt.Errorf("invalid network zone %q: must be one of %v", c.Network.Zone, getMapKeys(ValidNetworkZones))
+	}
+
+	// Validate control plane node pool locations
+	for _, pool := range c.ControlPlane.NodePools {
+		if pool.Location != "" && !ValidLocations[pool.Location] {
+			return fmt.Errorf("control plane pool %q has invalid location %q: must be one of %v",
+				pool.Name, pool.Location, getMapKeys(ValidLocations))
+		}
+	}
+
+	// Validate worker node pool locations
+	for _, pool := range c.Workers {
+		if pool.Location != "" && !ValidLocations[pool.Location] {
+			return fmt.Errorf("worker pool %q has invalid location %q: must be one of %v",
+				pool.Name, pool.Location, getMapKeys(ValidLocations))
+		}
+	}
+
+	return nil
+}
+
+// getMapKeys returns the keys of a map as a slice for error messages.
+func getMapKeys(m map[string]bool) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 // validateNetwork validates network configuration.

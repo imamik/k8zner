@@ -24,101 +24,139 @@ import (
 
 const phase = "cluster"
 
-// BootstrapCluster performs the bootstrap process.
-// It checks for the state marker, applies machine configs to all control plane nodes,
-// waits for them to be ready, calls bootstrap on the first node, creates the state marker,
-// and retrieves the kubeconfig.
+// BootstrapCluster performs the bootstrap process for a new cluster.
+// The main function orchestrates the steps - each helper does ONE thing.
 func (p *Provisioner) BootstrapCluster(ctx *provisioning.Context) error {
-	clusterName := ctx.Config.ClusterName
-	controlPlaneNodes := ctx.State.ControlPlaneIPs
-
-	// Ensure we have the client config in state
-	if len(ctx.State.TalosConfig) == 0 {
-		clientCfg, err := ctx.Talos.GetClientConfig()
-		if err != nil {
-			return fmt.Errorf("failed to get client config: %w", err)
-		}
-		ctx.State.TalosConfig = clientCfg
+	if err := p.ensureTalosConfigInState(ctx); err != nil {
+		return err
 	}
 
-	markerName := fmt.Sprintf("%s-state", clusterName)
-
-	// 1. Check for State Marker
-	cert, err := ctx.Infra.GetCertificate(ctx, markerName)
-	if err != nil {
-		return fmt.Errorf("failed to check for state marker: %w", err)
+	// Already bootstrapped? Just retrieve kubeconfig
+	if p.isAlreadyBootstrapped(ctx) {
+		return p.tryRetrieveExistingKubeconfig(ctx)
 	}
-	if cert != nil {
-		ctx.Logger.Printf("[%s] Cluster %s is already initialized (state marker found). Skipping bootstrap.", phase, clusterName)
-		// Cluster already bootstrapped, try to retrieve kubeconfig
-		kubeconfig, err := p.retrieveKubeconfig(ctx, controlPlaneNodes, ctx.State.TalosConfig, ctx.Logger)
-		if err != nil {
-			ctx.Logger.Printf("[%s] Note: Could not retrieve kubeconfig from existing cluster: %v", phase, err)
-			return nil
-		}
-		ctx.State.Kubeconfig = kubeconfig
+
+	// Bootstrap sequence
+	ctx.Logger.Printf("[%s] Bootstrapping cluster %s with %d control plane nodes...",
+		phase, ctx.Config.ClusterName, len(ctx.State.ControlPlaneIPs))
+
+	if err := p.applyControlPlaneConfigs(ctx); err != nil {
+		return err
+	}
+	if err := p.waitForControlPlaneReady(ctx); err != nil {
+		return err
+	}
+	if err := p.bootstrapEtcd(ctx); err != nil {
+		return err
+	}
+	if err := p.createStateMarker(ctx); err != nil {
+		return err
+	}
+
+	// Apply worker configs after control plane is ready and etcd is bootstrapped
+	if err := p.ApplyWorkerConfigs(ctx); err != nil {
+		return err
+	}
+
+	return p.retrieveAndStoreKubeconfig(ctx)
+}
+
+// ensureTalosConfigInState ensures the Talos client config is stored in state.
+func (p *Provisioner) ensureTalosConfigInState(ctx *provisioning.Context) error {
+	if len(ctx.State.TalosConfig) > 0 {
 		return nil
 	}
+	clientCfg, err := ctx.Talos.GetClientConfig()
+	if err != nil {
+		return fmt.Errorf("failed to get client config: %w", err)
+	}
+	ctx.State.TalosConfig = clientCfg
+	return nil
+}
 
-	ctx.Logger.Printf("[%s] Bootstrapping cluster %s with %d control plane nodes...", phase, clusterName, len(controlPlaneNodes))
+// isAlreadyBootstrapped checks if the cluster state marker exists.
+func (p *Provisioner) isAlreadyBootstrapped(ctx *provisioning.Context) bool {
+	markerName := fmt.Sprintf("%s-state", ctx.Config.ClusterName)
+	cert, err := ctx.Infra.GetCertificate(ctx, markerName)
+	if err != nil {
+		return false
+	}
+	if cert != nil {
+		ctx.Logger.Printf("[%s] Cluster %s is already initialized (state marker found). Skipping bootstrap.",
+			phase, ctx.Config.ClusterName)
+		return true
+	}
+	return false
+}
 
-	// 2. Apply machine configurations to all control plane nodes
+// tryRetrieveExistingKubeconfig attempts to retrieve kubeconfig from an existing cluster.
+func (p *Provisioner) tryRetrieveExistingKubeconfig(ctx *provisioning.Context) error {
+	kubeconfig, err := p.retrieveKubeconfig(ctx, ctx.State.ControlPlaneIPs, ctx.State.TalosConfig, ctx.Logger)
+	if err != nil {
+		ctx.Logger.Printf("[%s] Note: Could not retrieve kubeconfig from existing cluster: %v", phase, err)
+		return nil
+	}
+	ctx.State.Kubeconfig = kubeconfig
+	return nil
+}
+
+// applyControlPlaneConfigs applies machine configs to all control plane nodes.
+func (p *Provisioner) applyControlPlaneConfigs(ctx *provisioning.Context) error {
 	ctx.Logger.Printf("[%s] Applying machine configurations to control plane nodes...", phase)
-	for nodeName, nodeIP := range controlPlaneNodes {
-		// Generate config for node
+	for nodeName, nodeIP := range ctx.State.ControlPlaneIPs {
 		machineConfig, err := ctx.Talos.GenerateControlPlaneConfig(ctx.State.SANs, nodeName)
 		if err != nil {
 			return fmt.Errorf("failed to generate machine config for node %s: %w", nodeName, err)
 		}
-
 		ctx.Logger.Printf("[%s] Applying config to node %s (%s)...", phase, nodeName, nodeIP)
-		if err := p.applyMachineConfig(ctx, nodeIP, machineConfig, ctx.State.TalosConfig); err != nil {
+		if err := p.applyMachineConfig(ctx, nodeIP, machineConfig); err != nil {
 			return fmt.Errorf("failed to apply config to node %s: %w", nodeName, err)
 		}
 	}
+	return nil
+}
 
-	// 3. Wait for all nodes to reboot and become ready
+// waitForControlPlaneReady waits for all control plane nodes to reboot and become ready.
+func (p *Provisioner) waitForControlPlaneReady(ctx *provisioning.Context) error {
 	ctx.Logger.Printf("[%s] Waiting for nodes to reboot and become ready...", phase)
-	for nodeName, nodeIP := range controlPlaneNodes {
+	for nodeName, nodeIP := range ctx.State.ControlPlaneIPs {
 		ctx.Logger.Printf("[%s] Waiting for node %s (%s) to be ready...", phase, nodeName, nodeIP)
 		if err := p.waitForNodeReady(ctx, nodeIP, ctx.State.TalosConfig, ctx.Logger); err != nil {
 			return fmt.Errorf("node %s failed to become ready: %w", nodeName, err)
 		}
 		ctx.Logger.Printf("[%s] Node %s is ready", phase, nodeName)
 	}
+	return nil
+}
 
-	// Initialize Talos Client for bootstrap
-	clientConfigBytes := ctx.State.TalosConfig
+// bootstrapEtcd initializes etcd on the first control plane node.
+func (p *Provisioner) bootstrapEtcd(ctx *provisioning.Context) error {
+	firstCPIP := p.getFirstControlPlaneIP(ctx)
 
-	// Get first control plane IP for bootstrap
-	var firstCPIP string
-	for _, ip := range controlPlaneNodes {
-		firstCPIP = ip
-		break
+	cfg, err := config.FromString(string(ctx.State.TalosConfig))
+	if err != nil {
+		return fmt.Errorf("failed to parse talos config: %w", err)
 	}
-
-	// Create Talos Client Context
-	cfg, _ := config.FromString(string(clientConfigBytes))
 	clientCtx, err := client.New(ctx, client.WithConfig(cfg), client.WithEndpoints(firstCPIP))
 	if err != nil {
 		return fmt.Errorf("failed to create talos client: %w", err)
 	}
-	defer func() {
-		_ = clientCtx.Close()
-	}()
+	defer func() { _ = clientCtx.Close() }()
 
-	// 5. Bootstrap the cluster
 	ctx.Logger.Printf("[%s] Bootstrapping etcd on first control plane node %s...", phase, firstCPIP)
-	req := &machine.BootstrapRequest{}
-
-	if err := clientCtx.Bootstrap(ctx, req); err != nil {
+	if err := clientCtx.Bootstrap(ctx, &machine.BootstrapRequest{}); err != nil {
 		return fmt.Errorf("failed to bootstrap: %w", err)
 	}
+	return nil
+}
 
-	// 6. Create State Marker
+// createStateMarker creates a certificate marker indicating the cluster is initialized.
+func (p *Provisioner) createStateMarker(ctx *provisioning.Context) error {
 	ctx.Logger.Printf("[%s] Creating state marker...", phase)
+
+	markerName := fmt.Sprintf("%s-state", ctx.Config.ClusterName)
 	labels := map[string]string{
-		"cluster": clusterName,
+		"cluster": ctx.Config.ClusterName,
 		"state":   "initialized",
 	}
 
@@ -127,26 +165,35 @@ func (p *Provisioner) BootstrapCluster(ctx *provisioning.Context) error {
 		return fmt.Errorf("failed to generate dummy cert for marker: %w", err)
 	}
 
-	_, err = ctx.Infra.EnsureCertificate(ctx, markerName, dummyCert, dummyKey, labels)
-	if err != nil {
+	if _, err := ctx.Infra.EnsureCertificate(ctx, markerName, dummyCert, dummyKey, labels); err != nil {
 		return fmt.Errorf("failed to create state marker: %w", err)
 	}
 
 	ctx.Logger.Printf("[%s] Bootstrap complete!", phase)
+	return nil
+}
 
-	// 7. Retrieve Kubeconfig
+// retrieveAndStoreKubeconfig retrieves the kubeconfig and stores it in state.
+func (p *Provisioner) retrieveAndStoreKubeconfig(ctx *provisioning.Context) error {
 	ctx.Logger.Printf("[%s] Retrieving kubeconfig...", phase)
-	kubeconfig, err := p.retrieveKubeconfig(ctx, controlPlaneNodes, clientConfigBytes, ctx.Logger)
+	kubeconfig, err := p.retrieveKubeconfig(ctx, ctx.State.ControlPlaneIPs, ctx.State.TalosConfig, ctx.Logger)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve kubeconfig: %w", err)
 	}
-
 	ctx.State.Kubeconfig = kubeconfig
 	return nil
 }
 
+// getFirstControlPlaneIP returns the IP of any control plane node (used for bootstrap).
+func (p *Provisioner) getFirstControlPlaneIP(ctx *provisioning.Context) string {
+	for _, ip := range ctx.State.ControlPlaneIPs {
+		return ip
+	}
+	return ""
+}
+
 // applyMachineConfig applies a machine configuration to a Talos node.
-func (p *Provisioner) applyMachineConfig(ctx context.Context, nodeIP string, machineConfig []byte, _ []byte) error {
+func (p *Provisioner) applyMachineConfig(ctx context.Context, nodeIP string, machineConfig []byte) error {
 	// Wait for Talos API to be available
 	if err := waitForPort(ctx, nodeIP, 50000, talosAPIWaitTimeout); err != nil {
 		return fmt.Errorf("failed to wait for Talos API: %w", err)
@@ -192,7 +239,7 @@ func (p *Provisioner) waitForNodeReady(ctx context.Context, nodeIP string, clien
 
 	// Wait for port to become unavailable (node rebooting)
 	logger.Printf("[%s] Waiting for node %s to begin reboot...", phase, nodeIP)
-	time.Sleep(10 * time.Second)
+	time.Sleep(rebootInitialWait)
 
 	// Wait for port to come back up
 	logger.Printf("[%s] Waiting for node %s to come back online...", phase, nodeIP)
@@ -212,10 +259,10 @@ func (p *Provisioner) waitForNodeReady(ctx context.Context, nodeIP string, clien
 	defer func() { _ = clientCtx.Close() }()
 
 	// Wait for node to report ready status
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(nodeReadyPollInterval)
 	defer ticker.Stop()
 
-	timeout := time.After(10 * time.Minute)
+	timeout := time.After(nodeReadyTimeout)
 
 	for {
 		select {
@@ -256,10 +303,10 @@ func (p *Provisioner) retrieveKubeconfig(ctx context.Context, controlPlaneNodes 
 
 	// Wait for Kubernetes API to be ready
 	logger.Printf("[%s] Waiting for Kubernetes API to become ready...", phase)
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(nodeReadyPollInterval)
 	defer ticker.Stop()
 
-	timeout := time.After(15 * time.Minute)
+	timeout := time.After(kubeconfigTimeout)
 
 	for {
 		select {
@@ -327,7 +374,7 @@ func (p *Provisioner) ApplyWorkerConfigs(ctx *provisioning.Context) error {
 			return fmt.Errorf("failed to generate worker config for %s: %w", nodeName, err)
 		}
 		ctx.Logger.Printf("[%s] Applying config to worker node %s (%s)...", phase, nodeName, nodeIP)
-		if err := p.applyMachineConfig(ctx, nodeIP, nodeConfig, ctx.State.TalosConfig); err != nil {
+		if err := p.applyMachineConfig(ctx, nodeIP, nodeConfig); err != nil {
 			return fmt.Errorf("failed to apply config to worker node %s: %w", nodeName, err)
 		}
 	}

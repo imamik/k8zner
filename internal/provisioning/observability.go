@@ -100,6 +100,10 @@ func (o *ConsoleObserver) Event(event Event) {
 
 // Progress implements Observer interface.
 func (o *ConsoleObserver) Progress(phase string, current, total int) {
+	if total == 0 {
+		log.Printf("[%s] Progress: %d/%d", phase, current, total)
+		return
+	}
 	percentage := (current * 100) / total
 	log.Printf("[%s] Progress: %d/%d (%d%%)", phase, current, total, percentage)
 }

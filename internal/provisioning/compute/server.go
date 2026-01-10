@@ -10,29 +10,32 @@ import (
 	"hcloud-k8s/internal/util/retry"
 )
 
+// ServerSpec defines the configuration for creating a server.
+// All fields are self-documenting - no need to remember parameter order.
+type ServerSpec struct {
+	Name           string
+	Type           string
+	Location       string
+	Image          string // empty or "talos" = auto-detect
+	Role           string // "control-plane" or "worker"
+	Pool           string
+	ExtraLabels    map[string]string
+	UserData       string
+	PlacementGroup *int64
+	PrivateIP      string
+}
+
 // ensureServer ensures a server exists and returns its IP.
-func (p *Provisioner) ensureServer(
-	ctx *provisioning.Context,
-	serverName string,
-	serverType string,
-	location string,
-	image string,
-	role string,
-	poolName string,
-	extraLabels map[string]string,
-	userData string,
-	pgID *int64,
-	privateIP string,
-) (string, error) {
+func (p *Provisioner) ensureServer(ctx *provisioning.Context, spec ServerSpec) (string, error) {
 	// Check if exists
-	serverID, err := ctx.Infra.GetServerID(ctx, serverName)
+	serverID, err := ctx.Infra.GetServerID(ctx, spec.Name)
 	if err != nil {
 		return "", err
 	}
 
 	if serverID != "" {
 		// Server exists, get IP
-		ip, err := ctx.Infra.GetServerIP(ctx, serverName)
+		ip, err := ctx.Infra.GetServerIP(ctx, spec.Name)
 		if err != nil {
 			return "", err
 		}
@@ -40,19 +43,19 @@ func (p *Provisioner) ensureServer(
 	}
 
 	// Create
-	ctx.Logger.Printf("[%s] Creating %s server %s...", phase, role, serverName)
+	ctx.Logger.Printf("[%s] Creating %s server %s...", phase, spec.Role, spec.Name)
 
 	// Labels
-	labels := labels.NewLabelBuilder(ctx.Config.ClusterName).
-		WithRole(role).
-		WithPool(poolName).
-		Merge(extraLabels).
+	serverLabels := labels.NewLabelBuilder(ctx.Config.ClusterName).
+		WithRole(spec.Role).
+		WithPool(spec.Pool).
+		Merge(spec.ExtraLabels).
 		Build()
 
 	// Image defaulting - if empty or "talos", ensure the versioned image exists
+	image := spec.Image
 	if image == "" || image == "talos" {
-		var err error
-		image, err = p.ensureImage(ctx, serverType, location)
+		image, err = p.ensureImage(ctx, spec.Type, spec.Location)
 		if err != nil {
 			return "", fmt.Errorf("failed to ensure Talos image: %w", err)
 		}
@@ -67,19 +70,19 @@ func (p *Provisioner) ensureServer(
 
 	_, err = ctx.Infra.CreateServer(
 		ctx,
-		serverName,
+		spec.Name,
 		image,
-		serverType,
-		location,
+		spec.Type,
+		spec.Location,
 		ctx.Config.SSHKeys,
-		labels,
-		userData,
-		pgID,
+		serverLabels,
+		spec.UserData,
+		spec.PlacementGroup,
 		networkID,
-		privateIP,
+		spec.PrivateIP,
 	)
 	if err != nil {
-		return "", fmt.Errorf("failed to create server %s: %w", serverName, err)
+		return "", fmt.Errorf("failed to create server %s: %w", spec.Name, err)
 	}
 
 	// Get IP after creation with retry logic and configurable timeout
@@ -89,7 +92,7 @@ func (p *Provisioner) ensureServer(
 	var ip string
 	err = retry.WithExponentialBackoff(ipCtx, func() error {
 		var getErr error
-		ip, getErr = ctx.Infra.GetServerIP(ctx, serverName)
+		ip, getErr = ctx.Infra.GetServerIP(ctx, spec.Name)
 		if getErr != nil {
 			return getErr
 		}
@@ -100,7 +103,7 @@ func (p *Provisioner) ensureServer(
 	}, retry.WithMaxRetries(ctx.Timeouts.RetryMaxAttempts), retry.WithInitialDelay(ctx.Timeouts.RetryInitialDelay))
 
 	if err != nil {
-		return "", fmt.Errorf("failed to get server IP for %s: %w", serverName, err)
+		return "", fmt.Errorf("failed to get server IP for %s: %w", spec.Name, err)
 	}
 
 	return ip, nil

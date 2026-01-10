@@ -12,20 +12,23 @@ import (
 	"hcloud-k8s/internal/util/naming"
 )
 
+// NodePoolSpec defines the configuration for provisioning a pool of servers.
+// All fields are self-documenting - no need to remember parameter order.
+type NodePoolSpec struct {
+	Name             string
+	Count            int
+	ServerType       string
+	Location         string
+	Image            string
+	Role             string // "control-plane" or "worker"
+	ExtraLabels      map[string]string
+	UserData         string
+	PlacementGroupID *int64
+	PoolIndex        int
+}
+
 // reconcileNodePool provisions a pool of servers in parallel.
-func (p *Provisioner) reconcileNodePool(
-	ctx *provisioning.Context,
-	poolName string,
-	count int,
-	serverType string,
-	location string,
-	image string,
-	role string,
-	extraLabels map[string]string,
-	userData string,
-	pgID *int64,
-	poolIndex int,
-) (map[string]string, error) {
+func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePoolSpec) (map[string]string, error) {
 	// Pre-calculate all server configurations
 	type serverConfig struct {
 		name      string
@@ -33,11 +36,11 @@ func (p *Provisioner) reconcileNodePool(
 		pgID      *int64
 	}
 
-	configs := make([]serverConfig, count)
+	configs := make([]serverConfig, spec.Count)
 
-	for j := 1; j <= count; j++ {
+	for j := 1; j <= spec.Count; j++ {
 		// Name: <cluster>-<pool>-<index> (e.g. cluster-control-plane-1)
-		srvName := naming.Server(ctx.Config.ClusterName, poolName, j)
+		srvName := naming.Server(ctx.Config.ClusterName, spec.Name, j)
 
 		// Calculate global index for subnet calculations
 		// For CP: 10 * np_index + cp_index + 1
@@ -46,19 +49,19 @@ func (p *Provisioner) reconcileNodePool(
 		var subnet string
 		var err error
 
-		if role == "control-plane" {
+		if spec.Role == "control-plane" {
 			// Terraform: ipv4_private = cidrhost(subnet, np_index * 10 + cp_index + 1)
 			subnet, err = ctx.Config.GetSubnetForRole("control-plane", 0)
 			if err != nil {
 				return nil, err
 			}
-			hostNum = poolIndex*10 + (j - 1) + 1
+			hostNum = spec.PoolIndex*10 + (j - 1) + 1
 		} else {
 			// Terraform: ipv4_private = cidrhost(subnet, wkr_index + 1)
 			// Note: Terraform iterates worker nodepools and uses separate subnets for each
 			// hcloud_network_subnet.worker[np.name]
 			// The config.GetSubnetForRole("worker", i) handles the subnet iteration.
-			subnet, err = ctx.Config.GetSubnetForRole("worker", poolIndex)
+			subnet, err = ctx.Config.GetSubnetForRole("worker", spec.PoolIndex)
 			if err != nil {
 				return nil, err
 			}
@@ -73,12 +76,12 @@ func (p *Provisioner) reconcileNodePool(
 		// Placement Group Sharding for Workers
 		// Terraform: ${cluster}-${pool}-pg-${ceil((index+1)/10)}
 		var currentPGID *int64
-		if role == "worker" && pgID == nil { // Workers manage their own PGs if enabled
+		if spec.Role == "worker" && spec.PlacementGroupID == nil { // Workers manage their own PGs if enabled
 			// Check if enabled in config for this pool
 			usePG := false
 			// Find the pool config again (slightly inefficient but safe)
 			for _, pool := range ctx.Config.Workers {
-				if pool.Name == poolName {
+				if pool.Name == spec.Name {
 					usePG = pool.PlacementGroup
 					break
 				}
@@ -88,17 +91,17 @@ func (p *Provisioner) reconcileNodePool(
 				pgIndex := int((j-1)/10) + 1
 				pgLabels := labels.NewLabelBuilder(ctx.Config.ClusterName).
 					WithRole("worker").
-					WithPool(poolName).
-					WithNodePool(poolName).
+					WithPool(spec.Name).
+					WithNodePool(spec.Name).
 					Build()
-				pg, err := ctx.Infra.EnsurePlacementGroup(ctx, naming.WorkerPlacementGroupShard(ctx.Config.ClusterName, poolName, pgIndex), "spread", pgLabels)
+				pg, err := ctx.Infra.EnsurePlacementGroup(ctx, naming.WorkerPlacementGroupShard(ctx.Config.ClusterName, spec.Name, pgIndex), "spread", pgLabels)
 				if err != nil {
 					return nil, err
 				}
 				currentPGID = &pg.ID
 			}
 		} else {
-			currentPGID = pgID
+			currentPGID = spec.PlacementGroupID
 		}
 
 		configs[j-1] = serverConfig{
@@ -109,7 +112,7 @@ func (p *Provisioner) reconcileNodePool(
 	}
 
 	// Create all servers in parallel
-	ctx.Logger.Printf("[%s] Creating %d servers for pool %s...", phase, count, poolName)
+	ctx.Logger.Printf("[%s] Creating %d servers for pool %s...", phase, spec.Count, spec.Name)
 
 	// Collect IPs in a thread-safe way
 	var mu sync.Mutex
@@ -121,7 +124,18 @@ func (p *Provisioner) reconcileNodePool(
 		tasks[i] = async.Task{
 			Name: fmt.Sprintf("server-%s", cfg.name),
 			Func: func(_ context.Context) error {
-				ip, err := p.ensureServer(ctx, cfg.name, serverType, location, image, role, poolName, extraLabels, userData, cfg.pgID, cfg.privateIP)
+				ip, err := p.ensureServer(ctx, ServerSpec{
+					Name:           cfg.name,
+					Type:           spec.ServerType,
+					Location:       spec.Location,
+					Image:          spec.Image,
+					Role:           spec.Role,
+					Pool:           spec.Name,
+					ExtraLabels:    spec.ExtraLabels,
+					UserData:       spec.UserData,
+					PlacementGroup: cfg.pgID,
+					PrivateIP:      cfg.privateIP,
+				})
 				if err != nil {
 					return err
 				}
@@ -134,9 +148,9 @@ func (p *Provisioner) reconcileNodePool(
 	}
 
 	if err := async.RunParallel(ctx, tasks, false); err != nil {
-		return nil, fmt.Errorf("failed to provision pool %s: %w", poolName, err)
+		return nil, fmt.Errorf("failed to provision pool %s: %w", spec.Name, err)
 	}
 
-	ctx.Logger.Printf("[%s] Successfully created %d servers for pool %s", phase, count, poolName)
+	ctx.Logger.Printf("[%s] Successfully created %d servers for pool %s", phase, spec.Count, spec.Name)
 	return ips, nil
 }

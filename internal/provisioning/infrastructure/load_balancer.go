@@ -33,7 +33,7 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 		}
 
 		// Algorithm: round_robin
-		lb, err := ctx.Infra.EnsureLoadBalancer(ctx, lbName, ctx.Config.Network.Zone, "lb11", hcloud.LoadBalancerAlgorithmTypeRoundRobin, labels)
+		lb, err := ctx.Infra.EnsureLoadBalancer(ctx, lbName, ctx.Config.Location, "lb11", hcloud.LoadBalancerAlgorithmTypeRoundRobin, labels)
 		if err != nil {
 			return fmt.Errorf("failed to ensure API load balancer: %w", err)
 		}
@@ -112,62 +112,11 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 			return err
 		}
 
-		// Services
-		// HTTP: 80 -> 30080 (NodePort) - wait, TF uses variables for destination ports.
-		// Usually 80/443 -> NodePorts.
-		// Assuming NodePorts 80/443 if using HostPort, or 30080/30443 if NodePort.
-		// Terraform defaults: http 80 -> 80 (if host port), but let's check vars.
-		// Assuming we want standard 80->80 mapping for now as basic implementation,
-		// OR we should look at `ingress_nginx.tf` defaults if we had them.
-		// For safety, let's assume standard NodePorts 30080/30443 for ingress-nginx.
-		// But if we use `hostNetwork: true` on DaemonSet, it's 80/443.
-		// Let's use 80->80 and 443->443 with Proxy Protocol enabled as per TF usually.
-		// TF:
-		// listen_port = protocol == "http" ? 80 : 443
-		// destination_port = (protocol == "http" ? local.ingress_nginx_service_node_port_http : local.ingress_nginx_service_node_port_https)
-		// We don't have these locals in config easily.
-		// I will hardcode typical NodePorts for now: 30080 and 30443, which are standard for many setups,
-		// OR better, I should check if config has these ports. It doesn't seem to have specific ports in IngressConfig.
-		// I will use 80 -> 80 and 443 -> 443 assuming the Ingress controller uses HostNetwork or LoadBalancer service sync.
-		// Actually, `load_balancep.tf` uses `local.ingress_nginx_service_node_port_http`.
-		// Let's assume 80->80 for now as a safe default for "HostPort" style which is common on bare metal / Talos.
-
-		services := []hcloud.LoadBalancerAddServiceOpts{
-			{
-				Protocol:        hcloud.LoadBalancerServiceProtocolTCP,
-				ListenPort:      hcloud.Ptr(80),
-				DestinationPort: hcloud.Ptr(80),
-				Proxyprotocol:   hcloud.Ptr(true),
-			},
-			{
-				Protocol:        hcloud.LoadBalancerServiceProtocolTCP,
-				ListenPort:      hcloud.Ptr(443),
-				DestinationPort: hcloud.Ptr(443),
-				Proxyprotocol:   hcloud.Ptr(true),
-			},
-		}
-
-		for _, svc := range services {
-			svc.HealthCheck = &hcloud.LoadBalancerAddServiceOptsHealthCheck{
-				Protocol: hcloud.LoadBalancerServiceProtocolTCP,
-				Port:     svc.DestinationPort,
-				Interval: hcloud.Ptr(time.Second * time.Duration(ctx.Config.Ingress.HealthCheckInt)),
-				Timeout:  hcloud.Ptr(time.Second * time.Duration(ctx.Config.Ingress.HealthCheckTimeout)),
-				Retries:  hcloud.Ptr(ctx.Config.Ingress.HealthCheckRetry),
-			}
-			// Defaults if 0
-			if *svc.HealthCheck.Interval == 0 {
-				svc.HealthCheck.Interval = hcloud.Ptr(time.Second * 15)
-			}
-			if *svc.HealthCheck.Timeout == 0 {
-				svc.HealthCheck.Timeout = hcloud.Ptr(time.Second * 10)
-			}
-			if *svc.HealthCheck.Retries == 0 {
-				svc.HealthCheck.Retries = hcloud.Ptr(3)
-			}
-
-			err = ctx.Infra.ConfigureService(ctx, lb, svc)
-			if err != nil {
+		// HTTP (80) and HTTPS (443) services with proxy protocol
+		// Uses HostNetwork port mapping (80->80, 443->443) which is common for Talos/bare-metal
+		for _, port := range []int{80, 443} {
+			svc := newIngressService(port, ctx.Config.Ingress)
+			if err := ctx.Infra.ConfigureService(ctx, lb, svc); err != nil {
 				return err
 			}
 		}
@@ -200,4 +149,35 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 	}
 
 	return nil
+}
+
+// newIngressService creates a load balancer service for the given port with health check defaults.
+func newIngressService(port int, cfg config.IngressConfig) hcloud.LoadBalancerAddServiceOpts {
+	// Apply defaults for health check values
+	interval := time.Second * time.Duration(cfg.HealthCheckInt)
+	if interval == 0 {
+		interval = time.Second * 15
+	}
+	timeout := time.Second * time.Duration(cfg.HealthCheckTimeout)
+	if timeout == 0 {
+		timeout = time.Second * 10
+	}
+	retries := cfg.HealthCheckRetry
+	if retries == 0 {
+		retries = 3
+	}
+
+	return hcloud.LoadBalancerAddServiceOpts{
+		Protocol:        hcloud.LoadBalancerServiceProtocolTCP,
+		ListenPort:      hcloud.Ptr(port),
+		DestinationPort: hcloud.Ptr(port),
+		Proxyprotocol:   hcloud.Ptr(true),
+		HealthCheck: &hcloud.LoadBalancerAddServiceOptsHealthCheck{
+			Protocol: hcloud.LoadBalancerServiceProtocolTCP,
+			Port:     hcloud.Ptr(port),
+			Interval: hcloud.Ptr(interval),
+			Timeout:  hcloud.Ptr(timeout),
+			Retries:  hcloud.Ptr(retries),
+		},
+	}
 }

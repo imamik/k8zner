@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 
+	"hcloud-k8s/internal/config"
 	"hcloud-k8s/internal/provisioning"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
@@ -18,127 +19,112 @@ func (p *Provisioner) ProvisionFirewall(ctx *provisioning.Context) error {
 	ctx.Logger.Printf("[%s] Reconciling firewall %s...", phase, ctx.Config.ClusterName)
 
 	publicIP := ctx.State.PublicIP
+	fw := &ctx.Config.Firewall
 
-	// Collect Allow Sources
-	// 1. Kube API
-	kubeAPISources := []string{}
-	// Add config sources
-	if len(ctx.Config.Firewall.KubeAPISource) > 0 {
-		kubeAPISources = append(kubeAPISources, ctx.Config.Firewall.KubeAPISource...)
-	} else if len(ctx.Config.Firewall.APISource) > 0 {
-		kubeAPISources = append(kubeAPISources, ctx.Config.Firewall.APISource...)
-	}
-	// Add current IP if detected and allowed
-	if publicIP != "" && ctx.Config.Firewall.UseCurrentIPv4 {
-		kubeAPISources = append(kubeAPISources, publicIP+"/32")
-	}
+	// Collect API sources using helpers
+	kubeAPISources := collectAPISources(fw.KubeAPISource, fw.APISource, publicIP, fw.UseCurrentIPv4)
+	talosAPISources := collectAPISources(fw.TalosAPISource, fw.APISource, publicIP, fw.UseCurrentIPv4)
 
-	// 2. Talos API
-	talosAPISources := []string{}
-	if len(ctx.Config.Firewall.TalosAPISource) > 0 {
-		talosAPISources = append(talosAPISources, ctx.Config.Firewall.TalosAPISource...)
-	} else if len(ctx.Config.Firewall.APISource) > 0 {
-		talosAPISources = append(talosAPISources, ctx.Config.Firewall.APISource...)
-	}
-	if publicIP != "" && ctx.Config.Firewall.UseCurrentIPv4 {
-		talosAPISources = append(talosAPISources, publicIP+"/32")
-	}
-
-	// Build Rules
+	// Build firewall rules
 	rules := []hcloud.FirewallRule{}
 
 	// Kube API Rule (TCP 6443)
-	if len(kubeAPISources) > 0 {
-		sourceNets := make([]net.IPNet, 0)
-		for _, s := range kubeAPISources {
-			_, n, err := net.ParseCIDR(s)
-			if err == nil {
-				sourceNets = append(sourceNets, *n)
-			}
-		}
-		if len(sourceNets) > 0 {
-			rules = append(rules, hcloud.FirewallRule{
-				Description: hcloud.Ptr("Allow Incoming Requests to Kube API"),
-				Direction:   hcloud.FirewallRuleDirectionIn,
-				Protocol:    hcloud.FirewallRuleProtocolTCP,
-				Port:        hcloud.Ptr("6443"),
-				SourceIPs:   sourceNets,
-			})
-		}
+	if sourceNets := parseCIDRs(kubeAPISources); len(sourceNets) > 0 {
+		rules = append(rules, hcloud.FirewallRule{
+			Description: hcloud.Ptr("Allow Incoming Requests to Kube API"),
+			Direction:   hcloud.FirewallRuleDirectionIn,
+			Protocol:    hcloud.FirewallRuleProtocolTCP,
+			Port:        hcloud.Ptr("6443"),
+			SourceIPs:   sourceNets,
+		})
 	}
 
 	// Talos API Rule (TCP 50000)
-	if len(talosAPISources) > 0 {
-		sourceNets := make([]net.IPNet, 0)
-		for _, s := range talosAPISources {
-			_, n, err := net.ParseCIDR(s)
-			if err == nil {
-				sourceNets = append(sourceNets, *n)
-			}
-		}
-		if len(sourceNets) > 0 {
-			rules = append(rules, hcloud.FirewallRule{
-				Description: hcloud.Ptr("Allow Incoming Requests to Talos API"),
-				Direction:   hcloud.FirewallRuleDirectionIn,
-				Protocol:    hcloud.FirewallRuleProtocolTCP,
-				Port:        hcloud.Ptr("50000"),
-				SourceIPs:   sourceNets,
-			})
-		}
+	if sourceNets := parseCIDRs(talosAPISources); len(sourceNets) > 0 {
+		rules = append(rules, hcloud.FirewallRule{
+			Description: hcloud.Ptr("Allow Incoming Requests to Talos API"),
+			Direction:   hcloud.FirewallRuleDirectionIn,
+			Protocol:    hcloud.FirewallRuleProtocolTCP,
+			Port:        hcloud.Ptr("50000"),
+			SourceIPs:   sourceNets,
+		})
 	}
 
-	// Extra Rules
-	for _, rule := range ctx.Config.Firewall.ExtraRules {
-		// Helper to parse IPs
-		parseIPs := func(ips []string) []net.IPNet {
-			var nets []net.IPNet
-			for _, ip := range ips {
-				_, n, err := net.ParseCIDR(ip)
-				if err == nil {
-					nets = append(nets, *n)
-				}
-			}
-			return nets
-		}
-
-		direction := hcloud.FirewallRuleDirectionIn
-		if rule.Direction == "out" {
-			direction = hcloud.FirewallRuleDirectionOut
-		}
-
-		protocol := hcloud.FirewallRuleProtocolTCP
-		switch rule.Protocol {
-		case "udp":
-			protocol = hcloud.FirewallRuleProtocolUDP
-		case "icmp":
-			protocol = hcloud.FirewallRuleProtocolICMP
-		case "gre":
-			protocol = hcloud.FirewallRuleProtocolGRE
-		case "esp":
-			protocol = hcloud.FirewallRuleProtocolESP
-		}
-
-		r := hcloud.FirewallRule{
-			Description:    hcloud.Ptr(rule.Description),
-			Direction:      direction,
-			Protocol:       protocol,
-			SourceIPs:      parseIPs(rule.SourceIPs),
-			DestinationIPs: parseIPs(rule.DestinationIPs),
-		}
-		if rule.Port != "" {
-			r.Port = hcloud.Ptr(rule.Port)
-		}
-		rules = append(rules, r)
+	// Extra Rules from config
+	for _, rule := range fw.ExtraRules {
+		rules = append(rules, buildFirewallRule(rule))
 	}
 
 	labels := map[string]string{
 		"cluster": ctx.Config.ClusterName,
 	}
 
-	fw, err := ctx.Infra.EnsureFirewall(ctx, ctx.Config.ClusterName, rules, labels)
+	result, err := ctx.Infra.EnsureFirewall(ctx, ctx.Config.ClusterName, rules, labels)
 	if err != nil {
 		return fmt.Errorf("failed to ensure firewall: %w", err)
 	}
-	ctx.State.Firewall = fw
+	ctx.State.Firewall = result
 	return nil
+}
+
+// collectAPISources collects IP sources with fallback and current IP logic.
+func collectAPISources(specific, fallback []string, publicIP string, useCurrentIP bool) []string {
+	sources := []string{}
+	if len(specific) > 0 {
+		sources = append(sources, specific...)
+	} else if len(fallback) > 0 {
+		sources = append(sources, fallback...)
+	}
+	if publicIP != "" && useCurrentIP {
+		sources = append(sources, publicIP+"/32")
+	}
+	return sources
+}
+
+// parseCIDRs parses a slice of CIDR strings into net.IPNet, skipping invalid entries.
+func parseCIDRs(cidrs []string) []net.IPNet {
+	var nets []net.IPNet
+	for _, cidr := range cidrs {
+		_, n, err := net.ParseCIDR(cidr)
+		if err == nil {
+			nets = append(nets, *n)
+		}
+	}
+	return nets
+}
+
+// buildFirewallRule converts a config FirewallRule to an hcloud FirewallRule.
+func buildFirewallRule(rule config.FirewallRule) hcloud.FirewallRule {
+	direction := hcloud.FirewallRuleDirectionIn
+	if rule.Direction == "out" {
+		direction = hcloud.FirewallRuleDirectionOut
+	}
+
+	r := hcloud.FirewallRule{
+		Description:    hcloud.Ptr(rule.Description),
+		Direction:      direction,
+		Protocol:       parseProtocol(rule.Protocol),
+		SourceIPs:      parseCIDRs(rule.SourceIPs),
+		DestinationIPs: parseCIDRs(rule.DestinationIPs),
+	}
+	if rule.Port != "" {
+		r.Port = hcloud.Ptr(rule.Port)
+	}
+	return r
+}
+
+// parseProtocol converts a protocol string to hcloud FirewallRuleProtocol.
+func parseProtocol(proto string) hcloud.FirewallRuleProtocol {
+	switch proto {
+	case "udp":
+		return hcloud.FirewallRuleProtocolUDP
+	case "icmp":
+		return hcloud.FirewallRuleProtocolICMP
+	case "gre":
+		return hcloud.FirewallRuleProtocolGRE
+	case "esp":
+		return hcloud.FirewallRuleProtocolESP
+	default:
+		return hcloud.FirewallRuleProtocolTCP
+	}
 }

@@ -55,10 +55,10 @@ func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architect
 
 	defer b.cleanupSSHKey(keyName)
 
-	// 1. Create Servep.
+	// 1. Create Server
 	log.Printf("Creating server %s in location %s...", serverName, location)
 
-	// We need to pass the ssh key NAME to CreateServep.
+	// We need to pass the ssh key NAME to CreateServer
 	sshKeys := []string{keyName}
 
 	// Select appropriate server type for the architecture

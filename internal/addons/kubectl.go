@@ -15,9 +15,8 @@ func applyWithKubectl(ctx context.Context, kubeconfigPath, addonName string, man
 	if err != nil {
 		return fmt.Errorf("failed to create temp manifest file: %w", err)
 	}
-	defer func() {
-		_ = os.Remove(tmpfile.Name())
-	}()
+	// Best-effort cleanup; failure to remove temp file is non-critical
+	defer func() { _ = os.Remove(tmpfile.Name()) }()
 
 	if _, err := tmpfile.Write(manifestBytes); err != nil {
 		_ = tmpfile.Close()
