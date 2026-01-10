@@ -514,7 +514,7 @@ spec:
 		if externalIP != "" {
 			t.Log("Verifying Load Balancer exists in Hetzner Cloud...")
 			// List all LBs and find the one with matching IP
-			lbs, err := hClient.Client().LoadBalancer.All(context.Background())
+			lbs, err := hClient.HCloudClient().LoadBalancer.All(context.Background())
 			if err != nil {
 				t.Errorf("Failed to list Hetzner Load Balancers: %v", err)
 			} else {
@@ -580,7 +580,7 @@ spec:
 			t.Log("Waiting for Load Balancer to be deleted from Hetzner Cloud...")
 			lbDeleted := false
 			for i := 0; i < 24; i++ { // Wait up to 2 minutes
-				lbs, err := hClient.Client().LoadBalancer.All(context.Background())
+				lbs, err := hClient.HCloudClient().LoadBalancer.All(context.Background())
 				if err != nil {
 					t.Logf("Failed to list LBs: %v (will retry)", err)
 					time.Sleep(5 * time.Second)
