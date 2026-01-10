@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"testing"
 	"time"
 
@@ -85,4 +86,13 @@ func WaitForPort(ctx context.Context, ip string, port int, timeout time.Duration
 			}
 		}
 	}
+}
+
+// httpGet performs an HTTP GET request with a short timeout.
+// Returns the response or an error if the request fails or times out.
+func httpGet(url string) (*http.Response, error) {
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+	return client.Get(url) //nolint:noctx // Simple helper for e2e tests
 }

@@ -392,6 +392,223 @@ func TestClusterProvisioning(t *testing.T) {
 			t.Error("Timeout: Not all nodes received providerIDs from CCM within 2 minutes")
 		}
 
+		// Functional test: CCM Load Balancer provisioning
+		t.Log("Testing CCM Load Balancer provisioning...")
+
+		testLBDeployment := "e2e-nginx"
+		testLBService := "e2e-nginx-lb"
+
+		// Create a simple nginx deployment
+		deploymentManifest := fmt.Sprintf(`
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: %s
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: %s
+  template:
+    metadata:
+      labels:
+        app: %s
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          ports:
+            - containerPort: 80
+      tolerations:
+        - operator: Exists
+`, testLBDeployment, testLBDeployment, testLBDeployment)
+
+		// Apply deployment
+		cmd = exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"apply", "-f", "-")
+		cmd.Stdin = strings.NewReader(deploymentManifest)
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			t.Errorf("Failed to create nginx deployment: %v\nOutput: %s", err, string(output))
+		} else {
+			t.Log("✓ Nginx deployment created")
+		}
+
+		// Create a LoadBalancer service
+		serviceManifest := fmt.Sprintf(`
+apiVersion: v1
+kind: Service
+metadata:
+  name: %s
+  namespace: default
+  annotations:
+    load-balancer.hetzner.cloud/location: nbg1
+spec:
+  type: LoadBalancer
+  selector:
+    app: %s
+  ports:
+    - port: 80
+      targetPort: 80
+`, testLBService, testLBDeployment)
+
+		// Apply service
+		cmd = exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"apply", "-f", "-")
+		cmd.Stdin = strings.NewReader(serviceManifest)
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			t.Errorf("Failed to create LoadBalancer service: %v\nOutput: %s", err, string(output))
+		} else {
+			t.Log("✓ LoadBalancer service created")
+		}
+
+		// Wait for Service to get an external IP
+		t.Log("Waiting for CCM to provision Load Balancer and assign external IP...")
+		var externalIP string
+		lbProvisioned := false
+		for i := 0; i < 60; i++ { // Wait up to 5 minutes
+			cmd = exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "svc", testLBService, "-n", "default", "-o", "json")
+			output, err = cmd.CombinedOutput()
+			if err != nil {
+				t.Logf("Service not ready yet: %v (will retry)", err)
+				time.Sleep(5 * time.Second)
+				continue
+			}
+
+			var svc struct {
+				Status struct {
+					LoadBalancer struct {
+						Ingress []struct {
+							IP string `json:"ip"`
+						} `json:"ingress"`
+					} `json:"loadBalancer"`
+				} `json:"status"`
+			}
+			if err := json.Unmarshal(output, &svc); err != nil {
+				t.Logf("Failed to parse service: %v (will retry)", err)
+				time.Sleep(5 * time.Second)
+				continue
+			}
+
+			if len(svc.Status.LoadBalancer.Ingress) > 0 && svc.Status.LoadBalancer.Ingress[0].IP != "" {
+				externalIP = svc.Status.LoadBalancer.Ingress[0].IP
+				lbProvisioned = true
+				t.Logf("✓ Load Balancer provisioned with external IP: %s", externalIP)
+				break
+			}
+			t.Logf("Waiting for external IP assignment...")
+			time.Sleep(5 * time.Second)
+		}
+
+		if !lbProvisioned {
+			t.Error("Timeout: CCM failed to provision Load Balancer within 5 minutes")
+		}
+
+		// Verify the Load Balancer exists in Hetzner Cloud
+		if externalIP != "" {
+			t.Log("Verifying Load Balancer exists in Hetzner Cloud...")
+			// List all LBs and find the one with matching IP
+			lbs, err := hClient.Client().LoadBalancer.All(context.Background())
+			if err != nil {
+				t.Errorf("Failed to list Hetzner Load Balancers: %v", err)
+			} else {
+				foundLB := false
+				for _, lb := range lbs {
+					if lb.PublicNet.IPv4.IP.String() == externalIP {
+						foundLB = true
+						t.Logf("✓ Found Hetzner Load Balancer: %s (ID: %d)", lb.Name, lb.ID)
+						t.Logf("  Type: %s, Location: %s", lb.LoadBalancerType.Name, lb.Location.Name)
+						break
+					}
+				}
+				if !foundLB {
+					t.Errorf("Load Balancer with IP %s not found in Hetzner Cloud", externalIP)
+				}
+			}
+
+			// Test HTTP connectivity to the Load Balancer
+			t.Log("Testing HTTP connectivity through Load Balancer...")
+			httpSuccess := false
+			for i := 0; i < 12; i++ { // Wait up to 1 minute for nginx to be ready
+				resp, err := httpGet(fmt.Sprintf("http://%s/", externalIP))
+				if err == nil && resp.StatusCode == 200 {
+					httpSuccess = true
+					t.Log("✓ HTTP request successful through Load Balancer")
+					break
+				}
+				t.Logf("HTTP not ready yet: %v (will retry)", err)
+				time.Sleep(5 * time.Second)
+			}
+			if !httpSuccess {
+				t.Error("Failed to connect to nginx through Load Balancer")
+			}
+		}
+
+		// Cleanup LB test resources
+		t.Log("Cleaning up Load Balancer test resources...")
+
+		// Delete service first (triggers LB deletion)
+		cmd = exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"delete", "svc", testLBService, "-n", "default")
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			t.Logf("Warning: Failed to delete LB service: %v", err)
+		} else {
+			t.Log("✓ LoadBalancer service deleted")
+		}
+
+		// Delete deployment
+		cmd = exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"delete", "deployment", testLBDeployment, "-n", "default")
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			t.Logf("Warning: Failed to delete nginx deployment: %v", err)
+		} else {
+			t.Log("✓ Nginx deployment deleted")
+		}
+
+		// Wait for LB to be deleted from Hetzner Cloud
+		if externalIP != "" {
+			t.Log("Waiting for Load Balancer to be deleted from Hetzner Cloud...")
+			lbDeleted := false
+			for i := 0; i < 24; i++ { // Wait up to 2 minutes
+				lbs, err := hClient.Client().LoadBalancer.All(context.Background())
+				if err != nil {
+					t.Logf("Failed to list LBs: %v (will retry)", err)
+					time.Sleep(5 * time.Second)
+					continue
+				}
+				found := false
+				for _, lb := range lbs {
+					if lb.PublicNet.IPv4.IP.String() == externalIP {
+						found = true
+						break
+					}
+				}
+				if !found {
+					lbDeleted = true
+					break
+				}
+				t.Logf("Load Balancer still exists, waiting for deletion...")
+				time.Sleep(5 * time.Second)
+			}
+			if !lbDeleted {
+				t.Error("Timeout: Load Balancer was not deleted within 2 minutes")
+			} else {
+				t.Log("✓ Load Balancer deleted from Hetzner Cloud")
+			}
+		}
+
+		t.Log("✓ CCM Load Balancer lifecycle test complete")
+
 		// Verify CSI Driver is installed and running
 		t.Log("Verifying Hetzner Cloud CSI Driver installation...")
 
