@@ -3,6 +3,7 @@ package compute
 import (
 	"context"
 	"net"
+	"sync"
 	"testing"
 
 	"hcloud-k8s/internal/config"
@@ -194,8 +195,11 @@ func TestProvisionWorkers_MultipleNodes(t *testing.T) {
 	}
 
 	createdServers := make(map[string]bool)
+	var mu sync.Mutex
 	mockInfra.CreateServerFunc = func(_ context.Context, name, _, serverType, _ string, _ []string, labels map[string]string, _ string, _ *int64, _ int64, _ string) (string, error) {
+		mu.Lock()
 		createdServers[name] = true
+		mu.Unlock()
 		assert.Equal(t, "cx31", serverType)
 		assert.Equal(t, "worker", labels["role"])
 		return "server-" + name, nil

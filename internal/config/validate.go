@@ -19,9 +19,9 @@ var ValidLocations = map[string]bool{
 // ValidNetworkZones contains all valid Hetzner Cloud network zones.
 // https://docs.hetzner.com/cloud/networks/overview/
 var ValidNetworkZones = map[string]bool{
-	"eu-central": true, // Europe
-	"us-east":    true, // US East
-	"us-west":    true, // US West
+	"eu-central":   true, // Europe
+	"us-east":      true, // US East
+	"us-west":      true, // US West
 	"ap-southeast": true, // Asia Pacific
 }
 
