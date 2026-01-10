@@ -121,6 +121,11 @@ func (c *RealClient) AddTarget(ctx context.Context, lb *hcloud.LoadBalancer, tar
 
 // AttachToNetwork attaches the load balancer to a network.
 func (c *RealClient) AttachToNetwork(ctx context.Context, lb *hcloud.LoadBalancer, network *hcloud.Network, ip net.IP) error {
+	// Validate required parameters
+	if ip == nil {
+		return fmt.Errorf("ip parameter is required for network attachment")
+	}
+
 	// Check if already attached
 	for _, privateNet := range lb.PrivateNet {
 		if privateNet.Network.ID == network.ID {

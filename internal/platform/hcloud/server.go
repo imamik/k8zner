@@ -11,6 +11,11 @@ import (
 
 // CreateServer creates a new server with the given specifications.
 func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string) (string, error) {
+	// Validate network parameters: both must be provided together or both empty
+	if (networkID != 0) != (privateIP != "") {
+		return "", fmt.Errorf("networkID and privateIP must both be provided or both be empty")
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, c.timeouts.ServerCreate)
 	defer cancel()
 
