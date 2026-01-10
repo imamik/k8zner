@@ -2,7 +2,11 @@ package compute
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"sync"
+
+	"hcloud-k8s/internal/util/async"
 )
 
 // ProvisionWorkers provisions worker node pools in parallel and returns a map of worker node names to their public IPs.
@@ -17,37 +21,39 @@ func (p *Provisioner) ProvisionWorkers(ctx context.Context) (map[string]string, 
 
 	log.Printf("Creating %d worker pools...", len(p.config.Workers))
 
-	// Collect IPs from all worker pools
-	type poolResult struct {
-		ips map[string]string
-		err error
-	}
-	resultChan := make(chan poolResult, len(p.config.Workers))
+	// Collect IPs from all worker pools using mutex for thread-safe access
+	var mu sync.Mutex
+	allWorkerIPs := make(map[string]string)
 
 	// Build tasks for parallel execution
+	tasks := make([]async.Task, len(p.config.Workers))
 	for i, pool := range p.config.Workers {
 		pool := pool // capture loop variable
 		poolIndex := i
-		go func() {
-			// Placement Group (Managed inside reconcileNodePool for Workers due to sharding)
-			// We pass nil here, and handle it inside reconcileNodePool based on pool config and index.
-			// userData is empty as configs will be generated and applied per-node in the reconciler
-			ips, err := p.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "worker", pool.Labels, "", nil, poolIndex)
-			resultChan <- poolResult{ips: ips, err: err}
-		}()
+		tasks[i] = async.Task{
+			Name: fmt.Sprintf("worker-pool-%s", pool.Name),
+			Func: func(ctx context.Context) error {
+				// Placement Group (Managed inside reconcileNodePool for Workers due to sharding)
+				// We pass nil here, and handle it inside reconcileNodePool based on pool config and index.
+				// userData is empty as configs will be generated and applied per-node in the reconciler
+				ips, err := p.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "worker", pool.Labels, "", nil, poolIndex)
+				if err != nil {
+					return err
+				}
+				// Thread-safe merge of IPs
+				mu.Lock()
+				for name, ip := range ips {
+					allWorkerIPs[name] = ip
+				}
+				mu.Unlock()
+				return nil
+			},
+		}
 	}
 
-	// Collect results from all worker pools
-	allWorkerIPs := make(map[string]string)
-	for i := 0; i < len(p.config.Workers); i++ {
-		result := <-resultChan
-		if result.err != nil {
-			return nil, result.err
-		}
-		// Merge IPs from this pool
-		for name, ip := range result.ips {
-			allWorkerIPs[name] = ip
-		}
+	// Execute all worker pool tasks in parallel
+	if err := async.RunParallel(ctx, tasks, true); err != nil {
+		return nil, err
 	}
 
 	log.Printf("Successfully created all worker pools")

@@ -12,32 +12,26 @@ import (
 	"hcloud-k8s/internal/addons"
 	"hcloud-k8s/internal/config"
 	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
+	"hcloud-k8s/internal/provisioning"
 	"hcloud-k8s/internal/provisioning/cluster"
 	"hcloud-k8s/internal/provisioning/compute"
 	"hcloud-k8s/internal/provisioning/image"
 	"hcloud-k8s/internal/provisioning/infrastructure"
 )
 
-// TalosConfigProducer defines the interface for generating Talos configurations.
-type TalosConfigProducer interface {
-	GenerateControlPlaneConfig(san []string, hostname string) ([]byte, error)
-	GenerateWorkerConfig(hostname string) ([]byte, error)
-	GetClientConfig() ([]byte, error)
-	SetEndpoint(endpoint string)
-}
-
 // Reconciler orchestrates the cluster provisioning workflow.
 // It delegates actual provisioning to specialized provisioners.
 type Reconciler struct {
 	infra          hcloud_internal.InfrastructureManager
-	talosGenerator TalosConfigProducer
+	talosGenerator provisioning.TalosConfigProducer
 	config         *config.Config
+	state          *provisioning.State
 
 	// Provisioners
 	infraProvisioner *infrastructure.Provisioner
 	imageProvisioner *image.Provisioner
 	// computeProvisioner is created during Reconcile() after network provisioning
-	// since it requires the provisioned network reference.
+	// since it requires the provisioned network reference via state.
 	computeProvisioner *compute.Provisioner
 	clusterProvisioner *cluster.Bootstrapper
 }
@@ -45,13 +39,15 @@ type Reconciler struct {
 // NewReconciler creates a new orchestration reconciler.
 func NewReconciler(
 	infra hcloud_internal.InfrastructureManager,
-	talosGenerator TalosConfigProducer,
+	talosGenerator provisioning.TalosConfigProducer,
 	cfg *config.Config,
 ) *Reconciler {
+	state := provisioning.NewState()
 	return &Reconciler{
 		infra:              infra,
 		talosGenerator:     talosGenerator,
 		config:             cfg,
+		state:              state,
 		infraProvisioner:   infrastructure.NewProvisioner(infra, cfg),
 		imageProvisioner:   image.NewProvisioner(infra, cfg),
 		clusterProvisioner: cluster.NewBootstrapper(infra),
@@ -67,12 +63,15 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 		return nil, err
 	}
 
-	// Create compute provisioner with the provisioned network
+	// Populate state with provisioned network
+	r.state.Network = r.infraProvisioner.GetNetwork()
+
+	// Create compute provisioner with shared state
 	r.computeProvisioner = compute.NewProvisioner(
 		r.infra,
 		r.talosGenerator,
 		r.config,
-		r.infraProvisioner.GetNetwork(),
+		r.state,
 	)
 
 	// 2. Images and infrastructure (parallel)

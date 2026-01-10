@@ -6,6 +6,7 @@ import (
 	"log"
 
 	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
+	"hcloud-k8s/internal/util/async"
 )
 
 // EnsureAllImages pre-builds all required Talos images in parallel.
@@ -60,67 +61,22 @@ func (p *Provisioner) EnsureAllImages(ctx context.Context) error {
 		location = p.config.ControlPlane.NodePools[0].Location
 	}
 
-	// Build images in parallel
-	type buildResult struct {
-		arch string
-		err  error
-	}
+	// Build images in parallel using async.RunParallel
+	archList := getKeys(architectures)
+	tasks := make([]async.Task, len(archList))
 
-	resultChan := make(chan buildResult, len(architectures))
-
-	for arch := range architectures {
+	for i, arch := range archList {
 		arch := arch // capture loop variable
-		go func() {
-			labels := map[string]string{
-				"os":            "talos",
-				"talos-version": talosVersion,
-				"k8s-version":   k8sVersion,
-				"arch":          arch,
-			}
-
-			// Check if snapshot already exists
-			snapshot, err := p.snapshotManager.GetSnapshotByLabels(ctx, labels)
-			if err != nil {
-				resultChan <- buildResult{arch: arch, err: fmt.Errorf("failed to check for existing snapshot: %w", err)}
-				return
-			}
-
-			if snapshot != nil {
-				log.Printf("Found existing Talos snapshot for %s: %s (ID: %d)", arch, snapshot.Description, snapshot.ID)
-				resultChan <- buildResult{arch: arch, err: nil}
-				return
-			}
-
-			// Build image
-			log.Printf("Building Talos image for %s/%s/%s in location %s...", talosVersion, k8sVersion, arch, location)
-			builder := p.createImageBuilder()
-			if builder == nil {
-				resultChan <- buildResult{arch: arch, err: fmt.Errorf("image builder not available")}
-				return
-			}
-
-			snapshotID, err := builder.Build(ctx, talosVersion, k8sVersion, arch, location, labels)
-			if err != nil {
-				resultChan <- buildResult{arch: arch, err: fmt.Errorf("failed to build image: %w", err)}
-				return
-			}
-
-			log.Printf("Successfully built Talos snapshot for %s: ID %s", arch, snapshotID)
-			resultChan <- buildResult{arch: arch, err: nil}
-		}()
-	}
-
-	// Wait for all builds to complete
-	var errors []error
-	for i := 0; i < len(architectures); i++ {
-		result := <-resultChan
-		if result.err != nil {
-			errors = append(errors, fmt.Errorf("%s: %w", result.arch, result.err))
+		tasks[i] = async.Task{
+			Name: fmt.Sprintf("image-%s", arch),
+			Func: func(ctx context.Context) error {
+				return p.ensureImageForArch(ctx, arch, talosVersion, k8sVersion, location)
+			},
 		}
 	}
 
-	if len(errors) > 0 {
-		return fmt.Errorf("failed to build some images: %v", errors)
+	if err := async.RunParallel(ctx, tasks, true); err != nil {
+		return err
 	}
 
 	log.Println("All required Talos images are ready")
@@ -134,6 +90,42 @@ func getKeys(m map[string]bool) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// ensureImageForArch ensures a Talos image exists for the given architecture.
+func (p *Provisioner) ensureImageForArch(ctx context.Context, arch, talosVersion, k8sVersion, location string) error {
+	labels := map[string]string{
+		"os":            "talos",
+		"talos-version": talosVersion,
+		"k8s-version":   k8sVersion,
+		"arch":          arch,
+	}
+
+	// Check if snapshot already exists
+	snapshot, err := p.snapshotManager.GetSnapshotByLabels(ctx, labels)
+	if err != nil {
+		return fmt.Errorf("failed to check for existing snapshot: %w", err)
+	}
+
+	if snapshot != nil {
+		log.Printf("Found existing Talos snapshot for %s: %s (ID: %d)", arch, snapshot.Description, snapshot.ID)
+		return nil
+	}
+
+	// Build image
+	log.Printf("Building Talos image for %s/%s/%s in location %s...", talosVersion, k8sVersion, arch, location)
+	builder := p.createImageBuilder()
+	if builder == nil {
+		return fmt.Errorf("image builder not available")
+	}
+
+	snapshotID, err := builder.Build(ctx, talosVersion, k8sVersion, arch, location, labels)
+	if err != nil {
+		return fmt.Errorf("failed to build image: %w", err)
+	}
+
+	log.Printf("Successfully built Talos snapshot for %s: ID %s", arch, snapshotID)
+	return nil
 }
 
 // createImageBuilder creates an image builder instance.

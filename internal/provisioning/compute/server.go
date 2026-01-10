@@ -60,10 +60,10 @@ func (p *Provisioner) ensureServer(
 	}
 
 	// Get Network ID
-	if p.network == nil {
-		return "", fmt.Errorf("network not initialized")
+	if p.state == nil || p.state.Network == nil {
+		return "", fmt.Errorf("network not initialized in provisioning state")
 	}
-	networkID := p.network.ID
+	networkID := p.state.Network.ID
 
 	_, err = p.serverProvisioner.CreateServer(
 		ctx,

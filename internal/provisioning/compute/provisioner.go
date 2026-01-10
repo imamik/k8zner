@@ -1,17 +1,10 @@
 package compute
 
 import (
-	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"hcloud-k8s/internal/config"
 	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
+	"hcloud-k8s/internal/provisioning"
 )
-
-// TalosConfigProducer defines the interface for generating Talos configurations.
-type TalosConfigProducer interface {
-	GenerateControlPlaneConfig(san []string, hostname string) ([]byte, error)
-	GenerateWorkerConfig(hostname string) ([]byte, error)
-	SetEndpoint(endpoint string)
-}
 
 // Provisioner handles compute resource provisioning (servers, node pools).
 type Provisioner struct {
@@ -20,18 +13,18 @@ type Provisioner struct {
 	pgManager         hcloud_internal.PlacementGroupManager
 	snapshotManager   hcloud_internal.SnapshotManager
 	infra             hcloud_internal.InfrastructureManager
-	talosGenerator    TalosConfigProducer
+	talosGenerator    provisioning.TalosConfigProducer
 	config            *config.Config
 	timeouts          *config.Timeouts
-	network           *hcloud.Network
+	state             *provisioning.State
 }
 
 // NewProvisioner creates a new compute provisioner.
 func NewProvisioner(
 	infra hcloud_internal.InfrastructureManager,
-	talosGenerator TalosConfigProducer,
+	talosGenerator provisioning.TalosConfigProducer,
 	cfg *config.Config,
-	network *hcloud.Network,
+	state *provisioning.State,
 ) *Provisioner {
 	return &Provisioner{
 		serverProvisioner: infra,
@@ -42,6 +35,6 @@ func NewProvisioner(
 		talosGenerator:    talosGenerator,
 		config:            cfg,
 		timeouts:          config.LoadTimeouts(),
-		network:           network,
+		state:             state,
 	}
 }
