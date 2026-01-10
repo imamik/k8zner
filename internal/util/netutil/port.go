@@ -15,14 +15,22 @@ const (
 	KubeAPIWaitTimeout = 10 * time.Minute
 )
 
-// WaitForPort waits for a TCP port to be open.
+// WaitForPort waits for a TCP port to be open on the target IP.
+// It retries every second until the port is accessible or the timeout is reached.
 func WaitForPort(ctx context.Context, ip string, port int, timeout time.Duration) error {
 	address := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
-	ticker := time.NewTicker(5 * time.Second)
+	// Check every second instead of 5 to allow faster tests and responsiveness
+	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+
+	// Check immediately before waiting for ticker
+	if conn, err := net.DialTimeout("tcp", address, 2*time.Second); err == nil {
+		_ = conn.Close()
+		return nil
+	}
 
 	for {
 		select {
