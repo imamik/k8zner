@@ -55,31 +55,22 @@ func NewReconciler(
 // Returns the kubeconfig bytes if bootstrap was performed, or nil if cluster already existed.
 func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 	// 1. Setup Provisioning Context
-	pCtx := &provisioning.Context{
-		Context: ctx,
-		Config:  r.config,
-		State:   r.state,
-		Infra:   r.infra,
-		Talos:   r.talosGenerator,
+	pCtx := provisioning.NewContext(ctx, r.config, r.infra, r.talosGenerator)
+
+	// 2. Execute Provisioning Pipeline
+	pipeline := provisioning.NewPipeline(
+		r.infraProvisioner,
+		r.imageProvisioner,
+		r.computeProvisioner,
+		r.clusterProvisioner,
+	)
+
+	if err := pipeline.Run(pCtx); err != nil {
+		return nil, err
 	}
 
-	// 2. Sequential Execution of Provisioning Phases
-	phases := []struct {
-		name  string
-		phase provisioning.Phase
-	}{
-		{"infrastructure", r.infraProvisioner},
-		{"image", r.imageProvisioner},
-		{"compute", r.computeProvisioner},
-		{"cluster", r.clusterProvisioner},
-	}
-
-	for _, p := range phases {
-		log.Printf("[Orchestrator] Starting phase: %s", p.name)
-		if err := p.phase.Provision(pCtx); err != nil {
-			return nil, fmt.Errorf("phase %s failed: %w", p.name, err)
-		}
-	}
+	// Persist state back to reconciler (if needed for legacy reasons, though pCtx.State is what matters)
+	r.state = pCtx.State
 
 	// 3. Install addons (if cluster was bootstrapped)
 	if len(r.state.Kubeconfig) > 0 {

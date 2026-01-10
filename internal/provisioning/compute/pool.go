@@ -1,12 +1,15 @@
 package compute
 
 import (
+	"context"
 	"fmt"
 	"hcloud-k8s/internal/util/labels"
 	"log"
+	"sync"
 
 	"hcloud-k8s/internal/config"
 	"hcloud-k8s/internal/provisioning"
+	"hcloud-k8s/internal/util/async"
 	"hcloud-k8s/internal/util/naming"
 )
 
@@ -108,30 +111,31 @@ func (p *Provisioner) reconcileNodePool(
 
 	// Create all servers in parallel
 	log.Printf("[Compute:Pool] Creating %d servers for pool %s...", count, poolName)
-	type serverResult struct {
-		name string
-		ip   string
-		err  error
-	}
 
-	resultChan := make(chan serverResult, count)
-
-	for _, cfg := range configs {
-		cfg := cfg // capture loop variable
-		go func() {
-			ip, err := p.ensureServer(ctx, cfg.name, serverType, location, image, role, poolName, extraLabels, userData, cfg.pgID, cfg.privateIP)
-			resultChan <- serverResult{name: cfg.name, ip: ip, err: err}
-		}()
-	}
-
-	// Collect results
+	// Collect IPs in a thread-safe way
+	var mu sync.Mutex
 	ips := make(map[string]string)
-	for i := 0; i < count; i++ {
-		result := <-resultChan
-		if result.err != nil {
-			return nil, fmt.Errorf("failed to create server %s: %w", result.name, result.err)
+
+	tasks := make([]async.Task, len(configs))
+	for i, cfg := range configs {
+		cfg := cfg // capture loop variable
+		tasks[i] = async.Task{
+			Name: fmt.Sprintf("server-%s", cfg.name),
+			Func: func(_ context.Context) error {
+				ip, err := p.ensureServer(ctx, cfg.name, serverType, location, image, role, poolName, extraLabels, userData, cfg.pgID, cfg.privateIP)
+				if err != nil {
+					return err
+				}
+				mu.Lock()
+				ips[cfg.name] = ip
+				mu.Unlock()
+				return nil
+			},
 		}
-		ips[result.name] = result.ip
+	}
+
+	if err := async.RunParallel(ctx, tasks, false); err != nil {
+		return nil, fmt.Errorf("failed to provision pool %s: %w", poolName, err)
 	}
 
 	log.Printf("Successfully created %d servers for pool %s", count, poolName)

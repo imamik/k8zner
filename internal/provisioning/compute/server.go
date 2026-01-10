@@ -84,7 +84,7 @@ func (p *Provisioner) ensureServer(
 	}
 
 	// Get IP after creation with retry logic and configurable timeout
-	ipCtx, cancel := context.WithTimeout(ctx, p.timeouts.ServerIP)
+	ipCtx, cancel := context.WithTimeout(ctx, ctx.Timeouts.ServerIP)
 	defer cancel()
 
 	var ip string
@@ -98,7 +98,7 @@ func (p *Provisioner) ensureServer(
 			return fmt.Errorf("server IP not yet assigned")
 		}
 		return nil
-	}, retry.WithMaxRetries(p.timeouts.RetryMaxAttempts), retry.WithInitialDelay(p.timeouts.RetryInitialDelay))
+	}, retry.WithMaxRetries(ctx.Timeouts.RetryMaxAttempts), retry.WithInitialDelay(ctx.Timeouts.RetryInitialDelay))
 
 	if err != nil {
 		return "", fmt.Errorf("failed to get server IP for %s: %w", serverName, err)

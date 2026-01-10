@@ -60,19 +60,13 @@ func Apply(ctx context.Context, configPath string) error {
 		return err
 	}
 
-	reconciler, kubeconfig, err := reconcileInfrastructure(ctx, client, talosGen, cfg)
+	_, kubeconfig, err := reconcileInfrastructure(ctx, client, talosGen, cfg)
 	if err != nil {
 		return err
 	}
 
 	if err := writeKubeconfig(kubeconfig); err != nil {
 		return err
-	}
-
-	if len(kubeconfig) > 0 {
-		if err := applyAddons(ctx, cfg, kubeconfig, reconciler.GetNetworkID()); err != nil {
-			return err
-		}
 	}
 
 	printSuccess(kubeconfig)
