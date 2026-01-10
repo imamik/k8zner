@@ -887,9 +887,10 @@ spec:
 		}
 
 		// Wait for Pod to be Running (confirms volume is attached)
+		// Hetzner volume attachment can take several minutes
 		t.Log("Waiting for test Pod to be Running...")
 		podRunning := false
-		for i := 0; i < 60; i++ { // Wait up to 5 minutes
+		for i := 0; i < 84; i++ { // Wait up to 7 minutes (volume attach can take time)
 			cmd = exec.CommandContext(context.Background(), "kubectl",
 				"--kubeconfig", kubeconfigPath,
 				"get", "pod", testPodName, "-n", "default", "-o", "jsonpath={.status.phase}")
@@ -898,11 +899,43 @@ spec:
 				podRunning = true
 				break
 			}
-			t.Logf("Test Pod not running yet (phase: %s), waiting...", string(output))
+			phase := string(output)
+			t.Logf("Test Pod not running yet (phase: %s), waiting...", phase)
+
+			// Every 2 minutes, show pod events for debugging
+			if i > 0 && i%24 == 0 {
+				t.Log("--- Pod events (for debugging) ---")
+				descCmd := exec.CommandContext(context.Background(), "kubectl",
+					"--kubeconfig", kubeconfigPath,
+					"describe", "pod", testPodName, "-n", "default")
+				descOutput, _ := descCmd.CombinedOutput()
+				// Extract just the events section (last part of describe output)
+				descStr := string(descOutput)
+				if idx := strings.Index(descStr, "Events:"); idx != -1 {
+					t.Logf("%s", descStr[idx:])
+				}
+			}
 			time.Sleep(5 * time.Second)
 		}
 		if !podRunning {
-			t.Error("Timeout: Test Pod failed to reach Running state")
+			// Get full pod description for debugging
+			t.Log("--- Final pod describe (timeout debugging) ---")
+			descCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"describe", "pod", testPodName, "-n", "default")
+			descOutput, _ := descCmd.CombinedOutput()
+			t.Logf("%s", string(descOutput))
+
+			// Check CSI controller logs for errors
+			t.Log("--- CSI controller logs (last 20 lines) ---")
+			logsCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"logs", "-l", "app=hcloud-csi-controller", "-n", "kube-system",
+				"--tail=20", "-c", "hcloud-csi-driver")
+			logsOutput, _ := logsCmd.CombinedOutput()
+			t.Logf("%s", string(logsOutput))
+
+			t.Error("Timeout: Test Pod failed to reach Running state within 7 minutes")
 		} else {
 			t.Log("✓ Test Pod is Running (volume successfully attached)")
 		}
