@@ -1,5 +1,4 @@
-// Package netutil provides network utility functions for port checking and network operations.
-package netutil
+package cluster
 
 import (
 	"context"
@@ -9,14 +8,13 @@ import (
 )
 
 const (
-	// TalosAPIWaitTimeout is the default timeout for waiting for Talos API to become available
-	TalosAPIWaitTimeout = 10 * time.Minute
-	// KubeAPIWaitTimeout is the default timeout for waiting for Kubernetes API to become available
-	KubeAPIWaitTimeout = 10 * time.Minute
+	// talosAPIWaitTimeout is the timeout for waiting for Talos API to become available.
+	talosAPIWaitTimeout = 10 * time.Minute
 )
 
-// WaitForPort waits for a TCP port to be open.
-func WaitForPort(ctx context.Context, ip string, port int, timeout time.Duration) error {
+// waitForPort waits for a TCP port to be open with the given timeout.
+// It polls every 5 seconds until the port accepts connections or the timeout expires.
+func waitForPort(ctx context.Context, ip string, port int, timeout time.Duration) error {
 	address := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
