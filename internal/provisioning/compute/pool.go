@@ -20,7 +20,7 @@ type NodePoolSpec struct {
 	ServerType       string
 	Location         string
 	Image            string
-	Role             string            // "control-plane" or "worker"
+	Role             string // "control-plane" or "worker"
 	ExtraLabels      map[string]string
 	UserData         string
 	PlacementGroupID *int64

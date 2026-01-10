@@ -56,7 +56,7 @@ func TestWriteTempKubeconfig(t *testing.T) {
 	defer func() { _ = os.Remove(path) }()
 
 	// Verify file exists and has correct content
-	content, err := os.ReadFile(path)
+	content, err := os.ReadFile(path) //nolint:gosec // G304: path is from our own test function
 	assert.NoError(t, err)
 	assert.Equal(t, kubeconfig, content)
 }
@@ -69,7 +69,7 @@ func TestWriteTempKubeconfig_EmptyContent(t *testing.T) {
 	defer func() { _ = os.Remove(path) }()
 
 	// File should exist but be empty
-	content, err := os.ReadFile(path)
+	content, err := os.ReadFile(path) //nolint:gosec // G304: path is from our own test function
 	assert.NoError(t, err)
 	assert.Empty(t, content)
 }

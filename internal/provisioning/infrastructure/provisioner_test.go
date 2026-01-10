@@ -48,7 +48,7 @@ func TestProvisionNetwork_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	// Setup mock expectations
-	mockInfra.EnsureNetworkFunc = func(_ context.Context, name, ipRange, zone string, labels map[string]string) (*hcloud.Network, error) {
+	mockInfra.EnsureNetworkFunc = func(_ context.Context, name, ipRange, _ string, _ map[string]string) (*hcloud.Network, error) {
 		assert.Contains(t, name, "test-cluster")
 		assert.Equal(t, "10.0.0.0/16", ipRange)
 		return &hcloud.Network{
@@ -58,7 +58,7 @@ func TestProvisionNetwork_Success(t *testing.T) {
 		}, nil
 	}
 
-	mockInfra.EnsureSubnetFunc = func(_ context.Context, network *hcloud.Network, cidr, zone string, subnetType hcloud.NetworkSubnetType) error {
+	mockInfra.EnsureSubnetFunc = func(_ context.Context, network *hcloud.Network, cidr string, _ string, _ hcloud.NetworkSubnetType) error {
 		assert.NotNil(t, network)
 		assert.NotEmpty(t, cidr)
 		return nil
@@ -88,7 +88,7 @@ func TestProvisionFirewall_Success(t *testing.T) {
 		return "1.2.3.4", nil
 	}
 
-	mockInfra.EnsureFirewallFunc = func(_ context.Context, name string, rules []hcloud.FirewallRule, labels map[string]string) (*hcloud.Firewall, error) {
+	mockInfra.EnsureFirewallFunc = func(_ context.Context, name string, _ []hcloud.FirewallRule, _ map[string]string) (*hcloud.Firewall, error) {
 		assert.Contains(t, name, "test-cluster")
 		// Rules may be empty if no control plane or workers configured
 		return &hcloud.Firewall{ID: 1, Name: name}, nil
@@ -120,7 +120,7 @@ func TestProvisionLoadBalancers_Success(t *testing.T) {
 	ctx := createTestContext(t, mockInfra, cfg)
 	ctx.State.Network = &hcloud.Network{ID: 1, IPRange: ipNet}
 
-	mockInfra.EnsureLoadBalancerFunc = func(_ context.Context, name, lbType, location string, algo hcloud.LoadBalancerAlgorithmType, labels map[string]string) (*hcloud.LoadBalancer, error) {
+	mockInfra.EnsureLoadBalancerFunc = func(_ context.Context, name, _ string, _ string, _ hcloud.LoadBalancerAlgorithmType, _ map[string]string) (*hcloud.LoadBalancer, error) {
 		assert.Contains(t, name, "test-cluster")
 		return &hcloud.LoadBalancer{
 			ID:   1,
@@ -133,13 +133,13 @@ func TestProvisionLoadBalancers_Success(t *testing.T) {
 		}, nil
 	}
 
-	mockInfra.AttachToNetworkFunc = func(_ context.Context, lb *hcloud.LoadBalancer, network *hcloud.Network, ip net.IP) error {
+	mockInfra.AttachToNetworkFunc = func(_ context.Context, lb *hcloud.LoadBalancer, network *hcloud.Network, _ net.IP) error {
 		assert.NotNil(t, lb)
 		assert.NotNil(t, network)
 		return nil
 	}
 
-	mockInfra.ConfigureServiceFunc = func(_ context.Context, lb *hcloud.LoadBalancer, service hcloud.LoadBalancerAddServiceOpts) error {
+	mockInfra.ConfigureServiceFunc = func(_ context.Context, _ *hcloud.LoadBalancer, _ hcloud.LoadBalancerAddServiceOpts) error {
 		return nil
 	}
 

@@ -11,9 +11,9 @@ import (
 // long-running operations. These errors are retryable.
 func isResourceLocked(err error) bool {
 	return isHCloudErrorCode(err,
-		hcloud.ErrorCodeLocked,           // Item is locked (action running)
-		hcloud.ErrorCodeConflict,         // Resource changed during request
-		hcloud.ErrorCodeResourceLocked,   // Resource locked (contact support)
+		hcloud.ErrorCodeLocked,         // Item is locked (action running)
+		hcloud.ErrorCodeConflict,       // Resource changed during request
+		hcloud.ErrorCodeResourceLocked, // Resource locked (contact support)
 		hcloud.ErrorCodeResourceUnavailable,
 	)
 }

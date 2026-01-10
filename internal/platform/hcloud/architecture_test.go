@@ -30,9 +30,9 @@ func TestDetectArchitecture(t *testing.T) {
 		{"cax41", ArchARM64},
 
 		// Edge cases
-		{"", ArchAMD64},       // Empty string defaults to AMD64
-		{"ca", ArchAMD64},     // Too short for CAX prefix
-		{"CAX11", ArchAMD64},  // Case sensitive - uppercase doesn't match
+		{"", ArchAMD64},      // Empty string defaults to AMD64
+		{"ca", ArchAMD64},    // Too short for CAX prefix
+		{"CAX11", ArchAMD64}, // Case sensitive - uppercase doesn't match
 	}
 
 	for _, tt := range tests {

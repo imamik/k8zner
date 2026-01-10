@@ -16,8 +16,8 @@ type ServerSpec struct {
 	Name           string
 	Type           string
 	Location       string
-	Image          string            // empty or "talos" = auto-detect
-	Role           string            // "control-plane" or "worker"
+	Image          string // empty or "talos" = auto-detect
+	Role           string // "control-plane" or "worker"
 	Pool           string
 	ExtraLabels    map[string]string
 	UserData       string

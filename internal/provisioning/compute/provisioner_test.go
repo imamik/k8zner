@@ -19,11 +19,11 @@ type mockTalosProducer struct {
 	endpoint string
 }
 
-func (m *mockTalosProducer) GenerateControlPlaneConfig(san []string, hostname string) ([]byte, error) {
+func (m *mockTalosProducer) GenerateControlPlaneConfig(_ []string, _ string) ([]byte, error) {
 	return []byte("control-plane-config"), nil
 }
 
-func (m *mockTalosProducer) GenerateWorkerConfig(hostname string) ([]byte, error) {
+func (m *mockTalosProducer) GenerateWorkerConfig(_ string) ([]byte, error) {
 	return []byte("worker-config"), nil
 }
 
@@ -133,7 +133,7 @@ func TestProvisionControlPlane_SingleNode(t *testing.T) {
 		return &hcloud.PlacementGroup{ID: 1}, nil
 	}
 
-	mockInfra.GetServerIDFunc = func(_ context.Context, name string) (string, error) {
+	mockInfra.GetServerIDFunc = func(_ context.Context, _ string) (string, error) {
 		// Server doesn't exist yet
 		return "", nil
 	}
@@ -201,7 +201,7 @@ func TestProvisionWorkers_MultipleNodes(t *testing.T) {
 		return "server-" + name, nil
 	}
 
-	mockInfra.GetServerIPFunc = func(_ context.Context, name string) (string, error) {
+	mockInfra.GetServerIPFunc = func(_ context.Context, _ string) (string, error) {
 		return "10.0.2.1", nil
 	}
 
