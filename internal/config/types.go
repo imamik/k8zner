@@ -166,9 +166,25 @@ type CNIConfig struct {
 // AddonsConfig defines the addon-related configuration.
 type AddonsConfig struct {
 	CCM CCMConfig `mapstructure:"ccm" yaml:"ccm"`
+	CSI CSIConfig `mapstructure:"csi" yaml:"csi"`
 }
 
 // CCMConfig defines the Hetzner Cloud Controller Manager configuration.
 type CCMConfig struct {
 	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+}
+
+// CSIConfig defines the Hetzner Cloud CSI driver configuration.
+type CSIConfig struct {
+	Enabled              bool           `mapstructure:"enabled" yaml:"enabled"`
+	DefaultStorageClass  bool           `mapstructure:"default_storage_class" yaml:"default_storage_class"`
+	EncryptionPassphrase string         `mapstructure:"encryption_passphrase" yaml:"encryption_passphrase"`
+	StorageClasses       []StorageClass `mapstructure:"storage_classes" yaml:"storage_classes"`
+}
+
+// StorageClass defines a Kubernetes StorageClass for CSI.
+type StorageClass struct {
+	Name          string `mapstructure:"name" yaml:"name"`
+	ReclaimPolicy string `mapstructure:"reclaim_policy" yaml:"reclaim_policy"`
+	IsDefault     bool   `mapstructure:"is_default" yaml:"is_default"`
 }

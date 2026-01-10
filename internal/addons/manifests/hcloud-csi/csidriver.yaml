@@ -1,0 +1,10 @@
+# CSIDriver resource for Hetzner CSI
+apiVersion: storage.k8s.io/v1
+kind: CSIDriver
+metadata:
+  name: csi.hetzner.cloud
+spec:
+  attachRequired: true
+  podInfoOnMount: true
+  volumeLifecycleModes:
+    - Persistent

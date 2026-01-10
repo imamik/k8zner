@@ -22,6 +22,7 @@ var manifestsFS embed.FS
 // This function checks the addon configuration and applies the appropriate
 // manifests to the cluster using kubectl. Currently supports:
 //   - Hetzner Cloud Controller Manager (CCM)
+//   - Hetzner Cloud CSI Driver
 //
 // The kubeconfig must be valid and the cluster must be accessible.
 // Addon manifests are embedded in the binary and processed as templates
@@ -45,5 +46,22 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		}
 	}
 
+	if cfg.Addons.CSI.Enabled {
+		controlPlaneCount := getControlPlaneCount(cfg)
+		defaultStorageClass := cfg.Addons.CSI.DefaultStorageClass
+		if err := applyCSI(ctx, tmpKubeconfig, cfg.HCloudToken, controlPlaneCount, defaultStorageClass); err != nil {
+			return fmt.Errorf("failed to install CSI: %w", err)
+		}
+	}
+
 	return nil
+}
+
+// getControlPlaneCount returns the total number of control plane nodes.
+func getControlPlaneCount(cfg *config.Config) int {
+	count := 0
+	for _, pool := range cfg.ControlPlane.NodePools {
+		count += pool.Count
+	}
+	return count
 }

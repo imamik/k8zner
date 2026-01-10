@@ -1,0 +1,138 @@
+# CSI Node DaemonSet
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: hcloud-csi-node
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: hcloud-csi
+    app.kubernetes.io/component: node
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hcloud-csi
+      app.kubernetes.io/component: node
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hcloud-csi
+        app.kubernetes.io/component: node
+    spec:
+      serviceAccountName: hcloud-csi-node
+      tolerations:
+        - effect: NoExecute
+          operator: Exists
+        - effect: NoSchedule
+          operator: Exists
+        - key: CriticalAddonsOnly
+          operator: Exists
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: instance.hetzner.cloud/is-root-server
+                    operator: NotIn
+                    values:
+                      - "true"
+      containers:
+        # CSI Driver Node
+        - name: hcloud-csi-driver
+          image: hetznercloud/hcloud-csi-driver:v2.10.1
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/hcloud-csi-driver-node"]
+          env:
+            - name: CSI_ENDPOINT
+              value: unix:///run/csi/socket
+            - name: HCLOUD_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hcloud
+                  key: token
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+            - name: ENABLE_METRICS
+              value: "true"
+          ports:
+            - name: metrics
+              containerPort: 9189
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 10m
+              memory: 40Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: kubelet-dir
+              mountPath: /var/lib/kubelet
+              mountPropagation: Bidirectional
+            - name: plugin-dir
+              mountPath: /run/csi
+            - name: device-dir
+              mountPath: /dev
+          securityContext:
+            privileged: true
+        # CSI Node Driver Registrar
+        - name: csi-node-driver-registrar
+          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.12.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - --csi-address=/run/csi/socket
+            - --kubelet-registration-path=/var/lib/kubelet/plugins/csi.hetzner.cloud/socket
+          resources:
+            requests:
+              cpu: 10m
+              memory: 20Mi
+            limits:
+              memory: 64Mi
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /run/csi
+            - name: registration-dir
+              mountPath: /registration
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+        # Liveness Probe
+        - name: liveness-probe
+          image: registry.k8s.io/sig-storage/livenessprobe:v2.14.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - --csi-address=/run/csi/socket
+          resources:
+            requests:
+              cpu: 10m
+              memory: 20Mi
+            limits:
+              memory: 64Mi
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /run/csi
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: kubelet-dir
+          hostPath:
+            path: /var/lib/kubelet
+            type: Directory
+        - name: plugin-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins/csi.hetzner.cloud
+            type: DirectoryOrCreate
+        - name: registration-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins_registry
+            type: Directory
+        - name: device-dir
+          hostPath:
+            path: /dev
+            type: Directory
