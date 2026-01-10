@@ -59,6 +59,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 
 	// 2. Execute Provisioning Pipeline
 	pipeline := provisioning.NewPipeline(
+		provisioning.NewValidationPhase(), // Validation first
 		r.infraProvisioner,
 		r.imageProvisioner,
 		r.computeProvisioner,

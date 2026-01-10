@@ -56,7 +56,8 @@ type Context struct {
 	State    *State
 	Infra    hcloud_internal.InfrastructureManager
 	Talos    TalosConfigProducer
-	Logger   Logger
+	Observer Observer // Replaced Logger with Observer for structured logging
+	Logger   Logger   // Keep for backward compatibility (points to same Observer)
 	Timeouts *config.Timeouts
 }
 
@@ -67,13 +68,15 @@ func NewContext(
 	infra hcloud_internal.InfrastructureManager,
 	talos TalosConfigProducer,
 ) *Context {
+	observer := NewConsoleObserver()
 	return &Context{
 		Context:  ctx,
 		Config:   cfg,
 		State:    NewState(),
 		Infra:    infra,
 		Talos:    talos,
-		Logger:   &DefaultLogger{},
+		Observer: observer,
+		Logger:   observer, // Observer implements Logger interface
 		Timeouts: config.LoadTimeouts(),
 	}
 }

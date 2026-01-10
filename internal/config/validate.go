@@ -109,3 +109,41 @@ func (c *Config) validateWorkers() error {
 
 	return nil
 }
+
+// ApplyDefaults applies sensible defaults to the configuration.
+func (c *Config) ApplyDefaults() error {
+	// Default Talos version
+	if c.Talos.Version == "" {
+		c.Talos.Version = "v1.8.3"
+	}
+
+	// Default Kubernetes version
+	if c.Kubernetes.Version == "" {
+		c.Kubernetes.Version = "v1.31.0"
+	}
+
+	// Default network zone if not set
+	if c.Network.Zone == "" {
+		c.Network.Zone = "eu-central"
+	}
+
+	// Default subnet mask size for nodes
+	if c.Network.NodeIPv4SubnetMask == 0 {
+		c.Network.NodeIPv4SubnetMask = 25
+	}
+
+	// Apply location defaults to node pools
+	for i := range c.ControlPlane.NodePools {
+		if c.ControlPlane.NodePools[i].Location == "" {
+			c.ControlPlane.NodePools[i].Location = c.Location
+		}
+	}
+
+	for i := range c.Workers {
+		if c.Workers[i].Location == "" {
+			c.Workers[i].Location = c.Location
+		}
+	}
+
+	return nil
+}

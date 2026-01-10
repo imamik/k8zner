@@ -45,6 +45,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
+		Location:    "nbg1",
 		Network: config.NetworkConfig{
 			IPv4CIDR: "10.0.0.0/16",
 			Zone:     "eu-central",
@@ -184,6 +185,7 @@ func TestReconciler_Reconcile_NetworkError(t *testing.T) {
 
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
+		Location:    "nbg1",
 		Network: config.NetworkConfig{
 			IPv4CIDR: "10.0.0.0/16",
 			Zone:     "eu-central",
@@ -213,6 +215,7 @@ func TestReconciler_Reconcile_ServerCreationError(t *testing.T) {
 
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
+		Location:    "nbg1",
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
 				{

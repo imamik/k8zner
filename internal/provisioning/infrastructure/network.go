@@ -2,7 +2,6 @@ package infrastructure
 
 import (
 	"fmt"
-	"log"
 
 	"hcloud-k8s/internal/provisioning"
 
@@ -11,12 +10,9 @@ import (
 
 // ProvisionNetwork provisions the private network and subnets.
 func (p *Provisioner) ProvisionNetwork(ctx *provisioning.Context) error {
-	log.Printf("[Infra:Network] Reconciling Network %s...", ctx.Config.ClusterName)
+	provisioning.LogResourceCreating(ctx.Observer, "infrastructure", "network", ctx.Config.ClusterName)
 
-	// 0. Calculate subnets if not already set (replaces Terraform's CIDR calculations)
-	if err := ctx.Config.CalculateSubnets(); err != nil {
-		return err
-	}
+	// Subnets are calculated during validation phase
 
 	labels := map[string]string{
 		"cluster": ctx.Config.ClusterName,
@@ -26,16 +22,17 @@ func (p *Provisioner) ProvisionNetwork(ctx *provisioning.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to ensure network: %w", err)
 	}
+	provisioning.LogResourceCreated(ctx.Observer, "infrastructure", "network", ctx.Config.ClusterName, fmt.Sprintf("%d", network.ID))
 	ctx.State.Network = network
 
 	// Detect Public IP for Firewall (if needed)
 	if ctx.Config.Firewall.UseCurrentIPv4 && ctx.State.PublicIP == "" {
 		ip, err := ctx.Infra.GetPublicIP(ctx)
 		if err != nil {
-			log.Printf("Warning: failed to detect public IP: %v", err)
+			ctx.Observer.Printf("[Infra:Network] Warning: failed to detect public IP: %v", err)
 		} else {
 			ctx.State.PublicIP = ip
-			log.Printf("Detected public IP: %s", ip)
+			ctx.Observer.Printf("[Infra:Network] Detected public IP: %s", ip)
 		}
 	}
 
