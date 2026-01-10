@@ -35,22 +35,28 @@ type Event struct {
 type EventType string
 
 const (
-	// Phase events
-	EventPhaseStarted   EventType = "phase.started"
+	// EventPhaseStarted indicates a provisioning phase has started.
+	EventPhaseStarted EventType = "phase.started"
+	// EventPhaseCompleted indicates a provisioning phase completed successfully.
 	EventPhaseCompleted EventType = "phase.completed"
-	EventPhaseFailed    EventType = "phase.failed"
+	// EventPhaseFailed indicates a provisioning phase failed.
+	EventPhaseFailed EventType = "phase.failed"
 
-	// Resource events
+	// EventResourceCreating indicates a resource is being created.
 	EventResourceCreating EventType = "resource.creating"
-	EventResourceCreated  EventType = "resource.created"
-	EventResourceExists   EventType = "resource.exists"
-	EventResourceFailed   EventType = "resource.failed"
+	// EventResourceCreated indicates a resource was created successfully.
+	EventResourceCreated EventType = "resource.created"
+	// EventResourceExists indicates a resource already exists.
+	EventResourceExists EventType = "resource.exists"
+	// EventResourceFailed indicates resource creation failed.
+	EventResourceFailed EventType = "resource.failed"
 
-	// Validation events
+	// EventValidationWarning indicates a validation warning.
 	EventValidationWarning EventType = "validation.warning"
-	EventValidationError   EventType = "validation.error"
+	// EventValidationError indicates a validation error.
+	EventValidationError EventType = "validation.error"
 
-	// Progress events
+	// EventProgress indicates progress in a long-running operation.
 	EventProgress EventType = "progress"
 )
 

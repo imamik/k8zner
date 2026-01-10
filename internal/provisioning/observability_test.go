@@ -22,7 +22,7 @@ func NewMockObserver() *MockObserver {
 	}
 }
 
-func (m *MockObserver) Printf(format string, v ...interface{}) {
+func (m *MockObserver) Printf(format string, _ ...interface{}) {
 	// Record raw log messages
 	m.messages = append(m.messages, format)
 }
@@ -55,14 +55,14 @@ func (m *MockObserver) WithFields(fields map[string]string) Observer {
 	return newObserver
 }
 
-func TestConsoleObserver_Printf(t *testing.T) {
+func TestConsoleObserver_Printf(_ *testing.T) {
 	observer := NewConsoleObserver()
 
 	// Should not panic
 	observer.Printf("test message: %s", "value")
 }
 
-func TestConsoleObserver_Event(t *testing.T) {
+func TestConsoleObserver_Event(_ *testing.T) {
 	observer := NewConsoleObserver()
 
 	event := Event{
@@ -80,7 +80,7 @@ func TestConsoleObserver_Event(t *testing.T) {
 	observer.Event(event)
 }
 
-func TestConsoleObserver_Progress(t *testing.T) {
+func TestConsoleObserver_Progress(_ *testing.T) {
 	observer := NewConsoleObserver()
 
 	// Should not panic

@@ -18,6 +18,7 @@ type Logger interface {
 // DefaultLogger is a logger that uses the standard log package.
 type DefaultLogger struct{}
 
+// Printf implements Logger interface for DefaultLogger.
 func (l *DefaultLogger) Printf(format string, v ...interface{}) {
 	log.Printf(format, v...)
 }

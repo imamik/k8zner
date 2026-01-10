@@ -98,6 +98,7 @@ func (vp *ValidationPhase) Provision(ctx *Context) error {
 // RequiredFieldsValidator validates that required configuration fields are set.
 type RequiredFieldsValidator struct{}
 
+// Validate implements Validator interface for RequiredFieldsValidator.
 func (v *RequiredFieldsValidator) Validate(ctx *Context) []ValidationError {
 	var errors []ValidationError
 	cfg := ctx.Config
@@ -132,6 +133,7 @@ func (v *RequiredFieldsValidator) Validate(ctx *Context) []ValidationError {
 // NetworkValidator validates network configuration.
 type NetworkValidator struct{}
 
+// Validate implements Validator interface for NetworkValidator.
 func (v *NetworkValidator) Validate(ctx *Context) []ValidationError {
 	var errors []ValidationError
 	cfg := ctx.Config
@@ -177,6 +179,7 @@ func (v *NetworkValidator) Validate(ctx *Context) []ValidationError {
 // ServerTypeValidator validates server type configurations.
 type ServerTypeValidator struct{}
 
+// Validate implements Validator interface for ServerTypeValidator.
 func (v *ServerTypeValidator) Validate(ctx *Context) []ValidationError {
 	var errors []ValidationError
 	cfg := ctx.Config
@@ -223,6 +226,7 @@ func (v *ServerTypeValidator) Validate(ctx *Context) []ValidationError {
 // SSHKeyValidator validates SSH key configuration.
 type SSHKeyValidator struct{}
 
+// Validate implements Validator interface for SSHKeyValidator.
 func (v *SSHKeyValidator) Validate(ctx *Context) []ValidationError {
 	var errors []ValidationError
 	cfg := ctx.Config
@@ -241,6 +245,7 @@ func (v *SSHKeyValidator) Validate(ctx *Context) []ValidationError {
 // VersionValidator validates Talos and Kubernetes version formats.
 type VersionValidator struct{}
 
+// Validate implements Validator interface for VersionValidator.
 func (v *VersionValidator) Validate(ctx *Context) []ValidationError {
 	var errors []ValidationError
 	cfg := ctx.Config
