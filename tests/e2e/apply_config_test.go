@@ -10,12 +10,13 @@ import (
 	"testing"
 	"time"
 
+	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
+	talos_config "hcloud-k8s/internal/platform/talos"
+
 	"github.com/siderolabs/talos/pkg/machinery/api/machine"
 	"github.com/siderolabs/talos/pkg/machinery/client"
 	"github.com/siderolabs/talos/pkg/machinery/client/config"
 	"github.com/stretchr/testify/require"
-	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
-	talos_config "hcloud-k8s/internal/platform/talos"
 )
 
 // TestApplyConfig - Test 2: Apply machine configuration to a single Talos node
@@ -88,14 +89,11 @@ func TestApplyConfig(t *testing.T) {
 	// Format endpoint as https://IP:6443 (standard Kubernetes API port)
 	endpoint := fmt.Sprintf("https://%s:6443", nodeIP)
 
-	configGenerator, err := talos_config.NewConfigGenerator(
-		clusterName,
-		"v1.31.0", // Kubernetes version
-		"v1.8.3",  // Talos version
-		endpoint,  // Control plane endpoint with port
-		"",        // No existing secrets file, will generate new
-	)
-	require.NoError(t, err, "Should be able to create config generator")
+	secrets, err := talos_config.GetOrGenerateSecrets("/tmp/talos-secrets-"+clusterName+".json", "v1.8.3")
+	require.NoError(t, err, "Should be able to get secrets")
+	defer os.Remove("/tmp/talos-secrets-" + clusterName + ".json")
+
+	configGenerator := talos_config.NewGenerator(clusterName, "v1.31.0", "v1.8.3", endpoint, secrets)
 
 	// Generate control plane config with hostname matching server name
 	machineConfigBytes, err := configGenerator.GenerateControlPlaneConfig([]string{nodeIP}, serverName)
