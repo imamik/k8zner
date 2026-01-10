@@ -22,13 +22,19 @@ const (
 
 	// rebootInitialWait is the initial wait time before checking if a node has rebooted.
 	rebootInitialWait = 10 * time.Second
+
+	// portPollInterval is the interval for polling port connectivity.
+	portPollInterval = 5 * time.Second
+
+	// dialTimeout is the timeout for TCP dial attempts.
+	dialTimeout = 2 * time.Second
 )
 
 // waitForPort waits for a TCP port to be open with the given timeout.
-// It polls every 5 seconds until the port accepts connections or the timeout expires.
+// It polls at portPollInterval until the port accepts connections or the timeout expires.
 func waitForPort(ctx context.Context, ip string, port int, timeout time.Duration) error {
 	address := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(portPollInterval)
 	defer ticker.Stop()
 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
@@ -42,7 +48,7 @@ func waitForPort(ctx context.Context, ip string, port int, timeout time.Duration
 			}
 			return ctx.Err()
 		case <-ticker.C:
-			conn, err := net.DialTimeout("tcp", address, 2*time.Second)
+			conn, err := net.DialTimeout("tcp", address, dialTimeout)
 			if err == nil {
 				_ = conn.Close()
 				return nil

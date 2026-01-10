@@ -56,7 +56,18 @@ func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
 			return fmt.Errorf("failed to ensure placement group for pool %s: %w", pool.Name, err)
 		}
 
-		poolIPs, err := p.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "control-plane", pool.Labels, "", &pg.ID, i)
+		poolIPs, err := p.reconcileNodePool(ctx, NodePoolSpec{
+			Name:             pool.Name,
+			Count:            pool.Count,
+			ServerType:       pool.ServerType,
+			Location:         pool.Location,
+			Image:            pool.Image,
+			Role:             "control-plane",
+			ExtraLabels:      pool.Labels,
+			UserData:         "",
+			PlacementGroupID: &pg.ID,
+			PoolIndex:        i,
+		})
 		if err != nil {
 			return fmt.Errorf("failed to reconcile node pool %s: %w", pool.Name, err)
 		}

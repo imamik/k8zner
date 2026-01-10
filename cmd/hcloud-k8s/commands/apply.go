@@ -31,6 +31,7 @@ func Apply() *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&configPath, "config", "c", "", "Path to configuration file")
+	// MarkFlagRequired cannot fail for flags defined on the same command
 	_ = cmd.MarkFlagRequired("config")
 
 	return cmd

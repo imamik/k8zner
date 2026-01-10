@@ -32,7 +32,18 @@ func (p *Provisioner) ProvisionWorkers(ctx *provisioning.Context) error {
 			Name: fmt.Sprintf("worker-pool-%s", pool.Name),
 			Func: func(_ context.Context) error {
 				// We use the outer ctx (*provisioning.Context)
-				ips, err := p.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "worker", pool.Labels, "", nil, poolIndex)
+				ips, err := p.reconcileNodePool(ctx, NodePoolSpec{
+					Name:             pool.Name,
+					Count:            pool.Count,
+					ServerType:       pool.ServerType,
+					Location:         pool.Location,
+					Image:            pool.Image,
+					Role:             "worker",
+					ExtraLabels:      pool.Labels,
+					UserData:         "",
+					PlacementGroupID: nil,
+					PoolIndex:        poolIndex,
+				})
 				if err != nil {
 					return err
 				}
