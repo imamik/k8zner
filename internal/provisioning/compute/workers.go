@@ -49,7 +49,7 @@ func (p *Provisioner) ProvisionWorkers(ctx *provisioning.Context) error {
 	}
 
 	// Execute all worker pool tasks in parallel
-	if err := async.RunParallel(ctx, tasks, true); err != nil {
+	if err := async.RunParallel(ctx, tasks); err != nil {
 		return fmt.Errorf("failed to provision worker pools: %w", err)
 	}
 

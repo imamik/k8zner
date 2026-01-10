@@ -76,7 +76,7 @@ func (p *Provisioner) EnsureAllImages(ctx *provisioning.Context) error {
 		}
 	}
 
-	if err := async.RunParallel(ctx, tasks, true); err != nil {
+	if err := async.RunParallel(ctx, tasks); err != nil {
 		return err
 	}
 

@@ -134,7 +134,7 @@ func (p *Provisioner) reconcileNodePool(
 		}
 	}
 
-	if err := async.RunParallel(ctx, tasks, false); err != nil {
+	if err := async.RunParallel(ctx, tasks); err != nil {
 		return nil, fmt.Errorf("failed to provision pool %s: %w", poolName, err)
 	}
 

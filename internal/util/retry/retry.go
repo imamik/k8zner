@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 )
 
@@ -54,9 +53,6 @@ func WithExponentialBackoff(ctx context.Context, operation func() error, opts ..
 		}
 
 		if attempt < cfg.MaxRetries {
-			log.Printf("Retry attempt %d/%d after error: %v (waiting %s)",
-				attempt+1, cfg.MaxRetries, err, delay)
-
 			select {
 			case <-ctx.Done():
 				return fmt.Errorf("context cancelled after %d attempts: %w", attempt+1, ctx.Err())
