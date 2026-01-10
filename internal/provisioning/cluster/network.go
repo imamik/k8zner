@@ -10,6 +10,18 @@ import (
 const (
 	// talosAPIWaitTimeout is the timeout for waiting for Talos API to become available.
 	talosAPIWaitTimeout = 10 * time.Minute
+
+	// nodeReadyTimeout is the timeout for waiting for a node to become ready after reboot.
+	nodeReadyTimeout = 10 * time.Minute
+
+	// kubeconfigTimeout is the timeout for waiting for Kubernetes API to be ready.
+	kubeconfigTimeout = 15 * time.Minute
+
+	// nodeReadyPollInterval is the interval for polling node readiness status.
+	nodeReadyPollInterval = 10 * time.Second
+
+	// rebootInitialWait is the initial wait time before checking if a node has rebooted.
+	rebootInitialWait = 10 * time.Second
 )
 
 // waitForPort waits for a TCP port to be open with the given timeout.

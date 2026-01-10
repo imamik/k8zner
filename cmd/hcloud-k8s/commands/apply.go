@@ -31,6 +31,7 @@ func Apply() *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&configPath, "config", "c", "", "Path to configuration file")
+	_ = cmd.MarkFlagRequired("config")
 
 	return cmd
 }

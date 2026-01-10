@@ -121,7 +121,18 @@ func (p *Provisioner) reconcileNodePool(
 		tasks[i] = async.Task{
 			Name: fmt.Sprintf("server-%s", cfg.name),
 			Func: func(_ context.Context) error {
-				ip, err := p.ensureServer(ctx, cfg.name, serverType, location, image, role, poolName, extraLabels, userData, cfg.pgID, cfg.privateIP)
+				ip, err := p.ensureServer(ctx, ServerSpec{
+					Name:           cfg.name,
+					Type:           serverType,
+					Location:       location,
+					Image:          image,
+					Role:           role,
+					Pool:           poolName,
+					ExtraLabels:    extraLabels,
+					UserData:       userData,
+					PlacementGroup: cfg.pgID,
+					PrivateIP:      cfg.privateIP,
+				})
 				if err != nil {
 					return err
 				}

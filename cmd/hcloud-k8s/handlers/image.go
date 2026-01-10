@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 
-	"hcloud-k8s/internal/platform/hcloud"
 	"hcloud-k8s/internal/provisioning/image"
 )
 
@@ -22,8 +20,7 @@ import (
 // The function expects HCLOUD_TOKEN to be set in the environment and will
 // delegate validation to the Hetzner Cloud client.
 func Build(ctx context.Context, imageName, talosVersion, arch, location string) error {
-	token := os.Getenv("HCLOUD_TOKEN")
-	client := hcloud.NewRealClient(token)
+	client := initializeClient()
 	builder := image.NewBuilder(client)
 
 	log.Printf("Building image %s (Talos %s, Arch %s) in location %s...", imageName, talosVersion, arch, location)
