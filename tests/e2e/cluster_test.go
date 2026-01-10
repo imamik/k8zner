@@ -76,6 +76,10 @@ func TestClusterProvisioning(t *testing.T) {
 			CCM: config.CCMConfig{
 				Enabled: true,
 			},
+			CSI: config.CSIConfig{
+				Enabled:             true,
+				DefaultStorageClass: true,
+			},
 		},
 	}
 
@@ -387,6 +391,139 @@ func TestClusterProvisioning(t *testing.T) {
 		if !providerIDsSet {
 			t.Error("Timeout: Not all nodes received providerIDs from CCM within 2 minutes")
 		}
+
+		// Verify CSI Driver is installed and running
+		t.Log("Verifying Hetzner Cloud CSI Driver installation...")
+
+		// Check if CSIDriver resource exists
+		cmd = exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"get", "csidriver", "csi.hetzner.cloud", "-o", "json")
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			t.Errorf("CSIDriver resource not found: %v\nOutput: %s", err, string(output))
+		} else {
+			t.Log("✓ CSIDriver resource exists")
+		}
+
+		// Check if CSI controller deployment exists
+		cmd = exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"get", "deployment", "-n", "kube-system", "hcloud-csi-controller", "-o", "json")
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			t.Errorf("CSI controller deployment not found: %v\nOutput: %s", err, string(output))
+		} else {
+			t.Log("✓ CSI controller deployment exists")
+		}
+
+		// Check if CSI node daemonset exists
+		cmd = exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"get", "daemonset", "-n", "kube-system", "hcloud-csi-node", "-o", "json")
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			t.Errorf("CSI node daemonset not found: %v\nOutput: %s", err, string(output))
+		} else {
+			t.Log("✓ CSI node daemonset exists")
+		}
+
+		// Check if StorageClass exists and is default
+		cmd = exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"get", "storageclass", "hcloud-volumes", "-o", "json")
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			t.Errorf("StorageClass not found: %v\nOutput: %s", err, string(output))
+		} else {
+			t.Log("✓ StorageClass 'hcloud-volumes' exists")
+
+			// Verify StorageClass is default
+			var sc struct {
+				Metadata struct {
+					Annotations map[string]string `json:"annotations"`
+				} `json:"metadata"`
+				Provisioner string `json:"provisioner"`
+			}
+			if err := json.Unmarshal(output, &sc); err != nil {
+				t.Errorf("Failed to parse StorageClass: %v", err)
+			} else {
+				if sc.Provisioner != "csi.hetzner.cloud" {
+					t.Errorf("StorageClass has wrong provisioner: %s (expected csi.hetzner.cloud)", sc.Provisioner)
+				} else {
+					t.Log("✓ StorageClass uses csi.hetzner.cloud provisioner")
+				}
+				if sc.Metadata.Annotations["storageclass.kubernetes.io/is-default-class"] == "true" {
+					t.Log("✓ StorageClass is marked as default")
+				} else {
+					t.Error("StorageClass is not marked as default")
+				}
+			}
+		}
+
+		// Wait for CSI controller pod to be running
+		t.Log("Waiting for CSI controller pod to be Running...")
+		csiControllerRunning := false
+		for i := 0; i < 30; i++ { // Wait up to 5 minutes
+			cmd = exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "pods", "-n", "kube-system", "-l", "app.kubernetes.io/name=hcloud-csi,app.kubernetes.io/component=controller",
+				"-o", "jsonpath={.items[0].status.phase}")
+			output, err = cmd.CombinedOutput()
+			if err == nil && string(output) == "Running" {
+				csiControllerRunning = true
+				break
+			}
+			t.Logf("CSI controller pod not running yet (phase: %s), waiting...", string(output))
+			time.Sleep(10 * time.Second)
+		}
+		if !csiControllerRunning {
+			t.Error("CSI controller pod failed to reach Running state")
+		} else {
+			t.Log("✓ CSI controller pod is Running")
+		}
+
+		// Check CSI node pods are running on all nodes
+		t.Log("Verifying CSI node pods are running on all nodes...")
+		cmd = exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"get", "pods", "-n", "kube-system", "-l", "app.kubernetes.io/name=hcloud-csi,app.kubernetes.io/component=node",
+			"-o", "json")
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			t.Errorf("Failed to get CSI node pods: %v\nOutput: %s", err, string(output))
+		} else {
+			var podList struct {
+				Items []struct {
+					Metadata struct {
+						Name string `json:"name"`
+					} `json:"metadata"`
+					Status struct {
+						Phase string `json:"phase"`
+					} `json:"status"`
+				} `json:"items"`
+			}
+			if err := json.Unmarshal(output, &podList); err != nil {
+				t.Errorf("Failed to parse CSI node pods: %v", err)
+			} else {
+				runningCount := 0
+				for _, pod := range podList.Items {
+					if pod.Status.Phase == "Running" {
+						runningCount++
+						t.Logf("✓ CSI node pod %s is Running", pod.Metadata.Name)
+					} else {
+						t.Logf("  CSI node pod %s is %s", pod.Metadata.Name, pod.Status.Phase)
+					}
+				}
+				if runningCount >= 2 { // At least 2 nodes (1 CP + 1 worker)
+					t.Logf("✓ CSI node pods running on %d nodes", runningCount)
+				} else {
+					t.Errorf("Expected CSI node pods on at least 2 nodes, found %d running", runningCount)
+				}
+			}
+		}
+
+		t.Log("✓ CSI Driver verification complete")
 	}
 
 	// Verify Resources using Interface Getters
