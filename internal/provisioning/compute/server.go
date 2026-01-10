@@ -41,7 +41,7 @@ func (p *Provisioner) ensureServer(
 	}
 
 	// Create
-	log.Printf("Creating %s Server %s...", role, serverName)
+	log.Printf("[Compute:Server] Creating %s Server %s...", role, serverName)
 
 	// Labels
 	labels := labels.NewLabelBuilder(ctx.Config.ClusterName).
@@ -57,7 +57,7 @@ func (p *Provisioner) ensureServer(
 		if err != nil {
 			return "", fmt.Errorf("failed to ensure Talos image: %w", err)
 		}
-		log.Printf("Using Talos image: %s", image)
+		log.Printf("[Compute:Server] Using Talos image: %s", image)
 	}
 
 	// Get Network ID
@@ -140,7 +140,7 @@ func (p *Provisioner) ensureImage(ctx *provisioning.Context, serverType, _ strin
 
 	if snapshot != nil {
 		snapshotID := fmt.Sprintf("%d", snapshot.ID)
-		log.Printf("Found existing Talos snapshot: %s (ID: %s)", snapshot.Description, snapshotID)
+		log.Printf("[Compute:Image] Found existing Talos snapshot: %s (ID: %s)", snapshot.Description, snapshotID)
 		return snapshotID, nil
 	}
 

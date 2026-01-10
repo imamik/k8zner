@@ -15,21 +15,13 @@ import (
 
 // Builder builds a Talos image on Hetzner Cloud.
 type Builder struct {
-	provisioner     hcloud.ServerProvisioner
-	snapshotManager hcloud.SnapshotManager
-	sshKeyManager   hcloud.SSHKeyManager
+	infra hcloud.InfrastructureManager
 }
 
 // NewBuilder creates a new Builder.
-func NewBuilder(client interface{}) *Builder {
-	p, _ := client.(hcloud.ServerProvisioner)
-	s, _ := client.(hcloud.SnapshotManager)
-	k, _ := client.(hcloud.SSHKeyManager)
-
+func NewBuilder(infra hcloud.InfrastructureManager) *Builder {
 	return &Builder{
-		provisioner:     p,
-		snapshotManager: s,
-		sshKeyManager:   k,
+		infra: infra,
 	}
 }
 
@@ -52,11 +44,11 @@ func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architect
 		return "", fmt.Errorf("failed to generate key pair: %w", err)
 	}
 
-	if b.sshKeyManager == nil {
-		return "", fmt.Errorf("SSHKeyManager is required")
+	if b.infra == nil {
+		return "", fmt.Errorf("InfrastructureManager is required")
 	}
 
-	sshKeyID, err := b.sshKeyManager.CreateSSHKey(ctx, keyName, string(keyPair.PublicKey))
+	sshKeyID, err := b.infra.CreateSSHKey(ctx, keyName, string(keyPair.PublicKey))
 	if err != nil {
 		return "", fmt.Errorf("failed to upload ssh key: %w", err)
 	}
@@ -76,12 +68,12 @@ func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architect
 		b.cleanupServer(serverName)
 	}()
 
-	serverID, err := b.provisioner.CreateServer(ctx, serverName, "debian-13", serverType, location, sshKeys, labels, "", nil, 0, "")
+	serverID, err := b.infra.CreateServer(ctx, serverName, "debian-13", serverType, location, sshKeys, labels, "", nil, 0, "")
 	if err != nil {
 		return "", fmt.Errorf("failed to create server: %w", err)
 	}
 
-	ip, err := b.provisioner.GetServerIP(ctx, serverName)
+	ip, err := b.infra.GetServerIP(ctx, serverName)
 	if err != nil {
 		return "", fmt.Errorf("failed to get server IP: %w", err)
 	}
@@ -93,14 +85,14 @@ func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architect
 	// EnableRescue expects SSHKey IDs if using API v2 logic?
 	// Our wrapper `EnableRescue` takes `[]string` which are expected to be IDs (based on hcloud-go opts).
 	// We got `sshKeyID` from `CreateSSHKey`.
-	_, err = b.provisioner.EnableRescue(ctx, serverID, []string{sshKeyID})
+	_, err = b.infra.EnableRescue(ctx, serverID, []string{sshKeyID})
 	if err != nil {
 		return "", fmt.Errorf("failed to enable rescue: %w", err)
 	}
 
 	// 3. Reset Server (boot into rescue).
 	log.Printf("Resetting server to boot into Rescue Mode...")
-	if err := b.provisioner.ResetServer(ctx, serverID); err != nil {
+	if err := b.infra.ResetServer(ctx, serverID); err != nil {
 		return "", fmt.Errorf("failed to reset server: %w", err)
 	}
 
@@ -138,7 +130,7 @@ func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architect
 
 	// 5. Poweroff Servep.
 	log.Printf("Powering off server for snapshot...")
-	if err := b.provisioner.PoweroffServer(ctx, serverID); err != nil {
+	if err := b.infra.PoweroffServer(ctx, serverID); err != nil {
 		return "", fmt.Errorf("failed to poweroff server: %w", err)
 	}
 
@@ -152,7 +144,7 @@ func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architect
 	labels["k8s-version"] = k8sVersion
 	labels["arch"] = architecture
 
-	snapshotID, err := b.snapshotManager.CreateSnapshot(ctx, serverID, imageName, labels)
+	snapshotID, err := b.infra.CreateSnapshot(ctx, serverID, imageName, labels)
 	if err != nil {
 		return "", fmt.Errorf("failed to create snapshot: %w", err)
 	}
@@ -165,7 +157,7 @@ func (b *Builder) cleanupServer(serverName string) {
 	// DeleteServer now has built-in retry logic and timeout (5 minutes default)
 	// from Phase 2 improvements, so we can simply call it
 	ctx := context.Background()
-	err := b.provisioner.DeleteServer(ctx, serverName)
+	err := b.infra.DeleteServer(ctx, serverName)
 	if err != nil {
 		log.Printf("Failed to delete server %s: %v", serverName, err)
 	} else {
@@ -178,7 +170,7 @@ func (b *Builder) cleanupSSHKey(keyName string) {
 	// DeleteSSHKey now has built-in retry logic and timeout (5 minutes default)
 	// from Phase 2 improvements, so we can simply call it
 	ctx := context.Background()
-	err := b.sshKeyManager.DeleteSSHKey(ctx, keyName)
+	err := b.infra.DeleteSSHKey(ctx, keyName)
 	if err != nil {
 		log.Printf("Failed to delete SSH key %s: %v", keyName, err)
 	} else {

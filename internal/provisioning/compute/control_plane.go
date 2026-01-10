@@ -11,9 +11,9 @@ import (
 	"hcloud-k8s/internal/util/naming"
 )
 
-// ProvisionControlPlane provisions control plane servers and returns a map of ServerName -> PublicIP and the SANs to use.
-func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) (map[string]string, []string, error) {
-	log.Printf("Reconciling Control Plane...")
+// ProvisionControlPlane provisions control plane servers.
+func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
+	log.Printf("[Compute:CP] Reconciling Control Plane...")
 
 	// Collect all SANs
 	var sans []string
@@ -22,7 +22,7 @@ func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) (map[stri
 	// The API LB is "kube-api".
 	lb, err := ctx.Infra.GetLoadBalancer(ctx, naming.KubeAPILoadBalancer(ctx.Config.ClusterName))
 	if err != nil {
-		return nil, nil, err
+		return fmt.Errorf("failed to get load balancer: %w", err)
 	}
 	if lb != nil {
 		// Use LB Public IP as endpoint
@@ -33,7 +33,7 @@ func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) (map[stri
 			// UPDATE TALOS ENDPOINT
 			// We use the LB IP as the control plane endpoint.
 			endpoint := fmt.Sprintf("https://%s:6443", lbIP)
-			log.Printf("Setting Talos Endpoint to: %s", endpoint)
+			log.Printf("[Compute:CP] Setting Talos Endpoint to: %s", endpoint)
 			ctx.Talos.SetEndpoint(endpoint)
 		}
 
@@ -44,7 +44,6 @@ func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) (map[stri
 	}
 
 	// Provision Servers (configs will be generated per-node in reconciler)
-	ips := make(map[string]string)
 	for i, pool := range ctx.Config.ControlPlane.NodePools {
 		// Placement Group for Control Plane
 		pgLabels := labels.NewLabelBuilder(ctx.Config.ClusterName).
@@ -53,17 +52,18 @@ func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) (map[stri
 
 		pg, err := ctx.Infra.EnsurePlacementGroup(ctx, naming.PlacementGroup(ctx.Config.ClusterName, pool.Name), "spread", pgLabels)
 		if err != nil {
-			return nil, nil, err
+			return fmt.Errorf("failed to ensure placement group for pool %s: %w", pool.Name, err)
 		}
 
 		poolIPs, err := p.reconcileNodePool(ctx, pool.Name, pool.Count, pool.ServerType, pool.Location, pool.Image, "control-plane", pool.Labels, "", &pg.ID, i)
 		if err != nil {
-			return nil, nil, err
+			return fmt.Errorf("failed to reconcile node pool %s: %w", pool.Name, err)
 		}
 		for k, v := range poolIPs {
-			ips[k] = v
+			ctx.State.ControlPlaneIPs[k] = v
 		}
 	}
 
-	return ips, sans, nil
+	ctx.State.SANs = sans
+	return nil
 }

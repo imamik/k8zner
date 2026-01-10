@@ -10,21 +10,19 @@ import (
 	"hcloud-k8s/internal/util/async"
 )
 
-// ProvisionWorkers provisions worker node pools in parallel and returns a map of worker node names to their public IPs.
-func (p *Provisioner) ProvisionWorkers(ctx *provisioning.Context) (map[string]string, error) {
-	log.Printf("Reconciling Workers...")
+// ProvisionWorkers provisions worker node pools.
+func (p *Provisioner) ProvisionWorkers(ctx *provisioning.Context) error {
+	log.Printf("[Compute:Workers] Reconciling Worker Pools...")
 
 	// Parallelize worker pool provisioning
 	if len(ctx.Config.Workers) == 0 {
-		log.Println("No worker pools configured")
-		return nil, nil
+		return nil
 	}
 
-	log.Printf("Creating %d worker pools...", len(ctx.Config.Workers))
+	log.Printf("[Compute:Workers] Creating %d worker pools...", len(ctx.Config.Workers))
 
 	// Collect IPs from all worker pools using mutex for thread-safe access
 	var mu sync.Mutex
-	allWorkerIPs := make(map[string]string)
 
 	// Build tasks for parallel execution
 	tasks := make([]async.Task, len(ctx.Config.Workers))
@@ -42,7 +40,7 @@ func (p *Provisioner) ProvisionWorkers(ctx *provisioning.Context) (map[string]st
 				// Thread-safe merge of IPs
 				mu.Lock()
 				for name, ip := range ips {
-					allWorkerIPs[name] = ip
+					ctx.State.WorkerIPs[name] = ip
 				}
 				mu.Unlock()
 				return nil
@@ -52,9 +50,9 @@ func (p *Provisioner) ProvisionWorkers(ctx *provisioning.Context) (map[string]st
 
 	// Execute all worker pool tasks in parallel
 	if err := async.RunParallel(ctx, tasks, true); err != nil {
-		return nil, err
+		return fmt.Errorf("failed to provision worker pools: %w", err)
 	}
 
-	log.Printf("Successfully created all worker pools")
-	return allWorkerIPs, nil
+	log.Printf("[Compute:Workers] Successfully created all worker pools")
+	return nil
 }

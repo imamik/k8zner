@@ -20,14 +20,12 @@ func NewProvisioner() *Provisioner {
 // Provision implements the provisioning.Phase interface.
 func (p *Provisioner) Provision(ctx *provisioning.Context) error {
 	// 1. Control plane nodes
-	_, _, err := p.ProvisionControlPlane(ctx)
-	if err != nil {
+	if err := p.ProvisionControlPlane(ctx); err != nil {
 		return err
 	}
 
 	// 2. Worker nodes
-	_, err = p.ProvisionWorkers(ctx)
-	if err != nil {
+	if err := p.ProvisionWorkers(ctx); err != nil {
 		return err
 	}
 

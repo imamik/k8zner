@@ -3,6 +3,7 @@
 package infrastructure
 
 import (
+	"fmt"
 	"log"
 	"net"
 
@@ -12,8 +13,10 @@ import (
 )
 
 // ProvisionFirewall provisions the cluster firewall with rules.
-func (p *Provisioner) ProvisionFirewall(ctx *provisioning.Context, publicIP string) error {
+func (p *Provisioner) ProvisionFirewall(ctx *provisioning.Context) error {
 	log.Printf("Reconciling Firewall %s...", ctx.Config.ClusterName)
+
+	publicIP := ctx.State.PublicIP
 
 	// Collect Allow Sources
 	// 1. Kube API
@@ -133,7 +136,7 @@ func (p *Provisioner) ProvisionFirewall(ctx *provisioning.Context, publicIP stri
 
 	fw, err := ctx.Infra.EnsureFirewall(ctx, ctx.Config.ClusterName, rules, labels)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to ensure firewall: %w", err)
 	}
 	ctx.State.Firewall = fw
 	return nil

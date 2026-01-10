@@ -13,8 +13,9 @@ import (
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
-// ProvisionLoadBalancers creates and configures load balancers for the cluster including API and ingress load balancers.
+// ProvisionLoadBalancers provisions API and Ingress load balancers.
 func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
+	log.Printf("[Infra:LB] Reconciling Load Balancers for %s...", ctx.Config.ClusterName)
 	// API Load Balancer
 	// Sum up control plane nodes
 	cpCount := 0
@@ -25,7 +26,7 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 	if cpCount > 0 {
 		// Name: ${cluster_name}-kube-api
 		lbName := naming.KubeAPILoadBalancer(ctx.Config.ClusterName)
-		log.Printf("Reconciling Load Balancer %s...", lbName)
+		log.Printf("[Infra:LB] Reconciling Load Balancer %s...", lbName)
 
 		labels := map[string]string{
 			"cluster": ctx.Config.ClusterName,
@@ -33,9 +34,9 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 		}
 
 		// Algorithm: round_robin
-		lb, err := ctx.Infra.EnsureLoadBalancer(ctx, lbName, ctx.Config.Location, "lb11", hcloud.LoadBalancerAlgorithmTypeRoundRobin, labels)
+		lb, err := ctx.Infra.EnsureLoadBalancer(ctx, lbName, ctx.Config.Network.Zone, "lb11", hcloud.LoadBalancerAlgorithmTypeRoundRobin, labels)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to ensure API load balancer: %w", err)
 		}
 
 		// Service: 6443

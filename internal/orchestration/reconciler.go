@@ -75,7 +75,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 	}
 
 	for _, p := range phases {
-		log.Printf("Starting phase: %s", p.name)
+		log.Printf("[Orchestrator] Starting phase: %s", p.name)
 		if err := p.phase.Provision(pCtx); err != nil {
 			return nil, fmt.Errorf("phase %s failed: %w", p.name, err)
 		}
@@ -83,7 +83,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 
 	// 3. Install addons (if cluster was bootstrapped)
 	if len(r.state.Kubeconfig) > 0 {
-		log.Println("Installing cluster addons...")
+		log.Println("[Orchestrator] Installing cluster addons...")
 		networkID := r.state.Network.ID
 		if err := addons.Apply(ctx, r.config, r.state.Kubeconfig, networkID); err != nil {
 			return nil, fmt.Errorf("failed to install addons: %w", err)

@@ -22,7 +22,7 @@ func (p *Provisioner) Provision(ctx *provisioning.Context) error {
 	}
 
 	// 2. Firewall
-	if err := p.ProvisionFirewall(ctx, ""); err != nil {
+	if err := p.ProvisionFirewall(ctx); err != nil {
 		return err
 	}
 

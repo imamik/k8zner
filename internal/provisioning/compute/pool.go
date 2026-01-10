@@ -107,7 +107,7 @@ func (p *Provisioner) reconcileNodePool(
 	}
 
 	// Create all servers in parallel
-	log.Printf("Creating %d servers for pool %s...", count, poolName)
+	log.Printf("[Compute:Pool] Creating %d servers for pool %s...", count, poolName)
 	type serverResult struct {
 		name string
 		ip   string
