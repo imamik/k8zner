@@ -1,4 +1,8 @@
-// Package keygen provides utilities for generating SSH keys.
+// Package keygen provides utilities for generating cryptographic key pairs.
+//
+// This package generates RSA key pairs suitable for SSH authentication,
+// outputting the private key in PEM format and the public key in OpenSSH
+// authorized_keys format.
 package keygen
 
 import (
@@ -6,46 +10,42 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 
 	"golang.org/x/crypto/ssh"
 )
 
-// KeyPair holds the private and public keys.
+// KeyPair holds an RSA key pair in ready-to-use formats.
 type KeyPair struct {
+	// PrivateKey is the RSA private key in PEM-encoded PKCS#1 format.
 	PrivateKey []byte
-	PublicKey  []byte
+	// PublicKey is the public key in OpenSSH authorized_keys format.
+	PublicKey []byte
 }
 
-// GenerateRSAKeyPair generates a new RSA key pair.
+// GenerateRSAKeyPair generates a new RSA key pair with the specified bit size.
+// Common bit sizes are 2048 (minimum recommended) and 4096 (high security).
 func GenerateRSAKeyPair(bits int) (*KeyPair, error) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, bits)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to generate RSA private key: %w", err)
 	}
 
-	// Validate Private Key.
 	err = privateKey.Validate()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to validate RSA private key: %w", err)
 	}
 
-	// Get ASN.1 DER format.
 	privDER := x509.MarshalPKCS1PrivateKey(privateKey)
-
-	// PEM block.
 	privBlock := pem.Block{
-		Type:    "RSA PRIVATE KEY",
-		Headers: nil,
-		Bytes:   privDER,
+		Type:  "RSA PRIVATE KEY",
+		Bytes: privDER,
 	}
-
-	// Private Key in PEM format.
 	privateKeyPEM := pem.EncodeToMemory(&privBlock)
 
-	// Public Key generation.
 	publicRsaKey, err := ssh.NewPublicKey(&privateKey.PublicKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create SSH public key: %w", err)
 	}
 
 	pubKeyBytes := ssh.MarshalAuthorizedKey(publicRsaKey)

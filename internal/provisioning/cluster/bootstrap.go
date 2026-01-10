@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"hcloud-k8s/internal/provisioning"
-	"hcloud-k8s/internal/util/netutil"
 
 	"github.com/siderolabs/talos/pkg/machinery/api/machine"
 	"github.com/siderolabs/talos/pkg/machinery/client"
@@ -149,7 +148,7 @@ func (p *Provisioner) BootstrapCluster(ctx *provisioning.Context) error {
 // applyMachineConfig applies a machine configuration to a Talos node.
 func (p *Provisioner) applyMachineConfig(ctx context.Context, nodeIP string, machineConfig []byte, _ []byte) error {
 	// Wait for Talos API to be available
-	if err := netutil.WaitForPort(ctx, nodeIP, 50000, netutil.TalosAPIWaitTimeout); err != nil {
+	if err := waitForPort(ctx, nodeIP, 50000, talosAPIWaitTimeout); err != nil {
 		return fmt.Errorf("failed to wait for Talos API: %w", err)
 	}
 
@@ -197,7 +196,7 @@ func (p *Provisioner) waitForNodeReady(ctx context.Context, nodeIP string, clien
 
 	// Wait for port to come back up
 	logger.Printf("[%s] Waiting for node %s to come back online...", phase, nodeIP)
-	if err := netutil.WaitForPort(ctx, nodeIP, 50000, netutil.TalosAPIWaitTimeout); err != nil {
+	if err := waitForPort(ctx, nodeIP, 50000, talosAPIWaitTimeout); err != nil {
 		return fmt.Errorf("failed to wait for node to come back: %w", err)
 	}
 

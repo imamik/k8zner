@@ -7,6 +7,7 @@ package async
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -14,13 +15,15 @@ import (
 
 // Task represents an asynchronous operation with a name and function.
 type Task struct {
+	// Name identifies the task in logs and error messages.
 	Name string
+	// Func is the operation to execute, receiving the context for cancellation.
 	Func func(context.Context) error
 }
 
-// RunParallel executes multiple tasks in parallel and returns the first error encountered.
+// RunParallel executes multiple tasks in parallel and returns all errors encountered.
 // All tasks are started concurrently, and the function waits for all to complete.
-// If any task returns an error, the first error is returned after all tasks finish.
+// If multiple tasks fail, all errors are joined using errors.Join.
 //
 // Set withLogging to true to log task start and completion times, which is useful
 // for tracking infrastructure provisioning progress.
@@ -60,14 +63,17 @@ func RunParallel(ctx context.Context, tasks []Task, withLogging bool) error {
 		}()
 	}
 
-	// Wait for all tasks to complete and collect first error
-	var firstError error
+	// Wait for all tasks to complete and collect all errors
+	var errs []error
 	for range len(tasks) {
 		res := <-resultChan
-		if res.err != nil && firstError == nil {
-			firstError = fmt.Errorf("failed to reconcile %s: %w", res.name, res.err)
+		if res.err != nil {
+			errs = append(errs, fmt.Errorf("task %s: %w", res.name, res.err))
 		}
 	}
 
-	return firstError
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	return nil
 }
