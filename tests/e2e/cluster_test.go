@@ -18,6 +18,7 @@ import (
 	"hcloud-k8s/internal/platform/talos"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestClusterProvisioning is an end-to-end test that provisions a cluster and verifies resources.
@@ -142,20 +143,21 @@ func TestClusterProvisioning(t *testing.T) {
 	defer cancel()
 
 	kubeconfig, err := reconciler.Reconcile(ctx)
-	assert.NoError(t, err)
-	assert.NotEmpty(t, kubeconfig, "kubeconfig should be returned after bootstrap")
+	require.NoError(t, err)
+	require.NotEmpty(t, kubeconfig, "kubeconfig should be returned after bootstrap")
 
 	// Verify APIs are reachable
 	// We check for Talos API on one of the servers
 	cp1IP, err := hClient.GetServerIP(ctx, clusterName+"-control-plane-1")
-	assert.NoError(t, err)
-	assert.NotEmpty(t, cp1IP)
+	require.NoError(t, err)
+	require.NotEmpty(t, cp1IP)
 
 	// Kube API through Load Balancer
 	lb, err := hClient.GetLoadBalancer(ctx, clusterName+"-kube-api")
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	require.NotNil(t, lb)
 	lbIP := lb.PublicNet.IPv4.IP.String()
-	assert.NotEmpty(t, lbIP)
+	require.NotEmpty(t, lbIP)
 
 	t.Logf("Verifying APIs: Talos=%s:50000, Kube=%s:6443", cp1IP, lbIP)
 

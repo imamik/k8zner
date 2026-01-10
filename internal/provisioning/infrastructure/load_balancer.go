@@ -33,7 +33,7 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 		}
 
 		// Algorithm: round_robin
-		lb, err := ctx.Infra.EnsureLoadBalancer(ctx, lbName, ctx.Config.Network.Zone, "lb11", hcloud.LoadBalancerAlgorithmTypeRoundRobin, labels)
+		lb, err := ctx.Infra.EnsureLoadBalancer(ctx, lbName, ctx.Config.Location, "lb11", hcloud.LoadBalancerAlgorithmTypeRoundRobin, labels)
 		if err != nil {
 			return fmt.Errorf("failed to ensure API load balancer: %w", err)
 		}

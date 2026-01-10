@@ -15,7 +15,7 @@ func (p *Provisioner) ProvisionFloatingIPs(ctx *provisioning.Context) error {
 	if ctx.Config.ControlPlane.PublicVIPIPv4Enabled {
 		name := naming.ControlPlaneFloatingIP(ctx.Config.ClusterName)
 		labels := map[string]string{"cluster": ctx.Config.ClusterName, "role": "control-plane"}
-		_, err := ctx.Infra.EnsureFloatingIP(ctx, name, ctx.Config.Network.Zone, string(hcloud.FloatingIPTypeIPv4), labels)
+		_, err := ctx.Infra.EnsureFloatingIP(ctx, name, ctx.Config.Location, string(hcloud.FloatingIPTypeIPv4), labels)
 		if err != nil {
 			return fmt.Errorf("failed to ensure floating IP %s: %w", name, err)
 		}

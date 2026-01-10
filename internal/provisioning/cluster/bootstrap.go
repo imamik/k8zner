@@ -53,6 +53,11 @@ func (p *Provisioner) BootstrapCluster(ctx *provisioning.Context) error {
 		return err
 	}
 
+	// Apply worker configs after control plane is ready and etcd is bootstrapped
+	if err := p.ApplyWorkerConfigs(ctx); err != nil {
+		return err
+	}
+
 	return p.retrieveAndStoreKubeconfig(ctx)
 }
 
