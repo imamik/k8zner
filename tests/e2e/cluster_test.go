@@ -524,6 +524,221 @@ func TestClusterProvisioning(t *testing.T) {
 		}
 
 		t.Log("✓ CSI Driver verification complete")
+
+		// Functional test: Create and delete a volume
+		t.Log("Testing CSI volume provisioning (create/mount/delete)...")
+
+		testPVCName := "e2e-test-pvc"
+		testPodName := "e2e-test-pod"
+
+		// Create a PVC
+		pvcManifest := fmt.Sprintf(`
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: %s
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: hcloud-volumes
+`, testPVCName)
+
+		// Apply PVC
+		cmd = exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"apply", "-f", "-")
+		cmd.Stdin = strings.NewReader(pvcManifest)
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			t.Errorf("Failed to create PVC: %v\nOutput: %s", err, string(output))
+		} else {
+			t.Log("✓ PVC created")
+		}
+
+		// Create a Pod that uses the PVC (triggers WaitForFirstConsumer binding)
+		podManifest := fmt.Sprintf(`
+apiVersion: v1
+kind: Pod
+metadata:
+  name: %s
+  namespace: default
+spec:
+  containers:
+    - name: test
+      image: busybox:latest
+      command: ["sleep", "3600"]
+      volumeMounts:
+        - name: test-volume
+          mountPath: /data
+  volumes:
+    - name: test-volume
+      persistentVolumeClaim:
+        claimName: %s
+  tolerations:
+    - operator: Exists
+`, testPodName, testPVCName)
+
+		// Apply Pod
+		cmd = exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"apply", "-f", "-")
+		cmd.Stdin = strings.NewReader(podManifest)
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			t.Errorf("Failed to create test Pod: %v\nOutput: %s", err, string(output))
+		} else {
+			t.Log("✓ Test Pod created (will trigger volume provisioning)")
+		}
+
+		// Wait for PVC to be Bound
+		t.Log("Waiting for PVC to be Bound...")
+		pvcBound := false
+		var pvName string
+		for i := 0; i < 60; i++ { // Wait up to 5 minutes
+			cmd = exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "pvc", testPVCName, "-n", "default", "-o", "json")
+			output, err = cmd.CombinedOutput()
+			if err != nil {
+				t.Logf("PVC not ready yet: %v (will retry)", err)
+				time.Sleep(5 * time.Second)
+				continue
+			}
+
+			var pvc struct {
+				Status struct {
+					Phase string `json:"phase"`
+				} `json:"status"`
+				Spec struct {
+					VolumeName string `json:"volumeName"`
+				} `json:"spec"`
+			}
+			if err := json.Unmarshal(output, &pvc); err != nil {
+				t.Logf("Failed to parse PVC: %v (will retry)", err)
+				time.Sleep(5 * time.Second)
+				continue
+			}
+
+			if pvc.Status.Phase == "Bound" {
+				pvcBound = true
+				pvName = pvc.Spec.VolumeName
+				t.Logf("✓ PVC is Bound to PV: %s", pvName)
+				break
+			}
+			t.Logf("PVC phase: %s (waiting for Bound...)", pvc.Status.Phase)
+			time.Sleep(5 * time.Second)
+		}
+
+		if !pvcBound {
+			t.Error("Timeout: PVC failed to become Bound within 5 minutes")
+		}
+
+		// Verify PV exists and has correct CSI driver
+		if pvName != "" {
+			cmd = exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "pv", pvName, "-o", "json")
+			output, err = cmd.CombinedOutput()
+			if err != nil {
+				t.Errorf("Failed to get PV: %v\nOutput: %s", err, string(output))
+			} else {
+				var pv struct {
+					Spec struct {
+						CSI struct {
+							Driver       string `json:"driver"`
+							VolumeHandle string `json:"volumeHandle"`
+						} `json:"csi"`
+					} `json:"spec"`
+				}
+				if err := json.Unmarshal(output, &pv); err != nil {
+					t.Errorf("Failed to parse PV: %v", err)
+				} else {
+					if pv.Spec.CSI.Driver != "csi.hetzner.cloud" {
+						t.Errorf("PV has wrong CSI driver: %s", pv.Spec.CSI.Driver)
+					} else {
+						t.Log("✓ PV uses csi.hetzner.cloud driver")
+					}
+					if pv.Spec.CSI.VolumeHandle != "" {
+						t.Logf("✓ PV has Hetzner volume handle: %s", pv.Spec.CSI.VolumeHandle)
+					}
+				}
+			}
+		}
+
+		// Wait for Pod to be Running (confirms volume is attached)
+		t.Log("Waiting for test Pod to be Running...")
+		podRunning := false
+		for i := 0; i < 60; i++ { // Wait up to 5 minutes
+			cmd = exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "pod", testPodName, "-n", "default", "-o", "jsonpath={.status.phase}")
+			output, err = cmd.CombinedOutput()
+			if err == nil && string(output) == "Running" {
+				podRunning = true
+				break
+			}
+			t.Logf("Test Pod not running yet (phase: %s), waiting...", string(output))
+			time.Sleep(5 * time.Second)
+		}
+		if !podRunning {
+			t.Error("Timeout: Test Pod failed to reach Running state")
+		} else {
+			t.Log("✓ Test Pod is Running (volume successfully attached)")
+		}
+
+		// Cleanup: Delete Pod and PVC
+		t.Log("Cleaning up test resources...")
+
+		// Delete Pod first
+		cmd = exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"delete", "pod", testPodName, "-n", "default", "--grace-period=0", "--force")
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			t.Logf("Warning: Failed to delete test Pod: %v", err)
+		} else {
+			t.Log("✓ Test Pod deleted")
+		}
+
+		// Delete PVC
+		cmd = exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"delete", "pvc", testPVCName, "-n", "default")
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			t.Logf("Warning: Failed to delete PVC: %v", err)
+		} else {
+			t.Log("✓ PVC deleted")
+		}
+
+		// Wait for PV to be deleted (ReclaimPolicy: Delete)
+		if pvName != "" {
+			t.Log("Waiting for PV to be deleted (ReclaimPolicy: Delete)...")
+			pvDeleted := false
+			for i := 0; i < 30; i++ { // Wait up to 2.5 minutes
+				cmd = exec.CommandContext(context.Background(), "kubectl",
+					"--kubeconfig", kubeconfigPath,
+					"get", "pv", pvName)
+				output, err = cmd.CombinedOutput()
+				if err != nil && strings.Contains(string(output), "not found") {
+					pvDeleted = true
+					break
+				}
+				t.Logf("PV still exists, waiting for deletion...")
+				time.Sleep(5 * time.Second)
+			}
+			if !pvDeleted {
+				t.Error("Timeout: PV was not deleted within 2.5 minutes")
+			} else {
+				t.Log("✓ PV deleted (Hetzner volume should be deleted)")
+			}
+		}
+
+		t.Log("✓ CSI volume lifecycle test complete (create/mount/delete verified)")
 	}
 
 	// Verify Resources using Interface Getters
