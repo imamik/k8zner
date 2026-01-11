@@ -147,20 +147,46 @@ func TestClusterProvisioning(t *testing.T) {
 	defer cancel()
 
 	kubeconfig, err := reconciler.Reconcile(ctx)
-	require.NoError(t, err)
+
+	// Get control plane IP and LB IP for diagnostics (even if reconcile failed)
+	cp1IP, cpErr := hClient.GetServerIP(ctx, clusterName+"-control-plane-1")
+	var lbIP string
+	lb, lbErr := hClient.GetLoadBalancer(ctx, clusterName+"-kube-api")
+	if lbErr == nil && lb != nil {
+		lbIP = lb.PublicNet.IPv4.IP.String()
+	}
+
+	// If reconcile failed, run diagnostics before failing the test
+	if err != nil {
+		t.Logf("Reconcile failed: %v", err)
+		t.Log("Running diagnostics to investigate the failure...")
+
+		// Get talos config from the generator for diagnostics
+		talosConfig, tcErr := talosGen.GetClientConfig()
+		if tcErr != nil {
+			t.Logf("Warning: Could not get talos config for diagnostics: %v", tcErr)
+		}
+
+		if cpErr == nil && cp1IP != "" {
+			diag := NewClusterDiagnostics(t, cp1IP, lbIP, talosConfig)
+			diag.RunFullDiagnostics(context.Background())
+		} else {
+			t.Log("Cannot run diagnostics: control plane IP not available")
+		}
+
+		require.NoError(t, err, "Reconcile failed - see diagnostics above")
+	}
+
 	require.NotEmpty(t, kubeconfig, "kubeconfig should be returned after bootstrap")
 
 	// Verify APIs are reachable
 	// We check for Talos API on one of the servers
-	cp1IP, err := hClient.GetServerIP(ctx, clusterName+"-control-plane-1")
-	require.NoError(t, err)
+	require.NoError(t, cpErr)
 	require.NotEmpty(t, cp1IP)
 
 	// Kube API through Load Balancer
-	lb, err := hClient.GetLoadBalancer(ctx, clusterName+"-kube-api")
-	require.NoError(t, err)
+	require.NoError(t, lbErr)
 	require.NotNil(t, lb)
-	lbIP := lb.PublicNet.IPv4.IP.String()
 	require.NotEmpty(t, lbIP)
 
 	t.Logf("Verifying APIs: Talos=%s:50000, Kube=%s:6443", cp1IP, lbIP)
@@ -815,7 +841,7 @@ spec:
 		t.Log("Waiting for PVC to be Bound...")
 		pvcBound := false
 		var pvName string
-		for i := 0; i < 60; i++ { // Wait up to 5 minutes
+		for i := 0; i < 24; i++ { // Wait up to 2 minutes (reduced from 5 for faster feedback)
 			cmd = exec.CommandContext(context.Background(), "kubectl",
 				"--kubeconfig", kubeconfigPath,
 				"get", "pvc", testPVCName, "-n", "default", "-o", "json")
@@ -851,7 +877,7 @@ spec:
 		}
 
 		if !pvcBound {
-			t.Error("Timeout: PVC failed to become Bound within 5 minutes")
+			t.Error("Timeout: PVC failed to become Bound within 2 minutes")
 		}
 
 		// Verify PV exists and has correct CSI driver
@@ -887,10 +913,10 @@ spec:
 		}
 
 		// Wait for Pod to be Running (confirms volume is attached)
-		// Hetzner volume attachment can take several minutes
+		// Hetzner volume attachment typically takes 30-90 seconds
 		t.Log("Waiting for test Pod to be Running...")
 		podRunning := false
-		for i := 0; i < 84; i++ { // Wait up to 7 minutes (volume attach can take time)
+		for i := 0; i < 36; i++ { // Wait up to 3 minutes (reduced for faster feedback)
 			cmd = exec.CommandContext(context.Background(), "kubectl",
 				"--kubeconfig", kubeconfigPath,
 				"get", "pod", testPodName, "-n", "default", "-o", "jsonpath={.status.phase}")
@@ -927,15 +953,24 @@ spec:
 			t.Logf("%s", string(descOutput))
 
 			// Check CSI controller logs for errors
-			t.Log("--- CSI controller logs (last 20 lines) ---")
+			t.Log("--- CSI controller logs (hcloud-csi-driver container, last 30 lines) ---")
 			logsCmd := exec.CommandContext(context.Background(), "kubectl",
 				"--kubeconfig", kubeconfigPath,
-				"logs", "-l", "app=hcloud-csi-controller", "-n", "kube-system",
-				"--tail=20", "-c", "hcloud-csi-driver")
+				"logs", "-l", "app.kubernetes.io/name=hcloud-csi,app.kubernetes.io/component=controller",
+				"-n", "kube-system", "--tail=30", "-c", "hcloud-csi-driver")
 			logsOutput, _ := logsCmd.CombinedOutput()
 			t.Logf("%s", string(logsOutput))
 
-			t.Error("Timeout: Test Pod failed to reach Running state within 7 minutes")
+			// Also check provisioner logs (handles volume creation)
+			t.Log("--- CSI provisioner logs (last 30 lines) ---")
+			provLogsCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"logs", "-l", "app.kubernetes.io/name=hcloud-csi,app.kubernetes.io/component=controller",
+				"-n", "kube-system", "--tail=30", "-c", "csi-provisioner")
+			provLogsOutput, _ := provLogsCmd.CombinedOutput()
+			t.Logf("%s", string(provLogsOutput))
+
+			t.Error("Timeout: Test Pod failed to reach Running state within 3 minutes")
 		} else {
 			t.Log("✓ Test Pod is Running (volume successfully attached)")
 		}

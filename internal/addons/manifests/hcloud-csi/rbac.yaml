@@ -40,6 +40,10 @@ rules:
   - apiGroups: ["snapshot.storage.k8s.io"]
     resources: ["volumesnapshotcontents"]
     verbs: ["get", "list"]
+  # Leader election requires coordination API
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "watch", "list", "create", "update", "delete"]
 ---
 # ClusterRoleBinding for CSI controller
 apiVersion: rbac.authorization.k8s.io/v1
