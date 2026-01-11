@@ -71,6 +71,17 @@ func TestClusterProvisioning(t *testing.T) {
 		},
 		Kubernetes: config.KubernetesConfig{
 			Version: "v1.31.0",
+			CNI: config.CNIConfig{
+				Enabled:              true,
+				HelmVersion:          "1.18.5",
+				KubeProxyReplacement: true,
+				RoutingMode:          "native",
+				BPFDatapathMode:      "veth",
+				Encryption: config.CiliumEncryptionConfig{
+					Enabled: true,
+					Type:    "wireguard",
+				},
+			},
 		},
 		Addons: config.AddonsConfig{
 			CCM: config.CCMConfig{
@@ -258,14 +269,145 @@ func TestClusterProvisioning(t *testing.T) {
 		}
 	endNodeCheck:
 
+		// Verify Cilium CNI is installed and running
+		t.Log("Verifying Cilium CNI installation...")
+
+		// Check if Cilium DaemonSet exists
+		cmd := exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"get", "daemonset", "-n", "kube-system", "cilium", "-o", "json")
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Errorf("Cilium DaemonSet not found: %v\nOutput: %s", err, string(output))
+		} else {
+			t.Log("✓ Cilium DaemonSet exists")
+		}
+
+		// Check if Cilium Operator deployment exists
+		cmd = exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"get", "deployment", "-n", "kube-system", "cilium-operator", "-o", "json")
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			t.Errorf("Cilium Operator deployment not found: %v\nOutput: %s", err, string(output))
+		} else {
+			t.Log("✓ Cilium Operator deployment exists")
+		}
+
+		// Wait for Cilium pods to be running
+		t.Log("Waiting for Cilium pods to be Running...")
+		ciliumRunning := false
+		for i := 0; i < 30; i++ { // Wait up to 5 minutes
+			cmd = exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "pods", "-n", "kube-system", "-l", "k8s-app=cilium",
+				"-o", "json")
+			output, err = cmd.CombinedOutput()
+			if err != nil {
+				t.Logf("Failed to get Cilium pods: %v (will retry)", err)
+				time.Sleep(10 * time.Second)
+				continue
+			}
+
+			var podList struct {
+				Items []struct {
+					Metadata struct {
+						Name string `json:"name"`
+					} `json:"metadata"`
+					Status struct {
+						Phase string `json:"phase"`
+					} `json:"status"`
+				} `json:"items"`
+			}
+			if err := json.Unmarshal(output, &podList); err != nil {
+				t.Logf("Failed to parse Cilium pods: %v (will retry)", err)
+				time.Sleep(10 * time.Second)
+				continue
+			}
+
+			runningCount := 0
+			for _, pod := range podList.Items {
+				if pod.Status.Phase == "Running" {
+					runningCount++
+				}
+			}
+
+			if len(podList.Items) >= 2 && runningCount == len(podList.Items) {
+				ciliumRunning = true
+				t.Logf("✓ All %d Cilium pods are Running", runningCount)
+				break
+			}
+			t.Logf("Cilium pods: %d running / %d total, waiting...", runningCount, len(podList.Items))
+			time.Sleep(10 * time.Second)
+		}
+		if !ciliumRunning {
+			t.Error("Cilium pods failed to reach Running state")
+		}
+
+		// Wait for Cilium Operator pod to be running
+		t.Log("Waiting for Cilium Operator pod to be Running...")
+		ciliumOperatorRunning := false
+		for i := 0; i < 30; i++ { // Wait up to 5 minutes
+			cmd = exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "pods", "-n", "kube-system", "-l", "name=cilium-operator",
+				"-o", "jsonpath={.items[0].status.phase}")
+			output, err = cmd.CombinedOutput()
+			if err == nil && string(output) == "Running" {
+				ciliumOperatorRunning = true
+				break
+			}
+			t.Logf("Cilium Operator pod not running yet (phase: %s), waiting...", string(output))
+			time.Sleep(10 * time.Second)
+		}
+		if !ciliumOperatorRunning {
+			t.Error("Cilium Operator pod failed to reach Running state")
+		} else {
+			t.Log("✓ Cilium Operator pod is Running")
+		}
+
+		// Check Cilium status using cilium-cli or kubectl exec
+		t.Log("Checking Cilium status...")
+		cmd = exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"exec", "-n", "kube-system", "ds/cilium", "--", "cilium", "status", "--brief")
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			t.Logf("Warning: Could not get Cilium status: %v\nOutput: %s", err, string(output))
+		} else {
+			statusOutput := string(output)
+			t.Logf("Cilium status:\n%s", statusOutput)
+			if strings.Contains(statusOutput, "OK") {
+				t.Log("✓ Cilium status reports OK")
+			}
+		}
+
+		// Verify encryption is enabled (WireGuard)
+		t.Log("Verifying Cilium encryption status...")
+		cmd = exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"exec", "-n", "kube-system", "ds/cilium", "--", "cilium", "encrypt", "status")
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			t.Logf("Warning: Could not get encryption status: %v\nOutput: %s", err, string(output))
+		} else {
+			encryptOutput := string(output)
+			t.Logf("Encryption status:\n%s", encryptOutput)
+			if strings.Contains(encryptOutput, "Encryption:") && strings.Contains(encryptOutput, "Wireguard") {
+				t.Log("✓ WireGuard encryption is enabled")
+			}
+		}
+
+		t.Log("✓ Cilium CNI verification complete")
+
 		// Verify CCM is installed and running
 		t.Log("Verifying Hetzner Cloud Controller Manager (CCM) installation...")
 
 		// Check if CCM deployment exists
-		cmd := exec.CommandContext(context.Background(), "kubectl",
+		cmd = exec.CommandContext(context.Background(), "kubectl",
 			"--kubeconfig", kubeconfigPath,
 			"get", "deployment", "-n", "kube-system", "hcloud-cloud-controller-manager", "-o", "json")
-		output, err := cmd.CombinedOutput()
+		output, err = cmd.CombinedOutput()
 		if err != nil {
 			t.Errorf("CCM deployment not found: %v\nOutput: %s", err, string(output))
 		} else {
