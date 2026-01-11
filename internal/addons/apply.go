@@ -21,15 +21,28 @@ var manifestsFS embed.FS
 //
 // This function checks the addon configuration and applies the appropriate
 // manifests to the cluster using kubectl. Currently supports:
+//   - Cilium CNI (via Helm)
 //   - Hetzner Cloud Controller Manager (CCM)
 //   - Hetzner Cloud CSI Driver
 //
 // The kubeconfig must be valid and the cluster must be accessible.
 // Addon manifests are embedded in the binary and processed as templates
 // with cluster-specific configuration injected at runtime.
+//
+// Installation order matters: Cilium (CNI) must be installed first as it
+// provides pod networking required by other components.
 func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID int64) error {
 	if len(kubeconfig) == 0 {
 		return fmt.Errorf("kubeconfig is required for addon installation")
+	}
+
+	controlPlaneCount := getControlPlaneCount(cfg)
+
+	// Install Cilium CNI first (required for cluster networking)
+	if cfg.Kubernetes.CNI.Enabled {
+		if err := applyCilium(ctx, cfg, kubeconfig, controlPlaneCount); err != nil {
+			return fmt.Errorf("failed to install Cilium: %w", err)
+		}
 	}
 
 	tmpKubeconfig, err := writeTempKubeconfig(kubeconfig)
@@ -47,7 +60,6 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 	}
 
 	if cfg.Addons.CSI.Enabled {
-		controlPlaneCount := getControlPlaneCount(cfg)
 		defaultStorageClass := cfg.Addons.CSI.DefaultStorageClass
 		if err := applyCSI(ctx, tmpKubeconfig, cfg.HCloudToken, controlPlaneCount, defaultStorageClass); err != nil {
 			return fmt.Errorf("failed to install CSI: %w", err)

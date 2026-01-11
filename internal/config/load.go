@@ -39,6 +39,9 @@ func LoadFile(path string) (*Config, error) {
 		cfg.Addons.CCM.Enabled = shouldEnableCCMByDefault(rawConfig)
 	}
 
+	// Default CNI (Cilium) settings
+	applyCNIDefaults(&cfg, rawConfig)
+
 	// Validate configuration
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
@@ -67,4 +70,123 @@ func shouldEnableCCMByDefault(rawConfig map[string]interface{}) bool {
 	}
 
 	return false // Explicitly set to false, respect it
+}
+
+// applyCNIDefaults sets sensible defaults for Cilium CNI configuration.
+func applyCNIDefaults(cfg *Config, rawConfig map[string]interface{}) {
+	cni := &cfg.Kubernetes.CNI
+
+	// Default CNI to enabled unless explicitly disabled
+	if !cni.Enabled {
+		cni.Enabled = shouldEnableCNIByDefault(rawConfig)
+	}
+
+	// Default Helm version
+	if cni.HelmVersion == "" {
+		cni.HelmVersion = "1.18.5"
+	}
+
+	// Default to kube-proxy replacement (eBPF)
+	if !cni.KubeProxyReplacement {
+		cni.KubeProxyReplacement = shouldEnableKubeProxyReplacementByDefault(rawConfig)
+	}
+
+	// Default routing mode
+	if cni.RoutingMode == "" {
+		cni.RoutingMode = "native"
+	}
+
+	// Default BPF datapath mode
+	if cni.BPFDatapathMode == "" {
+		cni.BPFDatapathMode = "veth"
+	}
+
+	// Default encryption to enabled with WireGuard
+	if !cni.Encryption.Enabled {
+		cni.Encryption.Enabled = shouldEnableEncryptionByDefault(rawConfig)
+	}
+	if cni.Encryption.Type == "" {
+		cni.Encryption.Type = "wireguard"
+	}
+
+	// IPSec defaults (only used when Type == "ipsec")
+	if cni.Encryption.IPSec.Algorithm == "" {
+		cni.Encryption.IPSec.Algorithm = "rfc4106(gcm(aes))"
+	}
+	if cni.Encryption.IPSec.KeySize == 0 {
+		cni.Encryption.IPSec.KeySize = 256
+	}
+	if cni.Encryption.IPSec.KeyID == 0 {
+		cni.Encryption.IPSec.KeyID = 1
+	}
+
+	// Gateway API defaults
+	if cni.GatewayAPI.ExternalTrafficPolicy == "" {
+		cni.GatewayAPI.ExternalTrafficPolicy = "Cluster"
+	}
+}
+
+// shouldEnableCNIByDefault determines if CNI should be enabled when not explicitly configured.
+func shouldEnableCNIByDefault(rawConfig map[string]interface{}) bool {
+	kubernetesMap, ok := rawConfig["kubernetes"].(map[string]interface{})
+	if !ok {
+		return true // No kubernetes section, default to enabled
+	}
+
+	cniMap, ok := kubernetesMap["cni"].(map[string]interface{})
+	if !ok {
+		return true // No cni section, default to enabled
+	}
+
+	_, explicitlySet := cniMap["enabled"]
+	if !explicitlySet {
+		return true // CNI section exists but enabled not set, default to enabled
+	}
+
+	return false
+}
+
+// shouldEnableKubeProxyReplacementByDefault determines if kube-proxy replacement should be enabled.
+func shouldEnableKubeProxyReplacementByDefault(rawConfig map[string]interface{}) bool {
+	kubernetesMap, ok := rawConfig["kubernetes"].(map[string]interface{})
+	if !ok {
+		return true
+	}
+
+	cniMap, ok := kubernetesMap["cni"].(map[string]interface{})
+	if !ok {
+		return true
+	}
+
+	_, explicitlySet := cniMap["kube_proxy_replacement"]
+	if !explicitlySet {
+		return true
+	}
+
+	return false
+}
+
+// shouldEnableEncryptionByDefault determines if encryption should be enabled.
+func shouldEnableEncryptionByDefault(rawConfig map[string]interface{}) bool {
+	kubernetesMap, ok := rawConfig["kubernetes"].(map[string]interface{})
+	if !ok {
+		return true
+	}
+
+	cniMap, ok := kubernetesMap["cni"].(map[string]interface{})
+	if !ok {
+		return true
+	}
+
+	encryptionMap, ok := cniMap["encryption"].(map[string]interface{})
+	if !ok {
+		return true
+	}
+
+	_, explicitlySet := encryptionMap["enabled"]
+	if !explicitlySet {
+		return true
+	}
+
+	return false
 }

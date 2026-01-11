@@ -1,13 +1,13 @@
 # Migration Status Analysis: Terraform → Pure Go CLI
 
-**Analysis Date:** 2026-01-10 (Updated)
+**Analysis Date:** 2026-01-11 (Updated)
 **Reference Document:** [technical_design_doc.md](technical_design_doc.md)
 
 ---
 
 ## Executive Summary
 
-The migration from Terraform to a pure Go CLI is **~70% complete**. Core infrastructure provisioning is fully functional with excellent architecture, comprehensive test coverage, and working addon framework. The primary gaps are in **Day-2 operations** (upgrade/destroy), **advanced addons**, and **config schema extensions**.
+The migration from Terraform to a pure Go CLI is **~73% complete**. Core infrastructure provisioning is fully functional with excellent architecture, comprehensive test coverage, and working addon framework. The primary gaps are in **Day-2 operations** (upgrade/destroy), **advanced addons**, and **config schema extensions**.
 
 ### Current State
 
@@ -17,16 +17,17 @@ The migration from Terraform to a pure Go CLI is **~70% complete**. Core infrast
 - Control plane and worker node provisioning with placement group sharding
 - Cluster bootstrap with Talos
 - CCM addon installation (fully wired into reconciliation flow)
-- Comprehensive E2E test suite
+- CSI addon installation with full volume lifecycle support
+- Comprehensive E2E test suite (including CCM LB and CSI volume tests)
 
 ⚠️ **Partially Complete:**
-- Addon framework (only CCM implemented, 9 addons missing)
+- Addon framework (CCM + CSI implemented, 8 addons missing)
 - Config schema (missing fields for advanced addons)
 - Advanced Talos configurations (encryption, registries, extra mounts)
 
 🔴 **Missing:**
 - CLI lifecycle commands (upgrade, destroy)
-- Most Kubernetes addons (CSI, Cilium, Ingress NGINX, RBAC, OIDC, Autoscaler, Backups, etc.)
+- Most Kubernetes addons (Cilium, Ingress NGINX, RBAC, OIDC, Autoscaler, Backups, etc.)
 - RDNS configuration
 
 ---
@@ -122,7 +123,7 @@ The migration from Terraform to a pure Go CLI is **~70% complete**. Core infrast
 
 ---
 
-### ⚠️ Step 5: Features & Addons (15% Complete)
+### ⚠️ Step 5: Features & Addons (20% Complete)
 
 **Addon Framework Status:** ✅ **Fully Wired Up**
 
@@ -142,7 +143,7 @@ if len(r.state.Kubeconfig) > 0 {
 | Addon | TDD Requirement | Implementation | Status |
 |-------|----------------|----------------|--------|
 | **Hetzner CCM** | Secret + Deployment manifest | `internal/addons/ccm.go` + `manifests/hcloud-ccm/` | ✅ Complete |
-| **Hetzner CSI** | Apply manifests | Not implemented | 🔴 **Missing** |
+| **Hetzner CSI** | Secret + Controller + Node + StorageClass | `internal/addons/csi.go` + `manifests/hcloud-csi/` | ✅ Complete |
 | **Cilium CNI** | Helm chart + IPSec key generation | Not implemented | 🔴 **Missing** |
 | **RBAC** | Generate Role/ClusterRole manifests | Not implemented | 🔴 **Missing** |
 | **OIDC** | Generate RoleBindings/ClusterRoleBindings | Not implemented | 🔴 **Missing** |
@@ -152,6 +153,20 @@ if len(r.state.Kubeconfig) > 0 {
 | **Cert Manager** | Helm with CRDs | Not implemented | 🔴 **Missing** |
 | **Metrics Server** | Helm deployment | Not implemented | 🔴 **Missing** |
 
+**CSI Implementation Details (PR #40):**
+- `internal/addons/csi.go` - CSI installation with controller replica scaling
+- `internal/addons/csi_test.go` - Unit tests
+- `internal/addons/manifests/hcloud-csi/` - 7 manifest files:
+  - `secret.yaml` - HCloud token
+  - `serviceaccount.yaml` - CSI service accounts
+  - `rbac.yaml` - RBAC with leader election support
+  - `csidriver.yaml` - CSIDriver resource
+  - `controller.yaml` - Controller deployment (1-2 replicas based on CP count)
+  - `node.yaml` - Node DaemonSet
+  - `storageclass.yaml` - Default storage class (configurable)
+- `internal/config/types.go` - CSIConfig with DefaultStorageClass, EncryptionPassphrase, StorageClasses
+- E2E tests: CSI verification + full volume lifecycle (create/mount/delete)
+
 **Addon Framework Architecture:**
 - `internal/addons/apply.go` - Entry point, iterates enabled addons
 - `internal/addons/manifests.go` - Generic templating engine (Go text/template)
@@ -160,6 +175,7 @@ if len(r.state.Kubeconfig) > 0 {
 
 **Terraform References:**
 - ✅ `terraform/hcloud.tf` (CCM) → Migrated
+- ✅ `terraform/hcloud.tf` (CSI) → Migrated (PR #40)
 - ❌ `terraform/cilium.tf` → **Not migrated** (171 lines, complex Helm config)
 - ❌ `terraform/autoscaler.tf` → **Not migrated** (131 lines, requires machine config injection)
 - ❌ `terraform/rbac.tf` → **Not migrated**
@@ -261,24 +277,19 @@ if len(r.state.Kubeconfig) > 0 {
 
 ## Prioritized Action Plan
 
-### Phase 1: Addons (Estimated: 2-3 weeks)
+### Phase 1: Addons
 
-#### 🎯 Priority 1.1: Add CSI Driver
+#### ✅ Priority 1.1: Add CSI Driver - **COMPLETE** (PR #40)
 
 **Goal:** Prove addon pattern with a simple manifest-based addon.
 
-**Tasks:**
-1. Add CSI manifests to `internal/addons/manifests/hcloud-csi/`
-   - `daemonset.yaml` - CSI node plugin
-   - `deployment.yaml` - CSI controller
-   - `secret.yaml` - Token injection
-   - `storageclass.yaml` - Default storage class
-2. Add `CSIConfig` struct to `internal/config/types.go`
-3. Implement `applyCSI()` function in `internal/addons/csi.go`
-4. Wire into `addons.Apply()`
-5. Add E2E test with PVC/PV verification
-
-**Reference:** `terraform/hcloud.tf` (CSI portion)
+**Implementation (Merged 2026-01-11):**
+- ✅ CSI manifests in `internal/addons/manifests/hcloud-csi/` (7 files)
+- ✅ `CSIConfig` struct in `internal/config/types.go` with DefaultStorageClass, EncryptionPassphrase, StorageClasses
+- ✅ `applyCSI()` function in `internal/addons/csi.go` with controller replica scaling
+- ✅ Wired into `addons.Apply()`
+- ✅ E2E tests: CSI verification + full volume lifecycle (create/mount/delete)
+- ✅ Unit tests in `internal/addons/csi_test.go`
 
 ---
 
@@ -461,74 +472,78 @@ if len(r.state.Kubeconfig) > 0 {
 | **Step 2: Infrastructure** | 100% | ✅ None |
 | **Step 3: Server & Talos** | 75% | RDNS, Encryption, Registries, Mounts |
 | **Step 4: Bootstrap** | 100% | ✅ None |
-| **Step 5: Addons** | 15% | 9/10 addons missing |
+| **Step 5: Addons** | 20% | 8/10 addons missing (CCM + CSI complete) |
 | **Step 6: Lifecycle** | 0% | Upgrade + Destroy commands |
-| **Overall** | **~70%** | ~30% remaining |
+| **Overall** | **~73%** | ~27% remaining |
 
 ---
 
 ## Immediate Next Steps
 
-### 🚀 **Recommended Starting Point: CSI Driver (Priority 1.1)**
+### ✅ **Completed: CSI Driver (Priority 1.1)** - PR #40 Merged
+
+The CSI addon has been fully implemented with:
+- Full manifest suite (7 files) with templated configuration
+- Controller replica scaling based on control plane count
+- Default storage class support (configurable)
+- Comprehensive E2E tests including full volume lifecycle (create/mount/delete)
+
+---
+
+### 🚀 **Recommended Next Step: Cilium CNI (Priority 1.2)**
 
 **Why this step:**
-- Addon framework is already wired up and proven with CCM
-- CSI is a simple manifest-based addon (no Helm complexity)
-- Enables persistent volumes for stateful workloads
-- Validates the addon pattern before tackling complex addons (Cilium, Autoscaler)
-- Quick win to build momentum
+- CNI is essential for any production cluster (pod networking)
+- More complex than CSI - introduces Helm-based addon pattern
+- Cilium is the modern default for Talos (replaces Flannel)
+- Enables network policies, encryption (IPSec/WireGuard), and observability
+- Validates Helm addon approach before tackling other Helm-based addons
+
+**Key Decisions Required:**
+
+1. **Helm Approach:**
+   - Option A: Add `helm.sh/helm/v3` dependency for native Go Helm (recommended)
+   - Option B: Pre-render templates and embed as manifests (simpler but less flexible)
+   - Option C: Shell out to `helm template` (requires helm binary)
+
+2. **Encryption Support:**
+   - IPSec key generation when `cni.encryption: ipsec`
+   - WireGuard support when `cni.encryption: wireguard`
 
 **Implementation Checklist:**
 
-1. **Create manifests directory:**
-   ```
-   internal/addons/manifests/hcloud-csi/
-   ├── secret.yaml
-   ├── controller.yaml
-   ├── node.yaml
-   └── storageclass.yaml
-   ```
-
-2. **Add config schema:**
+1. **Add config schema:**
    ```go
    // internal/config/types.go
-   type CSIConfig struct {
-       Enabled bool `mapstructure:"enabled" yaml:"enabled"`
-   }
-
-   // Add to AddonsConfig
-   CSI CSIConfig `mapstructure:"csi" yaml:"csi"`
-   ```
-
-3. **Implement addon:**
-   ```go
-   // internal/addons/csi.go
-   func applyCSI(ctx context.Context, kubeconfigPath, token string) error {
-       templateData := map[string]string{"Token": token}
-       manifestBytes, err := readAndProcessManifests("hcloud-csi", templateData)
-       if err != nil {
-           return fmt.Errorf("failed to read CSI manifests: %w", err)
-       }
-       return applyWithKubectl(ctx, kubeconfigPath, "hcloud-csi", manifestBytes)
+   type CNIConfig struct {
+       Type       string `mapstructure:"type" yaml:"type"`             // "cilium" (default), "none"
+       Encryption string `mapstructure:"encryption" yaml:"encryption"` // "none", "ipsec", "wireguard"
    }
    ```
 
-4. **Wire into Apply:**
+2. **Add Helm support or pre-rendered manifests**
+
+3. **Port Cilium Helm values from `terraform/cilium.tf` (171 lines)**
+
+4. **Implement IPSec key generation:**
    ```go
-   // internal/addons/apply.go (after CCM block)
-   if cfg.Addons.CSI.Enabled {
-       if err := applyCSI(ctx, tmpKubeconfig, cfg.HCloudToken); err != nil {
-           return fmt.Errorf("failed to install CSI: %w", err)
+   func generateIPSecKey() (string, error) {
+       // Generate random 20-byte key, encode as hex
+   }
+   ```
+
+5. **Wire into Apply:**
+   ```go
+   if cfg.Addons.CNI.Type == "cilium" {
+       if err := applyCilium(ctx, tmpKubeconfig, cfg); err != nil {
+           return fmt.Errorf("failed to install Cilium: %w", err)
        }
    }
    ```
 
-5. **Test:**
-   ```bash
-   go test -v -tags=e2e ./tests/e2e/ -run TestClusterProvisioning
-   kubectl get pods -n kube-system | grep csi
-   kubectl get storageclass
-   ```
+6. **E2E test with pod-to-pod connectivity validation**
+
+**Reference:** `terraform/cilium.tf` (171 lines)
 
 ---
 
@@ -536,11 +551,14 @@ if len(r.state.Kubeconfig) > 0 {
 
 The foundation is **excellent** with a **production-ready architecture**. Infrastructure provisioning is complete, the addon framework is properly wired and extensible, and the pipeline system provides clean phase orchestration.
 
-**Key insight:** The migration status was previously underestimated. Infrastructure is 100% complete (not 70%), and the addon framework is fully operational (not missing wiring).
+**Recent Progress (PR #40):**
+- ✅ CSI addon fully implemented with comprehensive E2E tests
+- ✅ CCM Load Balancer lifecycle E2E test added
+- ✅ Volume lifecycle testing (create/mount/delete) validated
 
 **Primary remaining work:**
-1. **Addon implementations** - Following the proven CCM pattern
+1. **Addon implementations** - Following the proven CCM/CSI pattern
 2. **Lifecycle commands** - Upgrade and destroy CLI commands
 3. **Config schema extensions** - Fields for advanced features
 
-The recommended path is to start with **CSI Driver** as it validates the addon pattern with minimal complexity, then progressively tackle more complex addons (Cilium, Autoscaler) and lifecycle operations.
+The recommended path is **Cilium CNI** as the next addon - it introduces the Helm pattern needed for several other addons (Autoscaler, Cert Manager, Ingress NGINX, Metrics Server) while providing essential cluster networking.

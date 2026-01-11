@@ -158,9 +158,74 @@ type OIDCConfig struct {
 	ClientID  string `mapstructure:"client_id" yaml:"client_id"`
 }
 
-// CNIConfig defines the CNI-related configuration.
+// CNIConfig defines the CNI-related configuration (Cilium).
 type CNIConfig struct {
-	Encryption string `mapstructure:"encryption" yaml:"encryption"` // ipsec, wireguard
+	// Enabled controls whether Cilium CNI is installed.
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// HelmVersion is the Cilium chart version.
+	HelmVersion string `mapstructure:"helm_version" yaml:"helm_version"`
+
+	// KubeProxyReplacement enables Cilium's eBPF kube-proxy replacement.
+	KubeProxyReplacement bool `mapstructure:"kube_proxy_replacement" yaml:"kube_proxy_replacement"`
+
+	// RoutingMode: "native" or "tunnel".
+	RoutingMode string `mapstructure:"routing_mode" yaml:"routing_mode"`
+
+	// BPFDatapathMode: "veth", "netkit", or "netkit-l2".
+	BPFDatapathMode string `mapstructure:"bpf_datapath_mode" yaml:"bpf_datapath_mode"`
+
+	// Encryption settings for transparent network encryption.
+	Encryption CiliumEncryptionConfig `mapstructure:"encryption" yaml:"encryption"`
+
+	// Hubble observability settings.
+	Hubble CiliumHubbleConfig `mapstructure:"hubble" yaml:"hubble"`
+
+	// GatewayAPI settings.
+	GatewayAPI CiliumGatewayAPIConfig `mapstructure:"gateway_api" yaml:"gateway_api"`
+
+	// ExtraHelmValues for advanced customization (merged with defaults).
+	ExtraHelmValues map[string]interface{} `mapstructure:"extra_helm_values" yaml:"extra_helm_values"`
+}
+
+// CiliumEncryptionConfig defines encryption settings for Cilium.
+type CiliumEncryptionConfig struct {
+	// Enabled turns on transparent network encryption.
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Type: "wireguard" (default) or "ipsec".
+	Type string `mapstructure:"type" yaml:"type"`
+
+	// IPSec settings (only used when Type="ipsec").
+	IPSec CiliumIPSecConfig `mapstructure:"ipsec" yaml:"ipsec"`
+}
+
+// CiliumIPSecConfig defines IPSec-specific settings.
+type CiliumIPSecConfig struct {
+	// Algorithm: default "rfc4106(gcm(aes))".
+	Algorithm string `mapstructure:"algorithm" yaml:"algorithm"`
+
+	// KeySize in bits: 128, 192, or 256.
+	KeySize int `mapstructure:"key_size" yaml:"key_size"`
+
+	// KeyID for key rotation (1-15).
+	KeyID int `mapstructure:"key_id" yaml:"key_id"`
+
+	// Key is the pre-generated IPSec key (optional, generated if empty).
+	Key string `mapstructure:"key" yaml:"key"`
+}
+
+// CiliumHubbleConfig defines Hubble observability settings.
+type CiliumHubbleConfig struct {
+	Enabled      bool `mapstructure:"enabled" yaml:"enabled"`
+	RelayEnabled bool `mapstructure:"relay_enabled" yaml:"relay_enabled"`
+	UIEnabled    bool `mapstructure:"ui_enabled" yaml:"ui_enabled"`
+}
+
+// CiliumGatewayAPIConfig defines Gateway API settings.
+type CiliumGatewayAPIConfig struct {
+	Enabled               bool   `mapstructure:"enabled" yaml:"enabled"`
+	ExternalTrafficPolicy string `mapstructure:"external_traffic_policy" yaml:"external_traffic_policy"`
 }
 
 // AddonsConfig defines the addon-related configuration.

@@ -58,6 +58,11 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("worker validation failed: %w", err)
 	}
 
+	// CNI validation
+	if err := c.validateCNI(); err != nil {
+		return fmt.Errorf("CNI validation failed: %w", err)
+	}
+
 	return nil
 }
 
@@ -170,6 +175,74 @@ func (c *Config) validateWorkers() error {
 		if pool.Count < 0 {
 			return fmt.Errorf("worker node pool %s: count cannot be negative, got %d", pool.Name, pool.Count)
 		}
+	}
+
+	return nil
+}
+
+// validateCNI validates CNI (Cilium) configuration.
+func (c *Config) validateCNI() error {
+	cni := c.Kubernetes.CNI
+
+	// Skip validation if CNI is disabled
+	if !cni.Enabled {
+		return nil
+	}
+
+	// Validate routing mode
+	validRoutingModes := map[string]bool{"native": true, "tunnel": true}
+	if cni.RoutingMode != "" && !validRoutingModes[cni.RoutingMode] {
+		return fmt.Errorf("invalid routing_mode %q: must be 'native' or 'tunnel'", cni.RoutingMode)
+	}
+
+	// Validate BPF datapath mode
+	validDatapathModes := map[string]bool{"veth": true, "netkit": true, "netkit-l2": true}
+	if cni.BPFDatapathMode != "" && !validDatapathModes[cni.BPFDatapathMode] {
+		return fmt.Errorf("invalid bpf_datapath_mode %q: must be 'veth', 'netkit', or 'netkit-l2'", cni.BPFDatapathMode)
+	}
+
+	// Validate encryption configuration
+	if cni.Encryption.Enabled {
+		validEncryptionTypes := map[string]bool{"wireguard": true, "ipsec": true}
+		if cni.Encryption.Type != "" && !validEncryptionTypes[cni.Encryption.Type] {
+			return fmt.Errorf("invalid encryption type %q: must be 'wireguard' or 'ipsec'", cni.Encryption.Type)
+		}
+
+		// IPSec-specific validation
+		if cni.Encryption.Type == "ipsec" {
+			ipsec := cni.Encryption.IPSec
+
+			// Validate key size
+			validKeySizes := map[int]bool{128: true, 192: true, 256: true}
+			if ipsec.KeySize != 0 && !validKeySizes[ipsec.KeySize] {
+				return fmt.Errorf("invalid IPSec key_size %d: must be 128, 192, or 256", ipsec.KeySize)
+			}
+
+			// Validate key ID
+			if ipsec.KeyID != 0 && (ipsec.KeyID < 1 || ipsec.KeyID > 15) {
+				return fmt.Errorf("invalid IPSec key_id %d: must be between 1 and 15", ipsec.KeyID)
+			}
+
+			// IPSec is not compatible with netkit modes
+			if cni.BPFDatapathMode == "netkit" || cni.BPFDatapathMode == "netkit-l2" {
+				return fmt.Errorf("IPSec encryption is not compatible with BPF datapath mode %q", cni.BPFDatapathMode)
+			}
+		}
+	}
+
+	// Validate Hubble dependencies
+	if cni.Hubble.UIEnabled && !cni.Hubble.RelayEnabled {
+		return fmt.Errorf("hubble.ui_enabled requires hubble.relay_enabled to be true")
+	}
+	if cni.Hubble.RelayEnabled && !cni.Hubble.Enabled {
+		return fmt.Errorf("hubble.relay_enabled requires hubble.enabled to be true")
+	}
+
+	// Validate Gateway API traffic policy
+	validTrafficPolicies := map[string]bool{"Cluster": true, "Local": true}
+	if cni.GatewayAPI.ExternalTrafficPolicy != "" && !validTrafficPolicies[cni.GatewayAPI.ExternalTrafficPolicy] {
+		return fmt.Errorf("invalid gateway_api.external_traffic_policy %q: must be 'Cluster' or 'Local'",
+			cni.GatewayAPI.ExternalTrafficPolicy)
 	}
 
 	return nil
