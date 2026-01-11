@@ -54,6 +54,13 @@ func NewRealClient(token string, opts ...ClientOption) *RealClient {
 	return c
 }
 
+// HCloudClient returns the underlying hcloud.Client for advanced operations.
+// Use this when you need direct access to Hetzner Cloud API features not
+// exposed through the RealClient interface.
+func (c *RealClient) HCloudClient() *hcloud.Client {
+	return c.client
+}
+
 // GetPublicIP returns the public IPv4 address of the host.
 func (c *RealClient) GetPublicIP(ctx context.Context) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", "https://ipv4.icanhazip.com", nil)

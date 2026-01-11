@@ -47,3 +47,13 @@ addons:
   # Enabled by default - set to false to disable.
   ccm:
     enabled: true
+
+  # Hetzner Cloud CSI Driver
+  # Provides persistent volume support using Hetzner Cloud Volumes.
+  # Requires CCM to be enabled for proper cloud provider integration.
+  csi:
+    enabled: true
+    # Whether to set hcloud-volumes as the default StorageClass
+    default_storage_class: true
+    # Optional: encryption passphrase for encrypted volumes (auto-generated if not set)
+    # encryption_passphrase: "your-secure-passphrase"
