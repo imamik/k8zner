@@ -7,7 +7,7 @@
 
 ## Executive Summary
 
-The migration from Terraform to a pure Go CLI is **~73% complete**. Core infrastructure provisioning is fully functional with excellent architecture, comprehensive test coverage, and working addon framework. The primary gaps are in **Day-2 operations** (upgrade/destroy), **advanced addons**, and **config schema extensions**.
+The migration from Terraform to a pure Go CLI is **~75% complete**. Core infrastructure provisioning is fully functional with excellent architecture, comprehensive test coverage, and working addon framework. The primary gaps are in **Day-2 operations** (upgrade/destroy), **advanced addons**, and **config schema extensions**.
 
 ### Current State
 
@@ -18,10 +18,11 @@ The migration from Terraform to a pure Go CLI is **~73% complete**. Core infrast
 - Cluster bootstrap with Talos
 - CCM addon installation (fully wired into reconciliation flow)
 - CSI addon installation with full volume lifecycle support
+- Cilium CNI addon with native Go Helm SDK (WireGuard/IPSec encryption)
 - Comprehensive E2E test suite (including CCM LB and CSI volume tests)
 
 ⚠️ **Partially Complete:**
-- Addon framework (CCM + CSI implemented, 8 addons missing)
+- Addon framework (CCM + CSI + Cilium implemented, 7 addons missing)
 - Config schema (missing fields for advanced addons)
 - Advanced Talos configurations (encryption, registries, extra mounts)
 
@@ -123,7 +124,7 @@ The migration from Terraform to a pure Go CLI is **~73% complete**. Core infrast
 
 ---
 
-### ⚠️ Step 5: Features & Addons (20% Complete)
+### ⚠️ Step 5: Features & Addons (30% Complete)
 
 **Addon Framework Status:** ✅ **Fully Wired Up**
 
@@ -144,7 +145,7 @@ if len(r.state.Kubeconfig) > 0 {
 |-------|----------------|----------------|--------|
 | **Hetzner CCM** | Secret + Deployment manifest | `internal/addons/ccm.go` + `manifests/hcloud-ccm/` | ✅ Complete |
 | **Hetzner CSI** | Secret + Controller + Node + StorageClass | `internal/addons/csi.go` + `manifests/hcloud-csi/` | ✅ Complete |
-| **Cilium CNI** | Helm chart + IPSec key generation | Not implemented | 🔴 **Missing** |
+| **Cilium CNI** | Helm chart + IPSec key generation | `internal/addons/cilium.go` + Helm client | ✅ Complete |
 | **RBAC** | Generate Role/ClusterRole manifests | Not implemented | 🔴 **Missing** |
 | **OIDC** | Generate RoleBindings/ClusterRoleBindings | Not implemented | 🔴 **Missing** |
 | **Autoscaler** | Helm + config secret with full machine config | Not implemented | 🔴 **Missing** |
@@ -167,6 +168,28 @@ if len(r.state.Kubeconfig) > 0 {
 - `internal/config/types.go` - CSIConfig with DefaultStorageClass, EncryptionPassphrase, StorageClasses
 - E2E tests: CSI verification + full volume lifecycle (create/mount/delete)
 
+**Cilium Implementation Details (feature/cilium-addon branch):**
+- `internal/addons/helm/` - Reusable Helm client package:
+  - `restclient.go` - InMemoryRESTClientGetter for kubeconfig bytes
+  - `client.go` - Helm client with InstallOrUpgrade method
+- `internal/addons/cilium.go` - Cilium installation with:
+  - Native Go Helm SDK (helm.sh/helm/v3)
+  - Full Helm values matching terraform/cilium.tf (171 lines)
+  - IPSec secret creation when encryption type is ipsec
+  - WireGuard (default) and IPSec encryption support
+  - Talos-specific configuration (cgroup, KubePrism endpoint)
+  - Operator HA (1-2 replicas based on control plane count)
+- `internal/crypto/ipsec/` - IPSec key generation:
+  - GenerateKey() for random key generation
+  - CreateSecretManifest() for Kubernetes secret
+- `internal/config/types.go` - CNIConfig with full Cilium settings:
+  - HelmVersion, RoutingMode, BPFDatapathMode
+  - Encryption (WireGuard/IPSec with key settings)
+  - Hubble observability settings
+  - GatewayAPI settings
+  - ExtraHelmValues for customization
+- Comprehensive unit tests in cilium_test.go
+
 **Addon Framework Architecture:**
 - `internal/addons/apply.go` - Entry point, iterates enabled addons
 - `internal/addons/manifests.go` - Generic templating engine (Go text/template)
@@ -176,7 +199,7 @@ if len(r.state.Kubeconfig) > 0 {
 **Terraform References:**
 - ✅ `terraform/hcloud.tf` (CCM) → Migrated
 - ✅ `terraform/hcloud.tf` (CSI) → Migrated (PR #40)
-- ❌ `terraform/cilium.tf` → **Not migrated** (171 lines, complex Helm config)
+- ✅ `terraform/cilium.tf` → Migrated (feature/cilium-addon branch)
 - ❌ `terraform/autoscaler.tf` → **Not migrated** (131 lines, requires machine config injection)
 - ❌ `terraform/rbac.tf` → **Not migrated**
 - ❌ `terraform/oidc.tf` → **Not migrated**
@@ -472,9 +495,9 @@ if len(r.state.Kubeconfig) > 0 {
 | **Step 2: Infrastructure** | 100% | ✅ None |
 | **Step 3: Server & Talos** | 75% | RDNS, Encryption, Registries, Mounts |
 | **Step 4: Bootstrap** | 100% | ✅ None |
-| **Step 5: Addons** | 20% | 8/10 addons missing (CCM + CSI complete) |
+| **Step 5: Addons** | 30% | 7/10 addons missing (CCM + CSI + Cilium complete) |
 | **Step 6: Lifecycle** | 0% | Upgrade + Destroy commands |
-| **Overall** | **~73%** | ~27% remaining |
+| **Overall** | **~75%** | ~25% remaining |
 
 ---
 
