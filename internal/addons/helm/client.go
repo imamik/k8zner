@@ -35,7 +35,7 @@ func NewClient(kubeconfig []byte, namespace string) (*Client, error) {
 	restGetter := NewInMemoryRESTClientGetter(kubeconfig, namespace)
 
 	// Initialize with a no-op logger (suppress debug output)
-	if err := actionConfig.Init(restGetter, namespace, "secret", func(format string, v ...interface{}) {}); err != nil {
+	if err := actionConfig.Init(restGetter, namespace, "secret", func(_ string, _ ...interface{}) {}); err != nil {
 		return nil, fmt.Errorf("failed to initialize helm action config: %w", err)
 	}
 

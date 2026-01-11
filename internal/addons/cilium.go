@@ -153,9 +153,9 @@ func buildCiliumValues(cfg *config.Config, controlPlaneCount int) map[string]any
 		},
 		// Gateway API
 		"gatewayAPI": map[string]any{
-			"enabled":             cniCfg.GatewayAPI.Enabled,
-			"enableAppProtocol":   true,
-			"enableAlpn":          true,
+			"enabled":           cniCfg.GatewayAPI.Enabled,
+			"enableAppProtocol": true,
+			"enableAlpn":        true,
 			"externalTrafficPolicy": func() string {
 				if cniCfg.GatewayAPI.ExternalTrafficPolicy != "" {
 					return cniCfg.GatewayAPI.ExternalTrafficPolicy

@@ -159,11 +159,7 @@ func shouldEnableKubeProxyReplacementByDefault(rawConfig map[string]interface{})
 	}
 
 	_, explicitlySet := cniMap["kube_proxy_replacement"]
-	if !explicitlySet {
-		return true
-	}
-
-	return false
+	return !explicitlySet
 }
 
 // shouldEnableEncryptionByDefault determines if encryption should be enabled.
@@ -184,9 +180,5 @@ func shouldEnableEncryptionByDefault(rawConfig map[string]interface{}) bool {
 	}
 
 	_, explicitlySet := encryptionMap["enabled"]
-	if !explicitlySet {
-		return true
-	}
-
-	return false
+	return !explicitlySet
 }
