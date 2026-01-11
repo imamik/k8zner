@@ -11,8 +11,8 @@ import (
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/cli"
+	"helm.sh/helm/v3/pkg/downloader"
 	"helm.sh/helm/v3/pkg/getter"
-	"helm.sh/helm/v3/pkg/registry"
 	"helm.sh/helm/v3/pkg/release"
 	"helm.sh/helm/v3/pkg/repo"
 )
@@ -94,17 +94,26 @@ func (c *Client) upgrade(ctx context.Context, releaseName, repoURL, chartName, v
 func (c *Client) loadChart(repoURL, chartName, version string) (*chart.Chart, error) {
 	settings := cli.New()
 
-	// Create registry client for OCI support
-	registryClient, err := registry.NewClient(
-		registry.ClientOptDebug(false),
-		registry.ClientOptWriter(io.Discard),
-	)
+	// Create a temporary directory for downloading the chart
+	tempDir, err := os.MkdirTemp("", "helm-chart-*")
 	if err != nil {
-		return nil, fmt.Errorf("failed to create registry client: %w", err)
+		return nil, fmt.Errorf("failed to create temp dir: %w", err)
+	}
+	defer func() {
+		_ = os.RemoveAll(tempDir)
+	}()
+
+	// Download the chart
+	dl := downloader.ChartDownloader{
+		Out:              io.Discard,
+		Verify:           downloader.VerifyNever,
+		Getters:          getter.All(settings),
+		RepositoryConfig: settings.RepositoryConfig,
+		RepositoryCache:  settings.RepositoryCache,
 	}
 
-	// Find the chart in the repository
-	chartPath, err := repo.FindChartInRepoURL(
+	// Find and download the chart
+	chartURL, err := repo.FindChartInRepoURL(
 		repoURL,
 		chartName,
 		version,
@@ -115,15 +124,14 @@ func (c *Client) loadChart(repoURL, chartName, version string) (*chart.Chart, er
 		return nil, fmt.Errorf("failed to find chart %s in repo %s: %w", chartName, repoURL, err)
 	}
 
-	// Clean up the downloaded chart after loading
-	defer func() {
-		_ = os.Remove(chartPath)
-	}()
+	// Download to temp directory
+	saved, _, err := dl.DownloadTo(chartURL, version, tempDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download chart from %s: %w", chartURL, err)
+	}
 
-	// Suppress registry client warning by setting it
-	_ = registryClient
-
-	return loader.Load(chartPath)
+	// Load the downloaded chart
+	return loader.Load(saved)
 }
 
 // Uninstall removes a Helm release.
