@@ -22,14 +22,12 @@ func TestBuildMetricsServerValues(t *testing.T) {
 			name: "single control plane with workers",
 			cfg: &config.Config{
 				ControlPlane: config.ControlPlaneConfig{
-					NodePools: []config.NodePoolConfig{
+					NodePools: []config.ControlPlaneNodePool{
 						{Count: 1},
 					},
 				},
-				Workers: config.WorkersConfig{
-					NodePools: []config.NodePoolConfig{
-						{Count: 3},
-					},
+				Workers: []config.WorkerNodePool{
+					{Count: 3},
 				},
 			},
 			expectedReplicas:         2,
@@ -41,14 +39,12 @@ func TestBuildMetricsServerValues(t *testing.T) {
 			name: "HA control plane with workers",
 			cfg: &config.Config{
 				ControlPlane: config.ControlPlaneConfig{
-					NodePools: []config.NodePoolConfig{
+					NodePools: []config.ControlPlaneNodePool{
 						{Count: 3},
 					},
 				},
-				Workers: config.WorkersConfig{
-					NodePools: []config.NodePoolConfig{
-						{Count: 5},
-					},
+				Workers: []config.WorkerNodePool{
+					{Count: 5},
 				},
 			},
 			expectedReplicas:         2,
@@ -60,13 +56,11 @@ func TestBuildMetricsServerValues(t *testing.T) {
 			name: "control plane only cluster",
 			cfg: &config.Config{
 				ControlPlane: config.ControlPlaneConfig{
-					NodePools: []config.NodePoolConfig{
+					NodePools: []config.ControlPlaneNodePool{
 						{Count: 3},
 					},
 				},
-				Workers: config.WorkersConfig{
-					NodePools: []config.NodePoolConfig{},
-				},
+				Workers: []config.WorkerNodePool{},
 			},
 			expectedReplicas:         2,
 			expectedScheduleOnCP:     true,
@@ -77,13 +71,11 @@ func TestBuildMetricsServerValues(t *testing.T) {
 			name: "single control plane only",
 			cfg: &config.Config{
 				ControlPlane: config.ControlPlaneConfig{
-					NodePools: []config.NodePoolConfig{
+					NodePools: []config.ControlPlaneNodePool{
 						{Count: 1},
 					},
 				},
-				Workers: config.WorkersConfig{
-					NodePools: []config.NodePoolConfig{},
-				},
+				Workers: []config.WorkerNodePool{},
 			},
 			expectedReplicas:         1,
 			expectedScheduleOnCP:     true,

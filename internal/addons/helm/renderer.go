@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
@@ -71,7 +70,6 @@ func (r *Renderer) renderChart(ch *chart.Chart, values Values) ([]byte, error) {
 
 	// Render templates
 	settings := cli.New()
-	actionConfig := new(action.Configuration)
 
 	eng := engine.Engine{
 		Strict:   false,

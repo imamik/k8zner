@@ -110,13 +110,13 @@ func buildCertManagerValues(cfg *config.Config) helm.Values {
 			},
 		},
 		// Apply configuration to all components
-		"replicaCount":               controllerConfig["replicaCount"],
-		"podDisruptionBudget":        controllerConfig["podDisruptionBudget"],
-		"topologySpreadConstraints":  controllerConfig["topologySpreadConstraints"],
-		"nodeSelector":               controllerConfig["nodeSelector"],
-		"tolerations":                controllerConfig["tolerations"],
-		"webhook":                    webhookConfig,
-		"cainjector":                 cainjectorConfig,
+		"replicaCount":              controllerConfig["replicaCount"],
+		"podDisruptionBudget":       controllerConfig["podDisruptionBudget"],
+		"topologySpreadConstraints": controllerConfig["topologySpreadConstraints"],
+		"nodeSelector":              controllerConfig["nodeSelector"],
+		"tolerations":               controllerConfig["tolerations"],
+		"webhook":                   webhookConfig,
+		"cainjector":                cainjectorConfig,
 	}
 }
 

@@ -52,11 +52,11 @@ func buildIngressNginxValues(cfg *config.Config) helm.Values {
 				"enabled": true,
 			},
 		},
-		"kind":                      "Deployment",
-		"replicaCount":              replicas,
-		"minAvailable":              nil,
-		"maxUnavailable":            1,
-		"watchIngressWithoutClass":  true,
+		"kind":                       "Deployment",
+		"replicaCount":               replicas,
+		"minAvailable":               nil,
+		"maxUnavailable":             1,
+		"watchIngressWithoutClass":   true,
 		"enableTopologyAwareRouting": false,
 	}
 

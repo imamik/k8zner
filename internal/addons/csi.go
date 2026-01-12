@@ -79,16 +79,16 @@ func buildCSIValues(controlPlaneCount int, encryptionKey string, defaultStorageC
 		},
 		"storageClasses": []helm.Values{
 			{
-				"name":          "hcloud-volumes",
+				"name":                "hcloud-volumes",
 				"defaultStorageClass": defaultStorageClass,
-				"reclaimPolicy": "Delete",
+				"reclaimPolicy":       "Delete",
 			},
 		},
 		"secret": helm.Values{
 			"create": true,
 			"data": helm.Values{
-				"token":                  "",  // Token set via hcloud secret
-				"encryption-passphrase":  encryptionKey,
+				"token":                 "", // Token set via hcloud secret
+				"encryption-passphrase": encryptionKey,
 			},
 		},
 	}

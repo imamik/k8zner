@@ -46,10 +46,8 @@ func TestBuildIngressNginxValues(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &config.Config{
-				Workers: config.WorkersConfig{
-					NodePools: []config.NodePoolConfig{
-						{Count: tt.workerCount},
-					},
+				Workers: []config.WorkerNodePool{
+					{Count: tt.workerCount},
 				},
 				Addons: config.AddonsConfig{
 					IngressNginx: config.IngressNginxConfig{
@@ -144,18 +142,18 @@ func TestBuildIngressNginxValues(t *testing.T) {
 
 func TestBuildIngressNginxTopologySpread(t *testing.T) {
 	tests := []struct {
-		name                      string
-		workerCount               int
+		name                          string
+		workerCount                   int
 		expectedHostnameUnsatisfiable string
 	}{
 		{
-			name:                      "single worker - soft constraint",
-			workerCount:               1,
+			name:                          "single worker - soft constraint",
+			workerCount:                   1,
 			expectedHostnameUnsatisfiable: "ScheduleAnyway",
 		},
 		{
-			name:                      "multiple workers - hard constraint",
-			workerCount:               3,
+			name:                          "multiple workers - hard constraint",
+			workerCount:                   3,
 			expectedHostnameUnsatisfiable: "DoNotSchedule",
 		},
 	}

@@ -6,13 +6,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
+	yamlpkg "gopkg.in/yaml.v3"
 
 	"hcloud-k8s/internal/config"
 )
 
 func TestCollectUniqueClusterRoles(t *testing.T) {
-	mappings := []config.OIDCGroupMapping{
+	mappings := []config.OIDCRBACGroupMapping{
 		{
 			Group:        "admins",
 			ClusterRoles: []string{"cluster-admin", "view"},
@@ -37,17 +37,17 @@ func TestCollectUniqueClusterRoles(t *testing.T) {
 }
 
 func TestCollectUniqueRoles(t *testing.T) {
-	mappings := []config.OIDCGroupMapping{
+	mappings := []config.OIDCRBACGroupMapping{
 		{
 			Group: "team-a",
-			Roles: []config.OIDCRole{
+			Roles: []config.OIDCRBACRole{
 				{Name: "developer", Namespace: "team-a"},
 				{Name: "viewer", Namespace: "default"},
 			},
 		},
 		{
 			Group: "team-b",
-			Roles: []config.OIDCRole{
+			Roles: []config.OIDCRBACRole{
 				{Name: "developer", Namespace: "team-b"},
 				{Name: "viewer", Namespace: "default"}, // Duplicate
 			},
@@ -71,7 +71,7 @@ func TestCollectUniqueRoles(t *testing.T) {
 }
 
 func TestGenerateClusterRoleBinding(t *testing.T) {
-	mappings := []config.OIDCGroupMapping{
+	mappings := []config.OIDCRBACGroupMapping{
 		{
 			Group:        "admins",
 			ClusterRoles: []string{"cluster-admin", "view"},
@@ -98,7 +98,7 @@ func TestGenerateClusterRoleBinding(t *testing.T) {
 
 	// Parse and verify structure
 	var binding map[string]any
-	err := yaml3.Unmarshal([]byte(yaml), &binding)
+	err := yamlpkg.Unmarshal([]byte(yaml), &binding)
 	require.NoError(t, err)
 
 	subjects := binding["subjects"].([]any)
@@ -106,7 +106,7 @@ func TestGenerateClusterRoleBinding(t *testing.T) {
 }
 
 func TestGenerateClusterRoleBindingSingleGroup(t *testing.T) {
-	mappings := []config.OIDCGroupMapping{
+	mappings := []config.OIDCRBACGroupMapping{
 		{
 			Group:        "admins",
 			ClusterRoles: []string{"cluster-admin"},
@@ -121,7 +121,7 @@ func TestGenerateClusterRoleBindingSingleGroup(t *testing.T) {
 
 	// Parse and verify single subject
 	var binding map[string]any
-	err := yaml3.Unmarshal([]byte(yaml), &binding)
+	err := yamlpkg.Unmarshal([]byte(yaml), &binding)
 	require.NoError(t, err)
 
 	subjects := binding["subjects"].([]any)
@@ -129,21 +129,21 @@ func TestGenerateClusterRoleBindingSingleGroup(t *testing.T) {
 }
 
 func TestGenerateRoleBinding(t *testing.T) {
-	role := config.OIDCRole{
+	role := config.OIDCRBACRole{
 		Name:      "developer",
 		Namespace: "team-a",
 	}
 
-	mappings := []config.OIDCGroupMapping{
+	mappings := []config.OIDCRBACGroupMapping{
 		{
 			Group: "team-a-devs",
-			Roles: []config.OIDCRole{
+			Roles: []config.OIDCRBACRole{
 				{Name: "developer", Namespace: "team-a"},
 			},
 		},
 		{
 			Group: "team-a-leads",
-			Roles: []config.OIDCRole{
+			Roles: []config.OIDCRBACRole{
 				{Name: "developer", Namespace: "team-a"},
 			},
 		},
@@ -166,7 +166,7 @@ func TestGenerateRoleBinding(t *testing.T) {
 
 	// Parse and verify structure
 	var binding map[string]any
-	err := yaml3.Unmarshal([]byte(yaml), &binding)
+	err := yamlpkg.Unmarshal([]byte(yaml), &binding)
 	require.NoError(t, err)
 
 	subjects := binding["subjects"].([]any)
@@ -177,15 +177,15 @@ func TestGenerateRoleBinding(t *testing.T) {
 }
 
 func TestGenerateRoleBindingSingleGroup(t *testing.T) {
-	role := config.OIDCRole{
+	role := config.OIDCRBACRole{
 		Name:      "viewer",
 		Namespace: "default",
 	}
 
-	mappings := []config.OIDCGroupMapping{
+	mappings := []config.OIDCRBACGroupMapping{
 		{
 			Group: "viewers",
-			Roles: []config.OIDCRole{
+			Roles: []config.OIDCRBACRole{
 				{Name: "viewer", Namespace: "default"},
 			},
 		},
@@ -198,7 +198,7 @@ func TestGenerateRoleBindingSingleGroup(t *testing.T) {
 
 	// Parse and verify single subject
 	var binding map[string]any
-	err := yaml3.Unmarshal([]byte(yaml), &binding)
+	err := yamlpkg.Unmarshal([]byte(yaml), &binding)
 	require.NoError(t, err)
 
 	subjects := binding["subjects"].([]any)
@@ -206,21 +206,21 @@ func TestGenerateRoleBindingSingleGroup(t *testing.T) {
 }
 
 func TestOIDCFullFlow(t *testing.T) {
-	oidc := config.OIDCConfig{
+	oidc := config.OIDCRBACConfig{
 		Enabled:      true,
 		GroupsPrefix: "oidc:",
-		GroupMappings: []config.OIDCGroupMapping{
+		GroupMappings: []config.OIDCRBACGroupMapping{
 			{
 				Group:        "admins",
 				ClusterRoles: []string{"cluster-admin"},
-				Roles: []config.OIDCRole{
+				Roles: []config.OIDCRBACRole{
 					{Name: "developer", Namespace: "default"},
 				},
 			},
 			{
 				Group:        "developers",
 				ClusterRoles: []string{"view"},
-				Roles: []config.OIDCRole{
+				Roles: []config.OIDCRBACRole{
 					{Name: "developer", Namespace: "default"},
 					{Name: "viewer", Namespace: "team-a"},
 				},
@@ -262,7 +262,7 @@ func TestOIDCFullFlow(t *testing.T) {
 }
 
 func TestOIDCEmptyMappings(t *testing.T) {
-	mappings := []config.OIDCGroupMapping{}
+	mappings := []config.OIDCRBACGroupMapping{}
 
 	clusterRoles := collectUniqueClusterRoles(mappings)
 	assert.Len(t, clusterRoles, 0)
@@ -300,7 +300,7 @@ func TestOIDCGroupsPrefix(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mappings := []config.OIDCGroupMapping{
+			mappings := []config.OIDCRBACGroupMapping{
 				{
 					Group:        tt.group,
 					ClusterRoles: []string{"view"},

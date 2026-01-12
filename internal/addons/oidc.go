@@ -13,13 +13,13 @@ import (
 // applyOIDC installs OIDC RBAC role bindings and cluster role bindings.
 // See: terraform/oidc.tf
 func applyOIDC(ctx context.Context, kubeconfigPath string, cfg *config.Config) error {
-	if len(cfg.Addons.OIDC.GroupMappings) == 0 {
+	if len(cfg.Addons.OIDCRBAC.GroupMappings) == 0 {
 		return nil // Nothing to apply
 	}
 
 	// Collect unique cluster roles and roles from all group mappings
-	clusterRoles := collectUniqueClusterRoles(cfg.Addons.OIDC.GroupMappings)
-	roles := collectUniqueRoles(cfg.Addons.OIDC.GroupMappings)
+	clusterRoles := collectUniqueClusterRoles(cfg.Addons.OIDCRBAC.GroupMappings)
+	roles := collectUniqueRoles(cfg.Addons.OIDCRBAC.GroupMappings)
 
 	var manifests []string
 
@@ -27,8 +27,8 @@ func applyOIDC(ctx context.Context, kubeconfigPath string, cfg *config.Config) e
 	for _, clusterRole := range clusterRoles {
 		binding := generateClusterRoleBinding(
 			clusterRole,
-			cfg.Addons.OIDC.GroupMappings,
-			cfg.Addons.OIDC.GroupsPrefix,
+			cfg.Addons.OIDCRBAC.GroupMappings,
+			cfg.Addons.OIDCRBAC.GroupsPrefix,
 		)
 		manifests = append(manifests, binding)
 	}
@@ -37,8 +37,8 @@ func applyOIDC(ctx context.Context, kubeconfigPath string, cfg *config.Config) e
 	for _, role := range roles {
 		binding := generateRoleBinding(
 			role,
-			cfg.Addons.OIDC.GroupMappings,
-			cfg.Addons.OIDC.GroupsPrefix,
+			cfg.Addons.OIDCRBAC.GroupMappings,
+			cfg.Addons.OIDCRBAC.GroupsPrefix,
 		)
 		manifests = append(manifests, binding)
 	}
@@ -58,7 +58,7 @@ func applyOIDC(ctx context.Context, kubeconfigPath string, cfg *config.Config) e
 
 // collectUniqueClusterRoles extracts all unique cluster role names.
 // See: terraform/oidc.tf lines 3-5
-func collectUniqueClusterRoles(mappings []config.OIDCGroupMapping) []string {
+func collectUniqueClusterRoles(mappings []config.OIDCRBACGroupMapping) []string {
 	roleSet := make(map[string]bool)
 	for _, mapping := range mappings {
 		for _, role := range mapping.ClusterRoles {
@@ -75,8 +75,8 @@ func collectUniqueClusterRoles(mappings []config.OIDCGroupMapping) []string {
 
 // collectUniqueRoles extracts all unique roles (by namespace/name).
 // See: terraform/oidc.tf lines 8-14
-func collectUniqueRoles(mappings []config.OIDCGroupMapping) []config.OIDCRole {
-	roleMap := make(map[string]config.OIDCRole)
+func collectUniqueRoles(mappings []config.OIDCRBACGroupMapping) []config.OIDCRBACRole {
+	roleMap := make(map[string]config.OIDCRBACRole)
 	for _, mapping := range mappings {
 		for _, role := range mapping.Roles {
 			key := role.Namespace + "/" + role.Name
@@ -84,7 +84,7 @@ func collectUniqueRoles(mappings []config.OIDCGroupMapping) []config.OIDCRole {
 		}
 	}
 
-	var roles []config.OIDCRole
+	var roles []config.OIDCRBACRole
 	for _, role := range roleMap {
 		roles = append(roles, role)
 	}
@@ -93,7 +93,7 @@ func collectUniqueRoles(mappings []config.OIDCGroupMapping) []config.OIDCRole {
 
 // generateClusterRoleBinding creates a ClusterRoleBinding manifest.
 // See: terraform/oidc.tf lines 17-42
-func generateClusterRoleBinding(clusterRole string, mappings []config.OIDCGroupMapping, groupsPrefix string) string {
+func generateClusterRoleBinding(clusterRole string, mappings []config.OIDCRBACGroupMapping, groupsPrefix string) string {
 	// Find all groups that have this cluster role
 	var subjects []map[string]any
 	for _, mapping := range mappings {
@@ -129,9 +129,7 @@ func generateClusterRoleBinding(clusterRole string, mappings []config.OIDCGroupM
 
 // generateRoleBinding creates a RoleBinding manifest.
 // See: terraform/oidc.tf lines 45-71
-func generateRoleBinding(role config.OIDCRole, mappings []config.OIDCGroupMapping, groupsPrefix string) string {
-	roleKey := role.Namespace + "/" + role.Name
-
+func generateRoleBinding(role config.OIDCRBACRole, mappings []config.OIDCRBACGroupMapping, groupsPrefix string) string {
 	// Find all groups that have this role
 	var subjects []map[string]any
 	for _, mapping := range mappings {

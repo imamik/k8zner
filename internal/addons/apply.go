@@ -7,15 +7,11 @@ package addons
 
 import (
 	"context"
-	"embed"
 	"fmt"
 	"os"
 
 	"hcloud-k8s/internal/config"
 )
-
-//go:embed manifests/*
-var manifestsFS embed.FS
 
 // Apply installs configured addons to the Kubernetes cluster.
 //
@@ -84,9 +80,9 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		}
 	}
 
-	if cfg.Addons.OIDC.Enabled {
+	if cfg.Addons.OIDCRBAC.Enabled {
 		if err := applyOIDC(ctx, tmpKubeconfig, cfg); err != nil {
-			return fmt.Errorf("failed to install OIDC: %w", err)
+			return fmt.Errorf("failed to install OIDC RBAC: %w", err)
 		}
 	}
 

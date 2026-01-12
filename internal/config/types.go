@@ -171,8 +171,8 @@ type AddonsConfig struct {
 	CertManager   CertManagerConfig   `mapstructure:"cert_manager" yaml:"cert_manager"`
 	IngressNginx  IngressNginxConfig  `mapstructure:"ingress_nginx" yaml:"ingress_nginx"`
 	Longhorn      LonghornConfig      `mapstructure:"longhorn" yaml:"longhorn"`
-	RBAC          RBACConfig          `mapstructure:"rbac" yaml:"rbac"`
-	OIDC          OIDCConfig          `mapstructure:"oidc" yaml:"oidc"`
+	RBAC     RBACConfig     `mapstructure:"rbac" yaml:"rbac"`
+	OIDCRBAC OIDCRBACConfig `mapstructure:"oidc_rbac" yaml:"oidc_rbac"`
 }
 
 // CCMConfig defines the Hetzner Cloud Controller Manager configuration.
@@ -243,22 +243,22 @@ type RBACRuleConfig struct {
 	Verbs     []string `mapstructure:"verbs" yaml:"verbs"`
 }
 
-// OIDCConfig defines OIDC group mappings to Kubernetes roles.
-type OIDCConfig struct {
-	Enabled       bool                `mapstructure:"enabled" yaml:"enabled"`
-	GroupsPrefix  string              `mapstructure:"groups_prefix" yaml:"groups_prefix"`
-	GroupMappings []OIDCGroupMapping  `mapstructure:"group_mappings" yaml:"group_mappings"`
+// OIDCRBACConfig defines OIDC group mappings to Kubernetes roles.
+type OIDCRBACConfig struct {
+	Enabled       bool                   `mapstructure:"enabled" yaml:"enabled"`
+	GroupsPrefix  string                 `mapstructure:"groups_prefix" yaml:"groups_prefix"`
+	GroupMappings []OIDCRBACGroupMapping `mapstructure:"group_mappings" yaml:"group_mappings"`
 }
 
-// OIDCGroupMapping maps an OIDC group to Kubernetes roles and cluster roles.
-type OIDCGroupMapping struct {
-	Group        string     `mapstructure:"group" yaml:"group"`
-	ClusterRoles []string   `mapstructure:"cluster_roles" yaml:"cluster_roles"`
-	Roles        []OIDCRole `mapstructure:"roles" yaml:"roles"`
+// OIDCRBACGroupMapping maps an OIDC group to Kubernetes roles and cluster roles.
+type OIDCRBACGroupMapping struct {
+	Group        string         `mapstructure:"group" yaml:"group"`
+	ClusterRoles []string       `mapstructure:"cluster_roles" yaml:"cluster_roles"`
+	Roles        []OIDCRBACRole `mapstructure:"roles" yaml:"roles"`
 }
 
-// OIDCRole defines a namespaced role for OIDC mapping.
-type OIDCRole struct {
+// OIDCRBACRole defines a namespaced role for OIDC mapping.
+type OIDCRBACRole struct {
 	Name      string `mapstructure:"name" yaml:"name"`
 	Namespace string `mapstructure:"namespace" yaml:"namespace"`
 }

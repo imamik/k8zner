@@ -11,24 +11,24 @@ import (
 
 func TestBuildCSIValues(t *testing.T) {
 	tests := []struct {
-		name                       string
-		controlPlaneCount          int
-		defaultStorageClass        bool
-		expectedReplicas           int
+		name                        string
+		controlPlaneCount           int
+		defaultStorageClass         bool
+		expectedReplicas            int
 		expectedDefaultStorageClass bool
 	}{
 		{
-			name:                       "single control plane",
-			controlPlaneCount:          1,
-			defaultStorageClass:        true,
-			expectedReplicas:           1,
+			name:                        "single control plane",
+			controlPlaneCount:           1,
+			defaultStorageClass:         true,
+			expectedReplicas:            1,
 			expectedDefaultStorageClass: true,
 		},
 		{
-			name:                       "HA control plane",
-			controlPlaneCount:          3,
-			defaultStorageClass:        false,
-			expectedReplicas:           2,
+			name:                        "HA control plane",
+			controlPlaneCount:           3,
+			defaultStorageClass:         false,
+			expectedReplicas:            2,
 			expectedDefaultStorageClass: false,
 		},
 	}

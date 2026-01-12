@@ -12,9 +12,9 @@ import (
 
 func TestBuildLonghornValues(t *testing.T) {
 	tests := []struct {
-		name                         string
-		defaultStorageClass          bool
-		expectedDefaultStorageClass  bool
+		name                        string
+		defaultStorageClass         bool
+		expectedDefaultStorageClass bool
 	}{
 		{
 			name:                        "default storage class enabled",
@@ -78,10 +78,8 @@ func TestBuildLonghornValues(t *testing.T) {
 
 func TestHasClusterAutoscaler(t *testing.T) {
 	cfg := &config.Config{
-		Workers: config.WorkersConfig{
-			NodePools: []config.NodePoolConfig{
-				{Count: 3},
-			},
+		Workers: []config.WorkerNodePool{
+			{Count: 3},
 		},
 	}
 

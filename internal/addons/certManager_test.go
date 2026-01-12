@@ -12,11 +12,11 @@ import (
 
 func TestBuildCertManagerValues(t *testing.T) {
 	tests := []struct {
-		name                         string
-		controlPlaneCount            int
-		ingressNginxEnabled          bool
-		expectedReplicas             int
-		expectedACMEPathTypeExact    bool
+		name                      string
+		controlPlaneCount         int
+		ingressNginxEnabled       bool
+		expectedReplicas          int
+		expectedACMEPathTypeExact bool
 	}{
 		{
 			name:                      "single control plane, no ingress-nginx",
@@ -52,7 +52,7 @@ func TestBuildCertManagerValues(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &config.Config{
 				ControlPlane: config.ControlPlaneConfig{
-					NodePools: []config.NodePoolConfig{
+					NodePools: []config.ControlPlaneNodePool{
 						{Count: tt.controlPlaneCount},
 					},
 				},

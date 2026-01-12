@@ -95,7 +95,7 @@ func buildMetricsServerValues(cfg *config.Config) helm.Values {
 // getWorkerCount returns the total number of worker nodes.
 func getWorkerCount(cfg *config.Config) int {
 	count := 0
-	for _, pool := range cfg.Workers.NodePools {
+	for _, pool := range cfg.Workers {
 		count += pool.Count
 	}
 	return count
