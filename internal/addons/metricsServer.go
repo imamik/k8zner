@@ -29,8 +29,8 @@ func applyMetricsServer(ctx context.Context, kubeconfigPath string, cfg *config.
 func buildMetricsServerValues(cfg *config.Config) helm.Values {
 	controlPlaneCount := getControlPlaneCount(cfg)
 	workerCount := getWorkerCount(cfg)
-
 	scheduleOnControlPlane := workerCount == 0
+
 	nodeCount := workerCount
 	if scheduleOnControlPlane {
 		nodeCount = controlPlaneCount
@@ -42,54 +42,64 @@ func buildMetricsServerValues(cfg *config.Config) helm.Values {
 	}
 
 	values := helm.Values{
-		"replicas": replicas,
-		"podDisruptionBudget": helm.Values{
-			"enabled":        true,
-			"minAvailable":   nil,
-			"maxUnavailable": 1,
-		},
-		"topologySpreadConstraints": []helm.Values{
-			{
-				"topologyKey":       "kubernetes.io/hostname",
-				"maxSkew":           1,
-				"whenUnsatisfiable": "DoNotSchedule",
-				"labelSelector": helm.Values{
-					"matchLabels": helm.Values{
-						"app.kubernetes.io/instance": "metrics-server",
-						"app.kubernetes.io/name":     "metrics-server",
-					},
-				},
-				"matchLabelKeys": []string{"pod-template-hash"},
-			},
-			{
-				"topologyKey":       "topology.kubernetes.io/zone",
-				"maxSkew":           1,
-				"whenUnsatisfiable": "ScheduleAnyway",
-				"labelSelector": helm.Values{
-					"matchLabels": helm.Values{
-						"app.kubernetes.io/instance": "metrics-server",
-						"app.kubernetes.io/name":     "metrics-server",
-					},
-				},
-				"matchLabelKeys": []string{"pod-template-hash"},
-			},
-		},
+		"replicas":                  replicas,
+		"podDisruptionBudget":       buildMetricsServerPDB(),
+		"topologySpreadConstraints": buildMetricsServerTopologySpread(),
 	}
 
 	if scheduleOnControlPlane {
-		values["nodeSelector"] = helm.Values{
-			"node-role.kubernetes.io/control-plane": "",
-		}
-		values["tolerations"] = []helm.Values{
-			{
-				"key":      "node-role.kubernetes.io/control-plane",
-				"effect":   "NoSchedule",
-				"operator": "Exists",
-			},
-		}
+		values["nodeSelector"] = helm.Values{"node-role.kubernetes.io/control-plane": ""}
+		values["tolerations"] = buildControlPlaneTolerations()
 	}
 
 	return values
+}
+
+// buildMetricsServerPDB creates the pod disruption budget configuration.
+func buildMetricsServerPDB() helm.Values {
+	return helm.Values{
+		"enabled":        true,
+		"minAvailable":   nil,
+		"maxUnavailable": 1,
+	}
+}
+
+// buildMetricsServerTopologySpread creates topology spread constraints.
+func buildMetricsServerTopologySpread() []helm.Values {
+	labelSelector := helm.Values{
+		"matchLabels": helm.Values{
+			"app.kubernetes.io/instance": "metrics-server",
+			"app.kubernetes.io/name":     "metrics-server",
+		},
+	}
+
+	return []helm.Values{
+		{
+			"topologyKey":       "kubernetes.io/hostname",
+			"maxSkew":           1,
+			"whenUnsatisfiable": "DoNotSchedule",
+			"labelSelector":     labelSelector,
+			"matchLabelKeys":    []string{"pod-template-hash"},
+		},
+		{
+			"topologyKey":       "topology.kubernetes.io/zone",
+			"maxSkew":           1,
+			"whenUnsatisfiable": "ScheduleAnyway",
+			"labelSelector":     labelSelector,
+			"matchLabelKeys":    []string{"pod-template-hash"},
+		},
+	}
+}
+
+// buildControlPlaneTolerations creates tolerations for control plane scheduling.
+func buildControlPlaneTolerations() []helm.Values {
+	return []helm.Values{
+		{
+			"key":      "node-role.kubernetes.io/control-plane",
+			"effect":   "NoSchedule",
+			"operator": "Exists",
+		},
+	}
 }
 
 // getWorkerCount returns the total number of worker nodes.

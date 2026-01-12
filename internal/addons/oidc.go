@@ -123,7 +123,10 @@ func generateClusterRoleBinding(clusterRole string, mappings []config.OIDCRBACGr
 		"subjects": subjects,
 	}
 
-	yamlBytes, _ := yaml.Marshal(binding)
+	yamlBytes, err := yaml.Marshal(binding)
+	if err != nil {
+		panic(fmt.Sprintf("failed to marshal ClusterRoleBinding YAML: %v", err))
+	}
 	return string(yamlBytes)
 }
 
@@ -160,6 +163,9 @@ func generateRoleBinding(role config.OIDCRBACRole, mappings []config.OIDCRBACGro
 		"subjects": subjects,
 	}
 
-	yamlBytes, _ := yaml.Marshal(binding)
+	yamlBytes, err := yaml.Marshal(binding)
+	if err != nil {
+		panic(fmt.Sprintf("failed to marshal RoleBinding YAML: %v", err))
+	}
 	return string(yamlBytes)
 }

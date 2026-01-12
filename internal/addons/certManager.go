@@ -43,8 +43,28 @@ func buildCertManagerValues(cfg *config.Config) helm.Values {
 		replicas = 2
 	}
 
-	// Base configuration shared by all components
-	baseConfig := helm.Values{
+	baseConfig := buildCertManagerBaseConfig(replicas)
+	controllerConfig := helm.Merge(baseConfig, helm.Values{"topologySpreadConstraints": buildCertManagerTopologySpread("controller")})
+	webhookConfig := helm.Merge(baseConfig, helm.Values{"topologySpreadConstraints": buildCertManagerTopologySpread("webhook")})
+	cainjectorConfig := helm.Merge(baseConfig, helm.Values{"topologySpreadConstraints": buildCertManagerTopologySpread("cainjector")})
+
+	return helm.Values{
+		"crds":                      helm.Values{"enabled": true},
+		"startupapicheck":           helm.Values{"enabled": false},
+		"config":                    buildCertManagerConfig(cfg),
+		"replicaCount":              controllerConfig["replicaCount"],
+		"podDisruptionBudget":       controllerConfig["podDisruptionBudget"],
+		"topologySpreadConstraints": controllerConfig["topologySpreadConstraints"],
+		"nodeSelector":              controllerConfig["nodeSelector"],
+		"tolerations":               controllerConfig["tolerations"],
+		"webhook":                   webhookConfig,
+		"cainjector":                cainjectorConfig,
+	}
+}
+
+// buildCertManagerBaseConfig creates the base configuration shared by all components.
+func buildCertManagerBaseConfig(replicas int) helm.Values {
+	return helm.Values{
 		"replicaCount": replicas,
 		"podDisruptionBudget": helm.Values{
 			"enabled":        true,
@@ -62,61 +82,34 @@ func buildCertManagerValues(cfg *config.Config) helm.Values {
 			},
 		},
 	}
+}
 
-	// Build topology spread constraints for a component
-	buildTopologySpread := func(component string) []helm.Values {
-		return []helm.Values{
-			{
-				"topologyKey":       "kubernetes.io/hostname",
-				"maxSkew":           1,
-				"whenUnsatisfiable": "DoNotSchedule",
-				"labelSelector": helm.Values{
-					"matchLabels": helm.Values{
-						"app.kubernetes.io/instance":  "cert-manager",
-						"app.kubernetes.io/component": component,
-					},
+// buildCertManagerTopologySpread creates topology spread constraints for a component.
+func buildCertManagerTopologySpread(component string) []helm.Values {
+	return []helm.Values{
+		{
+			"topologyKey":       "kubernetes.io/hostname",
+			"maxSkew":           1,
+			"whenUnsatisfiable": "DoNotSchedule",
+			"labelSelector": helm.Values{
+				"matchLabels": helm.Values{
+					"app.kubernetes.io/instance":  "cert-manager",
+					"app.kubernetes.io/component": component,
 				},
-				"matchLabelKeys": []string{"pod-template-hash"},
 			},
-		}
+			"matchLabelKeys": []string{"pod-template-hash"},
+		},
 	}
+}
 
-	// Merge base config with topology spread for each component
-	controllerConfig := helm.Merge(
-		baseConfig,
-		helm.Values{"topologySpreadConstraints": buildTopologySpread("controller")},
-	)
-	webhookConfig := helm.Merge(
-		baseConfig,
-		helm.Values{"topologySpreadConstraints": buildTopologySpread("webhook")},
-	)
-	cainjectorConfig := helm.Merge(
-		baseConfig,
-		helm.Values{"topologySpreadConstraints": buildTopologySpread("cainjector")},
-	)
-
+// buildCertManagerConfig creates the config section with feature gates.
+func buildCertManagerConfig(cfg *config.Config) helm.Values {
 	return helm.Values{
-		"crds": helm.Values{
-			"enabled": true,
+		"enableGatewayAPI": true,
+		"featureGates": helm.Values{
+			// Workaround for ingress-nginx bug: https://github.com/kubernetes/ingress-nginx/issues/11176
+			"ACMEHTTP01IngressPathTypeExact": !cfg.Addons.IngressNginx.Enabled,
 		},
-		"startupapicheck": helm.Values{
-			"enabled": false,
-		},
-		"config": helm.Values{
-			"enableGatewayAPI": true,
-			"featureGates": helm.Values{
-				// Workaround for ingress-nginx bug: https://github.com/kubernetes/ingress-nginx/issues/11176
-				"ACMEHTTP01IngressPathTypeExact": !cfg.Addons.IngressNginx.Enabled,
-			},
-		},
-		// Apply configuration to all components
-		"replicaCount":              controllerConfig["replicaCount"],
-		"podDisruptionBudget":       controllerConfig["podDisruptionBudget"],
-		"topologySpreadConstraints": controllerConfig["topologySpreadConstraints"],
-		"nodeSelector":              controllerConfig["nodeSelector"],
-		"tolerations":               controllerConfig["tolerations"],
-		"webhook":                   webhookConfig,
-		"cainjector":                cainjectorConfig,
 	}
 }
 

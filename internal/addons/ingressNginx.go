@@ -38,14 +38,20 @@ func applyIngressNginx(ctx context.Context, kubeconfigPath string, cfg *config.C
 // See: terraform/ingress_nginx.tf lines 39-129
 func buildIngressNginxValues(cfg *config.Config) helm.Values {
 	workerCount := getWorkerCount(cfg)
-
-	// Calculate replicas: < 3 workers = 2 replicas, >= 3 = 3 replicas
 	replicas := 2
 	if workerCount >= 3 {
 		replicas = 3
 	}
 
-	// Build controller configuration
+	controller := buildIngressNginxController(workerCount, replicas)
+
+	return helm.Values{
+		"controller": controller,
+	}
+}
+
+// buildIngressNginxController creates the controller configuration.
+func buildIngressNginxController(workerCount, replicas int) helm.Values {
 	controller := helm.Values{
 		"admissionWebhooks": helm.Values{
 			"certManager": helm.Values{
@@ -58,38 +64,25 @@ func buildIngressNginxValues(cfg *config.Config) helm.Values {
 		"maxUnavailable":             1,
 		"watchIngressWithoutClass":   true,
 		"enableTopologyAwareRouting": false,
-	}
-
-	// Add topology spread constraints (only for Deployment kind)
-	controller["topologySpreadConstraints"] = buildIngressNginxTopologySpread(workerCount)
-
-	// Service configuration - using NodePort mode
-	// (LoadBalancer mode would be used if no external load balancer pools configured)
-	controller["service"] = helm.Values{
-		"type":                  "NodePort",
-		"externalTrafficPolicy": "Local",
-		"nodePorts": helm.Values{
-			"http":  30000,
-			"https": 30001,
+		"topologySpreadConstraints":  buildIngressNginxTopologySpread(workerCount),
+		"service": helm.Values{
+			"type":                  "NodePort",
+			"externalTrafficPolicy": "Local",
+			"nodePorts": helm.Values{
+				"http":  30000,
+				"https": 30001,
+			},
+		},
+		"config": helm.Values{
+			"compute-full-forwarded-for": true,
+			"use-proxy-protocol":         true,
+		},
+		"networkPolicy": helm.Values{
+			"enabled": true,
 		},
 	}
 
-	// Proxy protocol and real IP configuration
-	controller["config"] = helm.Values{
-		"compute-full-forwarded-for": true,
-		"use-proxy-protocol":         true,
-		// Note: proxy-real-ip-cidr would be set based on network config
-		// Skipped for now as it requires network subnet information
-	}
-
-	// Network policy
-	controller["networkPolicy"] = helm.Values{
-		"enabled": true,
-	}
-
-	return helm.Values{
-		"controller": controller,
-	}
+	return controller
 }
 
 // buildIngressNginxTopologySpread creates topology spread constraints for ingress-nginx.

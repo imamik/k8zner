@@ -62,7 +62,10 @@ func generateRole(role config.RoleConfig) string {
 		"rules": buildRules(role.Rules),
 	}
 
-	yamlBytes, _ := yaml.Marshal(r)
+	yamlBytes, err := yaml.Marshal(r)
+	if err != nil {
+		panic(fmt.Sprintf("failed to marshal Role YAML: %v", err))
+	}
 	return string(yamlBytes)
 }
 
@@ -78,7 +81,10 @@ func generateClusterRole(role config.ClusterRoleConfig) string {
 		"rules": buildRules(role.Rules),
 	}
 
-	yamlBytes, _ := yaml.Marshal(r)
+	yamlBytes, err := yaml.Marshal(r)
+	if err != nil {
+		panic(fmt.Sprintf("failed to marshal ClusterRole YAML: %v", err))
+	}
 	return string(yamlBytes)
 }
 
