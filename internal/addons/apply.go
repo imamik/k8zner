@@ -60,6 +60,12 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		}
 	}
 
+	if cfg.Addons.CertManager.Enabled {
+		if err := applyCertManager(ctx, tmpKubeconfig, cfg); err != nil {
+			return fmt.Errorf("failed to install Cert Manager: %w", err)
+		}
+	}
+
 	return nil
 }
 

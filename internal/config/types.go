@@ -168,6 +168,8 @@ type AddonsConfig struct {
 	CCM           CCMConfig           `mapstructure:"ccm" yaml:"ccm"`
 	CSI           CSIConfig           `mapstructure:"csi" yaml:"csi"`
 	MetricsServer MetricsServerConfig `mapstructure:"metrics_server" yaml:"metrics_server"`
+	CertManager   CertManagerConfig   `mapstructure:"cert_manager" yaml:"cert_manager"`
+	IngressNginx  IngressNginxConfig  `mapstructure:"ingress_nginx" yaml:"ingress_nginx"`
 }
 
 // CCMConfig defines the Hetzner Cloud Controller Manager configuration.
@@ -185,6 +187,16 @@ type CSIConfig struct {
 
 // MetricsServerConfig defines the Kubernetes Metrics Server configuration.
 type MetricsServerConfig struct {
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+}
+
+// CertManagerConfig defines the cert-manager configuration.
+type CertManagerConfig struct {
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+}
+
+// IngressNginxConfig defines the ingress-nginx configuration.
+type IngressNginxConfig struct {
 	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
 }
 
