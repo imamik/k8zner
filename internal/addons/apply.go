@@ -72,6 +72,12 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		}
 	}
 
+	if cfg.Addons.IngressNginx.Enabled {
+		if err := applyIngressNginx(ctx, tmpKubeconfig, cfg); err != nil {
+			return fmt.Errorf("failed to install Ingress NGINX: %w", err)
+		}
+	}
+
 	return nil
 }
 
