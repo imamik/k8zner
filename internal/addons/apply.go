@@ -84,6 +84,12 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		}
 	}
 
+	if cfg.Addons.OIDC.Enabled {
+		if err := applyOIDC(ctx, tmpKubeconfig, cfg); err != nil {
+			return fmt.Errorf("failed to install OIDC: %w", err)
+		}
+	}
+
 	return nil
 }
 

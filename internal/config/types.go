@@ -172,6 +172,7 @@ type AddonsConfig struct {
 	IngressNginx  IngressNginxConfig  `mapstructure:"ingress_nginx" yaml:"ingress_nginx"`
 	Longhorn      LonghornConfig      `mapstructure:"longhorn" yaml:"longhorn"`
 	RBAC          RBACConfig          `mapstructure:"rbac" yaml:"rbac"`
+	OIDC          OIDCConfig          `mapstructure:"oidc" yaml:"oidc"`
 }
 
 // CCMConfig defines the Hetzner Cloud Controller Manager configuration.
@@ -240,4 +241,24 @@ type RBACRuleConfig struct {
 	APIGroups []string `mapstructure:"api_groups" yaml:"api_groups"`
 	Resources []string `mapstructure:"resources" yaml:"resources"`
 	Verbs     []string `mapstructure:"verbs" yaml:"verbs"`
+}
+
+// OIDCConfig defines OIDC group mappings to Kubernetes roles.
+type OIDCConfig struct {
+	Enabled       bool                `mapstructure:"enabled" yaml:"enabled"`
+	GroupsPrefix  string              `mapstructure:"groups_prefix" yaml:"groups_prefix"`
+	GroupMappings []OIDCGroupMapping  `mapstructure:"group_mappings" yaml:"group_mappings"`
+}
+
+// OIDCGroupMapping maps an OIDC group to Kubernetes roles and cluster roles.
+type OIDCGroupMapping struct {
+	Group        string     `mapstructure:"group" yaml:"group"`
+	ClusterRoles []string   `mapstructure:"cluster_roles" yaml:"cluster_roles"`
+	Roles        []OIDCRole `mapstructure:"roles" yaml:"roles"`
+}
+
+// OIDCRole defines a namespaced role for OIDC mapping.
+type OIDCRole struct {
+	Name      string `mapstructure:"name" yaml:"name"`
+	Namespace string `mapstructure:"namespace" yaml:"namespace"`
 }
