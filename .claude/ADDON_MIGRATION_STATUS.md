@@ -2,7 +2,7 @@
 
 ## Summary
 
-Successfully migrated 7 of 10 addons from Terraform to Go using the helm abstraction layer. All migrations follow CODE_STRUCTURE.md guidelines and achieve complete terraform parity.
+Successfully migrated 9 of 10 addons from Terraform to Go. All migrations follow CODE_STRUCTURE.md guidelines and achieve complete terraform parity.
 
 ## Completed Addons ✅
 
@@ -64,48 +64,25 @@ Successfully migrated 7 of 10 addons from Terraform to Go using the helm abstrac
 - Proxy protocol configuration
 - **Files**: `internal/addons/ingressNginx.go`, `ingressNginx_test.go`
 
+### 8. RBAC
+**Commit**: b65933d
+- Pure YAML generation (no helm)
+- Role and ClusterRole manifest generation
+- Rule conversion (apiGroups, resources, verbs)
+- Manifest combination with separator
+- **Files**: `internal/addons/rbac.go`, `rbac_test.go`
+
+### 9. OIDC RBAC
+**Commit**: 54fc84c
+- Pure YAML generation (no helm)
+- Group mapping to roles and cluster roles
+- ClusterRoleBinding generation (one per cluster role)
+- RoleBinding generation (one per role)
+- Groups prefix support
+- Efficient subject aggregation
+- **Files**: `internal/addons/oidc.go`, `oidc_test.go`
+
 ## Remaining Addons 🔄
-
-### 8. RBAC (Medium Priority)
-**Terraform**: `terraform/rbac.tf`
-**Complexity**: Low
-**Type**: Pure YAML Generation (No Helm)
-
-**Key Features Needed**:
-- Generate Roles from config
-- Generate ClusterRoles from config
-- No helm chart - direct YAML generation
-
-**Implementation Checklist**:
-- [ ] Add RBAC config (roles, clusterRoles)
-- [ ] Generate Role manifests
-- [ ] Generate ClusterRole manifests
-- [ ] Combine into single manifest
-- [ ] Tests for YAML generation
-
-**Terraform Reference**: Lines 1-38
-**Pattern**: Use existing YAML generation pattern
-
-### 9. OIDC RBAC (Medium Priority)
-**Terraform**: `terraform/oidc.tf`
-**Complexity**: Medium
-**Type**: Pure YAML Generation (No Helm)
-
-**Key Features Needed**:
-- ClusterRoleBindings for OIDC groups
-- RoleBindings for OIDC groups
-- Group mapping to roles/cluster roles
-- Groups prefix configuration
-
-**Implementation Checklist**:
-- [ ] Add OIDC config (group mappings)
-- [ ] Generate ClusterRoleBindings
-- [ ] Generate RoleBindings
-- [ ] Apply group prefix
-- [ ] Tests for binding generation
-
-**Terraform Reference**: Lines 1-84
-**Pattern**: Similar to RBAC, pure YAML generation
 
 ### 10. Cluster Autoscaler (High Complexity)
 **Terraform**: `terraform/autoscaler.tf`
@@ -135,11 +112,11 @@ Successfully migrated 7 of 10 addons from Terraform to Go using the helm abstrac
 | Metric | Value |
 |--------|-------|
 | **Total Addons** | 10 |
-| **Completed** | 7 (70%) |
-| **Remaining** | 3 (30%) |
-| **Commits** | 6 well-structured commits |
+| **Completed** | 9 (90%) |
+| **Remaining** | 1 (10%) |
+| **Commits** | 8 well-structured commits |
 | **Files Added** | 400+ files |
-| **Lines Added** | 44,000+ lines |
+| **Lines Added** | 45,000+ lines |
 | **Test Coverage** | 100% of value builders |
 | **Terraform Parity** | 100% for completed addons |
 
@@ -183,23 +160,12 @@ func TestBuildAddonValues(t *testing.T) {
 }
 ```
 
-## Next Steps (Priority Order)
+## Next Steps
 
-### Immediate (Pure YAML Addons)
-1. **RBAC** - Simple YAML generation (Low complexity)
-2. **OIDC** - Medium complexity YAML generation
-
-### Follow-up (Complex Helm Addon)
-3. **Cluster Autoscaler** - Complex Hetzner-specific integration
+### Single Remaining Addon
+**Cluster Autoscaler** - Complex Hetzner-specific helm integration
 
 ## Recommendations
-
-### For RBAC/OIDC
-- Don't use helm - generate YAML directly
-- Reuse existing YAML generation patterns (similar to namespace creation)
-- Simpler than helm addons
-- Can be completed quickly
-- RBAC should be done before OIDC (OIDC depends on RBAC roles)
 
 ### For Cluster Autoscaler
 - Requires understanding of Talos machine configuration
@@ -260,6 +226,6 @@ Each addon has:
 
 ## Conclusion
 
-7 of 10 addons successfully migrated with complete terraform parity. The helm abstraction layer is production-ready and provides a solid foundation. The remaining 3 addons include 2 simple YAML generation addons (RBAC, OIDC) and 1 complex helm addon (Cluster Autoscaler).
+9 of 10 addons successfully migrated with complete terraform parity. The helm abstraction layer is production-ready and provides a solid foundation. Both helm-based addons (CCM, CSI, Metrics Server, Cert Manager, Longhorn, Ingress NGINX) and YAML-based addons (RBAC, OIDC) are complete.
 
-**Next implementer**: Start with RBAC (simple YAML generation), followed by OIDC, then Cluster Autoscaler last due to its complexity.
+**Remaining work**: Only Cluster Autoscaler remains. This is the most complex addon requiring Hetzner-specific configuration and Talos machine integration. Can be deferred or implemented when needed.
