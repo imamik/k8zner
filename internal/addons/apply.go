@@ -66,6 +66,12 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		}
 	}
 
+	if cfg.Addons.Longhorn.Enabled {
+		if err := applyLonghorn(ctx, tmpKubeconfig, cfg); err != nil {
+			return fmt.Errorf("failed to install Longhorn: %w", err)
+		}
+	}
+
 	return nil
 }
 

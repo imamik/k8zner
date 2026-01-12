@@ -170,6 +170,7 @@ type AddonsConfig struct {
 	MetricsServer MetricsServerConfig `mapstructure:"metrics_server" yaml:"metrics_server"`
 	CertManager   CertManagerConfig   `mapstructure:"cert_manager" yaml:"cert_manager"`
 	IngressNginx  IngressNginxConfig  `mapstructure:"ingress_nginx" yaml:"ingress_nginx"`
+	Longhorn      LonghornConfig      `mapstructure:"longhorn" yaml:"longhorn"`
 }
 
 // CCMConfig defines the Hetzner Cloud Controller Manager configuration.
@@ -198,6 +199,12 @@ type CertManagerConfig struct {
 // IngressNginxConfig defines the ingress-nginx configuration.
 type IngressNginxConfig struct {
 	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+}
+
+// LonghornConfig defines the Longhorn storage configuration.
+type LonghornConfig struct {
+	Enabled             bool `mapstructure:"enabled" yaml:"enabled"`
+	DefaultStorageClass bool `mapstructure:"default_storage_class" yaml:"default_storage_class"`
 }
 
 // StorageClass defines a Kubernetes StorageClass for CSI.

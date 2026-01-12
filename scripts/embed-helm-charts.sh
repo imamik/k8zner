@@ -21,7 +21,7 @@ declare -A CHARTS=(
     ["metrics-server"]="https://kubernetes-sigs.github.io/metrics-server/ metrics-server 3.12.2"
     ["cert-manager"]="https://charts.jetstack.io cert-manager v1.19.2"
     ["ingress-nginx"]="https://kubernetes.github.io/ingress-nginx ingress-nginx 4.11.3"
-    ["longhorn"]="https://charts.longhorn.io longhorn 1.7.2"
+    ["longhorn"]="https://charts.longhorn.io longhorn 1.10.1"
     ["cluster-autoscaler"]="https://kubernetes.github.io/autoscaler cluster-autoscaler-hetzner 1.1.1"
 )
 
