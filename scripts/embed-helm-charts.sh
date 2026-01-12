@@ -16,6 +16,8 @@ TEMPLATES_DIR="${PROJECT_ROOT}/internal/addons/helm/templates"
 # Chart definitions matching terraform variables
 declare -A CHARTS=(
     # Format: [chart-name]="repository chart version"
+    ["hcloud-ccm"]="https://charts.hetzner.cloud hcloud-cloud-controller-manager 1.29.0"
+    ["hcloud-csi"]="https://charts.hetzner.cloud hcloud-csi 2.18.3"
     ["metrics-server"]="https://kubernetes-sigs.github.io/metrics-server/ metrics-server 3.12.2"
     ["cert-manager"]="https://charts.jetstack.io cert-manager v1.16.3"
     ["ingress-nginx"]="https://kubernetes.github.io/ingress-nginx ingress-nginx 4.11.3"

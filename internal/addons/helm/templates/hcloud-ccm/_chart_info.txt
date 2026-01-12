@@ -1,0 +1,4 @@
+Chart: hcloud-ccm
+Version: 1.29.0
+Repository: https://charts.hetzner.cloud
+Downloaded: 2026-01-12 18:08:53 UTC
