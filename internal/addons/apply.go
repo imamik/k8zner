@@ -54,6 +54,12 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		}
 	}
 
+	if cfg.Addons.MetricsServer.Enabled {
+		if err := applyMetricsServer(ctx, tmpKubeconfig, cfg); err != nil {
+			return fmt.Errorf("failed to install Metrics Server: %w", err)
+		}
+	}
+
 	return nil
 }
 

@@ -165,8 +165,9 @@ type CNIConfig struct {
 
 // AddonsConfig defines the addon-related configuration.
 type AddonsConfig struct {
-	CCM CCMConfig `mapstructure:"ccm" yaml:"ccm"`
-	CSI CSIConfig `mapstructure:"csi" yaml:"csi"`
+	CCM           CCMConfig           `mapstructure:"ccm" yaml:"ccm"`
+	CSI           CSIConfig           `mapstructure:"csi" yaml:"csi"`
+	MetricsServer MetricsServerConfig `mapstructure:"metrics_server" yaml:"metrics_server"`
 }
 
 // CCMConfig defines the Hetzner Cloud Controller Manager configuration.
@@ -180,6 +181,11 @@ type CSIConfig struct {
 	DefaultStorageClass  bool           `mapstructure:"default_storage_class" yaml:"default_storage_class"`
 	EncryptionPassphrase string         `mapstructure:"encryption_passphrase" yaml:"encryption_passphrase"`
 	StorageClasses       []StorageClass `mapstructure:"storage_classes" yaml:"storage_classes"`
+}
+
+// MetricsServerConfig defines the Kubernetes Metrics Server configuration.
+type MetricsServerConfig struct {
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
 }
 
 // StorageClass defines a Kubernetes StorageClass for CSI.
