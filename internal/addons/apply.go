@@ -78,6 +78,12 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		}
 	}
 
+	if cfg.Addons.RBAC.Enabled {
+		if err := applyRBAC(ctx, tmpKubeconfig, cfg); err != nil {
+			return fmt.Errorf("failed to install RBAC: %w", err)
+		}
+	}
+
 	return nil
 }
 

@@ -171,6 +171,7 @@ type AddonsConfig struct {
 	CertManager   CertManagerConfig   `mapstructure:"cert_manager" yaml:"cert_manager"`
 	IngressNginx  IngressNginxConfig  `mapstructure:"ingress_nginx" yaml:"ingress_nginx"`
 	Longhorn      LonghornConfig      `mapstructure:"longhorn" yaml:"longhorn"`
+	RBAC          RBACConfig          `mapstructure:"rbac" yaml:"rbac"`
 }
 
 // CCMConfig defines the Hetzner Cloud Controller Manager configuration.
@@ -212,4 +213,31 @@ type StorageClass struct {
 	Name          string `mapstructure:"name" yaml:"name"`
 	ReclaimPolicy string `mapstructure:"reclaim_policy" yaml:"reclaim_policy"`
 	IsDefault     bool   `mapstructure:"is_default" yaml:"is_default"`
+}
+
+// RBACConfig defines RBAC roles and cluster roles.
+type RBACConfig struct {
+	Enabled      bool                `mapstructure:"enabled" yaml:"enabled"`
+	Roles        []RoleConfig        `mapstructure:"roles" yaml:"roles"`
+	ClusterRoles []ClusterRoleConfig `mapstructure:"cluster_roles" yaml:"cluster_roles"`
+}
+
+// RoleConfig defines a namespaced Role.
+type RoleConfig struct {
+	Name      string           `mapstructure:"name" yaml:"name"`
+	Namespace string           `mapstructure:"namespace" yaml:"namespace"`
+	Rules     []RBACRuleConfig `mapstructure:"rules" yaml:"rules"`
+}
+
+// ClusterRoleConfig defines a ClusterRole.
+type ClusterRoleConfig struct {
+	Name  string           `mapstructure:"name" yaml:"name"`
+	Rules []RBACRuleConfig `mapstructure:"rules" yaml:"rules"`
+}
+
+// RBACRuleConfig defines a policy rule for RBAC.
+type RBACRuleConfig struct {
+	APIGroups []string `mapstructure:"api_groups" yaml:"api_groups"`
+	Resources []string `mapstructure:"resources" yaml:"resources"`
+	Verbs     []string `mapstructure:"verbs" yaml:"verbs"`
 }
