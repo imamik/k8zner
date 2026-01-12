@@ -171,8 +171,8 @@ type AddonsConfig struct {
 	CertManager   CertManagerConfig   `mapstructure:"cert_manager" yaml:"cert_manager"`
 	IngressNginx  IngressNginxConfig  `mapstructure:"ingress_nginx" yaml:"ingress_nginx"`
 	Longhorn      LonghornConfig      `mapstructure:"longhorn" yaml:"longhorn"`
-	RBAC     RBACConfig     `mapstructure:"rbac" yaml:"rbac"`
-	OIDCRBAC OIDCRBACConfig `mapstructure:"oidc_rbac" yaml:"oidc_rbac"`
+	RBAC          RBACConfig          `mapstructure:"rbac" yaml:"rbac"`
+	OIDCRBAC      OIDCRBACConfig      `mapstructure:"oidc_rbac" yaml:"oidc_rbac"`
 }
 
 // CCMConfig defines the Hetzner Cloud Controller Manager configuration.
