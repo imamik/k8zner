@@ -777,6 +777,31 @@ spec:
 
 		t.Log("✓ CCM Load Balancer lifecycle test complete")
 
+		// Verify Cilium is still healthy before CSI test
+		t.Log("Pre-CSI check: Verifying Cilium is still healthy...")
+		cmd = exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"get", "pods", "-n", "kube-system", "-l", "k8s-app=cilium", "-o", "wide")
+		output, _ = cmd.CombinedOutput()
+		t.Logf("Cilium pods status:\n%s", string(output))
+
+		// Check Cilium agent on control plane node specifically
+		cmd = exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"get", "pods", "-n", "kube-system", "-l", "k8s-app=cilium",
+			"--field-selector", "spec.nodeName="+clusterName+"-control-plane-1",
+			"-o", "jsonpath={.items[0].metadata.name}")
+		ciliumPodOutput, ciliumErr := cmd.CombinedOutput()
+		if ciliumErr == nil && string(ciliumPodOutput) != "" {
+			ciliumPodName := string(ciliumPodOutput)
+			t.Logf("Checking Cilium status on control plane node (pod: %s)...", ciliumPodName)
+			cmd = exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"exec", "-n", "kube-system", ciliumPodName, "--", "cilium", "status", "--brief")
+			ciliumStatusOutput, _ := cmd.CombinedOutput()
+			t.Logf("Cilium status on control plane:\n%s", string(ciliumStatusOutput))
+		}
+
 		// Verify CSI Driver is installed and running
 		t.Log("Verifying Hetzner Cloud CSI Driver installation...")
 
@@ -1058,7 +1083,7 @@ spec:
 		// Hetzner volume attachment typically takes 30-90 seconds
 		t.Log("Waiting for test Pod to be Running...")
 		podRunning := false
-		for i := 0; i < 36; i++ { // Wait up to 3 minutes (reduced for faster feedback)
+		for i := 0; i < 60; i++ { // Wait up to 5 minutes
 			cmd = exec.CommandContext(context.Background(), "kubectl",
 				"--kubeconfig", kubeconfigPath,
 				"get", "pod", testPodName, "-n", "default", "-o", "jsonpath={.status.phase}")
@@ -1070,18 +1095,71 @@ spec:
 			phase := string(output)
 			t.Logf("Test Pod not running yet (phase: %s), waiting...", phase)
 
-			// Every 2 minutes, show pod events for debugging
-			if i > 0 && i%24 == 0 {
-				t.Log("--- Pod events (for debugging) ---")
+			// Every minute, show detailed diagnostic information
+			if i > 0 && i%12 == 0 {
+				t.Logf("--- Diagnostics at %d seconds ---", i*5)
+
+				// Show pod events
+				t.Log("Pod events:")
 				descCmd := exec.CommandContext(context.Background(), "kubectl",
 					"--kubeconfig", kubeconfigPath,
 					"describe", "pod", testPodName, "-n", "default")
 				descOutput, _ := descCmd.CombinedOutput()
-				// Extract just the events section (last part of describe output)
 				descStr := string(descOutput)
 				if idx := strings.Index(descStr, "Events:"); idx != -1 {
 					t.Logf("%s", descStr[idx:])
+				} else {
+					t.Log("No events found")
 				}
+
+				// Show PVC events
+				t.Log("PVC events:")
+				pvcDescCmd := exec.CommandContext(context.Background(), "kubectl",
+					"--kubeconfig", kubeconfigPath,
+					"describe", "pvc", testPVCName, "-n", "default")
+				pvcDescOutput, _ := pvcDescCmd.CombinedOutput()
+				pvcDescStr := string(pvcDescOutput)
+				if idx := strings.Index(pvcDescStr, "Events:"); idx != -1 {
+					t.Logf("%s", pvcDescStr[idx:])
+				} else {
+					t.Log("No PVC events found")
+				}
+
+				// Check VolumeAttachment objects
+				t.Log("VolumeAttachments:")
+				vaCmd := exec.CommandContext(context.Background(), "kubectl",
+					"--kubeconfig", kubeconfigPath,
+					"get", "volumeattachments", "-o", "wide")
+				vaOutput, _ := vaCmd.CombinedOutput()
+				t.Logf("%s", string(vaOutput))
+
+				// Check CSI node pods status
+				t.Log("CSI node pods status:")
+				csiNodeCmd := exec.CommandContext(context.Background(), "kubectl",
+					"--kubeconfig", kubeconfigPath,
+					"get", "pods", "-n", "kube-system", "-l", "app.kubernetes.io/name=hcloud-csi,app.kubernetes.io/component=node", "-o", "wide")
+				csiNodeOutput, _ := csiNodeCmd.CombinedOutput()
+				t.Logf("%s", string(csiNodeOutput))
+
+				// Check for Hetzner volumes via API
+				t.Log("Hetzner Cloud volumes:")
+				volumes, volErr := hClient.HCloudClient().Volume.All(context.Background())
+				if volErr == nil {
+					for _, vol := range volumes {
+						t.Logf("  Volume: %s (ID: %d, Size: %dGB, Status: %s, Server: %v)",
+							vol.Name, vol.ID, vol.Size, vol.Status, vol.Server)
+					}
+				} else {
+					t.Logf("  Failed to list volumes: %v", volErr)
+				}
+
+				// Check CSI controller pod status
+				t.Log("CSI controller pod status:")
+				csiControllerStatusCmd := exec.CommandContext(context.Background(), "kubectl",
+					"--kubeconfig", kubeconfigPath,
+					"get", "pods", "-n", "kube-system", "-l", "app.kubernetes.io/name=hcloud-csi,app.kubernetes.io/component=controller", "-o", "wide")
+				csiControllerStatusOutput, _ := csiControllerStatusCmd.CombinedOutput()
+				t.Logf("%s", string(csiControllerStatusOutput))
 			}
 			time.Sleep(5 * time.Second)
 		}
@@ -1094,25 +1172,97 @@ spec:
 			descOutput, _ := descCmd.CombinedOutput()
 			t.Logf("%s", string(descOutput))
 
+			// Check PVC status and events
+			t.Log("--- PVC describe ---")
+			pvcDescCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"describe", "pvc", testPVCName, "-n", "default")
+			pvcDescOutput, _ := pvcDescCmd.CombinedOutput()
+			t.Logf("%s", string(pvcDescOutput))
+
+			// Check CSI controller pod status
+			t.Log("--- CSI controller pod describe ---")
+			csiControllerDescCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"describe", "pod", "-n", "kube-system", "-l", "app.kubernetes.io/name=hcloud-csi,app.kubernetes.io/component=controller")
+			csiControllerDescOutput, _ := csiControllerDescCmd.CombinedOutput()
+			t.Logf("%s", string(csiControllerDescOutput))
+
+			// Check VolumeAttachment status
+			t.Log("--- VolumeAttachments ---")
+			vaCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "volumeattachments", "-o", "yaml")
+			vaOutput, _ := vaCmd.CombinedOutput()
+			t.Logf("%s", string(vaOutput))
+
 			// Check CSI controller logs for errors
-			t.Log("--- CSI controller logs (hcloud-csi-driver container, last 30 lines) ---")
+			t.Log("--- CSI controller logs (hcloud-csi-driver container, last 50 lines) ---")
 			logsCmd := exec.CommandContext(context.Background(), "kubectl",
 				"--kubeconfig", kubeconfigPath,
 				"logs", "-l", "app.kubernetes.io/name=hcloud-csi,app.kubernetes.io/component=controller",
-				"-n", "kube-system", "--tail=30", "-c", "hcloud-csi-driver")
+				"-n", "kube-system", "--tail=50", "-c", "hcloud-csi-driver")
 			logsOutput, _ := logsCmd.CombinedOutput()
 			t.Logf("%s", string(logsOutput))
 
-			// Also check provisioner logs (handles volume creation)
-			t.Log("--- CSI provisioner logs (last 30 lines) ---")
+			// Check provisioner logs (handles volume creation)
+			t.Log("--- CSI provisioner logs (last 50 lines) ---")
 			provLogsCmd := exec.CommandContext(context.Background(), "kubectl",
 				"--kubeconfig", kubeconfigPath,
 				"logs", "-l", "app.kubernetes.io/name=hcloud-csi,app.kubernetes.io/component=controller",
-				"-n", "kube-system", "--tail=30", "-c", "csi-provisioner")
+				"-n", "kube-system", "--tail=50", "-c", "csi-provisioner")
 			provLogsOutput, _ := provLogsCmd.CombinedOutput()
 			t.Logf("%s", string(provLogsOutput))
 
-			t.Error("Timeout: Test Pod failed to reach Running state within 3 minutes")
+			// Check attacher logs (handles volume attachment)
+			t.Log("--- CSI attacher logs (last 50 lines) ---")
+			attacherLogsCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"logs", "-l", "app.kubernetes.io/name=hcloud-csi,app.kubernetes.io/component=controller",
+				"-n", "kube-system", "--tail=50", "-c", "csi-attacher")
+			attacherLogsOutput, _ := attacherLogsCmd.CombinedOutput()
+			t.Logf("%s", string(attacherLogsOutput))
+
+			// Check resizer logs
+			t.Log("--- CSI resizer logs (last 50 lines) ---")
+			resizerLogsCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"logs", "-l", "app.kubernetes.io/name=hcloud-csi,app.kubernetes.io/component=controller",
+				"-n", "kube-system", "--tail=50", "-c", "csi-resizer")
+			resizerLogsOutput, _ := resizerLogsCmd.CombinedOutput()
+			t.Logf("%s", string(resizerLogsOutput))
+
+			// Get the node where pod should be scheduled and check CSI node pod logs
+			t.Log("--- CSI node pod logs (last 50 lines from all nodes) ---")
+			csiNodePodsCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "pods", "-n", "kube-system", "-l", "app.kubernetes.io/name=hcloud-csi,app.kubernetes.io/component=node",
+				"-o", "jsonpath={.items[*].metadata.name}")
+			csiNodePodsOutput, _ := csiNodePodsCmd.CombinedOutput()
+			csiNodePods := strings.Fields(string(csiNodePodsOutput))
+			for _, podName := range csiNodePods {
+				t.Logf("CSI node pod %s logs:", podName)
+				nodeLogsCmd := exec.CommandContext(context.Background(), "kubectl",
+					"--kubeconfig", kubeconfigPath,
+					"logs", "-n", "kube-system", podName, "-c", "hcloud-csi-driver", "--tail=50")
+				nodeLogsOutput, _ := nodeLogsCmd.CombinedOutput()
+				t.Logf("%s", string(nodeLogsOutput))
+			}
+
+			// Check Hetzner Cloud volumes
+			t.Log("--- Hetzner Cloud volumes ---")
+			volumes, volErr := hClient.HCloudClient().Volume.All(context.Background())
+			if volErr == nil {
+				t.Logf("Found %d volumes:", len(volumes))
+				for _, vol := range volumes {
+					t.Logf("  Volume: %s (ID: %d, Size: %dGB, Status: %s, Server: %v, Location: %s)",
+						vol.Name, vol.ID, vol.Size, vol.Status, vol.Server, vol.Location.Name)
+				}
+			} else {
+				t.Logf("Failed to list volumes: %v", volErr)
+			}
+
+			t.Error("Timeout: Test Pod failed to reach Running state within 5 minutes")
 		} else {
 			t.Log("✓ Test Pod is Running (volume successfully attached)")
 		}

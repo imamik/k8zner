@@ -61,7 +61,7 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 
 	if cfg.Addons.CSI.Enabled {
 		defaultStorageClass := cfg.Addons.CSI.DefaultStorageClass
-		if err := applyCSI(ctx, tmpKubeconfig, cfg.HCloudToken, controlPlaneCount, defaultStorageClass); err != nil {
+		if err := applyCSI(ctx, kubeconfig, controlPlaneCount, defaultStorageClass); err != nil {
 			return fmt.Errorf("failed to install CSI: %w", err)
 		}
 	}

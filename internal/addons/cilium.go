@@ -123,6 +123,10 @@ func buildCiliumValues(cfg *config.Config, controlPlaneCount int) map[string]any
 			"autoMount": map[string]any{"enabled": false},
 			"hostRoot":  "/sys/fs/cgroup",
 		},
+		// Talos-specific daemon configuration
+		"daemon": map[string]any{
+			"runPath": "/var/run/cilium",
+		},
 		// Security context with required capabilities
 		"securityContext": map[string]any{
 			"capabilities": map[string]any{
