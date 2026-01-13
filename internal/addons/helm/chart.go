@@ -69,7 +69,7 @@ func readChartManifests(chartName string) ([][]byte, error) {
 	return manifests, nil
 }
 
-// isYAMLFile checks if a filename is a YAML manifest file.
+// isYAMLFile checks if a filename is a YAML manifest file or Helm template file.
 func isYAMLFile(name string) bool {
-	return strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml")
+	return strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml") || strings.HasSuffix(name, ".tpl")
 }
