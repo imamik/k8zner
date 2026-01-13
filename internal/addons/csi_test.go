@@ -35,8 +35,7 @@ func TestBuildCSIValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			encryptionKey := "test-encryption-key"
-			values := buildCSIValues(tt.controlPlaneCount, encryptionKey, tt.defaultStorageClass)
+			values := buildCSIValues(tt.controlPlaneCount, tt.defaultStorageClass)
 
 			// Check controller configuration
 			controller, ok := values["controller"].(helm.Values)
@@ -67,20 +66,25 @@ func TestBuildCSIValues(t *testing.T) {
 			assert.Len(t, tolerations, 1)
 			assert.Equal(t, "node-role.kubernetes.io/control-plane", tolerations[0]["key"])
 
-			// Check storage classes
+			// Check storage classes - we now have two: encrypted (default) and non-encrypted
 			storageClasses, ok := values["storageClasses"].([]helm.Values)
 			require.True(t, ok)
-			assert.Len(t, storageClasses, 1)
-			assert.Equal(t, "hcloud-volumes", storageClasses[0]["name"])
-			assert.Equal(t, tt.expectedDefaultStorageClass, storageClasses[0]["defaultStorageClass"])
+			assert.Len(t, storageClasses, 2, "should have 2 storage classes (encrypted and non-encrypted)")
 
-			// Check secret
-			secret, ok := values["secret"].(helm.Values)
-			require.True(t, ok)
-			assert.Equal(t, true, secret["create"])
-			secretData, ok := secret["data"].(helm.Values)
-			require.True(t, ok)
-			assert.Equal(t, encryptionKey, secretData["encryption-passphrase"])
+			// Check encrypted storage class (first one, should be default if requested)
+			encryptedSC := storageClasses[0]
+			assert.Equal(t, "hcloud-volumes-encrypted", encryptedSC["name"])
+			assert.Equal(t, tt.expectedDefaultStorageClass, encryptedSC["defaultStorageClass"])
+
+			// Verify extraParameters for encryption
+			extraParams, ok := encryptedSC["extraParameters"].(helm.Values)
+			require.True(t, ok, "encrypted storage class should have extraParameters")
+			assert.Equal(t, "hcloud-csi-secret", extraParams["csi.storage.k8s.io/node-publish-secret-name"])
+
+			// Check non-encrypted storage class (second one)
+			nonEncryptedSC := storageClasses[1]
+			assert.Equal(t, "hcloud-volumes", nonEncryptedSC["name"])
+			assert.Equal(t, false, nonEncryptedSC["defaultStorageClass"], "non-encrypted should not be default")
 		})
 	}
 }

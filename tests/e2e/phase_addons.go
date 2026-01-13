@@ -66,7 +66,7 @@ func testAddonCCM(t *testing.T, state *E2EState, token string) {
 	}
 
 	// Wait for CCM pod
-	waitForPod(t, state.KubeconfigPath, "kube-system", "app=hcloud-cloud-controller-manager", 5*time.Minute)
+	waitForPod(t, state.KubeconfigPath, "kube-system", "app.kubernetes.io/name=hcloud-cloud-controller-manager", 5*time.Minute)
 
 	// Verify provider IDs are set
 	verifyProviderIDs(t, state.KubeconfigPath, 2*time.Minute)

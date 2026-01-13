@@ -36,7 +36,7 @@ func TestBuild(t *testing.T) {
 		DeleteServerFunc: func(_ context.Context, _ string) error {
 			return nil
 		},
-		CreateSSHKeyFunc: func(_ context.Context, _ string, _ string) (string, error) {
+		CreateSSHKeyFunc: func(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
 			return "key-123", nil
 		},
 		DeleteSSHKeyFunc: func(_ context.Context, _ string) error {
