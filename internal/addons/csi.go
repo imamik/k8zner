@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"os/exec"
 
 	"hcloud-k8s/internal/addons/helm"
 )
@@ -18,8 +19,13 @@ func applyCSI(ctx context.Context, kubeconfigPath, token string, controlPlaneCou
 		return fmt.Errorf("failed to generate encryption key: %w", err)
 	}
 
+	// Create hcloud-csi-secret for encryption
+	if err := createCSISecret(ctx, kubeconfigPath, encryptionKey); err != nil {
+		return fmt.Errorf("failed to create CSI secret: %w", err)
+	}
+
 	// Build CSI values matching terraform configuration
-	values := buildCSIValues(controlPlaneCount, encryptionKey, defaultStorageClass)
+	values := buildCSIValues(controlPlaneCount, defaultStorageClass)
 
 	// Render helm chart with values
 	manifestBytes, err := helm.RenderChart("hcloud-csi", "kube-system", values)
@@ -37,15 +43,39 @@ func applyCSI(ctx context.Context, kubeconfigPath, token string, controlPlaneCou
 
 // buildCSIValues creates helm values matching terraform configuration.
 // See: terraform/hcloud.tf lines 119-156
-func buildCSIValues(controlPlaneCount int, encryptionKey string, defaultStorageClass bool) helm.Values {
+func buildCSIValues(controlPlaneCount int, defaultStorageClass bool) helm.Values {
 	replicas := 1
 	if controlPlaneCount > 1 {
 		replicas = 2
 	}
 
+	// Storage classes with encryption support (matches terraform defaults)
+	storageClasses := []helm.Values{
+		{
+			"name":                "hcloud-volumes-encrypted",
+			"defaultStorageClass": defaultStorageClass,
+			"reclaimPolicy":       "Delete",
+			"extraParameters": helm.Values{
+				"csi.storage.k8s.io/node-publish-secret-name":      "hcloud-csi-secret",
+				"csi.storage.k8s.io/node-publish-secret-namespace": "kube-system",
+			},
+		},
+		{
+			"name":                "hcloud-volumes",
+			"defaultStorageClass": false,
+			"reclaimPolicy":       "Delete",
+		},
+	}
+
 	return helm.Values{
 		"controller": helm.Values{
 			"replicaCount": replicas,
+			"hcloudToken": helm.Values{
+				"existingSecret": helm.Values{
+					"name": "hcloud",
+					"key":  "token",
+				},
+			},
 			"podDisruptionBudget": helm.Values{
 				"create":         true,
 				"minAvailable":   nil,
@@ -77,21 +107,35 @@ func buildCSIValues(controlPlaneCount int, encryptionKey string, defaultStorageC
 				},
 			},
 		},
-		"storageClasses": []helm.Values{
-			{
-				"name":                "hcloud-volumes",
-				"defaultStorageClass": defaultStorageClass,
-				"reclaimPolicy":       "Delete",
-			},
-		},
-		"secret": helm.Values{
-			"create": true,
-			"data": helm.Values{
-				"token":                 "", // Token set via hcloud secret
-				"encryption-passphrase": encryptionKey,
-			},
-		},
+		"storageClasses": storageClasses,
 	}
+}
+
+// createCSISecret creates the hcloud-csi-secret for volume encryption.
+func createCSISecret(ctx context.Context, kubeconfigPath, encryptionKey string) error {
+	// Delete existing secret if it exists (ignore errors)
+	deleteCmd := exec.CommandContext(ctx, "kubectl",
+		"--kubeconfig", kubeconfigPath,
+		"delete", "secret", "hcloud-csi-secret",
+		"--namespace", "kube-system",
+		"--ignore-not-found",
+	)
+	_ = deleteCmd.Run()
+
+	// Create new secret
+	cmd := exec.CommandContext(ctx, "kubectl",
+		"--kubeconfig", kubeconfigPath,
+		"create", "secret", "generic", "hcloud-csi-secret",
+		"--namespace", "kube-system",
+		"--from-literal=encryption-passphrase="+encryptionKey,
+	)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to create hcloud-csi-secret: %w\nOutput: %s", err, output)
+	}
+
+	return nil
 }
 
 // generateEncryptionKey creates a random encryption key of the specified byte length.

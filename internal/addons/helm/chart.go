@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-//go:embed templates/*
+//go:embed all:templates/*
 var templatesFS embed.FS
 
 // Chart represents metadata about an embedded helm chart.

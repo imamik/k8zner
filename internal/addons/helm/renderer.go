@@ -3,6 +3,7 @@ package helm
 import (
 	"bytes"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 
 	"helm.sh/helm/v3/pkg/chart"
@@ -62,8 +63,15 @@ func (r *Renderer) renderChart(ch *chart.Chart, values Values) ([]byte, error) {
 		IsInstall: true,
 	}
 
+	// Set capabilities for modern Kubernetes (1.31.0)
+	// This ensures templates use current API versions (e.g., policy/v1 instead of v1beta1)
+	capabilities := chartutil.DefaultCapabilities.Copy()
+	capabilities.KubeVersion.Version = "v1.31.0"
+	capabilities.KubeVersion.Major = "1"
+	capabilities.KubeVersion.Minor = "31"
+
 	// Merge chart values with defaults
-	valuesToRender, err := chartutil.ToRenderValues(ch, chartValues, releaseOptions, nil)
+	valuesToRender, err := chartutil.ToRenderValues(ch, chartValues, releaseOptions, capabilities)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare values: %w", err)
 	}
@@ -130,26 +138,37 @@ func loadChartFiles(chartPath string) ([]*loader.BufferedFile, error) {
 		})
 	}
 
-	// Read all template files
+	// Read all template files recursively using WalkDir
 	templatesPath := filepath.Join(chartPath, "templates")
-	templateEntries, err := templatesFS.ReadDir(templatesPath)
-	if err == nil {
-		for _, entry := range templateEntries {
-			if entry.IsDir() {
-				continue
-			}
-
-			filePath := filepath.Join(templatesPath, entry.Name())
-			data, err := templatesFS.ReadFile(filePath)
-			if err != nil {
-				return nil, fmt.Errorf("failed to read template %s: %w", entry.Name(), err)
-			}
-
-			files = append(files, &loader.BufferedFile{
-				Name: filepath.Join("templates", entry.Name()),
-				Data: data,
-			})
+	err = fs.WalkDir(templatesFS, templatesPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
+		if d.IsDir() {
+			return nil
+		}
+
+		// Read the file
+		data, err := templatesFS.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("failed to read template %s: %w", path, err)
+		}
+
+		// Calculate relative path from chartPath
+		relPath, err := filepath.Rel(chartPath, path)
+		if err != nil {
+			return fmt.Errorf("failed to get relative path for %s: %w", path, err)
+		}
+
+		files = append(files, &loader.BufferedFile{
+			Name: relPath,
+			Data: data,
+		})
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to walk templates directory: %w", err)
 	}
 
 	// Read CRDs if they exist

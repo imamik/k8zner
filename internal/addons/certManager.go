@@ -44,21 +44,30 @@ func buildCertManagerValues(cfg *config.Config) helm.Values {
 	}
 
 	baseConfig := buildCertManagerBaseConfig(replicas)
-	controllerConfig := helm.Merge(baseConfig, helm.Values{"topologySpreadConstraints": buildCertManagerTopologySpread("controller")})
-	webhookConfig := helm.Merge(baseConfig, helm.Values{"topologySpreadConstraints": buildCertManagerTopologySpread("webhook")})
-	cainjectorConfig := helm.Merge(baseConfig, helm.Values{"topologySpreadConstraints": buildCertManagerTopologySpread("cainjector")})
 
 	return helm.Values{
 		"crds":                      helm.Values{"enabled": true},
 		"startupapicheck":           helm.Values{"enabled": false},
 		"config":                    buildCertManagerConfig(cfg),
-		"replicaCount":              controllerConfig["replicaCount"],
-		"podDisruptionBudget":       controllerConfig["podDisruptionBudget"],
-		"topologySpreadConstraints": controllerConfig["topologySpreadConstraints"],
-		"nodeSelector":              controllerConfig["nodeSelector"],
-		"tolerations":               controllerConfig["tolerations"],
-		"webhook":                   webhookConfig,
-		"cainjector":                cainjectorConfig,
+		"replicaCount":              baseConfig["replicaCount"],
+		"podDisruptionBudget":       baseConfig["podDisruptionBudget"],
+		"topologySpreadConstraints": buildCertManagerTopologySpread("controller"),
+		"nodeSelector":              baseConfig["nodeSelector"],
+		"tolerations":               baseConfig["tolerations"],
+		"webhook": helm.Values{
+			"replicaCount":              baseConfig["replicaCount"],
+			"podDisruptionBudget":       baseConfig["podDisruptionBudget"],
+			"topologySpreadConstraints": buildCertManagerTopologySpread("webhook"),
+			"nodeSelector":              baseConfig["nodeSelector"],
+			"tolerations":               baseConfig["tolerations"],
+		},
+		"cainjector": helm.Values{
+			"replicaCount":              baseConfig["replicaCount"],
+			"podDisruptionBudget":       baseConfig["podDisruptionBudget"],
+			"topologySpreadConstraints": buildCertManagerTopologySpread("cainjector"),
+			"nodeSelector":              baseConfig["nodeSelector"],
+			"tolerations":               baseConfig["tolerations"],
+		},
 	}
 }
 

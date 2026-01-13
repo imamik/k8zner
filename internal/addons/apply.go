@@ -36,6 +36,13 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		_ = os.Remove(tmpKubeconfig)
 	}()
 
+	// Create hcloud secret if CCM or CSI are enabled
+	if cfg.Addons.CCM.Enabled || cfg.Addons.CSI.Enabled {
+		if err := createHCloudSecret(ctx, tmpKubeconfig, cfg.HCloudToken, networkID); err != nil {
+			return fmt.Errorf("failed to create hcloud secret: %w", err)
+		}
+	}
+
 	if cfg.Addons.CCM.Enabled {
 		if err := applyCCM(ctx, tmpKubeconfig, cfg.HCloudToken, networkID); err != nil {
 			return fmt.Errorf("failed to install CCM: %w", err)

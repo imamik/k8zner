@@ -37,18 +37,8 @@ func buildCCMValues(token string, networkID int64) helm.Values {
 		},
 		"networking": helm.Values{
 			"enabled": true,
-			// Note: clusterCIDR requires cluster config, will be handled when config is extended
-		},
-		"env": helm.Values{
-			"HCLOUD_TOKEN": helm.Values{
-				"valueFrom": helm.Values{
-					"secretKeyRef": helm.Values{
-						"name": "hcloud",
-						"key":  "token",
-					},
-				},
-			},
-			"HCLOUD_NETWORK": helm.Values{
+			// Note: clusterCIDR left at default 10.244.0.0/16 (Flannel default)
+			"network": helm.Values{
 				"valueFrom": helm.Values{
 					"secretKeyRef": helm.Values{
 						"name": "hcloud",
@@ -56,11 +46,8 @@ func buildCCMValues(token string, networkID int64) helm.Values {
 					},
 				},
 			},
-			// Load balancer configuration - using defaults from terraform
-			// These can be extended to take values from config when needed
-			"HCLOUD_LOAD_BALANCERS_ENABLED": helm.Values{
-				"value": "true",
-			},
 		},
+		// HCLOUD_TOKEN is already configured in values.yaml defaults
+		// Load balancer support is enabled by default in the chart
 	}
 }

@@ -62,6 +62,12 @@ func buildLonghornValues(cfg *config.Config) helm.Values {
 		},
 		"persistence": helm.Values{
 			"defaultClass": cfg.Addons.Longhorn.DefaultStorageClass,
+			"backingImage": helm.Values{
+				"enable": false,
+			},
+			"recurringJobSelector": helm.Values{
+				"enable": false,
+			},
 		},
 	}
 }

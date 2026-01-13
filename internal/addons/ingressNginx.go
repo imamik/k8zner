@@ -65,6 +65,10 @@ func buildIngressNginxController(workerCount, replicas int) helm.Values {
 		"watchIngressWithoutClass":   true,
 		"enableTopologyAwareRouting": false,
 		"topologySpreadConstraints":  buildIngressNginxTopologySpread(workerCount),
+		"metrics": helm.Values{
+			"enabled": false,
+		},
+		"extraArgs": helm.Values{},
 		"service": helm.Values{
 			"type":                  "NodePort",
 			"externalTrafficPolicy": "Local",
