@@ -2,6 +2,7 @@ bin/
 /hcloud-k8s
 
 .envrc
+.env
 
 # Git worktrees (isolated workspaces)
 .worktrees/
