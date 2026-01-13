@@ -47,9 +47,12 @@ func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
 	// Provision Servers (configs will be generated per-node in reconciler)
 	for i, pool := range ctx.Config.ControlPlane.NodePools {
 		// Placement Group for Control Plane
-		pgLabels := labels.NewLabelBuilder(ctx.Config.ClusterName).
-			WithPool(pool.Name).
-			Build()
+		lb := labels.NewLabelBuilder(ctx.Config.ClusterName).
+			WithPool(pool.Name)
+		if ctx.Config.TestID != "" {
+			lb = lb.WithTestID(ctx.Config.TestID)
+		}
+		pgLabels := lb.Build()
 
 		pg, err := ctx.Infra.EnsurePlacementGroup(ctx, naming.PlacementGroup(ctx.Config.ClusterName, pool.Name), "spread", pgLabels)
 		if err != nil {

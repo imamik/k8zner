@@ -7,6 +7,7 @@ type Config struct {
 	HCloudToken string   `mapstructure:"hcloud_token" yaml:"hcloud_token"`
 	Location    string   `mapstructure:"location" yaml:"location"` // e.g. nbg1, fsn1, hel1
 	SSHKeys     []string `mapstructure:"ssh_keys" yaml:"ssh_keys"` // List of SSH key names/IDs
+	TestID      string   `mapstructure:"test_id" yaml:"test_id"`   // Optional test ID for E2E test resource tracking
 
 	// Network Configuration
 	Network NetworkConfig `mapstructure:"network" yaml:"network"`

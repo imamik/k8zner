@@ -24,11 +24,14 @@ type SnapshotManager interface {
 	CreateSnapshot(ctx context.Context, serverID, snapshotDescription string, labels map[string]string) (string, error)
 	DeleteImage(ctx context.Context, imageID string) error
 	GetSnapshotByLabels(ctx context.Context, labels map[string]string) (*hcloud.Image, error)
+
+	// CleanupByLabel deletes all resources matching the given label selector
+	CleanupByLabel(ctx context.Context, labelSelector map[string]string) error
 }
 
 // SSHKeyManager defines the interface for managing SSH keys.
 type SSHKeyManager interface {
-	CreateSSHKey(ctx context.Context, name, publicKey string) (string, error)
+	CreateSSHKey(ctx context.Context, name, publicKey string, labels map[string]string) (string, error)
 	DeleteSSHKey(ctx context.Context, name string) error
 }
 

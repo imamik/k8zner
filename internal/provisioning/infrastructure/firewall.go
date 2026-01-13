@@ -8,6 +8,7 @@ import (
 
 	"hcloud-k8s/internal/config"
 	"hcloud-k8s/internal/provisioning"
+	"hcloud-k8s/internal/util/labels"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
@@ -55,11 +56,13 @@ func (p *Provisioner) ProvisionFirewall(ctx *provisioning.Context) error {
 		rules = append(rules, buildFirewallRule(rule))
 	}
 
-	labels := map[string]string{
-		"cluster": ctx.Config.ClusterName,
+	lb := labels.NewLabelBuilder(ctx.Config.ClusterName)
+	if ctx.Config.TestID != "" {
+		lb = lb.WithTestID(ctx.Config.TestID)
 	}
+	firewallLabels := lb.Build()
 
-	result, err := ctx.Infra.EnsureFirewall(ctx, ctx.Config.ClusterName, rules, labels)
+	result, err := ctx.Infra.EnsureFirewall(ctx, ctx.Config.ClusterName, rules, firewallLabels)
 	if err != nil {
 		return fmt.Errorf("failed to ensure firewall: %w", err)
 	}

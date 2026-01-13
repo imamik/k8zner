@@ -46,11 +46,13 @@ func (p *Provisioner) ensureServer(ctx *provisioning.Context, spec ServerSpec) (
 	ctx.Logger.Printf("[%s] Creating %s server %s...", phase, spec.Role, spec.Name)
 
 	// Labels
-	serverLabels := labels.NewLabelBuilder(ctx.Config.ClusterName).
+	lb := labels.NewLabelBuilder(ctx.Config.ClusterName).
 		WithRole(spec.Role).
-		WithPool(spec.Pool).
-		Merge(spec.ExtraLabels).
-		Build()
+		WithPool(spec.Pool)
+	if ctx.Config.TestID != "" {
+		lb = lb.WithTestID(ctx.Config.TestID)
+	}
+	serverLabels := lb.Merge(spec.ExtraLabels).Build()
 
 	// Image defaulting - if empty or "talos", ensure the versioned image exists
 	image := spec.Image

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"hcloud-k8s/internal/provisioning"
+	"hcloud-k8s/internal/util/labels"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
@@ -14,11 +15,13 @@ func (p *Provisioner) ProvisionNetwork(ctx *provisioning.Context) error {
 
 	// Subnets are calculated during validation phase
 
-	labels := map[string]string{
-		"cluster": ctx.Config.ClusterName,
+	lb := labels.NewLabelBuilder(ctx.Config.ClusterName)
+	if ctx.Config.TestID != "" {
+		lb = lb.WithTestID(ctx.Config.TestID)
 	}
+	networkLabels := lb.Build()
 
-	network, err := ctx.Infra.EnsureNetwork(ctx, ctx.Config.ClusterName, ctx.Config.Network.IPv4CIDR, ctx.Config.Network.Zone, labels)
+	network, err := ctx.Infra.EnsureNetwork(ctx, ctx.Config.ClusterName, ctx.Config.Network.IPv4CIDR, ctx.Config.Network.Zone, networkLabels)
 	if err != nil {
 		return fmt.Errorf("failed to ensure network: %w", err)
 	}

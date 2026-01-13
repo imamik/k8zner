@@ -33,7 +33,7 @@ func (rc *ResourceCleaner) Add(f func()) {
 
 // setupSSHKey generates a temporary SSH key, uploads it to HCloud, and registers cleanup.
 // It returns the key name and private key bytes.
-func setupSSHKey(t *testing.T, client *hcloud.RealClient, cleaner *ResourceCleaner, prefix string) (string, []byte) {
+func setupSSHKey(t *testing.T, client *hcloud.RealClient, cleaner *ResourceCleaner, prefix string, labels map[string]string) (string, []byte) {
 	keyName := fmt.Sprintf("%s-key-%d", prefix, time.Now().UnixNano())
 	t.Logf("Generating SSH key %s...", keyName)
 
@@ -42,7 +42,7 @@ func setupSSHKey(t *testing.T, client *hcloud.RealClient, cleaner *ResourceClean
 		t.Fatalf("Failed to generate key pair: %v", err)
 	}
 
-	_, err = client.CreateSSHKey(context.Background(), keyName, string(keyPair.PublicKey))
+	_, err = client.CreateSSHKey(context.Background(), keyName, string(keyPair.PublicKey), labels)
 	if err != nil {
 		t.Fatalf("Failed to upload ssh key: %v", err)
 	}

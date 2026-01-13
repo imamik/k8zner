@@ -8,10 +8,11 @@ import (
 )
 
 // CreateSSHKey creates a new SSH key.
-func (c *RealClient) CreateSSHKey(ctx context.Context, name, publicKey string) (string, error) {
+func (c *RealClient) CreateSSHKey(ctx context.Context, name, publicKey string, labels map[string]string) (string, error) {
 	opts := hcloud.SSHKeyCreateOpts{
 		Name:      name,
 		PublicKey: publicKey,
+		Labels:    labels,
 	}
 	key, _, err := c.client.SSHKey.Create(ctx, opts)
 	if err != nil {
