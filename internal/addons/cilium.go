@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -41,8 +43,19 @@ func applyCilium(ctx context.Context, kubeconfigPath string, cfg *config.Config)
 		return fmt.Errorf("failed to render Cilium chart: %w", err)
 	}
 
-	// Apply manifests
-	if err := applyWithKubectl(ctx, kubeconfigPath, "cilium", manifestBytes); err != nil {
+	// Apply manifests in two phases to avoid namespace race conditions
+	// Phase 1: Apply namespaces first
+	namespaces, rest := splitManifestsByKind(string(manifestBytes), "Namespace")
+	if len(namespaces) > 0 {
+		if err := applyWithKubectl(ctx, kubeconfigPath, "cilium-namespaces", []byte(namespaces)); err != nil {
+			return fmt.Errorf("failed to apply Cilium namespaces: %w", err)
+		}
+		// Brief wait for namespace propagation
+		time.Sleep(2 * time.Second)
+	}
+
+	// Phase 2: Apply remaining resources
+	if err := applyWithKubectl(ctx, kubeconfigPath, "cilium", []byte(rest)); err != nil {
 		return fmt.Errorf("failed to apply Cilium manifests: %w", err)
 	}
 
@@ -283,4 +296,30 @@ func generateIPSecKey(keySize int) (string, error) {
 	}
 
 	return hex.EncodeToString(bytes), nil
+}
+
+// splitManifestsByKind splits YAML manifests into two groups: matching kind and rest.
+// Returns (matching, rest) where matching contains only manifests of the specified kind.
+func splitManifestsByKind(manifests, kind string) (string, string) {
+	docs := strings.Split(manifests, "\n---\n")
+	var matching, rest []string
+
+	for _, doc := range docs {
+		doc = strings.TrimSpace(doc)
+		if doc == "" {
+			continue
+		}
+
+		// Simple check: does this doc have "kind: <kind>" in it?
+		if strings.Contains(doc, "kind: "+kind) {
+			matching = append(matching, doc)
+		} else {
+			rest = append(rest, doc)
+		}
+	}
+
+	matchingStr := strings.Join(matching, "\n---\n")
+	restStr := strings.Join(rest, "\n---\n")
+
+	return matchingStr, restStr
 }
