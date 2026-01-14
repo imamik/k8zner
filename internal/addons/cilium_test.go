@@ -14,12 +14,12 @@ import (
 
 func TestBuildCiliumValues(t *testing.T) {
 	tests := []struct {
-		name                    string
-		config                  *config.Config
-		expectedRoutingMode     string
-		expectedEncryptionType  string
-		expectedKubeProxyRepl   bool
-		expectedHubbleEnabled   bool
+		name                     string
+		config                   *config.Config
+		expectedRoutingMode      string
+		expectedEncryptionType   string
+		expectedKubeProxyRepl    bool
+		expectedHubbleEnabled    bool
 		expectedOperatorReplicas int
 	}{
 		{
@@ -222,12 +222,12 @@ func TestBuildCiliumOperatorConfig(t *testing.T) {
 
 func TestBuildCiliumHubbleConfig(t *testing.T) {
 	tests := []struct {
-		name              string
-		hubbleEnabled     bool
-		relayEnabled      bool
-		uiEnabled         bool
-		expectRelay       bool
-		expectUI          bool
+		name          string
+		hubbleEnabled bool
+		relayEnabled  bool
+		uiEnabled     bool
+		expectRelay   bool
+		expectUI      bool
 	}{
 		{
 			name:          "hubble disabled",
@@ -359,9 +359,9 @@ func TestBuildCiliumIPSecSecretDefaults(t *testing.T) {
 
 func TestGenerateIPSecKey(t *testing.T) {
 	tests := []struct {
-		name            string
-		keySize         int
-		expectedLength  int // hex string length: (keySize/8 + 4) * 2
+		name           string
+		keySize        int
+		expectedLength int // hex string length: (keySize/8 + 4) * 2
 	}{
 		{
 			name:           "128-bit key",

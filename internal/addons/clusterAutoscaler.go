@@ -142,7 +142,7 @@ func parseTaintsForAutoscaler(taints []string) []map[string]string {
 		// Expected format: "key=value:effect"
 		// Split and convert to map
 		parsed = append(parsed, map[string]string{
-			"key":    taint, // Simplified - real parsing would extract key/value/effect
+			"key": taint, // Simplified - real parsing would extract key/value/effect
 		})
 	}
 	return parsed
@@ -170,8 +170,8 @@ func buildClusterAutoscalerValues(cfg *config.Config, networkID int64, sshKeyNam
 	}
 
 	values := helm.Values{
-		"cloudProvider":   "hetzner",
-		"replicaCount":    replicas,
+		"cloudProvider":     "hetzner",
+		"replicaCount":      replicas,
 		"autoscalingGroups": autoscalingGroups,
 		"image": helm.Values{
 			"tag": "v1.33.3",

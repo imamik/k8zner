@@ -80,10 +80,10 @@ func buildCiliumValues(cfg *config.Config) helm.Values {
 		"k8s": helm.Values{
 			"requireIPv4PodCIDR": true,
 		},
-		"k8sServiceHost":                      "127.0.0.1",
-		"k8sServicePort":                      7445,
-		"kubeProxyReplacement":                cfg.Addons.Cilium.KubeProxyReplacementEnabled,
-		"installNoConntrackIptablesRules":     cfg.Addons.Cilium.KubeProxyReplacementEnabled && cfg.Addons.Cilium.RoutingMode == "native",
+		"k8sServiceHost":                  "127.0.0.1",
+		"k8sServicePort":                  7445,
+		"kubeProxyReplacement":            cfg.Addons.Cilium.KubeProxyReplacementEnabled,
+		"installNoConntrackIptablesRules": cfg.Addons.Cilium.KubeProxyReplacementEnabled && cfg.Addons.Cilium.RoutingMode == "native",
 		"socketLB": helm.Values{
 			"hostNamespaceOnly": false,
 		},

@@ -19,7 +19,7 @@ func TestDestroy(t *testing.T) {
 		errorContains string
 	}{
 		{
-			name: "missing config file",
+			name:          "missing config file",
 			configContent: ``,
 			expectError:   true,
 			errorContains: "failed to load config",
