@@ -68,9 +68,11 @@ func buildCiliumValues(cfg *config.Config) helm.Values {
 		"ipv4NativeRoutingCIDR": nativeRoutingCIDR,
 		"policyCIDRMatchMode":   []string{"nodes"},
 		"bpf": helm.Values{
-			"masquerade":        cfg.Addons.Cilium.KubeProxyReplacementEnabled,
-			"datapathMode":      "veth",
-			"hostLegacyRouting": cfg.Addons.Cilium.EncryptionEnabled && cfg.Addons.Cilium.EncryptionType == "ipsec",
+			"masquerade":   cfg.Addons.Cilium.KubeProxyReplacementEnabled,
+			"datapathMode": "veth",
+			// hostLegacyRouting MUST be true on Talos 1.8+ due to DNS forwarding
+			// See: https://github.com/siderolabs/talos/issues/9132
+			"hostLegacyRouting": true,
 		},
 		"encryption": helm.Values{
 			"enabled": cfg.Addons.Cilium.EncryptionEnabled,
@@ -105,6 +107,9 @@ func buildCiliumValues(cfg *config.Config) helm.Values {
 		"loadBalancer": helm.Values{
 			"acceleration": "native",
 		},
+		// Enable agent to tolerate its own taint during startup
+		// See: https://github.com/cilium/cilium/issues/40312
+		"agentNotReadyTaintKey": "node.cilium.io/agent-not-ready",
 	}
 
 	// KubeProxy replacement specific settings

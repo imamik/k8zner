@@ -38,7 +38,21 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		_ = os.Remove(tmpKubeconfig)
 	}()
 
-	// Install Cilium CNI first (network foundation)
+	// Create hcloud secret if CCM or CSI are enabled (needed before CCM/CSI)
+	if cfg.Addons.CCM.Enabled || cfg.Addons.CSI.Enabled {
+		if err := createHCloudSecret(ctx, tmpKubeconfig, cfg.HCloudToken, networkID); err != nil {
+			return fmt.Errorf("failed to create hcloud secret: %w", err)
+		}
+	}
+
+	// Install CCM first (provides CSR approver required by Cilium 1.18+)
+	if cfg.Addons.CCM.Enabled {
+		if err := applyCCM(ctx, tmpKubeconfig, cfg.HCloudToken, networkID); err != nil {
+			return fmt.Errorf("failed to install CCM: %w", err)
+		}
+	}
+
+	// Install Cilium CNI (after CCM for CSR approver support)
 	if cfg.Addons.Cilium.Enabled {
 		if err := applyCilium(ctx, tmpKubeconfig, cfg); err != nil {
 			return fmt.Errorf("failed to install Cilium: %w", err)
@@ -49,19 +63,6 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 	if cfg.Addons.ClusterAutoscaler.Enabled && len(cfg.Autoscaler.NodePools) > 0 {
 		if err := applyClusterAutoscaler(ctx, tmpKubeconfig, cfg, networkID, sshKeyName, firewallID, talosGen); err != nil {
 			return fmt.Errorf("failed to install Cluster Autoscaler: %w", err)
-		}
-	}
-
-	// Create hcloud secret if CCM or CSI are enabled
-	if cfg.Addons.CCM.Enabled || cfg.Addons.CSI.Enabled {
-		if err := createHCloudSecret(ctx, tmpKubeconfig, cfg.HCloudToken, networkID); err != nil {
-			return fmt.Errorf("failed to create hcloud secret: %w", err)
-		}
-	}
-
-	if cfg.Addons.CCM.Enabled {
-		if err := applyCCM(ctx, tmpKubeconfig, cfg.HCloudToken, networkID); err != nil {
-			return fmt.Errorf("failed to install CCM: %w", err)
 		}
 	}
 
