@@ -54,8 +54,9 @@ func buildIngressNginxValues(cfg *config.Config) helm.Values {
 func buildIngressNginxController(workerCount, replicas int) helm.Values {
 	controller := helm.Values{
 		"admissionWebhooks": helm.Values{
+			"enabled": true,
 			"certManager": helm.Values{
-				"enabled": true,
+				"enabled": false, // Disabled to avoid startup delays in test environments
 			},
 		},
 		"kind":                       "Deployment",

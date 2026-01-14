@@ -182,8 +182,8 @@ func testAddonIngressNginx(t *testing.T, state *E2EState) {
 		t.Fatalf("Failed to install Ingress NGINX: %v", err)
 	}
 
-	// Wait for ingress controller pod
-	waitForPod(t, state.KubeconfigPath, "ingress-nginx", "app.kubernetes.io/component=controller", 5*time.Minute)
+	// Wait for ingress controller pod (increased timeout for large image pull)
+	waitForPod(t, state.KubeconfigPath, "ingress-nginx", "app.kubernetes.io/component=controller", 8*time.Minute)
 
 	state.AddonsInstalled["ingress-nginx"] = true
 	t.Log("✓ Ingress NGINX addon working")
@@ -242,6 +242,25 @@ func waitForPod(t *testing.T, kubeconfigPath, namespace, selector string, timeou
 	for {
 		select {
 		case <-ctx.Done():
+			// Timeout - gather diagnostics before failing
+			t.Logf("Timeout waiting for pod - gathering diagnostics...")
+
+			// Get pod details
+			descCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"describe", "pod", "-n", namespace, "-l", selector)
+			if descOutput, _ := descCmd.CombinedOutput(); len(descOutput) > 0 {
+				t.Logf("Pod description:\n%s", string(descOutput))
+			}
+
+			// Get pod events
+			eventsCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "events", "-n", namespace, "--sort-by=.lastTimestamp")
+			if eventsOutput, _ := eventsCmd.CombinedOutput(); len(eventsOutput) > 0 {
+				t.Logf("Namespace events:\n%s", string(eventsOutput))
+			}
+
 			t.Fatalf("Timeout waiting for pod with selector %s in namespace %s", selector, namespace)
 		case <-ticker.C:
 			cmd := exec.CommandContext(context.Background(), "kubectl",
@@ -349,6 +368,8 @@ kind: Service
 metadata:
   name: %s
   namespace: default
+  annotations:
+    load-balancer.hetzner.cloud/location: nbg1
 spec:
   type: LoadBalancer
   ports:
