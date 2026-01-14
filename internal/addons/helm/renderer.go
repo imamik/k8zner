@@ -64,8 +64,12 @@ func (r *Renderer) renderChart(ch *chart.Chart, values Values) ([]byte, error) {
 	// This ensures nested objects (like controller.podSecurityContext) are preserved
 	mergedValues := DeepMerge(chartDefaults, values)
 
+	// Convert to plain map[string]interface{} recursively
+	// This ensures nested Values types are converted to plain maps for Helm
+	plainMap := mergedValues.ToMap()
+
 	// Prepare chart values
-	chartValues := chartutil.Values(mergedValues)
+	chartValues := chartutil.Values(plainMap)
 
 	// Create release options
 	releaseOptions := chartutil.ReleaseOptions{

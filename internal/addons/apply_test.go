@@ -18,7 +18,7 @@ func TestApply_EmptyKubeconfig(t *testing.T) {
 		},
 	}
 
-	err := Apply(context.Background(), cfg, nil, 1)
+	err := Apply(context.Background(), cfg, nil, 1, "", 0, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "kubeconfig is required")
 }
@@ -40,7 +40,7 @@ contexts: []
 current-context: ""
 users: []`)
 
-	err := Apply(context.Background(), cfg, kubeconfig, 1)
+	err := Apply(context.Background(), cfg, kubeconfig, 1, "", 0, nil)
 	// Should succeed since no addons are enabled
 	assert.NoError(t, err)
 }
@@ -61,7 +61,7 @@ contexts: []
 current-context: ""
 users: []`)
 
-	err := Apply(context.Background(), cfg, kubeconfig, 1)
+	err := Apply(context.Background(), cfg, kubeconfig, 1, "", 0, nil)
 	assert.NoError(t, err)
 }
 

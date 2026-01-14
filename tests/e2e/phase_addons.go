@@ -14,7 +14,6 @@ import (
 
 	"hcloud-k8s/internal/addons"
 	"hcloud-k8s/internal/config"
-	"hcloud-k8s/internal/provisioning"
 )
 
 // phaseAddons installs and tests addons sequentially.

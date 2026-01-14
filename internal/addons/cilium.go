@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 

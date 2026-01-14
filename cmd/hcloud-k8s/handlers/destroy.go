@@ -17,22 +17,19 @@ import (
 // from Hetzner Cloud. Resources are deleted in dependency order.
 func Destroy(ctx context.Context, configPath string) error {
 	// Load and validate configuration
-	cfg, err := config.LoadFromFile(configPath)
+	cfg, err := config.LoadFile(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	if err := config.Validate(cfg); err != nil {
+	if err := cfg.Validate(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
 
 	log.Printf("Destroying cluster: %s", cfg.ClusterName)
 
 	// Initialize Hetzner Cloud client
-	infraClient, err := hcloud.NewRealClient(cfg.HCloudToken)
-	if err != nil {
-		return fmt.Errorf("failed to create Hetzner Cloud client: %w", err)
-	}
+	infraClient := hcloud.NewRealClient(cfg.HCloudToken)
 
 	// Create provisioning context (no Talos generator needed for destroy)
 	pCtx := provisioning.NewContext(ctx, cfg, infraClient, nil)

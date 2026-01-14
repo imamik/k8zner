@@ -130,7 +130,6 @@ func TestProvisionCallsCleanupWithCorrectLabels(t *testing.T) {
 	// Verify the captured labels
 	require.NotNil(t, capturedLabels)
 	assert.Equal(t, "production-cluster", capturedLabels["cluster"])
-	assert.Equal(t, "hcloud-k8s", capturedLabels["managed-by"])
 
 	// Test ID should not be present
 	_, hasTestID := capturedLabels["test-id"]

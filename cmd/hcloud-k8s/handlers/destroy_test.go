@@ -31,7 +31,7 @@ cluster_name: ""
 hcloud_token: invalid
 `,
 			expectError:   true,
-			errorContains: "invalid configuration",
+			errorContains: "cluster_name is required",
 		},
 		{
 			name: "missing hcloud token",
@@ -40,7 +40,7 @@ cluster_name: test-cluster
 hcloud_token: ""
 `,
 			expectError:   true,
-			errorContains: "invalid configuration",
+			errorContains: "hcloud_token is required",
 		},
 	}
 
@@ -96,11 +96,11 @@ control_plane:
 	err := os.WriteFile(configPath, []byte(configContent), 0600)
 	require.NoError(t, err)
 
-	// Note: This will fail with "failed to create Hetzner Cloud client"
-	// because we're using a fake token. In a full test, we'd mock the client.
+	// Note: This will fail with configuration validation error
+	// because location is required. In a full test, we'd mock the client.
 	err = Destroy(context.Background(), configPath)
 	if err != nil {
-		// Expected to fail with API error or connection error
-		assert.Contains(t, err.Error(), "Hetzner Cloud client")
+		// Expected to fail with config validation error
+		assert.Contains(t, err.Error(), "configuration validation failed")
 	}
 }

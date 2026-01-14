@@ -24,8 +24,8 @@ func TestBuildClusterAutoscalerValues(t *testing.T) {
 			cfg: &config.Config{
 				ClusterName: "test-cluster",
 				ControlPlane: config.ControlPlaneConfig{
-					NodePools: []config.NodePool{
-						{Count: 1, Type: "cpx21", Location: "nbg1"},
+					NodePools: []config.ControlPlaneNodePool{
+						{Count: 1, ServerType: "cpx21", Location: "nbg1"},
 					},
 				},
 				Autoscaler: config.AutoscalerConfig{
@@ -115,8 +115,8 @@ func TestBuildClusterAutoscalerValues(t *testing.T) {
 			cfg: &config.Config{
 				ClusterName: "ha-cluster",
 				ControlPlane: config.ControlPlaneConfig{
-					NodePools: []config.NodePool{
-						{Count: 3, Type: "cpx21", Location: "nbg1"},
+					NodePools: []config.ControlPlaneNodePool{
+						{Count: 3, ServerType: "cpx21", Location: "nbg1"},
 					},
 				},
 				Autoscaler: config.AutoscalerConfig{
@@ -357,13 +357,13 @@ func TestGenerateAutoscalerNodepoolConfigs(t *testing.T) {
 	pool1Config, ok := configs["pool1"]
 	require.True(t, ok, "should have config for pool1")
 	assert.NotEmpty(t, pool1Config)
-	// Base64 encoded "config-for-pool1" should be: Y29uZmlnLWZvci1wb29sMS==
-	assert.Equal(t, "Y29uZmlnLWZvci1wb29sMS==", pool1Config)
+	// Base64 encoded "config-for-pool1" should be: Y29uZmlnLWZvci1wb29sMQ==
+	assert.Equal(t, "Y29uZmlnLWZvci1wb29sMQ==", pool1Config)
 
 	pool2Config, ok := configs["pool2"]
 	require.True(t, ok, "should have config for pool2")
 	assert.NotEmpty(t, pool2Config)
-	assert.Equal(t, "Y29uZmlnLWZvci1wb29sMi==", pool2Config)
+	assert.Equal(t, "Y29uZmlnLWZvci1wb29sMg==", pool2Config)
 }
 
 func TestGenerateAutoscalerNodepoolConfigsError(t *testing.T) {

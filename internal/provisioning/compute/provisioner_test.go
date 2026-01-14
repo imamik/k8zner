@@ -36,6 +36,10 @@ func (m *mockTalosProducer) SetEndpoint(endpoint string) {
 	m.endpoint = endpoint
 }
 
+func (m *mockTalosProducer) GenerateAutoscalerConfig(_ string, _ map[string]string, _ []string) ([]byte, error) {
+	return []byte("autoscaler-config"), nil
+}
+
 func createTestContext(t *testing.T, mockInfra *hcloud_internal.MockClient, cfg *config.Config) *provisioning.Context {
 	t.Helper()
 

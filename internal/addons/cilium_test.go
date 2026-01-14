@@ -1,7 +1,7 @@
 package addons
 
 import (
-	"strings"
+	"encoding/hex"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
