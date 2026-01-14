@@ -21,7 +21,7 @@ type MockClient struct {
 	DeleteImageFunc         func(ctx context.Context, imageID string) error
 	GetSnapshotByLabelsFunc func(ctx context.Context, labels map[string]string) (*hcloud.Image, error)
 
-	CreateSSHKeyFunc func(ctx context.Context, name, publicKey string) (string, error)
+	CreateSSHKeyFunc func(ctx context.Context, name, publicKey string, labels map[string]string) (string, error)
 	DeleteSSHKeyFunc func(ctx context.Context, name string) error
 
 	// Network
@@ -59,6 +59,9 @@ type MockClient struct {
 
 	// IP
 	GetPublicIPFunc func(ctx context.Context) (string, error)
+
+	// Cleanup
+	CleanupByLabelFunc func(ctx context.Context, labelSelector map[string]string) error
 }
 
 // Ensure interface compliance.
@@ -145,9 +148,9 @@ func (m *MockClient) GetSnapshotByLabels(ctx context.Context, labels map[string]
 }
 
 // CreateSSHKey mocks ssh key creation.
-func (m *MockClient) CreateSSHKey(ctx context.Context, name, publicKey string) (string, error) {
+func (m *MockClient) CreateSSHKey(ctx context.Context, name, publicKey string, labels map[string]string) (string, error) {
 	if m.CreateSSHKeyFunc != nil {
-		return m.CreateSSHKeyFunc(ctx, name, publicKey)
+		return m.CreateSSHKeyFunc(ctx, name, publicKey, labels)
 	}
 	return "mock-key-id", nil
 }
@@ -339,4 +342,12 @@ func (m *MockClient) GetPublicIP(ctx context.Context) (string, error) {
 		return m.GetPublicIPFunc(ctx)
 	}
 	return "127.0.0.1", nil
+}
+
+// CleanupByLabel mocks label-based cleanup.
+func (m *MockClient) CleanupByLabel(ctx context.Context, labelSelector map[string]string) error {
+	if m.CleanupByLabelFunc != nil {
+		return m.CleanupByLabelFunc(ctx, labelSelector)
+	}
+	return nil
 }

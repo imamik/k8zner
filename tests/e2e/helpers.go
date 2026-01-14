@@ -33,7 +33,7 @@ func (rc *ResourceCleaner) Add(f func()) {
 
 // setupSSHKey generates a temporary SSH key, uploads it to HCloud, and registers cleanup.
 // It returns the key name and private key bytes.
-func setupSSHKey(t *testing.T, client *hcloud.RealClient, cleaner *ResourceCleaner, prefix string) (string, []byte) {
+func setupSSHKey(t *testing.T, client *hcloud.RealClient, cleaner *ResourceCleaner, prefix string, labels map[string]string) (string, []byte) {
 	keyName := fmt.Sprintf("%s-key-%d", prefix, time.Now().UnixNano())
 	t.Logf("Generating SSH key %s...", keyName)
 
@@ -42,7 +42,7 @@ func setupSSHKey(t *testing.T, client *hcloud.RealClient, cleaner *ResourceClean
 		t.Fatalf("Failed to generate key pair: %v", err)
 	}
 
-	_, err = client.CreateSSHKey(context.Background(), keyName, string(keyPair.PublicKey))
+	_, err = client.CreateSSHKey(context.Background(), keyName, string(keyPair.PublicKey), labels)
 	if err != nil {
 		t.Fatalf("Failed to upload ssh key: %v", err)
 	}
@@ -104,19 +104,19 @@ func httpGet(url string) (*http.Response, error) {
 
 // ClusterDiagnostics holds diagnostic information about a cluster.
 type ClusterDiagnostics struct {
-	t             *testing.T
+	t              *testing.T
 	controlPlaneIP string
-	lbIP          string
-	talosConfig   []byte
+	lbIP           string
+	talosConfig    []byte
 }
 
 // NewClusterDiagnostics creates a new diagnostics helper.
 func NewClusterDiagnostics(t *testing.T, cpIP, lbIP string, talosConfig []byte) *ClusterDiagnostics {
 	return &ClusterDiagnostics{
-		t:             t,
+		t:              t,
 		controlPlaneIP: cpIP,
-		lbIP:          lbIP,
-		talosConfig:   talosConfig,
+		lbIP:           lbIP,
+		talosConfig:    talosConfig,
 	}
 }
 

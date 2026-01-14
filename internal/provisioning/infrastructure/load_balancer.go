@@ -7,6 +7,7 @@ import (
 
 	"hcloud-k8s/internal/config"
 	"hcloud-k8s/internal/provisioning"
+	"hcloud-k8s/internal/util/labels"
 	"hcloud-k8s/internal/util/naming"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
@@ -27,13 +28,15 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 		lbName := naming.KubeAPILoadBalancer(ctx.Config.ClusterName)
 		ctx.Logger.Printf("[%s] Reconciling load balancer %s...", phase, lbName)
 
-		labels := map[string]string{
-			"cluster": ctx.Config.ClusterName,
-			"role":    "kube-api",
+		lb := labels.NewLabelBuilder(ctx.Config.ClusterName).
+			WithRole("kube-api")
+		if ctx.Config.TestID != "" {
+			lb = lb.WithTestID(ctx.Config.TestID)
 		}
+		apiLBLabels := lb.Build()
 
 		// Algorithm: round_robin
-		lb, err := ctx.Infra.EnsureLoadBalancer(ctx, lbName, ctx.Config.Location, "lb11", hcloud.LoadBalancerAlgorithmTypeRoundRobin, labels)
+		apiLB, err := ctx.Infra.EnsureLoadBalancer(ctx, lbName, ctx.Config.Location, "lb11", hcloud.LoadBalancerAlgorithmTypeRoundRobin, apiLBLabels)
 		if err != nil {
 			return fmt.Errorf("failed to ensure API load balancer: %w", err)
 		}
@@ -56,7 +59,7 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 				},
 			},
 		}
-		err = ctx.Infra.ConfigureService(ctx, lb, service)
+		err = ctx.Infra.ConfigureService(ctx, apiLB, service)
 		if err != nil {
 			return err
 		}
@@ -73,7 +76,7 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 		}
 		privateIP := net.ParseIP(privateIPStr)
 
-		err = ctx.Infra.AttachToNetwork(ctx, lb, ctx.State.Network, privateIP)
+		err = ctx.Infra.AttachToNetwork(ctx, apiLB, ctx.State.Network, privateIP)
 		if err != nil {
 			return err
 		}
@@ -81,7 +84,7 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 		// Add Targets
 		// Label Selector: "cluster=<cluster_name>,role=control-plane"
 		targetSelector := fmt.Sprintf("cluster=%s,role=control-plane", ctx.Config.ClusterName)
-		err = ctx.Infra.AddTarget(ctx, lb, hcloud.LoadBalancerTargetTypeLabelSelector, targetSelector)
+		err = ctx.Infra.AddTarget(ctx, apiLB, hcloud.LoadBalancerTargetTypeLabelSelector, targetSelector)
 		if err != nil {
 			return fmt.Errorf("failed to add target to LB: %w", err)
 		}
@@ -93,10 +96,12 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 		lbName := naming.IngressLoadBalancer(ctx.Config.ClusterName)
 		ctx.Logger.Printf("[%s] Reconciling ingress load balancer %s...", phase, lbName)
 
-		labels := map[string]string{
-			"cluster": ctx.Config.ClusterName,
-			"role":    "ingress",
+		lb := labels.NewLabelBuilder(ctx.Config.ClusterName).
+			WithRole("ingress")
+		if ctx.Config.TestID != "" {
+			lb = lb.WithTestID(ctx.Config.TestID)
 		}
+		ingressLBLabels := lb.Build()
 
 		lbType := ctx.Config.Ingress.LoadBalancerType
 		if lbType == "" {
@@ -107,7 +112,7 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 			algorithm = hcloud.LoadBalancerAlgorithmTypeLeastConnections
 		}
 
-		lb, err := ctx.Infra.EnsureLoadBalancer(ctx, lbName, ctx.Config.Location, lbType, algorithm, labels)
+		ingressLB, err := ctx.Infra.EnsureLoadBalancer(ctx, lbName, ctx.Config.Location, lbType, algorithm, ingressLBLabels)
 		if err != nil {
 			return err
 		}
@@ -116,7 +121,7 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 		// Uses HostNetwork port mapping (80->80, 443->443) which is common for Talos/bare-metal
 		for _, port := range []int{80, 443} {
 			svc := newIngressService(port, ctx.Config.Ingress)
-			if err := ctx.Infra.ConfigureService(ctx, lb, svc); err != nil {
+			if err := ctx.Infra.ConfigureService(ctx, ingressLB, svc); err != nil {
 				return err
 			}
 		}
@@ -133,7 +138,7 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 		}
 		privateIP := net.ParseIP(privateIPStr)
 
-		err = ctx.Infra.AttachToNetwork(ctx, lb, ctx.State.Network, privateIP)
+		err = ctx.Infra.AttachToNetwork(ctx, ingressLB, ctx.State.Network, privateIP)
 		if err != nil {
 			return err
 		}
@@ -142,7 +147,7 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 		// "cluster=<name>,role=worker"
 		// TF also includes CP if scheduling enabled, but let's stick to workers for now.
 		targetSelector := fmt.Sprintf("cluster=%s,role=worker", ctx.Config.ClusterName)
-		err = ctx.Infra.AddTarget(ctx, lb, hcloud.LoadBalancerTargetTypeLabelSelector, targetSelector)
+		err = ctx.Infra.AddTarget(ctx, ingressLB, hcloud.LoadBalancerTargetTypeLabelSelector, targetSelector)
 		if err != nil {
 			return fmt.Errorf("failed to add target to Ingress LB: %w", err)
 		}

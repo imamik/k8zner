@@ -48,7 +48,14 @@ func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architect
 		return "", fmt.Errorf("InfrastructureManager is required")
 	}
 
-	sshKeyID, err := b.infra.CreateSSHKey(ctx, keyName, string(keyPair.PublicKey))
+	// Merge labels for SSH key (labels already include test-id if present)
+	sshKeyLabels := make(map[string]string)
+	for k, v := range labels {
+		sshKeyLabels[k] = v
+	}
+	sshKeyLabels["type"] = "build-ssh-key"
+
+	sshKeyID, err := b.infra.CreateSSHKey(ctx, keyName, string(keyPair.PublicKey), sshKeyLabels)
 	if err != nil {
 		return "", fmt.Errorf("failed to upload ssh key: %w", err)
 	}

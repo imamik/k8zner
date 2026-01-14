@@ -44,6 +44,12 @@ func (lb *LabelBuilder) WithState(state string) *LabelBuilder {
 	return lb
 }
 
+// WithTestID adds a test-id label (used for E2E test resource tracking).
+func (lb *LabelBuilder) WithTestID(testID string) *LabelBuilder {
+	lb.labels["test-id"] = testID
+	return lb
+}
+
 // WithCustom adds a custom key-value label.
 func (lb *LabelBuilder) WithCustom(key, value string) *LabelBuilder {
 	lb.labels[key] = value

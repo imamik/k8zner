@@ -7,6 +7,7 @@ type Config struct {
 	HCloudToken string   `mapstructure:"hcloud_token" yaml:"hcloud_token"`
 	Location    string   `mapstructure:"location" yaml:"location"` // e.g. nbg1, fsn1, hel1
 	SSHKeys     []string `mapstructure:"ssh_keys" yaml:"ssh_keys"` // List of SSH key names/IDs
+	TestID      string   `mapstructure:"test_id" yaml:"test_id"`   // Optional test ID for E2E test resource tracking
 
 	// Network Configuration
 	Network NetworkConfig `mapstructure:"network" yaml:"network"`
@@ -165,8 +166,14 @@ type CNIConfig struct {
 
 // AddonsConfig defines the addon-related configuration.
 type AddonsConfig struct {
-	CCM CCMConfig `mapstructure:"ccm" yaml:"ccm"`
-	CSI CSIConfig `mapstructure:"csi" yaml:"csi"`
+	CCM           CCMConfig           `mapstructure:"ccm" yaml:"ccm"`
+	CSI           CSIConfig           `mapstructure:"csi" yaml:"csi"`
+	MetricsServer MetricsServerConfig `mapstructure:"metrics_server" yaml:"metrics_server"`
+	CertManager   CertManagerConfig   `mapstructure:"cert_manager" yaml:"cert_manager"`
+	IngressNginx  IngressNginxConfig  `mapstructure:"ingress_nginx" yaml:"ingress_nginx"`
+	Longhorn      LonghornConfig      `mapstructure:"longhorn" yaml:"longhorn"`
+	RBAC          RBACConfig          `mapstructure:"rbac" yaml:"rbac"`
+	OIDCRBAC      OIDCRBACConfig      `mapstructure:"oidc_rbac" yaml:"oidc_rbac"`
 }
 
 // CCMConfig defines the Hetzner Cloud Controller Manager configuration.
@@ -182,9 +189,77 @@ type CSIConfig struct {
 	StorageClasses       []StorageClass `mapstructure:"storage_classes" yaml:"storage_classes"`
 }
 
+// MetricsServerConfig defines the Kubernetes Metrics Server configuration.
+type MetricsServerConfig struct {
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+}
+
+// CertManagerConfig defines the cert-manager configuration.
+type CertManagerConfig struct {
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+}
+
+// IngressNginxConfig defines the ingress-nginx configuration.
+type IngressNginxConfig struct {
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+}
+
+// LonghornConfig defines the Longhorn storage configuration.
+type LonghornConfig struct {
+	Enabled             bool `mapstructure:"enabled" yaml:"enabled"`
+	DefaultStorageClass bool `mapstructure:"default_storage_class" yaml:"default_storage_class"`
+}
+
 // StorageClass defines a Kubernetes StorageClass for CSI.
 type StorageClass struct {
 	Name          string `mapstructure:"name" yaml:"name"`
 	ReclaimPolicy string `mapstructure:"reclaim_policy" yaml:"reclaim_policy"`
 	IsDefault     bool   `mapstructure:"is_default" yaml:"is_default"`
+}
+
+// RBACConfig defines RBAC roles and cluster roles.
+type RBACConfig struct {
+	Enabled      bool                `mapstructure:"enabled" yaml:"enabled"`
+	Roles        []RoleConfig        `mapstructure:"roles" yaml:"roles"`
+	ClusterRoles []ClusterRoleConfig `mapstructure:"cluster_roles" yaml:"cluster_roles"`
+}
+
+// RoleConfig defines a namespaced Role.
+type RoleConfig struct {
+	Name      string           `mapstructure:"name" yaml:"name"`
+	Namespace string           `mapstructure:"namespace" yaml:"namespace"`
+	Rules     []RBACRuleConfig `mapstructure:"rules" yaml:"rules"`
+}
+
+// ClusterRoleConfig defines a ClusterRole.
+type ClusterRoleConfig struct {
+	Name  string           `mapstructure:"name" yaml:"name"`
+	Rules []RBACRuleConfig `mapstructure:"rules" yaml:"rules"`
+}
+
+// RBACRuleConfig defines a policy rule for RBAC.
+type RBACRuleConfig struct {
+	APIGroups []string `mapstructure:"api_groups" yaml:"api_groups"`
+	Resources []string `mapstructure:"resources" yaml:"resources"`
+	Verbs     []string `mapstructure:"verbs" yaml:"verbs"`
+}
+
+// OIDCRBACConfig defines OIDC group mappings to Kubernetes roles.
+type OIDCRBACConfig struct {
+	Enabled       bool                   `mapstructure:"enabled" yaml:"enabled"`
+	GroupsPrefix  string                 `mapstructure:"groups_prefix" yaml:"groups_prefix"`
+	GroupMappings []OIDCRBACGroupMapping `mapstructure:"group_mappings" yaml:"group_mappings"`
+}
+
+// OIDCRBACGroupMapping maps an OIDC group to Kubernetes roles and cluster roles.
+type OIDCRBACGroupMapping struct {
+	Group        string         `mapstructure:"group" yaml:"group"`
+	ClusterRoles []string       `mapstructure:"cluster_roles" yaml:"cluster_roles"`
+	Roles        []OIDCRBACRole `mapstructure:"roles" yaml:"roles"`
+}
+
+// OIDCRBACRole defines a namespaced role for OIDC mapping.
+type OIDCRBACRole struct {
+	Name      string `mapstructure:"name" yaml:"name"`
+	Namespace string `mapstructure:"namespace" yaml:"namespace"`
 }

@@ -79,20 +79,3 @@ func (c *RealClient) GetSnapshotByLabels(ctx context.Context, labels map[string]
 	// Return the most recent snapshot
 	return images[0], nil
 }
-
-// buildLabelSelector creates a label selector string from a map of labels.
-func buildLabelSelector(labels map[string]string) string {
-	var selectors []string
-	for k, v := range labels {
-		selectors = append(selectors, fmt.Sprintf("%s=%s", k, v))
-	}
-	// Join with comma for AND logic
-	result := ""
-	for i, s := range selectors {
-		if i > 0 {
-			result += ","
-		}
-		result += s
-	}
-	return result
-}

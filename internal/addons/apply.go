@@ -7,15 +7,11 @@ package addons
 
 import (
 	"context"
-	"embed"
 	"fmt"
 	"os"
 
 	"hcloud-k8s/internal/config"
 )
-
-//go:embed manifests/*
-var manifestsFS embed.FS
 
 // Apply installs configured addons to the Kubernetes cluster.
 //
@@ -40,6 +36,13 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		_ = os.Remove(tmpKubeconfig)
 	}()
 
+	// Create hcloud secret if CCM or CSI are enabled
+	if cfg.Addons.CCM.Enabled || cfg.Addons.CSI.Enabled {
+		if err := createHCloudSecret(ctx, tmpKubeconfig, cfg.HCloudToken, networkID); err != nil {
+			return fmt.Errorf("failed to create hcloud secret: %w", err)
+		}
+	}
+
 	if cfg.Addons.CCM.Enabled {
 		if err := applyCCM(ctx, tmpKubeconfig, cfg.HCloudToken, networkID); err != nil {
 			return fmt.Errorf("failed to install CCM: %w", err)
@@ -51,6 +54,42 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		defaultStorageClass := cfg.Addons.CSI.DefaultStorageClass
 		if err := applyCSI(ctx, tmpKubeconfig, cfg.HCloudToken, controlPlaneCount, defaultStorageClass); err != nil {
 			return fmt.Errorf("failed to install CSI: %w", err)
+		}
+	}
+
+	if cfg.Addons.MetricsServer.Enabled {
+		if err := applyMetricsServer(ctx, tmpKubeconfig, cfg); err != nil {
+			return fmt.Errorf("failed to install Metrics Server: %w", err)
+		}
+	}
+
+	if cfg.Addons.CertManager.Enabled {
+		if err := applyCertManager(ctx, tmpKubeconfig, cfg); err != nil {
+			return fmt.Errorf("failed to install Cert Manager: %w", err)
+		}
+	}
+
+	if cfg.Addons.Longhorn.Enabled {
+		if err := applyLonghorn(ctx, tmpKubeconfig, cfg); err != nil {
+			return fmt.Errorf("failed to install Longhorn: %w", err)
+		}
+	}
+
+	if cfg.Addons.IngressNginx.Enabled {
+		if err := applyIngressNginx(ctx, tmpKubeconfig, cfg); err != nil {
+			return fmt.Errorf("failed to install Ingress NGINX: %w", err)
+		}
+	}
+
+	if cfg.Addons.RBAC.Enabled {
+		if err := applyRBAC(ctx, tmpKubeconfig, cfg); err != nil {
+			return fmt.Errorf("failed to install RBAC: %w", err)
+		}
+	}
+
+	if cfg.Addons.OIDCRBAC.Enabled {
+		if err := applyOIDC(ctx, tmpKubeconfig, cfg); err != nil {
+			return fmt.Errorf("failed to install OIDC RBAC: %w", err)
 		}
 	}
 
