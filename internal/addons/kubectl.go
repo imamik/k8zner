@@ -26,8 +26,10 @@ func applyWithKubectl(ctx context.Context, kubeconfigPath, addonName string, man
 		return fmt.Errorf("failed to close temp manifest file: %w", err)
 	}
 
+	// Use server-side apply to handle namespace creation race conditions
+	// See: https://kubernetes.io/docs/reference/using-api/server-side-apply/
 	// #nosec G204 - kubeconfigPath is from internal config, tmpfile.Name() is a secure temp file we created
-	cmd := exec.CommandContext(ctx, "kubectl", "--kubeconfig", kubeconfigPath, "apply", "-f", tmpfile.Name())
+	cmd := exec.CommandContext(ctx, "kubectl", "--kubeconfig", kubeconfigPath, "apply", "--server-side", "--force-conflicts", "-f", tmpfile.Name())
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("kubectl apply failed for addon %s: %w\nOutput: %s", addonName, err, string(output))
