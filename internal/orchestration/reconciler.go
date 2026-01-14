@@ -78,7 +78,20 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 	if len(r.state.Kubeconfig) > 0 {
 		pCtx.Logger.Printf("[%s] Installing cluster addons...", phase)
 		networkID := r.state.Network.ID
-		if err := addons.Apply(ctx, r.config, r.state.Kubeconfig, networkID); err != nil {
+
+		// Get SSH key name for autoscaler (use first configured SSH key)
+		sshKeyName := ""
+		if len(r.config.SSHKeys) > 0 {
+			sshKeyName = r.config.SSHKeys[0]
+		}
+
+		// Get firewall ID
+		firewallID := int64(0)
+		if r.state.Firewall != nil {
+			firewallID = r.state.Firewall.ID
+		}
+
+		if err := addons.Apply(ctx, r.config, r.state.Kubeconfig, networkID, sshKeyName, firewallID, r.talosGenerator); err != nil {
 			return nil, fmt.Errorf("failed to install addons: %w", err)
 		}
 	}

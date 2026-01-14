@@ -11,6 +11,7 @@ import (
 	"os"
 
 	"hcloud-k8s/internal/config"
+	"hcloud-k8s/internal/provisioning"
 )
 
 // Apply installs configured addons to the Kubernetes cluster.
@@ -19,11 +20,12 @@ import (
 // manifests to the cluster using kubectl. Currently supports:
 //   - Hetzner Cloud Controller Manager (CCM)
 //   - Hetzner Cloud CSI Driver
+//   - Cluster Autoscaler
 //
 // The kubeconfig must be valid and the cluster must be accessible.
 // Addon manifests are embedded in the binary and processed as templates
 // with cluster-specific configuration injected at runtime.
-func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID int64) error {
+func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID int64, sshKeyName string, firewallID int64, talosGen provisioning.TalosConfigProducer) error {
 	if len(kubeconfig) == 0 {
 		return fmt.Errorf("kubeconfig is required for addon installation")
 	}
@@ -35,6 +37,20 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 	defer func() {
 		_ = os.Remove(tmpKubeconfig)
 	}()
+
+	// Install Cilium CNI first (network foundation)
+	if cfg.Addons.Cilium.Enabled {
+		if err := applyCilium(ctx, tmpKubeconfig, cfg); err != nil {
+			return fmt.Errorf("failed to install Cilium: %w", err)
+		}
+	}
+
+	// Install Cluster Autoscaler (if enabled)
+	if cfg.Addons.ClusterAutoscaler.Enabled && len(cfg.Autoscaler.NodePools) > 0 {
+		if err := applyClusterAutoscaler(ctx, tmpKubeconfig, cfg, networkID, sshKeyName, firewallID, talosGen); err != nil {
+			return fmt.Errorf("failed to install Cluster Autoscaler: %w", err)
+		}
+	}
 
 	// Create hcloud secret if CCM or CSI are enabled
 	if cfg.Addons.CCM.Enabled || cfg.Addons.CSI.Enabled {
@@ -90,6 +106,12 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 	if cfg.Addons.OIDCRBAC.Enabled {
 		if err := applyOIDC(ctx, tmpKubeconfig, cfg); err != nil {
 			return fmt.Errorf("failed to install OIDC RBAC: %w", err)
+		}
+	}
+
+	if cfg.Addons.TalosBackup.Enabled {
+		if err := applyTalosBackup(ctx, tmpKubeconfig, cfg); err != nil {
+			return fmt.Errorf("failed to install Talos Backup: %w", err)
 		}
 	}
 

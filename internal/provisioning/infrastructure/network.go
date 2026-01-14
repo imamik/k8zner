@@ -76,5 +76,18 @@ func (p *Provisioner) ProvisionNetwork(ctx *provisioning.Context) error {
 		}
 	}
 
+	// Autoscaler Subnet (for dynamically created nodes)
+	if ctx.Config.Autoscaler.Enabled && len(ctx.Config.Autoscaler.NodePools) > 0 {
+		autoscalerSubnet, err := ctx.Config.GetSubnetForRole("autoscaler", 0)
+		if err != nil {
+			return fmt.Errorf("failed to calculate autoscaler subnet: %w", err)
+		}
+
+		err = ctx.Infra.EnsureSubnet(ctx, network, autoscalerSubnet, ctx.Config.Network.Zone, hcloud.NetworkSubnetTypeCloud)
+		if err != nil {
+			return fmt.Errorf("failed to ensure autoscaler subnet: %w", err)
+		}
+	}
+
 	return nil
 }

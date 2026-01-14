@@ -61,7 +61,7 @@ func testAddonCCM(t *testing.T, state *E2EState, token string) {
 		networkID = network.ID
 	}
 
-	if err := addons.Apply(ctx, cfg, state.Kubeconfig, networkID); err != nil {
+	if err := addons.Apply(ctx, cfg, state.Kubeconfig, networkID, "", 0, nil); err != nil {
 		t.Fatalf("Failed to install CCM: %v", err)
 	}
 
@@ -100,7 +100,7 @@ func testAddonCSI(t *testing.T, state *E2EState, token string) {
 		networkID = network.ID
 	}
 
-	if err := addons.Apply(ctx, cfg, state.Kubeconfig, networkID); err != nil {
+	if err := addons.Apply(ctx, cfg, state.Kubeconfig, networkID, "", 0, nil); err != nil {
 		t.Fatalf("Failed to install CSI: %v", err)
 	}
 
@@ -128,7 +128,7 @@ func testAddonMetricsServer(t *testing.T, state *E2EState) {
 		},
 	}
 
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
 		t.Fatalf("Failed to install Metrics Server: %v", err)
 	}
 
@@ -153,7 +153,7 @@ func testAddonCertManager(t *testing.T, state *E2EState) {
 		},
 	}
 
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
 		t.Fatalf("Failed to install Cert Manager: %v", err)
 	}
 
@@ -178,7 +178,7 @@ func testAddonIngressNginx(t *testing.T, state *E2EState) {
 		},
 	}
 
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
 		t.Fatalf("Failed to install Ingress NGINX: %v", err)
 	}
 
@@ -200,7 +200,7 @@ func testAddonRBAC(t *testing.T, state *E2EState) {
 		},
 	}
 
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
 		t.Fatalf("Failed to install RBAC: %v", err)
 	}
 
@@ -219,7 +219,7 @@ func testAddonLonghorn(t *testing.T, state *E2EState) {
 		},
 	}
 
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
 		t.Fatalf("Failed to install Longhorn: %v", err)
 	}
 

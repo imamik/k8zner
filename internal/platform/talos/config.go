@@ -126,6 +126,23 @@ func (g *Generator) GenerateWorkerConfig(hostname string) ([]byte, error) {
 	return g.generateConfig(machine.TypeWorker, hostname)
 }
 
+// GenerateAutoscalerConfig generates the configuration for an autoscaler node pool.
+// The configuration includes node labels and taints for the pool.
+func (g *Generator) GenerateAutoscalerConfig(poolName string, labels map[string]string, taints []string) ([]byte, error) {
+	bytes, err := g.generateConfig(machine.TypeWorker, "")
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply autoscaler-specific patches (labels and taints)
+	bytes, err = applyAutoscalerPatches(bytes, poolName, labels, taints)
+	if err != nil {
+		return nil, fmt.Errorf("failed to apply autoscaler patches: %w", err)
+	}
+
+	return bytes, nil
+}
+
 func (g *Generator) generateConfig(machineType machine.Type, hostname string, extraOpts ...generate.Option) ([]byte, error) {
 	vc, err := config.ParseContractFromVersion(g.talosVersion)
 	if err != nil {
@@ -238,6 +255,48 @@ func applyPatches(configBytes []byte, isControlPlane bool, hostname string) ([]b
 	if hostname != "" {
 		network := getOrCreate(machine, "network")
 		network["hostname"] = hostname
+	}
+
+	return yaml.Marshal(configMap)
+}
+
+// applyAutoscalerPatches applies labels and taints for autoscaler node pools.
+func applyAutoscalerPatches(configBytes []byte, poolName string, labels map[string]string, taints []string) ([]byte, error) {
+	var configMap map[string]interface{}
+	if err := yaml.Unmarshal(configBytes, &configMap); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	machine := getOrCreate(configMap, "machine")
+
+	// Add node labels
+	nodeLabels := getOrCreate(machine, "nodeLabels")
+	nodeLabels["nodepool"] = poolName
+	for k, v := range labels {
+		nodeLabels[k] = v
+	}
+
+	// Add node taints
+	if len(taints) > 0 {
+		nodeTaints := getOrCreate(machine, "nodeTaints")
+		for _, taint := range taints {
+			// Parse taint format: "key=value:effect"
+			parts := strings.SplitN(taint, ":", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			keyValue := parts[0]
+			effect := parts[1]
+
+			kvParts := strings.SplitN(keyValue, "=", 2)
+			if len(kvParts) != 2 {
+				continue
+			}
+			key := kvParts[0]
+			value := kvParts[1]
+
+			nodeTaints[key] = fmt.Sprintf("%s:%s", value, effect)
+		}
 	}
 
 	return yaml.Marshal(configMap)

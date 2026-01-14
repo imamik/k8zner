@@ -31,6 +31,7 @@ type State struct {
 	Network  *hcloud.Network
 	Firewall *hcloud.Firewall
 	PublicIP string // Current execution environment's public IPv4
+	SSHKeyID int64  // SSH key ID (for autoscaler addon)
 
 	// Compute results (populated by compute provisioner)
 	ControlPlaneIPs map[string]string // nodeName -> publicIP

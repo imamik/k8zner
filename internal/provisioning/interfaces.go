@@ -27,6 +27,9 @@ type TalosConfigProducer interface {
 	// GenerateWorkerConfig generates machine configuration for a worker node.
 	GenerateWorkerConfig(hostname string) ([]byte, error)
 
+	// GenerateAutoscalerConfig generates machine configuration for an autoscaler node pool.
+	GenerateAutoscalerConfig(poolName string, labels map[string]string, taints []string) ([]byte, error)
+
 	// GetClientConfig returns the Talos client configuration for cluster access.
 	GetClientConfig() ([]byte, error)
 
