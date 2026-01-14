@@ -38,6 +38,13 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		_ = os.Remove(tmpKubeconfig)
 	}()
 
+	// Install Cilium CNI first (required for pod networking)
+	if cfg.Addons.Cilium.Enabled {
+		if err := applyCilium(ctx, tmpKubeconfig, cfg); err != nil {
+			return fmt.Errorf("failed to install Cilium: %w", err)
+		}
+	}
+
 	// Create hcloud secret if CCM or CSI are enabled (needed before CCM/CSI)
 	if cfg.Addons.CCM.Enabled || cfg.Addons.CSI.Enabled {
 		if err := createHCloudSecret(ctx, tmpKubeconfig, cfg.HCloudToken, networkID); err != nil {
@@ -45,17 +52,10 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		}
 	}
 
-	// Install CCM first (provides CSR approver required by Cilium 1.18+)
+	// Install CCM after Cilium (requires pod networking)
 	if cfg.Addons.CCM.Enabled {
 		if err := applyCCM(ctx, tmpKubeconfig, cfg.HCloudToken, networkID); err != nil {
 			return fmt.Errorf("failed to install CCM: %w", err)
-		}
-	}
-
-	// Install Cilium CNI (after CCM for CSR approver support)
-	if cfg.Addons.Cilium.Enabled {
-		if err := applyCilium(ctx, tmpKubeconfig, cfg); err != nil {
-			return fmt.Errorf("failed to install Cilium: %w", err)
 		}
 	}
 
