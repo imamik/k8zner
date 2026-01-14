@@ -16,15 +16,16 @@ import (
 // all functionality from snapshots through addons and scaling.
 //
 // Phases:
-//   1. Snapshots - Build and verify Talos snapshots
-//   2. Cluster - Provision infrastructure and bootstrap Kubernetes
-//   3. Addons - Install and test each addon sequentially
-//   4. Scale - Scale cluster and verify operation
+//  1. Snapshots - Build and verify Talos snapshots
+//  2. Cluster - Provision infrastructure and bootstrap Kubernetes
+//  3. Addons - Install and test each addon sequentially
+//  4. Scale - Scale cluster and verify operation
 //
 // Environment variables:
-//   HCLOUD_TOKEN - Required
-//   E2E_KEEP_SNAPSHOTS - Set to "true" to cache snapshots between runs
-//   E2E_SKIP_SCALE - Set to "true" to skip scale testing (faster)
+//
+//	HCLOUD_TOKEN - Required
+//	E2E_KEEP_SNAPSHOTS - Set to "true" to cache snapshots between runs
+//	E2E_SKIP_SCALE - Set to "true" to skip scale testing (faster)
 func TestE2ELifecycle(t *testing.T) {
 	// This test is inherently sequential and long-running
 	// Do not mark as parallel

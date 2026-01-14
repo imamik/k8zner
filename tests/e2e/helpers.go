@@ -104,19 +104,19 @@ func httpGet(url string) (*http.Response, error) {
 
 // ClusterDiagnostics holds diagnostic information about a cluster.
 type ClusterDiagnostics struct {
-	t             *testing.T
+	t              *testing.T
 	controlPlaneIP string
-	lbIP          string
-	talosConfig   []byte
+	lbIP           string
+	talosConfig    []byte
 }
 
 // NewClusterDiagnostics creates a new diagnostics helper.
 func NewClusterDiagnostics(t *testing.T, cpIP, lbIP string, talosConfig []byte) *ClusterDiagnostics {
 	return &ClusterDiagnostics{
-		t:             t,
+		t:              t,
 		controlPlaneIP: cpIP,
-		lbIP:          lbIP,
-		talosConfig:   talosConfig,
+		lbIP:           lbIP,
+		talosConfig:    talosConfig,
 	}
 }
 
