@@ -167,6 +167,11 @@ func buildCiliumOperatorConfig(cfg *config.Config, controlPlaneCount int) helm.V
 				"effect":   "NoSchedule",
 				"operator": "Exists",
 			},
+			{
+				"key":      "node.cloudprovider.kubernetes.io/uninitialized",
+				"effect":   "NoSchedule",
+				"operator": "Exists",
+			},
 		},
 	}
 
