@@ -50,6 +50,10 @@ const (
 	EventResourceExists EventType = "resource.exists"
 	// EventResourceFailed indicates resource creation failed.
 	EventResourceFailed EventType = "resource.failed"
+	// EventResourceDeleting indicates a resource is being deleted.
+	EventResourceDeleting EventType = "resource.deleting"
+	// EventResourceDeleted indicates a resource was deleted successfully.
+	EventResourceDeleted EventType = "resource.deleted"
 
 	// EventValidationWarning indicates a validation warning.
 	EventValidationWarning EventType = "validation.warning"
@@ -223,6 +227,32 @@ func LogResourceExists(observer Observer, phase, resourceType, resourceName, res
 		Fields: map[string]string{
 			"type": resourceType,
 			"id":   resourceID,
+		},
+	})
+}
+
+// LogResourceDeleting logs a resource deletion start event.
+func LogResourceDeleting(observer Observer, phase, resourceType, resourceName string) {
+	observer.Event(Event{
+		Type:     EventResourceDeleting,
+		Phase:    phase,
+		Resource: resourceName,
+		Message:  fmt.Sprintf("deleting %s", resourceType),
+		Fields: map[string]string{
+			"type": resourceType,
+		},
+	})
+}
+
+// LogResourceDeleted logs a successful resource deletion event.
+func LogResourceDeleted(observer Observer, phase, resourceType, resourceName string) {
+	observer.Event(Event{
+		Type:     EventResourceDeleted,
+		Phase:    phase,
+		Resource: resourceName,
+		Message:  fmt.Sprintf("%s deleted", resourceType),
+		Fields: map[string]string{
+			"type": resourceType,
 		},
 	})
 }
