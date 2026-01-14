@@ -172,6 +172,11 @@ func buildCiliumOperatorConfig(cfg *config.Config, controlPlaneCount int) helm.V
 				"effect":   "NoSchedule",
 				"operator": "Exists",
 			},
+			{
+				"key":      "node.kubernetes.io/not-ready",
+				"effect":   "NoSchedule",
+				"operator": "Exists",
+			},
 		},
 	}
 
