@@ -240,6 +240,11 @@ func applyPatches(configBytes []byte, isControlPlane bool, hostname string) ([]b
 	cluster := getOrCreate(configMap, "cluster")
 	cluster["externalCloudProvider"] = map[string]interface{}{"enabled": true}
 
+	// 2. Disable default CNI (Flannel) to allow custom CNI (Cilium)
+	network := getOrCreate(cluster, "network")
+	cni := getOrCreate(network, "cni")
+	cni["name"] = "none"
+
 	machine := getOrCreate(configMap, "machine")
 	kubelet := getOrCreate(machine, "kubelet")
 	extraArgs := getOrCreate(kubelet, "extraArgs")
@@ -251,7 +256,7 @@ func applyPatches(configBytes []byte, isControlPlane bool, hostname string) ([]b
 		cmExtraArgs["cloud-provider"] = "external"
 	}
 
-	// 2. Hostname
+	// 3. Hostname
 	if hostname != "" {
 		network := getOrCreate(machine, "network")
 		network["hostname"] = hostname
