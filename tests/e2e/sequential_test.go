@@ -44,7 +44,11 @@ func TestE2ELifecycle(t *testing.T) {
 	state := NewE2EState(clusterName, client)
 
 	// Register cleanup to run at end (or on failure/timeout)
-	defer cleanupE2ECluster(t, state)
+	defer func() {
+		cleanupE2ECluster(t, state)
+		// Verify cleanup completed successfully
+		verifyCleanupComplete(t, state)
+	}()
 
 	// Phase 1: Snapshots
 	t.Run("Phase1_Snapshots", func(t *testing.T) {

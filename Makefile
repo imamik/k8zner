@@ -1,4 +1,4 @@
-.PHONY: fmt lint test build check e2e e2e-fast e2e-snapshot-only clean
+.PHONY: fmt lint test build check e2e e2e-fast e2e-snapshot-only e2e-cleanup clean
 
 fmt:
 	go fmt ./...
@@ -33,6 +33,13 @@ e2e-fast:
 # Useful for verifying image builder changes
 e2e-snapshot-only:
 	go test -v -timeout=30m -tags=e2e -run TestSnapshotCreation ./tests/e2e/...
+
+# Cleanup leftover E2E test resources
+# Use this if tests are interrupted or cleanup fails
+e2e-cleanup:
+	@echo "Cleaning up leftover E2E test resources..."
+	@go run tests/e2e/cmd/cleanup/main.go
+	@echo "✅ Cleanup complete"
 
 clean:
 	rm -rf bin/
