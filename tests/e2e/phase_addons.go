@@ -545,29 +545,11 @@ spec:
 	t.Log("  ✓ CSI volume test complete")
 }
 
-// testAddonCilium installs and tests Cilium CNI.
+// testAddonCilium verifies Cilium CNI is working.
+// Cilium is installed during cluster provisioning (Phase 2), so this test
+// only verifies it's functioning correctly.
 func testAddonCilium(t *testing.T, state *E2EState) {
-	t.Log("Installing Cilium addon...")
-
-	cfg := &config.Config{
-		ClusterName: state.ClusterName,
-		Addons: config.AddonsConfig{
-			Cilium: config.CiliumConfig{
-				Enabled:                     true,
-				EncryptionEnabled:           true,
-				EncryptionType:              "wireguard",
-				RoutingMode:                 "native",
-				KubeProxyReplacementEnabled: true,
-				HubbleEnabled:               true,
-				HubbleRelayEnabled:          true,
-				HubbleUIEnabled:             false, // Skip UI to save resources in E2E
-			},
-		},
-	}
-
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
-		t.Fatalf("Failed to install Cilium: %v", err)
-	}
+	t.Log("Verifying Cilium addon (installed during cluster provisioning)...")
 
 	// Wait for Cilium operator pod
 	t.Log("  Waiting for Cilium operator...")
@@ -576,12 +558,6 @@ func testAddonCilium(t *testing.T, state *E2EState) {
 	// Wait for Cilium agent daemonset
 	t.Log("  Waiting for Cilium agents...")
 	waitForDaemonSet(t, state.KubeconfigPath, "kube-system", "app.kubernetes.io/name=cilium-agent", 8*time.Minute)
-
-	// Verify Hubble Relay is running
-	if cfg.Addons.Cilium.HubbleRelayEnabled {
-		t.Log("  Waiting for Hubble Relay...")
-		waitForPod(t, state.KubeconfigPath, "kube-system", "app.kubernetes.io/name=hubble-relay", 5*time.Minute)
-	}
 
 	// Test network connectivity between pods
 	testCiliumNetworkConnectivity(t, state)

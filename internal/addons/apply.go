@@ -8,6 +8,7 @@ package addons
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 
 	"hcloud-k8s/internal/config"
@@ -40,9 +41,13 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 
 	// Install Cilium CNI first (required for pod networking)
 	if cfg.Addons.Cilium.Enabled {
+		log.Println("[addons] Installing Cilium CNI...")
 		if err := applyCilium(ctx, tmpKubeconfig, cfg); err != nil {
 			return fmt.Errorf("failed to install Cilium: %w", err)
 		}
+		log.Println("[addons] Cilium CNI installed successfully")
+	} else {
+		log.Println("[addons] Cilium CNI not enabled, skipping")
 	}
 
 	// Create hcloud secret if CCM or CSI are enabled (needed before CCM/CSI)

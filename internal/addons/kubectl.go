@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
+	"time"
 )
 
 // applyWithKubectl applies Kubernetes manifests using kubectl.
@@ -27,12 +29,34 @@ func applyWithKubectl(ctx context.Context, kubeconfigPath, addonName string, man
 	}
 
 	// Use server-side apply to handle namespace creation race conditions
+	// Skip client-side validation since server-side apply does server validation
+	// Retry on temporary connection failures (API server might be briefly unavailable)
 	// See: https://kubernetes.io/docs/reference/using-api/server-side-apply/
-	// #nosec G204 - kubeconfigPath is from internal config, tmpfile.Name() is a secure temp file we created
-	cmd := exec.CommandContext(ctx, "kubectl", "--kubeconfig", kubeconfigPath, "apply", "--server-side", "--force-conflicts", "-f", tmpfile.Name())
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("kubectl apply failed for addon %s: %w\nOutput: %s", addonName, err, string(output))
+	maxRetries := 5
+	retryDelay := 5 * time.Second
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		// #nosec G204 - kubeconfigPath is from internal config, tmpfile.Name() is a secure temp file we created
+		cmd := exec.CommandContext(ctx, "kubectl", "--kubeconfig", kubeconfigPath, "apply", "--server-side", "--force-conflicts", "--validate=false", "-f", tmpfile.Name())
+		output, err := cmd.CombinedOutput()
+
+		if err == nil {
+			return nil // Success
+		}
+
+		// Check if error is retryable (connection issues, EOF)
+		outputStr := string(output)
+		isRetryable := strings.Contains(outputStr, "EOF") ||
+		              strings.Contains(outputStr, "connection refused") ||
+		              strings.Contains(outputStr, "Unable to connect") ||
+		              strings.Contains(outputStr, "connection reset")
+
+		if !isRetryable || attempt == maxRetries {
+			return fmt.Errorf("kubectl apply failed for addon %s: %w\nOutput: %s", addonName, err, outputStr)
+		}
+
+		// Wait before retry
+		time.Sleep(retryDelay)
 	}
 
 	return nil

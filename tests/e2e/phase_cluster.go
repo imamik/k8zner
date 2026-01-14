@@ -167,6 +167,18 @@ func createInitialClusterConfig(state *E2EState) *config.Config {
 			Version: k8sVersion,
 		},
 		SSHKeys: []string{state.SSHKeyName},
+		Addons: config.AddonsConfig{
+			Cilium: config.CiliumConfig{
+				Enabled:                     true,
+				EncryptionEnabled:           true,
+				EncryptionType:              "wireguard",
+				RoutingMode:                 "native",
+				KubeProxyReplacementEnabled: true,
+				HubbleEnabled:               true,
+				HubbleRelayEnabled:          false, // Disable to speed up E2E
+				HubbleUIEnabled:             false,
+			},
+		},
 	}
 
 	cfg.CalculateSubnets()
