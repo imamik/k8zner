@@ -12,7 +12,7 @@ import (
 
 // applyCSI installs the Hetzner Cloud CSI driver.
 // See: terraform/hcloud.tf (hcloud_csi)
-func applyCSI(ctx context.Context, kubeconfigPath, token string, controlPlaneCount int, defaultStorageClass bool) error {
+func applyCSI(ctx context.Context, kubeconfigPath, _ string, controlPlaneCount int, defaultStorageClass bool) error {
 	// Generate encryption passphrase
 	encryptionKey, err := generateEncryptionKey(32)
 	if err != nil {
@@ -123,6 +123,7 @@ func createCSISecret(ctx context.Context, kubeconfigPath, encryptionKey string) 
 	_ = deleteCmd.Run()
 
 	// Create new secret
+	//nolint:gosec // kubectl command with internally generated encryption key
 	cmd := exec.CommandContext(ctx, "kubectl",
 		"--kubeconfig", kubeconfigPath,
 		"create", "secret", "generic", "hcloud-csi-secret",

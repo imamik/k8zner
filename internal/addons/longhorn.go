@@ -75,7 +75,7 @@ func buildLonghornValues(cfg *config.Config) helm.Values {
 // hasClusterAutoscaler checks if cluster autoscaler is configured.
 // In terraform this is: local.cluster_autoscaler_enabled
 // which checks if length(local.cluster_autoscaler_nodepools) > 0
-func hasClusterAutoscaler(cfg *config.Config) bool {
+func hasClusterAutoscaler(_ *config.Config) bool {
 	// Check if any worker pools have autoscaling configured
 	// This would need to be extended once autoscaling config is added
 	// For now, return false to match typical non-autoscaling setups

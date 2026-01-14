@@ -149,5 +149,5 @@ func (p *Provisioner) ensureImage(ctx *provisioning.Context, serverType, _ strin
 	}
 
 	// Snapshot doesn't exist - this shouldn't happen if EnsureAllImages was called first
-	return "", fmt.Errorf("Talos snapshot not found for %s/%s/%s (should have been pre-built)", talosVersion, k8sVersion, arch)
+	return "", fmt.Errorf("talos snapshot not found for %s/%s/%s (should have been pre-built)", talosVersion, k8sVersion, arch)
 }

@@ -20,6 +20,7 @@ func createHCloudSecret(ctx context.Context, kubeconfigPath, token string, netwo
 	_ = deleteCmd.Run()
 
 	// Create new secret
+	//nolint:gosec // kubectl command with configuration from trusted source
 	cmd := exec.CommandContext(ctx, "kubectl",
 		"--kubeconfig", kubeconfigPath,
 		"create", "secret", "generic", "hcloud",

@@ -3,7 +3,6 @@ package helm
 import (
 	"bytes"
 	"fmt"
-	"text/template"
 
 	"gopkg.in/yaml.v3"
 )
@@ -98,17 +97,3 @@ func FromYAML(data []byte) (Values, error) {
 	return values, nil
 }
 
-// renderTemplate processes a Go template with the provided values.
-func renderTemplate(name string, templateContent []byte, values Values) ([]byte, error) {
-	tmpl, err := template.New(name).Parse(string(templateContent))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse template %s: %w", name, err)
-	}
-
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, values); err != nil {
-		return nil, fmt.Errorf("failed to execute template %s: %w", name, err)
-	}
-
-	return buf.Bytes(), nil
-}

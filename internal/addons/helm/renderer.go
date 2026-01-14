@@ -56,7 +56,7 @@ func (r *Renderer) renderChart(ch *chart.Chart, values Values) ([]byte, error) {
 	// Load chart's default values from values.yaml
 	// ch.Values is already a map[string]interface{} from the loaded chart
 	chartDefaults := make(Values)
-	if ch.Values != nil && len(ch.Values) > 0 {
+	if len(ch.Values) > 0 {
 		chartDefaults = Values(ch.Values)
 	}
 

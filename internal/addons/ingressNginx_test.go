@@ -73,7 +73,7 @@ func TestBuildIngressNginxValues(t *testing.T) {
 			require.True(t, ok)
 			certManager, ok := webhooks["certManager"].(helm.Values)
 			require.True(t, ok)
-			assert.Equal(t, true, certManager["enabled"])
+			assert.Equal(t, false, certManager["enabled"]) // Changed to false per e2e fix
 
 			// Check maxUnavailable
 			assert.Equal(t, 1, controller["maxUnavailable"])

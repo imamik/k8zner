@@ -29,7 +29,7 @@ func applyCCM(ctx context.Context, kubeconfigPath, token string, networkID int64
 
 // buildCCMValues creates helm values matching terraform configuration.
 // See: terraform/hcloud.tf lines 31-57
-func buildCCMValues(token string, networkID int64) helm.Values {
+func buildCCMValues(_ string, _ int64) helm.Values {
 	return helm.Values{
 		"kind": "DaemonSet",
 		"nodeSelector": helm.Values{
