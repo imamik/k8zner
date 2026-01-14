@@ -45,6 +45,12 @@ func buildMetricsServerValues(cfg *config.Config) helm.Values {
 		"replicas":                  replicas,
 		"podDisruptionBudget":       buildMetricsServerPDB(),
 		"topologySpreadConstraints": buildMetricsServerTopologySpread(),
+		// Talos-specific configuration
+		// Talos uses self-signed kubelet certificates, so we need to skip TLS verification
+		"args": []string{
+			"--kubelet-insecure-tls",
+			"--kubelet-preferred-address-types=InternalIP",
+		},
 	}
 
 	if scheduleOnControlPlane {

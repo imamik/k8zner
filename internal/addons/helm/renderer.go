@@ -53,8 +53,19 @@ func (r *Renderer) Render(values Values) ([]byte, error) {
 
 // renderChart uses helm engine to render the chart with values.
 func (r *Renderer) renderChart(ch *chart.Chart, values Values) ([]byte, error) {
+	// Load chart's default values from values.yaml
+	// ch.Values is already a map[string]interface{} from the loaded chart
+	chartDefaults := make(Values)
+	if ch.Values != nil && len(ch.Values) > 0 {
+		chartDefaults = Values(ch.Values)
+	}
+
+	// Deep merge provided values with chart defaults
+	// This ensures nested objects (like controller.podSecurityContext) are preserved
+	mergedValues := DeepMerge(chartDefaults, values)
+
 	// Prepare chart values
-	chartValues := chartutil.Values(values)
+	chartValues := chartutil.Values(mergedValues)
 
 	// Create release options
 	releaseOptions := chartutil.ReleaseOptions{
@@ -70,7 +81,7 @@ func (r *Renderer) renderChart(ch *chart.Chart, values Values) ([]byte, error) {
 	capabilities.KubeVersion.Major = "1"
 	capabilities.KubeVersion.Minor = "31"
 
-	// Merge chart values with defaults
+	// Prepare values for rendering (adds built-in values like .Release, .Chart, etc.)
 	valuesToRender, err := chartutil.ToRenderValues(ch, chartValues, releaseOptions, capabilities)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare values: %w", err)
