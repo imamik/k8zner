@@ -38,6 +38,14 @@ func (m *MockTalosProducer) SetEndpoint(endpoint string) {
 	m.Called(endpoint)
 }
 
+func (m *MockTalosProducer) GenerateAutoscalerConfig(poolName string, labels map[string]string, taints []string) ([]byte, error) {
+	args := m.Called(poolName, labels, taints)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]byte), args.Error(1)
+}
+
 func TestReconciler_Reconcile(t *testing.T) {
 	// Setup Mocks
 	mockInfra := &hcloud_internal.MockClient{}

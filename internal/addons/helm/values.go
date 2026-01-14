@@ -96,3 +96,32 @@ func FromYAML(data []byte) (Values, error) {
 	}
 	return values, nil
 }
+
+// ToMap converts Values to map[string]interface{} recursively.
+// This ensures nested Values types are converted to plain maps,
+// which is required by Helm's template engine.
+func (v Values) ToMap() map[string]interface{} {
+	result := make(map[string]interface{}, len(v))
+	for k, val := range v {
+		result[k] = convertToInterface(val)
+	}
+	return result
+}
+
+// convertToInterface recursively converts Values types to map[string]interface{}.
+func convertToInterface(v any) any {
+	switch val := v.(type) {
+	case Values:
+		return val.ToMap()
+	case map[string]any:
+		return Values(val).ToMap()
+	case []any:
+		result := make([]any, len(val))
+		for i, item := range val {
+			result[i] = convertToInterface(item)
+		}
+		return result
+	default:
+		return v
+	}
+}

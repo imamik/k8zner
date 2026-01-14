@@ -1,0 +1,4 @@
+Chart: cluster-autoscaler
+Version: 9.50.1
+Repository: https://kubernetes.github.io/autoscaler
+Downloaded: 2026-01-14

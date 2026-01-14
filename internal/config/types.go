@@ -166,14 +166,17 @@ type CNIConfig struct {
 
 // AddonsConfig defines the addon-related configuration.
 type AddonsConfig struct {
-	CCM           CCMConfig           `mapstructure:"ccm" yaml:"ccm"`
-	CSI           CSIConfig           `mapstructure:"csi" yaml:"csi"`
-	MetricsServer MetricsServerConfig `mapstructure:"metrics_server" yaml:"metrics_server"`
-	CertManager   CertManagerConfig   `mapstructure:"cert_manager" yaml:"cert_manager"`
-	IngressNginx  IngressNginxConfig  `mapstructure:"ingress_nginx" yaml:"ingress_nginx"`
-	Longhorn      LonghornConfig      `mapstructure:"longhorn" yaml:"longhorn"`
-	RBAC          RBACConfig          `mapstructure:"rbac" yaml:"rbac"`
-	OIDCRBAC      OIDCRBACConfig      `mapstructure:"oidc_rbac" yaml:"oidc_rbac"`
+	Cilium            CiliumConfig            `mapstructure:"cilium" yaml:"cilium"`
+	CCM               CCMConfig               `mapstructure:"ccm" yaml:"ccm"`
+	CSI               CSIConfig               `mapstructure:"csi" yaml:"csi"`
+	MetricsServer     MetricsServerConfig     `mapstructure:"metrics_server" yaml:"metrics_server"`
+	CertManager       CertManagerConfig       `mapstructure:"cert_manager" yaml:"cert_manager"`
+	IngressNginx      IngressNginxConfig      `mapstructure:"ingress_nginx" yaml:"ingress_nginx"`
+	Longhorn          LonghornConfig          `mapstructure:"longhorn" yaml:"longhorn"`
+	ClusterAutoscaler ClusterAutoscalerConfig `mapstructure:"cluster_autoscaler" yaml:"cluster_autoscaler"`
+	RBAC              RBACConfig              `mapstructure:"rbac" yaml:"rbac"`
+	OIDCRBAC          OIDCRBACConfig          `mapstructure:"oidc_rbac" yaml:"oidc_rbac"`
+	TalosBackup       TalosBackupConfig       `mapstructure:"talos_backup" yaml:"talos_backup"`
 }
 
 // CCMConfig defines the Hetzner Cloud Controller Manager configuration.
@@ -258,8 +261,60 @@ type OIDCRBACGroupMapping struct {
 	Roles        []OIDCRBACRole `mapstructure:"roles" yaml:"roles"`
 }
 
-// OIDCRBACRole defines a namespaced role for OIDC mapping.
+// OIDCRBAC Role defines a namespaced role for OIDC mapping.
 type OIDCRBACRole struct {
 	Name      string `mapstructure:"name" yaml:"name"`
 	Namespace string `mapstructure:"namespace" yaml:"namespace"`
+}
+
+// CiliumConfig defines the Cilium CNI configuration.
+type CiliumConfig struct {
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Encryption
+	EncryptionEnabled bool   `mapstructure:"encryption_enabled" yaml:"encryption_enabled"`
+	EncryptionType    string `mapstructure:"encryption_type" yaml:"encryption_type"` // wireguard, ipsec
+
+	// IPSec specific
+	IPSecAlgorithm string `mapstructure:"ipsec_algorithm" yaml:"ipsec_algorithm"`
+	IPSecKeySize   int    `mapstructure:"ipsec_key_size" yaml:"ipsec_key_size"`
+	IPSecKeyID     int    `mapstructure:"ipsec_key_id" yaml:"ipsec_key_id"`
+
+	// Routing
+	RoutingMode string `mapstructure:"routing_mode" yaml:"routing_mode"` // native, tunnel
+
+	// KubeProxy Replacement
+	KubeProxyReplacementEnabled bool `mapstructure:"kube_proxy_replacement_enabled" yaml:"kube_proxy_replacement_enabled"`
+
+	// Gateway API
+	GatewayAPIEnabled bool `mapstructure:"gateway_api_enabled" yaml:"gateway_api_enabled"`
+
+	// Egress Gateway
+	EgressGatewayEnabled bool `mapstructure:"egress_gateway_enabled" yaml:"egress_gateway_enabled"`
+
+	// Hubble Observability
+	HubbleEnabled      bool `mapstructure:"hubble_enabled" yaml:"hubble_enabled"`
+	HubbleRelayEnabled bool `mapstructure:"hubble_relay_enabled" yaml:"hubble_relay_enabled"`
+	HubbleUIEnabled    bool `mapstructure:"hubble_ui_enabled" yaml:"hubble_ui_enabled"`
+}
+
+// ClusterAutoscalerConfig defines the Cluster Autoscaler addon configuration.
+type ClusterAutoscalerConfig struct {
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+}
+
+// TalosBackupConfig defines the Talos etcd backup configuration.
+type TalosBackupConfig struct {
+	Enabled            bool   `mapstructure:"enabled" yaml:"enabled"`
+	Version            string `mapstructure:"version" yaml:"version"`
+	Schedule           string `mapstructure:"schedule" yaml:"schedule"`
+	S3Bucket           string `mapstructure:"s3_bucket" yaml:"s3_bucket"`
+	S3Region           string `mapstructure:"s3_region" yaml:"s3_region"`
+	S3Endpoint         string `mapstructure:"s3_endpoint" yaml:"s3_endpoint"`
+	S3Prefix           string `mapstructure:"s3_prefix" yaml:"s3_prefix"`
+	S3AccessKey        string `mapstructure:"s3_access_key" yaml:"s3_access_key"`
+	S3SecretKey        string `mapstructure:"s3_secret_key" yaml:"s3_secret_key"`
+	S3PathStyle        bool   `mapstructure:"s3_path_style" yaml:"s3_path_style"`
+	AGEX25519PublicKey string `mapstructure:"age_x25519_public_key" yaml:"age_x25519_public_key"`
+	EnableCompression  bool   `mapstructure:"enable_compression" yaml:"enable_compression"`
 }
