@@ -1,5 +1,4 @@
-# golangci-lint v2 configuration
-version: 2
+version: "2"
 
 linters:
   enable:
@@ -9,6 +8,5 @@ linters:
     - errcheck
 
 issues:
-  exclude-use-default: false
   max-issues-per-linter: 0
   max-same-issues: 0
