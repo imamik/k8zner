@@ -366,9 +366,10 @@ spec:
 		t.Fatalf("Failed to create test LB service: %v\nOutput: %s", err, string(output))
 	}
 
-	// Wait for external IP
+	// Wait for external IP (max 3 minutes)
 	externalIP := ""
-	for i := 0; i < 60; i++ {
+	maxAttempts := 36 // 36 * 5s = 3 minutes
+	for i := 0; i < maxAttempts; i++ {
 		cmd = exec.CommandContext(context.Background(), "kubectl",
 			"--kubeconfig", state.KubeconfigPath,
 			"get", "svc", testLBName, "-o", "jsonpath={.status.loadBalancer.ingress[0].ip}")
@@ -377,10 +378,47 @@ spec:
 			externalIP = string(output)
 			break
 		}
+
+		// Log progress every 30 seconds
+		if i > 0 && i%6 == 0 {
+			elapsed := i * 5
+			t.Logf("  [%ds] Waiting for LB external IP...", elapsed)
+
+			// Show service description for debugging
+			if i == 12 { // At 1 minute mark
+				descCmd := exec.CommandContext(context.Background(), "kubectl",
+					"--kubeconfig", state.KubeconfigPath,
+					"describe", "svc", testLBName)
+				if descOutput, _ := descCmd.CombinedOutput(); len(descOutput) > 0 {
+					t.Logf("  Service status at %ds:\n%s", elapsed, string(descOutput))
+				}
+			}
+		}
+
 		time.Sleep(5 * time.Second)
 	}
 
 	if externalIP == "" {
+		// Gather diagnostic info before failing
+		t.Log("  CCM failed to provision load balancer - gathering diagnostics...")
+
+		// Show final service status
+		descCmd := exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", state.KubeconfigPath,
+			"describe", "svc", testLBName)
+		if descOutput, _ := descCmd.CombinedOutput(); len(descOutput) > 0 {
+			t.Logf("  Final service status:\n%s", string(descOutput))
+		}
+
+		// Show CCM logs
+		logsCmd := exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", state.KubeconfigPath,
+			"logs", "-n", "kube-system", "-l", "app.kubernetes.io/name=hcloud-cloud-controller-manager",
+			"--tail=50")
+		if logsOutput, _ := logsCmd.CombinedOutput(); len(logsOutput) > 0 {
+			t.Logf("  CCM logs (last 50 lines):\n%s", string(logsOutput))
+		}
+
 		t.Fatal("  CCM failed to provision load balancer")
 	}
 
