@@ -21,29 +21,29 @@ type E2EState struct {
 	SnapshotARM64 string
 
 	// Infrastructure (Phase 2)
-	NetworkID         string
-	FirewallID        string
-	LoadBalancerIP    string
-	ControlPlanePGID  string
-	SSHKeyName        string
-	SSHPrivateKey     []byte
+	NetworkID        string
+	FirewallID       string
+	LoadBalancerIP   string
+	ControlPlanePGID string
+	SSHKeyName       string
+	SSHPrivateKey    []byte
 
 	// Control Plane (Phase 3)
-	ControlPlaneIPs   []string
-	TalosConfig       []byte
-	Kubeconfig        []byte
-	KubeconfigPath    string
-	TalosSecretsPath  string
+	ControlPlaneIPs  []string
+	TalosConfig      []byte
+	Kubeconfig       []byte
+	KubeconfigPath   string
+	TalosSecretsPath string
 
 	// Workers (Phase 4)
-	WorkerIPs         []string
-	WorkerPoolNames   []string
+	WorkerIPs       []string
+	WorkerPoolNames []string
 
 	// Addons (Phase 5-6)
-	AddonsInstalled   map[string]bool
+	AddonsInstalled map[string]bool
 
 	// Scale (Phase 7)
-	ScaledOut         bool
+	ScaledOut bool
 }
 
 // NewE2EState creates a new state object for the E2E test lifecycle.
