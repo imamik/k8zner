@@ -35,6 +35,9 @@ type Config struct {
 
 	// Addons Configuration
 	Addons AddonsConfig `mapstructure:"addons" yaml:"addons"`
+
+	// RDNS Configuration
+	RDNS RDNSConfig `mapstructure:"rdns" yaml:"rdns"`
 }
 
 // NetworkConfig defines the network-related configuration.
@@ -87,6 +90,8 @@ type ControlPlaneNodePool struct {
 	Annotations map[string]string `mapstructure:"annotations" yaml:"annotations"`
 	Taints      []string          `mapstructure:"taints" yaml:"taints"`
 	Image       string            `mapstructure:"image" yaml:"image"` // Optional override
+	RDNSIPv4    string            `mapstructure:"rdns_ipv4" yaml:"rdns_ipv4"`
+	RDNSIPv6    string            `mapstructure:"rdns_ipv6" yaml:"rdns_ipv6"`
 }
 
 // WorkerNodePool defines a node pool for workers.
@@ -100,6 +105,8 @@ type WorkerNodePool struct {
 	Taints         []string          `mapstructure:"taints" yaml:"taints"`
 	PlacementGroup bool              `mapstructure:"placement_group" yaml:"placement_group"`
 	Image          string            `mapstructure:"image" yaml:"image"` // Optional override
+	RDNSIPv4       string            `mapstructure:"rdns_ipv4" yaml:"rdns_ipv4"`
+	RDNSIPv6       string            `mapstructure:"rdns_ipv6" yaml:"rdns_ipv6"`
 }
 
 // AutoscalerConfig defines the autoscaler configuration.
@@ -128,6 +135,8 @@ type IngressConfig struct {
 	HealthCheckInt     int    `mapstructure:"health_check_interval" yaml:"health_check_interval"`
 	HealthCheckRetry   int    `mapstructure:"health_check_retries" yaml:"health_check_retries"`
 	HealthCheckTimeout int    `mapstructure:"health_check_timeout" yaml:"health_check_timeout"`
+	RDNSIPv4           string `mapstructure:"rdns_ipv4" yaml:"rdns_ipv4"`
+	RDNSIPv6           string `mapstructure:"rdns_ipv6" yaml:"rdns_ipv6"`
 }
 
 // TalosConfig defines the Talos-specific configuration.
@@ -317,4 +326,14 @@ type TalosBackupConfig struct {
 	S3PathStyle        bool   `mapstructure:"s3_path_style" yaml:"s3_path_style"`
 	AGEX25519PublicKey string `mapstructure:"age_x25519_public_key" yaml:"age_x25519_public_key"`
 	EnableCompression  bool   `mapstructure:"enable_compression" yaml:"enable_compression"`
+}
+
+// RDNSConfig defines cluster-wide reverse DNS defaults.
+type RDNSConfig struct {
+	// Cluster-wide defaults (fallback for all resources)
+	ClusterRDNS      string `mapstructure:"cluster" yaml:"cluster"`
+	ClusterRDNSIPv4  string `mapstructure:"cluster_ipv4" yaml:"cluster_ipv4"`
+	ClusterRDNSIPv6  string `mapstructure:"cluster_ipv6" yaml:"cluster_ipv6"`
+	IngressRDNSIPv4  string `mapstructure:"ingress_ipv4" yaml:"ingress_ipv4"`
+	IngressRDNSIPv6  string `mapstructure:"ingress_ipv6" yaml:"ingress_ipv6"`
 }
