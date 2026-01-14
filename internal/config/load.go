@@ -62,9 +62,5 @@ func shouldEnableCCMByDefault(rawConfig map[string]interface{}) bool {
 	}
 
 	_, explicitlySet := ccmMap["enabled"]
-	if !explicitlySet {
-		return true // CCM section exists but enabled not set, default to enabled
-	}
-
-	return false // Explicitly set to false, respect it
+	return !explicitlySet // Default to enabled if not explicitly set
 }
