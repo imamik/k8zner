@@ -2,7 +2,6 @@ package talos
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"strings"
 	"time"
@@ -172,13 +171,10 @@ func (g *Generator) createClient(ctx context.Context, endpoint string) (*client.
 		return nil, fmt.Errorf("failed to parse talos config: %w", err)
 	}
 
-	// Create client with endpoint
+	// Create client with endpoint - the config contains CA and client certs for TLS
 	c, err := client.New(ctx,
 		client.WithEndpoints(endpoint),
 		client.WithConfig(cfg),
-		client.WithTLSConfig(&tls.Config{
-			InsecureSkipVerify: false,
-		}),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)

@@ -324,9 +324,9 @@ func (p *Provisioner) getControlPlaneIPs(ctx *provisioning.Context) ([]string, e
 
 	var ips []string
 	for _, server := range servers {
-		// Use private IP from first private network
-		if len(server.PrivateNet) > 0 && server.PrivateNet[0].IP != nil {
-			ips = append(ips, server.PrivateNet[0].IP.String())
+		// Use public IP for Talos API access (accessible on port 50000)
+		if server.PublicNet.IPv4.IP != nil {
+			ips = append(ips, server.PublicNet.IPv4.IP.String())
 		}
 	}
 	return ips, nil
@@ -343,9 +343,9 @@ func (p *Provisioner) getWorkerIPs(ctx *provisioning.Context) ([]string, error) 
 
 	var ips []string
 	for _, server := range servers {
-		// Use private IP from first private network
-		if len(server.PrivateNet) > 0 && server.PrivateNet[0].IP != nil {
-			ips = append(ips, server.PrivateNet[0].IP.String())
+		// Use public IP for Talos API access (accessible on port 50000)
+		if server.PublicNet.IPv4.IP != nil {
+			ips = append(ips, server.PublicNet.IPv4.IP.String())
 		}
 	}
 	return ips, nil

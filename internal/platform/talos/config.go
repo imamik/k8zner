@@ -2,7 +2,6 @@
 package talos
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -59,8 +58,9 @@ func LoadSecrets(path string) (*secrets.Bundle, error) {
 }
 
 // SaveSecrets saves Talos secrets to a file.
+// Uses YAML format to match what Talos machinery's LoadBundle expects.
 func SaveSecrets(path string, sb *secrets.Bundle) error {
-	data, err := json.MarshalIndent(sb, "", "  ")
+	data, err := yaml.Marshal(sb)
 	if err != nil {
 		return fmt.Errorf("failed to marshal secrets bundle: %w", err)
 	}

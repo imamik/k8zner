@@ -53,21 +53,24 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 
 		if spec.Role == "control-plane" {
 			// Terraform: ipv4_private = cidrhost(subnet, np_index * 10 + cp_index + 1)
+			// Note: Hetzner Cloud reserves .1 for the gateway, so we start at .2
+			// hostNum offset is +2 instead of +1 to skip the gateway
 			subnet, err = ctx.Config.GetSubnetForRole("control-plane", 0)
 			if err != nil {
 				return nil, err
 			}
-			hostNum = spec.PoolIndex*10 + (j - 1) + 1
+			hostNum = spec.PoolIndex*10 + (j - 1) + 2
 		} else {
 			// Terraform: ipv4_private = cidrhost(subnet, wkr_index + 1)
 			// Note: Terraform iterates worker nodepools and uses separate subnets for each
 			// hcloud_network_subnet.worker[np.name]
 			// The config.GetSubnetForRole("worker", i) handles the subnet iteration.
+			// Note: Hetzner Cloud reserves .1 for the gateway, so we start at .2
 			subnet, err = ctx.Config.GetSubnetForRole("worker", spec.PoolIndex)
 			if err != nil {
 				return nil, err
 			}
-			hostNum = (j - 1) + 1
+			hostNum = (j - 1) + 2
 		}
 
 		privateIP, err := config.CIDRHost(subnet, hostNum)
