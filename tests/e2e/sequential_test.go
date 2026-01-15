@@ -70,6 +70,15 @@ func TestE2ELifecycle(t *testing.T) {
 		t.Log("Skipping Phase 4: Scale (E2E_SKIP_SCALE=true)")
 	}
 
+	// Phase 5: Upgrade (optional, can be skipped for faster testing)
+	if os.Getenv("E2E_SKIP_UPGRADE") != "true" {
+		t.Run("Phase5_Upgrade", func(t *testing.T) {
+			phaseUpgrade(t, state)
+		})
+	} else {
+		t.Log("Skipping Phase 5: Upgrade (E2E_SKIP_UPGRADE=true)")
+	}
+
 	t.Log("✓ E2E Lifecycle Complete")
 	t.Logf("Cluster: %s", clusterName)
 	t.Logf("Snapshots: amd64=%s, arm64=%s", state.SnapshotAMD64, state.SnapshotARM64)
