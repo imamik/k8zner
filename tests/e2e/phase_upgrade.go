@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"hcloud-k8s/cmd/hcloud-k8s/handlers"
 	"hcloud-k8s/internal/config"
 )
@@ -37,7 +39,7 @@ func phaseUpgrade(t *testing.T, state *E2EState) {
 	// Create config file with updated versions
 	cfg := createUpgradeConfig(state)
 	configPath := fmt.Sprintf("/tmp/upgrade-config-%s.yaml", state.ClusterName)
-	if err := config.SaveToFile(cfg, configPath); err != nil {
+	if err := saveConfigToFile(cfg, configPath); err != nil {
 		t.Fatalf("Failed to save upgrade config: %v", err)
 	}
 	defer os.Remove(configPath)
@@ -77,6 +79,12 @@ func createUpgradeConfig(state *E2EState) *config.Config {
 	return &config.Config{
 		ClusterName: state.ClusterName,
 		HCloudToken: os.Getenv("HCLOUD_TOKEN"),
+		Location:    "nbg1",
+		Network: config.NetworkConfig{
+			Zone:         "eu-central",
+			IPv4CIDR:     "10.0.0.0/16",
+			NodeIPv4CIDR: "10.0.0.0/22",
+		},
 		Talos: config.TalosConfig{
 			Version:     newTalosVersion,
 			SchematicID: "ce4c980550dd2ab1b17bbf2b08801c7eb59418eafe8f279833297925d67c7515", // Default schematic
@@ -84,25 +92,39 @@ func createUpgradeConfig(state *E2EState) *config.Config {
 		Kubernetes: config.KubernetesConfig{
 			Version: newK8sVersion,
 		},
-		Infrastructure: config.InfrastructureConfig{
-			Location: "nbg1",
-			Network: config.NetworkConfig{
-				Region: "eu-central",
-				CIDR:   "10.0.0.0/16",
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{
+				{
+					Name:       "control-plane",
+					Location:   "nbg1",
+					ServerType: "cx22",
+					Count:      1,
+				},
 			},
 		},
-		ControlPlane: config.ControlPlaneConfig{
-			Count:      1,
-			ServerType: "cpx11",
-		},
-		Workers: []config.WorkerPoolConfig{
+		Workers: []config.WorkerNodePool{
 			{
 				Name:       "pool1",
+				Location:   "nbg1",
+				ServerType: "cx22",
 				Count:      1,
-				ServerType: "cpx11",
 			},
 		},
 	}
+}
+
+// saveConfigToFile saves a config to a YAML file.
+func saveConfigToFile(cfg *config.Config, path string) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	return nil
 }
 
 // copySecretsFile copies the Talos secrets file to the expected location.

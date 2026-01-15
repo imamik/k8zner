@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"hcloud-k8s/internal/config"
 	"hcloud-k8s/internal/orchestration"
 	"hcloud-k8s/internal/platform/hcloud"
@@ -153,12 +155,11 @@ func deployClusterWithVersion(t *testing.T, state *E2EState, talosVer, k8sVer, s
 	cfg := &config.Config{
 		ClusterName: state.ClusterName,
 		HCloudToken: os.Getenv("HCLOUD_TOKEN"),
-		Infrastructure: config.InfrastructureConfig{
-			Location: "nbg1",
-			Network: config.NetworkConfig{
-				Region: "eu-central",
-				CIDR:   "10.0.0.0/16",
-			},
+		Location:    "nbg1",
+		Network: config.NetworkConfig{
+			Zone:         "eu-central",
+			IPv4CIDR:     "10.0.0.0/16",
+			NodeIPv4CIDR: "10.0.0.0/22",
 		},
 		Talos: config.TalosConfig{
 			Version:     talosVer,
@@ -168,27 +169,23 @@ func deployClusterWithVersion(t *testing.T, state *E2EState, talosVer, k8sVer, s
 			Version: k8sVer,
 		},
 		ControlPlane: config.ControlPlaneConfig{
-			Count:      1,
-			ServerType: "cpx11",
-			NodePools: []config.NodePoolConfig{
+			NodePools: []config.ControlPlaneNodePool{
 				{
-					Name:     "control-plane",
-					Location: "nbg1",
-					Snapshots: config.SnapshotConfig{
-						AMD64: state.SnapshotAMD64,
-					},
+					Name:       "control-plane",
+					Location:   "nbg1",
+					ServerType: "cx22",
+					Count:      1,
+					Image:      state.SnapshotAMD64,
 				},
 			},
 		},
-		Workers: []config.WorkerPoolConfig{
+		Workers: []config.WorkerNodePool{
 			{
 				Name:       "pool1",
-				Count:      1,
-				ServerType: "cpx11",
 				Location:   "nbg1",
-				Snapshots: config.SnapshotConfig{
-					AMD64: state.SnapshotAMD64,
-				},
+				ServerType: "cx22",
+				Count:      1,
+				Image:      state.SnapshotAMD64,
 			},
 		},
 		Addons: config.AddonsConfig{
@@ -235,7 +232,7 @@ func deployClusterWithVersion(t *testing.T, state *E2EState, talosVer, k8sVer, s
 	if err != nil {
 		t.Logf("Warning: Could not get Talos config: %v", err)
 	} else {
-		state.TalosConfig = talosconfig.([]byte)
+		state.TalosConfig = talosconfig
 	}
 }
 
@@ -250,12 +247,11 @@ func upgradeCluster(t *testing.T, state *E2EState, talosVer, k8sVer, schematicID
 	cfg := &config.Config{
 		ClusterName: state.ClusterName,
 		HCloudToken: os.Getenv("HCLOUD_TOKEN"),
-		Infrastructure: config.InfrastructureConfig{
-			Location: "nbg1",
-			Network: config.NetworkConfig{
-				Region: "eu-central",
-				CIDR:   "10.0.0.0/16",
-			},
+		Location:    "nbg1",
+		Network: config.NetworkConfig{
+			Zone:         "eu-central",
+			IPv4CIDR:     "10.0.0.0/16",
+			NodeIPv4CIDR: "10.0.0.0/22",
 		},
 		Talos: config.TalosConfig{
 			Version:     talosVer,
@@ -265,41 +261,28 @@ func upgradeCluster(t *testing.T, state *E2EState, talosVer, k8sVer, schematicID
 			Version: k8sVer,
 		},
 		ControlPlane: config.ControlPlaneConfig{
-			Count:      1,
-			ServerType: "cpx11",
+			NodePools: []config.ControlPlaneNodePool{
+				{
+					Name:       "control-plane",
+					Location:   "nbg1",
+					ServerType: "cx22",
+					Count:      1,
+				},
+			},
 		},
-		Workers: []config.WorkerPoolConfig{
+		Workers: []config.WorkerNodePool{
 			{
 				Name:       "pool1",
+				Location:   "nbg1",
+				ServerType: "cx22",
 				Count:      1,
-				ServerType: "cpx11",
 			},
 		},
 	}
 
-	// Load existing secrets
-	secrets, err := talos.LoadSecrets(state.TalosSecretsPath)
-	if err != nil {
-		t.Fatalf("Failed to load Talos secrets: %v", err)
-	}
-
-	endpoint := fmt.Sprintf("https://%s-kube-api:6443", state.ClusterName)
-	talosGen := talos.NewGenerator(state.ClusterName, k8sVer, talosVer, endpoint, secrets)
-
-	// Create upgrade handler using the same pattern as handlers/upgrade.go
-	// but integrated into the test
-
-	// For now, call the upgrade provisioner directly
-	// Import the upgrade package
-	// import "hcloud-k8s/internal/provisioning/upgrade"
-
-	t.Log("Note: Direct upgrade provisioner call would go here")
-	t.Log("For full E2E test, use the CLI command:")
-	t.Logf("  hcloud-k8s upgrade --config <config>")
-
-	// Alternative: Write config file and call CLI
+	// Write config file and call upgrade CLI command
 	configPath := fmt.Sprintf("/tmp/upgrade-config-%s.yaml", state.ClusterName)
-	if err := config.SaveToFile(cfg, configPath); err != nil {
+	if err := saveConfigToYAML(cfg, configPath); err != nil {
 		t.Fatalf("Failed to save upgrade config: %v", err)
 	}
 
@@ -407,4 +390,18 @@ func testWorkloadDeployment(t *testing.T, state *E2EState) {
 	_, _ = cmd.CombinedOutput()
 
 	t.Log("✓ Workload deployment successful")
+}
+
+// saveConfigToYAML saves a config to a YAML file.
+func saveConfigToYAML(cfg *config.Config, path string) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	return nil
 }
