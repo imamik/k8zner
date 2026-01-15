@@ -156,7 +156,7 @@ func deployClusterWithVersion(t *testing.T, state *E2EState, talosVer, k8sVer, s
 		ClusterName: state.ClusterName,
 		HCloudToken: os.Getenv("HCLOUD_TOKEN"),
 		Location:    "nbg1",
-		SSHKeys:     []string{}, // Empty for now, will be created during provisioning
+		SSHKeys:     []string{state.SSHKeyName}, // Use the created SSH key
 		Network: config.NetworkConfig{
 			Zone:         "eu-central",
 			IPv4CIDR:     "10.0.0.0/16",
