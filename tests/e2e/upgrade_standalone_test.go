@@ -173,7 +173,7 @@ func deployClusterWithVersion(t *testing.T, state *E2EState, talosVer, k8sVer, s
 				{
 					Name:       "control-plane",
 					Location:   "nbg1",
-					ServerType: "cx22",
+					ServerType: "cpx22",
 					Count:      1,
 					Image:      state.SnapshotAMD64,
 				},
@@ -183,7 +183,7 @@ func deployClusterWithVersion(t *testing.T, state *E2EState, talosVer, k8sVer, s
 			{
 				Name:       "pool1",
 				Location:   "nbg1",
-				ServerType: "cx22",
+				ServerType: "cpx22",
 				Count:      1,
 				Image:      state.SnapshotAMD64,
 			},
@@ -265,7 +265,7 @@ func upgradeCluster(t *testing.T, state *E2EState, talosVer, k8sVer, schematicID
 				{
 					Name:       "control-plane",
 					Location:   "nbg1",
-					ServerType: "cx22",
+					ServerType: "cpx22",
 					Count:      1,
 				},
 			},
@@ -274,7 +274,7 @@ func upgradeCluster(t *testing.T, state *E2EState, talosVer, k8sVer, schematicID
 			{
 				Name:       "pool1",
 				Location:   "nbg1",
-				ServerType: "cx22",
+				ServerType: "cpx22",
 				Count:      1,
 			},
 		},

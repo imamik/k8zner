@@ -97,7 +97,7 @@ func createUpgradeConfig(state *E2EState) *config.Config {
 				{
 					Name:       "control-plane",
 					Location:   "nbg1",
-					ServerType: "cx22",
+					ServerType: "cpx22",
 					Count:      1,
 				},
 			},
@@ -106,7 +106,7 @@ func createUpgradeConfig(state *E2EState) *config.Config {
 			{
 				Name:       "pool1",
 				Location:   "nbg1",
-				ServerType: "cx22",
+				ServerType: "cpx22",
 				Count:      1,
 			},
 		},
