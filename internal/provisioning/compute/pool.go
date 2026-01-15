@@ -25,6 +25,8 @@ type NodePoolSpec struct {
 	UserData         string
 	PlacementGroupID *int64
 	PoolIndex        int
+	RDNSIPv4         string // RDNS template for IPv4
+	RDNSIPv6         string // RDNS template for IPv6
 }
 
 // reconcileNodePool provisions a pool of servers in parallel.
@@ -138,6 +140,8 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 					UserData:       spec.UserData,
 					PlacementGroup: cfg.pgID,
 					PrivateIP:      cfg.privateIP,
+					RDNSIPv4:       spec.RDNSIPv4,
+					RDNSIPv6:       spec.RDNSIPv6,
 				})
 				if err != nil {
 					return err

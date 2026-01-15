@@ -31,6 +31,10 @@ func (p *Provisioner) ProvisionWorkers(ctx *provisioning.Context) error {
 		tasks[i] = async.Task{
 			Name: fmt.Sprintf("worker-pool-%s", pool.Name),
 			Func: func(_ context.Context) error {
+				// Resolve RDNS templates with fallback to cluster defaults
+				rdnsIPv4 := resolveRDNSTemplate(pool.RDNSIPv4, ctx.Config.RDNS.ClusterRDNSIPv4, ctx.Config.RDNS.ClusterRDNS)
+				rdnsIPv6 := resolveRDNSTemplate(pool.RDNSIPv6, ctx.Config.RDNS.ClusterRDNSIPv6, ctx.Config.RDNS.ClusterRDNS)
+
 				// We use the outer ctx (*provisioning.Context)
 				ips, err := p.reconcileNodePool(ctx, NodePoolSpec{
 					Name:             pool.Name,
@@ -43,6 +47,8 @@ func (p *Provisioner) ProvisionWorkers(ctx *provisioning.Context) error {
 					UserData:         "",
 					PlacementGroupID: nil,
 					PoolIndex:        poolIndex,
+					RDNSIPv4:         rdnsIPv4,
+					RDNSIPv6:         rdnsIPv6,
 				})
 				if err != nil {
 					return err

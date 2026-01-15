@@ -23,6 +23,8 @@ type ServerSpec struct {
 	UserData       string
 	PlacementGroup *int64
 	PrivateIP      string
+	RDNSIPv4       string // RDNS template for IPv4
+	RDNSIPv6       string // RDNS template for IPv6
 }
 
 // ensureServer ensures a server exists and returns its IP.
@@ -106,6 +108,27 @@ func (p *Provisioner) ensureServer(ctx *provisioning.Context, spec ServerSpec) (
 
 	if err != nil {
 		return "", fmt.Errorf("failed to get server IP for %s: %w", spec.Name, err)
+	}
+
+	// Apply RDNS if configured
+	if spec.RDNSIPv4 != "" || spec.RDNSIPv6 != "" {
+		// Get server ID
+		serverIDStr, err := ctx.Infra.GetServerID(ctx, spec.Name)
+		if err != nil {
+			return "", fmt.Errorf("failed to get server ID for RDNS: %w", err)
+		}
+
+		// Convert to int64
+		var serverID int64
+		if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
+			return "", fmt.Errorf("failed to parse server ID: %w", err)
+		}
+
+		// Apply RDNS
+		if err := p.applyServerRDNSSimple(ctx, serverID, spec.Name, ip, spec.RDNSIPv4, spec.RDNSIPv6, spec.Role, spec.Pool); err != nil {
+			// Log error but don't fail server creation
+			ctx.Logger.Printf("[%s] Warning: Failed to set RDNS for %s: %v", phase, spec.Name, err)
+		}
 	}
 
 	return ip, nil

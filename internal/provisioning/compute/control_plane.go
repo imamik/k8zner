@@ -59,6 +59,10 @@ func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
 			return fmt.Errorf("failed to ensure placement group for pool %s: %w", pool.Name, err)
 		}
 
+		// Resolve RDNS templates with fallback to cluster defaults
+		rdnsIPv4 := resolveRDNSTemplate(pool.RDNSIPv4, ctx.Config.RDNS.ClusterRDNSIPv4, ctx.Config.RDNS.ClusterRDNS)
+		rdnsIPv6 := resolveRDNSTemplate(pool.RDNSIPv6, ctx.Config.RDNS.ClusterRDNSIPv6, ctx.Config.RDNS.ClusterRDNS)
+
 		poolIPs, err := p.reconcileNodePool(ctx, NodePoolSpec{
 			Name:             pool.Name,
 			Count:            pool.Count,
@@ -70,6 +74,8 @@ func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
 			UserData:         "",
 			PlacementGroupID: &pg.ID,
 			PoolIndex:        i,
+			RDNSIPv4:         rdnsIPv4,
+			RDNSIPv6:         rdnsIPv6,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to reconcile node pool %s: %w", pool.Name, err)

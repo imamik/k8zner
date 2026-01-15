@@ -88,6 +88,20 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to add target to LB: %w", err)
 		}
+
+		// Apply RDNS if configured
+		ipv4 := ""
+		if apiLB.PublicNet.IPv4.IP != nil {
+			ipv4 = apiLB.PublicNet.IPv4.IP.String()
+		}
+		ipv6 := ""
+		if apiLB.PublicNet.IPv6.IP != nil {
+			ipv6 = apiLB.PublicNet.IPv6.IP.String()
+		}
+
+		if err := p.applyLoadBalancerRDNS(ctx, apiLB.ID, lbName, ipv4, ipv6, "kube-api"); err != nil {
+			ctx.Logger.Printf("[%s] Warning: Failed to set RDNS for %s: %v", phase, lbName, err)
+		}
 	}
 
 	// Ingress Load Balancer
@@ -150,6 +164,20 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 		err = ctx.Infra.AddTarget(ctx, ingressLB, hcloud.LoadBalancerTargetTypeLabelSelector, targetSelector)
 		if err != nil {
 			return fmt.Errorf("failed to add target to Ingress LB: %w", err)
+		}
+
+		// Apply RDNS if configured
+		ipv4 := ""
+		if ingressLB.PublicNet.IPv4.IP != nil {
+			ipv4 = ingressLB.PublicNet.IPv4.IP.String()
+		}
+		ipv6 := ""
+		if ingressLB.PublicNet.IPv6.IP != nil {
+			ipv6 = ingressLB.PublicNet.IPv6.IP.String()
+		}
+
+		if err := p.applyLoadBalancerRDNS(ctx, ingressLB.ID, lbName, ipv4, ipv6, "ingress"); err != nil {
+			ctx.Logger.Printf("[%s] Warning: Failed to set RDNS for %s: %v", phase, lbName, err)
 		}
 	}
 

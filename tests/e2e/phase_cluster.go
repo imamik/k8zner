@@ -100,6 +100,11 @@ func phaseCluster(t *testing.T, state *E2EState) {
 	t.Log("Waiting for nodes to be ready...")
 	waitForNodesReady(t, state.KubeconfigPath, 2, 5*time.Minute)
 
+	// Verify RDNS configuration
+	t.Log("Verifying RDNS configuration...")
+	verifyServerRDNS(ctx, t, state)
+	verifyLoadBalancerRDNS(ctx, t, state)
+
 	t.Log("✓ Phase 2: Cluster (provisioned and ready)")
 }
 

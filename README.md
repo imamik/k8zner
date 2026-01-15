@@ -12,6 +12,7 @@
 - **Talos Config Generation:** Automatically generates secure Talos machine configurations and client secrets.
 - **Persistence:** Saves cluster secrets and `talosconfig` locally for ongoing management.
 - **Privacy:** Enforces SSH key usage to prevent root password transmission via email.
+- **Reverse DNS (RDNS):** Automatic configuration of PTR records for servers and load balancers with template support.
 
 ## Quick Start
 
@@ -65,6 +66,79 @@ This will:
 1.  Verify/Create the SSH keys and resources.
 2.  Provision 3 Control Plane servers.
 3.  Generate `secrets.yaml` (CA keys) and `talosconfig` in the current directory.
+
+## Configuration
+
+### Reverse DNS (RDNS)
+
+Configure automatic PTR records for servers and load balancers. RDNS templates support dynamic variable substitution:
+
+**Available Template Variables:**
+- `{{ cluster-name }}` - Cluster name
+- `{{ hostname }}` - Server/Load balancer name
+- `{{ id }}` - Resource ID
+- `{{ ip-labels }}` - Reverse IP notation (e.g., `1.2.3.4` → `4.3.2.1`)
+- `{{ ip-type }}` - IP version (`ipv4` or `ipv6`)
+- `{{ role }}` - Resource role (`control-plane`, `worker`, `kube-api`, `ingress`)
+- `{{ pool }}` - Node pool name
+
+**Example Configuration:**
+
+```yaml
+cluster_name: "my-cluster"
+
+# Global RDNS defaults (applies to all resources)
+rdns:
+  cluster: "{{ hostname }}.{{ cluster-name }}.example.com"
+  cluster_ipv4: "{{ ip-labels }}.nodes.example.com"
+  cluster_ipv6: "{{ ip-labels }}.ipv6.example.com"
+  ingress_ipv4: "{{ cluster-name }}-ingress.example.com"
+  ingress_ipv6: "{{ cluster-name }}-ingress-v6.example.com"
+
+control_plane:
+  node_pools:
+    - name: "control-plane"
+      count: 3
+      server_type: "cpx22"
+      # Override RDNS for this pool (optional)
+      rdns_ipv4: "{{ hostname }}.cp.example.com"
+      rdns_ipv6: "{{ hostname }}.cp-v6.example.com"
+
+workers:
+  - name: "worker"
+    count: 2
+    server_type: "cpx32"
+    # Override RDNS for this pool (optional)
+    rdns_ipv4: "{{ hostname }}.workers.example.com"
+
+ingress:
+  enabled: true
+  # Override RDNS for ingress load balancer (optional)
+  rdns_ipv4: "ingress.example.com"
+  rdns_ipv6: "ingress-v6.example.com"
+```
+
+**RDNS Resolution Order (Fallback Chain):**
+
+1. **Servers (Control Plane/Worker):**
+   - Pool-specific: `node_pools[].rdns_ipv4`
+   - Cluster default: `rdns.cluster_rdns_ipv4`
+   - Generic default: `rdns.cluster`
+
+2. **Kube API Load Balancer:**
+   - Cluster default: `rdns.cluster_rdns_ipv4`
+   - Generic default: `rdns.cluster`
+
+3. **Ingress Load Balancer:**
+   - Ingress-specific: `ingress.rdns_ipv4`
+   - Cluster ingress default: `rdns.ingress_rdns_ipv4`
+   - Cluster default: `rdns.cluster_rdns_ipv4`
+   - Generic default: `rdns.cluster`
+
+**Notes:**
+- RDNS failures are logged as warnings and don't block provisioning
+- IPv6 support requires IPv6-enabled resources
+- PTR records are automatically updated when resources are recreated
 
 ## Development
 

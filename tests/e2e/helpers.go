@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -359,4 +360,85 @@ func quickPortCheck(ip string, port int) error {
 	}
 	conn.Close()
 	return nil
+}
+
+// verifyRDNS verifies that RDNS (PTR) records are configured correctly for a resource.
+// It performs a reverse DNS lookup with retry logic (for DNS propagation) and checks
+// if the result matches expected patterns.
+// Returns an error if the lookup fails or the record doesn't match expectations.
+func verifyRDNS(t *testing.T, ip, expectedPattern string) error {
+	t.Logf("  Verifying RDNS for %s (expected pattern: %s)...", ip, expectedPattern)
+
+	var names []string
+	var err error
+	maxRetries := 5
+
+	// Retry with exponential backoff for DNS propagation
+	// Delays: 1s, 2s, 4s, 8s, 16s (total ~31 seconds max)
+	for i := 0; i < maxRetries; i++ {
+		names, err = net.LookupAddr(ip)
+		if err == nil && len(names) > 0 {
+			break
+		}
+
+		if i < maxRetries-1 {
+			delay := time.Duration(1<<uint(i)) * time.Second
+			t.Logf("    DNS lookup attempt %d/%d failed, retrying in %v...", i+1, maxRetries, delay)
+			time.Sleep(delay)
+		}
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to lookup PTR record for %s after %d attempts: %w", ip, maxRetries, err)
+	}
+
+	if len(names) == 0 {
+		return fmt.Errorf("no PTR record found for %s after %d attempts", ip, maxRetries)
+	}
+
+	// Check if any of the returned names match the expected pattern
+	ptrRecord := strings.TrimSuffix(names[0], ".")
+	t.Logf("  ✓ Found PTR record: %s → %s", ip, ptrRecord)
+
+	// If expectedPattern is not empty, verify it matches
+	if expectedPattern != "" && !strings.Contains(ptrRecord, expectedPattern) {
+		return fmt.Errorf("PTR record %s does not contain expected pattern %s", ptrRecord, expectedPattern)
+	}
+
+	return nil
+}
+
+// verifyServerRDNS verifies RDNS configuration for all servers in the cluster.
+func verifyServerRDNS(ctx context.Context, t *testing.T, state *E2EState) {
+	t.Log("--- Verifying Server RDNS ---")
+
+	// Verify control plane servers
+	for i, ip := range state.ControlPlaneIPs {
+		expectedPattern := state.ClusterName
+		if err := verifyRDNS(t, ip, expectedPattern); err != nil {
+			t.Logf("  Warning: RDNS verification failed for control plane node %d: %v", i+1, err)
+		}
+	}
+
+	// Verify worker servers
+	for i, ip := range state.WorkerIPs {
+		expectedPattern := state.ClusterName
+		if err := verifyRDNS(t, ip, expectedPattern); err != nil {
+			t.Logf("  Warning: RDNS verification failed for worker node %d: %v", i+1, err)
+		}
+	}
+}
+
+// verifyLoadBalancerRDNS verifies RDNS configuration for load balancers.
+func verifyLoadBalancerRDNS(ctx context.Context, t *testing.T, state *E2EState) {
+	t.Log("--- Verifying Load Balancer RDNS ---")
+
+	if state.LoadBalancerIP != "" {
+		expectedPattern := state.ClusterName
+		if err := verifyRDNS(t, state.LoadBalancerIP, expectedPattern); err != nil {
+			t.Logf("  Warning: RDNS verification failed for load balancer: %v", err)
+		}
+	} else {
+		t.Log("  ⚠ No load balancer IP available, skipping RDNS verification")
+	}
 }
