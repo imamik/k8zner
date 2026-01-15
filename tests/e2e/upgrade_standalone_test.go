@@ -300,7 +300,9 @@ func upgradeCluster(t *testing.T, state *E2EState, talosVer, k8sVer, schematicID
 	t.Log("Executing upgrade command...")
 	startTime := time.Now()
 
-	cmd := exec.CommandContext(ctx, "./hcloud-k8s", "upgrade", "--config", configPath)
+	// Binary is in project root, tests are in tests/e2e/
+	binaryPath := "../../hcloud-k8s"
+	cmd := exec.CommandContext(ctx, binaryPath, "upgrade", "--config", configPath)
 	cmd.Env = append(os.Environ(), "HCLOUD_TOKEN="+os.Getenv("HCLOUD_TOKEN"))
 	output, err := cmd.CombinedOutput()
 	duration := time.Since(startTime)
