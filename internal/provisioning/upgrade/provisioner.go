@@ -246,7 +246,7 @@ func (p *Provisioner) upgradeKubernetes(ctx *provisioning.Context) error {
 }
 
 // upgradeNode upgrades a single node.
-func (p *Provisioner) upgradeNode(ctx *provisioning.Context, nodeIP, role string) error {
+func (p *Provisioner) upgradeNode(ctx *provisioning.Context, nodeIP, _ string) error {
 	// Build upgrade image URL
 	var imageURL string
 	if ctx.Config.Talos.SchematicID != "" {
@@ -291,14 +291,14 @@ func (p *Provisioner) healthCheck(ctx *provisioning.Context) error {
 func (p *Provisioner) healthCheckWithRetry(ctx *provisioning.Context, maxRetries int) error {
 	var lastErr error
 	for i := 0; i < maxRetries; i++ {
-		if err := p.healthCheck(ctx); err == nil {
+		err := p.healthCheck(ctx)
+		if err == nil {
 			return nil
-		} else {
-			lastErr = err
-			if i < maxRetries-1 {
-				ctx.Observer.Printf("[%s] Health check failed (attempt %d/%d), retrying in 10s...", phase, i+1, maxRetries)
-				time.Sleep(10 * time.Second)
-			}
+		}
+		lastErr = err
+		if i < maxRetries-1 {
+			ctx.Observer.Printf("[%s] Health check failed (attempt %d/%d), retrying in 10s...", phase, i+1, maxRetries)
+			time.Sleep(10 * time.Second)
 		}
 	}
 	return fmt.Errorf("health check failed after %d attempts: %w", maxRetries, lastErr)

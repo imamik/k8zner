@@ -237,11 +237,11 @@ func TestUpgradeControlPlane_SkipsNodesAlreadyAtTargetVersion(t *testing.T) {
 		GetNodeVersionFunc: func(_ context.Context, endpoint string) (string, error) {
 			return nodeVersions[endpoint], nil
 		},
-		UpgradeNodeFunc: func(_ context.Context, endpoint, imageURL string) error {
+		UpgradeNodeFunc: func(_ context.Context, _, _ string) error {
 			upgradeCallCount++
 			return nil
 		},
-		HealthCheckFunc: func(_ context.Context, endpoint string) error {
+		HealthCheckFunc: func(_ context.Context, _ string) error {
 			return nil
 		},
 	}
@@ -284,7 +284,7 @@ func TestUpgradeControlPlane_DryRun(t *testing.T) {
 	}
 
 	mockTalos := &mockTalosClient{
-		UpgradeNodeFunc: func(_ context.Context, endpoint, imageURL string) error {
+		UpgradeNodeFunc: func(_ context.Context, _, _ string) error {
 			upgradeCallCount++
 			return nil
 		},
@@ -344,7 +344,7 @@ func TestUpgradeWorkers_SkipsNodesAlreadyAtTargetVersion(t *testing.T) {
 		GetNodeVersionFunc: func(_ context.Context, endpoint string) (string, error) {
 			return nodeVersions[endpoint], nil
 		},
-		UpgradeNodeFunc: func(_ context.Context, endpoint, imageURL string) error {
+		UpgradeNodeFunc: func(_ context.Context, _, _ string) error {
 			upgradeCallCount++
 			return nil
 		},
@@ -385,7 +385,7 @@ func TestUpgradeKubernetes_SkipsIfNoVersionSpecified(t *testing.T) {
 	}
 
 	mockTalos := &mockTalosClient{
-		UpgradeKubernetesFunc: func(_ context.Context, endpoint, targetVersion string) error {
+		UpgradeKubernetesFunc: func(_ context.Context, _, _ string) error {
 			upgradeCallCount++
 			return nil
 		},
@@ -425,7 +425,7 @@ func TestUpgradeKubernetes_DryRun(t *testing.T) {
 	}
 
 	mockTalos := &mockTalosClient{
-		UpgradeKubernetesFunc: func(_ context.Context, endpoint, targetVersion string) error {
+		UpgradeKubernetesFunc: func(_ context.Context, _, _ string) error {
 			upgradeCallCount++
 			return nil
 		},
@@ -467,7 +467,7 @@ func TestHealthCheckWithRetry_SucceedsOnFirstAttempt(t *testing.T) {
 	}
 
 	mockTalos := &mockTalosClient{
-		HealthCheckFunc: func(_ context.Context, endpoint string) error {
+		HealthCheckFunc: func(_ context.Context, _ string) error {
 			healthCheckCalls++
 			return nil
 		},
@@ -503,7 +503,7 @@ func TestHealthCheckWithRetry_SucceedsOnSecondAttempt(t *testing.T) {
 	}
 
 	mockTalos := &mockTalosClient{
-		HealthCheckFunc: func(_ context.Context, endpoint string) error {
+		HealthCheckFunc: func(_ context.Context, _ string) error {
 			healthCheckCalls++
 			if healthCheckCalls == 1 {
 				return assert.AnError
@@ -529,7 +529,7 @@ func TestUpgradeNode_BuildsCorrectImageURL(t *testing.T) {
 	var capturedImageURL string
 
 	mockTalos := &mockTalosClient{
-		UpgradeNodeFunc: func(_ context.Context, endpoint, imageURL string) error {
+		UpgradeNodeFunc: func(_ context.Context, _, imageURL string) error {
 			capturedImageURL = imageURL
 			return nil
 		},

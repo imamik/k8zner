@@ -16,7 +16,7 @@ func (g *Generator) GetNodeVersion(ctx context.Context, endpoint string) (string
 	if err != nil {
 		return "", fmt.Errorf("failed to create Talos client: %w", err)
 	}
-	defer talosClient.Close()
+	defer func() { _ = talosClient.Close() }()
 
 	// Wrap context with target node - required for node-specific operations
 	nodeCtx := client.WithNode(ctx, endpoint)
@@ -40,7 +40,7 @@ func (g *Generator) GetSchematicID(ctx context.Context, endpoint string) (string
 	if err != nil {
 		return "", fmt.Errorf("failed to create Talos client: %w", err)
 	}
-	defer talosClient.Close()
+	defer func() { _ = talosClient.Close() }()
 
 	// Wrap context with target node - required for node-specific operations
 	nodeCtx := client.WithNode(ctx, endpoint)
@@ -77,7 +77,7 @@ func (g *Generator) UpgradeNode(ctx context.Context, endpoint, imageURL string) 
 	if err != nil {
 		return fmt.Errorf("failed to create Talos client: %w", err)
 	}
-	defer talosClient.Close()
+	defer func() { _ = talosClient.Close() }()
 
 	// Wrap context with target node - required for node-specific operations
 	// WithNode tells apid which node to target for the upgrade
@@ -99,10 +99,7 @@ func (g *Generator) UpgradeNode(ctx context.Context, endpoint, imageURL string) 
 // to a new Talos version with a different Kubernetes version. The Talos machinery
 // client doesn't expose a direct K8s upgrade method - upgrades are managed by
 // upgrading the Talos OS itself with the new Kubernetes version bundled.
-func (g *Generator) UpgradeKubernetes(ctx context.Context, endpoint, targetVersion string) error {
-	// Strip 'v' prefix if present (K8s version format)
-	targetVersion = strings.TrimPrefix(targetVersion, "v")
-
+func (g *Generator) UpgradeKubernetes(_ context.Context, _, _ string) error {
 	// TODO: Implement Kubernetes-only upgrade if needed
 	// For now, K8s upgrades happen via Talos node upgrades
 	// The Talos image includes the K8s version, so upgrading Talos nodes
@@ -131,7 +128,7 @@ func (g *Generator) WaitForNodeReady(ctx context.Context, endpoint string, timeo
 
 		// Try to get version as a health check
 		_, err = talosClient.Version(nodeCtx)
-		talosClient.Close()
+		_ = talosClient.Close()
 
 		if err == nil {
 			// Node is responsive
@@ -150,7 +147,7 @@ func (g *Generator) HealthCheck(ctx context.Context, endpoint string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create Talos client: %w", err)
 	}
-	defer talosClient.Close()
+	defer func() { _ = talosClient.Close() }()
 
 	// Wrap context with target node - required for node-specific operations
 	nodeCtx := client.WithNode(ctx, endpoint)
@@ -158,7 +155,7 @@ func (g *Generator) HealthCheck(ctx context.Context, endpoint string) error {
 	// Check that we can communicate with Talos API
 	version, err := talosClient.Version(nodeCtx)
 	if err != nil {
-		return fmt.Errorf("Talos API not responding: %w", err)
+		return fmt.Errorf("talos API not responding: %w", err)
 	}
 
 	if len(version.Messages) == 0 {

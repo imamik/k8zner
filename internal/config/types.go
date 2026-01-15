@@ -271,7 +271,7 @@ type OIDCRBACGroupMapping struct {
 	Roles        []OIDCRBACRole `mapstructure:"roles" yaml:"roles"`
 }
 
-// OIDCRBAC Role defines a namespaced role for OIDC mapping.
+// OIDCRBACRole defines a namespaced role for OIDC mapping.
 type OIDCRBACRole struct {
 	Name      string `mapstructure:"name" yaml:"name"`
 	Namespace string `mapstructure:"namespace" yaml:"namespace"`

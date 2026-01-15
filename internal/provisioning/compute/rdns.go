@@ -75,11 +75,12 @@ func (p *Provisioner) applyLoadBalancerRDNS(ctx *provisioning.Context, lbID int6
 	// Determine RDNS templates
 	var rdnsIPv4, rdnsIPv6 string
 
-	if role == "kube-api" {
+	switch role {
+	case "kube-api":
 		// Kube API load balancer uses cluster-wide defaults
 		rdnsIPv4 = resolveRDNSTemplate(ctx.Config.RDNS.ClusterRDNSIPv4, ctx.Config.RDNS.ClusterRDNS, "")
 		rdnsIPv6 = resolveRDNSTemplate(ctx.Config.RDNS.ClusterRDNSIPv6, ctx.Config.RDNS.ClusterRDNS, "")
-	} else if role == "ingress" {
+	case "ingress":
 		// Ingress load balancer uses ingress-specific config
 		rdnsIPv4 = resolveRDNSTemplate(ctx.Config.Ingress.RDNSIPv4, ctx.Config.RDNS.IngressRDNSIPv4, ctx.Config.RDNS.ClusterRDNSIPv4, ctx.Config.RDNS.ClusterRDNS)
 		rdnsIPv6 = resolveRDNSTemplate(ctx.Config.Ingress.RDNSIPv6, ctx.Config.RDNS.IngressRDNSIPv6, ctx.Config.RDNS.ClusterRDNSIPv6, ctx.Config.RDNS.ClusterRDNS)
