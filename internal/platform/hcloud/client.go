@@ -98,5 +98,6 @@ type InfrastructureManager interface {
 	PlacementGroupManager
 	FloatingIPManager
 	CertificateManager
+	RDNSManager
 	GetPublicIP(ctx context.Context) (string, error)
 }
