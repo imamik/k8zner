@@ -141,9 +141,10 @@ type IngressConfig struct {
 
 // TalosConfig defines the Talos-specific configuration.
 type TalosConfig struct {
-	Version    string        `mapstructure:"version" yaml:"version"`
-	Extensions []string      `mapstructure:"extensions" yaml:"extensions"`
-	Upgrade    UpgradeConfig `mapstructure:"upgrade" yaml:"upgrade"`
+	Version     string        `mapstructure:"version" yaml:"version"`
+	SchematicID string        `mapstructure:"schematic_id" yaml:"schematic_id"`
+	Extensions  []string      `mapstructure:"extensions" yaml:"extensions"`
+	Upgrade     UpgradeConfig `mapstructure:"upgrade" yaml:"upgrade"`
 }
 
 // UpgradeConfig defines the upgrade-related configuration.

@@ -20,6 +20,7 @@ func Root() *cobra.Command {
 	cmd.AddCommand(Apply())
 	cmd.AddCommand(Image())
 	cmd.AddCommand(Destroy())
+	cmd.AddCommand(Upgrade())
 
 	return cmd
 }

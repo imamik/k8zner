@@ -13,6 +13,7 @@ type ServerProvisioner interface {
 	CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string) (string, error)
 	DeleteServer(ctx context.Context, name string) error
 	GetServerIP(ctx context.Context, name string) (string, error)
+	GetServersByLabel(ctx context.Context, labels map[string]string) ([]*hcloud.Server, error)
 	EnableRescue(ctx context.Context, serverID string, sshKeyIDs []string) (string, error)
 	ResetServer(ctx context.Context, serverID string) error
 	PoweroffServer(ctx context.Context, serverID string) error

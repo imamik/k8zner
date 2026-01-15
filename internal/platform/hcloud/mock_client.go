@@ -9,13 +9,14 @@ import (
 
 // MockClient is a mock implementation of InfrastructureManager.
 type MockClient struct {
-	CreateServerFunc   func(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string) (string, error)
-	DeleteServerFunc   func(ctx context.Context, name string) error
-	GetServerIPFunc    func(ctx context.Context, name string) (string, error)
-	GetServerIDFunc    func(ctx context.Context, name string) (string, error)
-	EnableRescueFunc   func(ctx context.Context, serverID string, sshKeyIDs []string) (string, error)
-	ResetServerFunc    func(ctx context.Context, serverID string) error
-	PoweroffServerFunc func(ctx context.Context, serverID string) error
+	CreateServerFunc      func(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string) (string, error)
+	DeleteServerFunc      func(ctx context.Context, name string) error
+	GetServerIPFunc       func(ctx context.Context, name string) (string, error)
+	GetServerIDFunc       func(ctx context.Context, name string) (string, error)
+	GetServersByLabelFunc func(ctx context.Context, labels map[string]string) ([]*hcloud.Server, error)
+	EnableRescueFunc      func(ctx context.Context, serverID string, sshKeyIDs []string) (string, error)
+	ResetServerFunc       func(ctx context.Context, serverID string) error
+	PoweroffServerFunc    func(ctx context.Context, serverID string) error
 
 	CreateSnapshotFunc      func(ctx context.Context, serverID, snapshotDescription string, labels map[string]string) (string, error)
 	DeleteImageFunc         func(ctx context.Context, imageID string) error
@@ -101,6 +102,14 @@ func (m *MockClient) GetServerID(ctx context.Context, name string) (string, erro
 		return m.GetServerIDFunc(ctx, name)
 	}
 	return "123", nil
+}
+
+// GetServersByLabel mocks getting servers by label.
+func (m *MockClient) GetServersByLabel(ctx context.Context, labels map[string]string) ([]*hcloud.Server, error) {
+	if m.GetServersByLabelFunc != nil {
+		return m.GetServersByLabelFunc(ctx, labels)
+	}
+	return []*hcloud.Server{}, nil
 }
 
 // EnableRescue mocks enabling rescue mode.
