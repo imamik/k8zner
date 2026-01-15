@@ -248,9 +248,17 @@ func (p *Provisioner) upgradeKubernetes(ctx *provisioning.Context) error {
 // upgradeNode upgrades a single node.
 func (p *Provisioner) upgradeNode(ctx *provisioning.Context, nodeIP, role string) error {
 	// Build upgrade image URL
-	imageURL := fmt.Sprintf("factory.talos.dev/installer/%s:%s",
-		ctx.Config.Talos.SchematicID,
-		ctx.Config.Talos.Version)
+	var imageURL string
+	if ctx.Config.Talos.SchematicID != "" {
+		// Use Talos factory with schematic for custom extensions
+		imageURL = fmt.Sprintf("factory.talos.dev/installer/%s:%s",
+			ctx.Config.Talos.SchematicID,
+			ctx.Config.Talos.Version)
+	} else {
+		// Use official installer without schematic
+		imageURL = fmt.Sprintf("ghcr.io/siderolabs/installer:%s",
+			ctx.Config.Talos.Version)
+	}
 
 	// Perform upgrade
 	if err := ctx.Talos.UpgradeNode(ctx, nodeIP, imageURL); err != nil {

@@ -18,7 +18,10 @@ func (g *Generator) GetNodeVersion(ctx context.Context, endpoint string) (string
 	}
 	defer talosClient.Close()
 
-	version, err := talosClient.Version(ctx)
+	// Wrap context with target node - required for node-specific operations
+	nodeCtx := client.WithNode(ctx, endpoint)
+
+	version, err := talosClient.Version(nodeCtx)
 	if err != nil {
 		return "", fmt.Errorf("failed to get version: %w", err)
 	}
@@ -39,7 +42,10 @@ func (g *Generator) GetSchematicID(ctx context.Context, endpoint string) (string
 	}
 	defer talosClient.Close()
 
-	version, err := talosClient.Version(ctx)
+	// Wrap context with target node - required for node-specific operations
+	nodeCtx := client.WithNode(ctx, endpoint)
+
+	version, err := talosClient.Version(nodeCtx)
 	if err != nil {
 		return "", fmt.Errorf("failed to get version: %w", err)
 	}
@@ -73,10 +79,14 @@ func (g *Generator) UpgradeNode(ctx context.Context, endpoint, imageURL string) 
 	}
 	defer talosClient.Close()
 
+	// Wrap context with target node - required for node-specific operations
+	// WithNode tells apid which node to target for the upgrade
+	nodeCtx := client.WithNode(ctx, endpoint)
+
 	// Perform upgrade
 	// Note: This will cause the node to reboot
-	// Parameters: ctx, image, preserve=false (don't preserve ephemeral data), stage=false (upgrade immediately)
-	_, err = talosClient.Upgrade(ctx, imageURL, false, false)
+	// Parameters: ctx, image, stage=false (upgrade immediately), force=false (don't force)
+	_, err = talosClient.Upgrade(nodeCtx, imageURL, false, false)
 	if err != nil {
 		return fmt.Errorf("failed to initiate upgrade: %w", err)
 	}
@@ -116,8 +126,11 @@ func (g *Generator) WaitForNodeReady(ctx context.Context, endpoint string, timeo
 			continue
 		}
 
+		// Wrap context with target node - required for node-specific operations
+		nodeCtx := client.WithNode(ctx, endpoint)
+
 		// Try to get version as a health check
-		_, err = talosClient.Version(ctx)
+		_, err = talosClient.Version(nodeCtx)
 		talosClient.Close()
 
 		if err == nil {
@@ -139,8 +152,11 @@ func (g *Generator) HealthCheck(ctx context.Context, endpoint string) error {
 	}
 	defer talosClient.Close()
 
+	// Wrap context with target node - required for node-specific operations
+	nodeCtx := client.WithNode(ctx, endpoint)
+
 	// Check that we can communicate with Talos API
-	version, err := talosClient.Version(ctx)
+	version, err := talosClient.Version(nodeCtx)
 	if err != nil {
 		return fmt.Errorf("Talos API not responding: %w", err)
 	}
