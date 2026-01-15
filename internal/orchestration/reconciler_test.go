@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"testing"
+	"time"
 
 	"hcloud-k8s/internal/config"
 	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
@@ -44,6 +45,31 @@ func (m *MockTalosProducer) GenerateAutoscalerConfig(poolName string, labels map
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]byte), args.Error(1)
+}
+
+func (m *MockTalosProducer) GetNodeVersion(ctx context.Context, endpoint string) (string, error) {
+	args := m.Called(ctx, endpoint)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockTalosProducer) UpgradeNode(ctx context.Context, endpoint, imageURL string) error {
+	args := m.Called(ctx, endpoint, imageURL)
+	return args.Error(0)
+}
+
+func (m *MockTalosProducer) UpgradeKubernetes(ctx context.Context, endpoint, targetVersion string) error {
+	args := m.Called(ctx, endpoint, targetVersion)
+	return args.Error(0)
+}
+
+func (m *MockTalosProducer) WaitForNodeReady(ctx context.Context, endpoint string, timeout time.Duration) error {
+	args := m.Called(ctx, endpoint, timeout)
+	return args.Error(0)
+}
+
+func (m *MockTalosProducer) HealthCheck(ctx context.Context, endpoint string) error {
+	args := m.Called(ctx, endpoint)
+	return args.Error(0)
 }
 
 func TestReconciler_Reconcile(t *testing.T) {

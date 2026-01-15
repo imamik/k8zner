@@ -332,9 +332,9 @@ type TalosBackupConfig struct {
 // RDNSConfig defines cluster-wide reverse DNS defaults.
 type RDNSConfig struct {
 	// Cluster-wide defaults (fallback for all resources)
-	ClusterRDNS      string `mapstructure:"cluster" yaml:"cluster"`
-	ClusterRDNSIPv4  string `mapstructure:"cluster_ipv4" yaml:"cluster_ipv4"`
-	ClusterRDNSIPv6  string `mapstructure:"cluster_ipv6" yaml:"cluster_ipv6"`
-	IngressRDNSIPv4  string `mapstructure:"ingress_ipv4" yaml:"ingress_ipv4"`
-	IngressRDNSIPv6  string `mapstructure:"ingress_ipv6" yaml:"ingress_ipv6"`
+	ClusterRDNS     string `mapstructure:"cluster" yaml:"cluster"`
+	ClusterRDNSIPv4 string `mapstructure:"cluster_ipv4" yaml:"cluster_ipv4"`
+	ClusterRDNSIPv6 string `mapstructure:"cluster_ipv6" yaml:"cluster_ipv6"`
+	IngressRDNSIPv4 string `mapstructure:"ingress_ipv4" yaml:"ingress_ipv4"`
+	IngressRDNSIPv6 string `mapstructure:"ingress_ipv6" yaml:"ingress_ipv6"`
 }

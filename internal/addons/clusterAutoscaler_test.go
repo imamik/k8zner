@@ -1,7 +1,9 @@
 package addons
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"hcloud-k8s/internal/addons/helm"
 	"hcloud-k8s/internal/config"
@@ -414,4 +416,24 @@ func (m *mockTalosConfigProducer) GetClientConfig() ([]byte, error) {
 }
 
 func (m *mockTalosConfigProducer) SetEndpoint(endpoint string) {
+}
+
+func (m *mockTalosConfigProducer) GetNodeVersion(ctx context.Context, endpoint string) (string, error) {
+	return "v1.8.2", nil
+}
+
+func (m *mockTalosConfigProducer) UpgradeNode(ctx context.Context, endpoint, imageURL string) error {
+	return nil
+}
+
+func (m *mockTalosConfigProducer) UpgradeKubernetes(ctx context.Context, endpoint, targetVersion string) error {
+	return nil
+}
+
+func (m *mockTalosConfigProducer) WaitForNodeReady(ctx context.Context, endpoint string, timeout time.Duration) error {
+	return nil
+}
+
+func (m *mockTalosConfigProducer) HealthCheck(ctx context.Context, endpoint string) error {
+	return nil
 }

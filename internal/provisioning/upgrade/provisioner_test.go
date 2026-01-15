@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"testing"
+	"time"
 
 	"hcloud-k8s/internal/config"
 	"hcloud-k8s/internal/platform/hcloud"
@@ -16,12 +17,11 @@ import (
 
 // mockTalosClient implements TalosConfigProducer for testing.
 type mockTalosClient struct {
-	GetNodeVersionFunc     func(ctx context.Context, endpoint string) (string, error)
-	GetSchematicIDFunc     func(ctx context.Context, endpoint string) (string, error)
-	UpgradeNodeFunc        func(ctx context.Context, endpoint, imageURL string) error
-	UpgradeKubernetesFunc  func(ctx context.Context, endpoint, targetVersion string) error
-	WaitForNodeReadyFunc   func(ctx context.Context, endpoint string, timeout interface{}) error
-	HealthCheckFunc        func(ctx context.Context, endpoint string) error
+	GetNodeVersionFunc    func(ctx context.Context, endpoint string) (string, error)
+	UpgradeNodeFunc       func(ctx context.Context, endpoint, imageURL string) error
+	UpgradeKubernetesFunc func(ctx context.Context, endpoint, targetVersion string) error
+	WaitForNodeReadyFunc  func(ctx context.Context, endpoint string, timeout time.Duration) error
+	HealthCheckFunc       func(ctx context.Context, endpoint string) error
 }
 
 func (m *mockTalosClient) GetNodeVersion(ctx context.Context, endpoint string) (string, error) {
@@ -29,13 +29,6 @@ func (m *mockTalosClient) GetNodeVersion(ctx context.Context, endpoint string) (
 		return m.GetNodeVersionFunc(ctx, endpoint)
 	}
 	return "v1.8.3", nil
-}
-
-func (m *mockTalosClient) GetSchematicID(ctx context.Context, endpoint string) (string, error) {
-	if m.GetSchematicIDFunc != nil {
-		return m.GetSchematicIDFunc(ctx, endpoint)
-	}
-	return "abc123", nil
 }
 
 func (m *mockTalosClient) UpgradeNode(ctx context.Context, endpoint, imageURL string) error {
@@ -52,7 +45,7 @@ func (m *mockTalosClient) UpgradeKubernetes(ctx context.Context, endpoint, targe
 	return nil
 }
 
-func (m *mockTalosClient) WaitForNodeReady(ctx context.Context, endpoint string, timeout interface{}) error {
+func (m *mockTalosClient) WaitForNodeReady(ctx context.Context, endpoint string, timeout time.Duration) error {
 	if m.WaitForNodeReadyFunc != nil {
 		return m.WaitForNodeReadyFunc(ctx, endpoint, timeout)
 	}
@@ -67,23 +60,22 @@ func (m *mockTalosClient) HealthCheck(ctx context.Context, endpoint string) erro
 }
 
 // Implement other required TalosConfigProducer methods as stubs.
-func (m *mockTalosClient) GenerateControlPlaneConfig(_ int) ([]byte, error) {
+func (m *mockTalosClient) GenerateControlPlaneConfig(_ []string, _ string) ([]byte, error) {
 	return nil, nil
 }
 
-func (m *mockTalosClient) GenerateWorkerConfig() ([]byte, error) {
+func (m *mockTalosClient) GenerateWorkerConfig(_ string) ([]byte, error) {
 	return nil, nil
 }
 
-func (m *mockTalosClient) GetClientConfig() (interface{}, error) {
+func (m *mockTalosClient) GetClientConfig() ([]byte, error) {
 	return nil, nil
 }
 
-func (m *mockTalosClient) GetKubeconfig() ([]byte, error) {
-	return nil, nil
+func (m *mockTalosClient) SetEndpoint(_ string) {
 }
 
-func (m *mockTalosClient) GenerateAutoscalerConfig(_ config.AutoscalerNodePool) ([]byte, error) {
+func (m *mockTalosClient) GenerateAutoscalerConfig(_ string, _ map[string]string, _ []string) ([]byte, error) {
 	return nil, nil
 }
 
@@ -104,8 +96,8 @@ func TestGetControlPlaneIPs(t *testing.T) {
 			servers: []*hcloudAPI.Server{
 				{
 					Name: "cp-1",
-					PrivateNet: []hcloudAPI.ServerPrivateNet{
-						{IP: net.ParseIP("10.0.0.10")},
+					PublicNet: hcloudAPI.ServerPublicNet{
+						IPv4: hcloudAPI.ServerPublicNetIPv4{IP: net.ParseIP("1.2.3.10")},
 					},
 				},
 			},
@@ -117,20 +109,20 @@ func TestGetControlPlaneIPs(t *testing.T) {
 			servers: []*hcloudAPI.Server{
 				{
 					Name: "cp-1",
-					PrivateNet: []hcloudAPI.ServerPrivateNet{
-						{IP: net.ParseIP("10.0.0.10")},
+					PublicNet: hcloudAPI.ServerPublicNet{
+						IPv4: hcloudAPI.ServerPublicNetIPv4{IP: net.ParseIP("1.2.3.10")},
 					},
 				},
 				{
 					Name: "cp-2",
-					PrivateNet: []hcloudAPI.ServerPrivateNet{
-						{IP: net.ParseIP("10.0.0.11")},
+					PublicNet: hcloudAPI.ServerPublicNet{
+						IPv4: hcloudAPI.ServerPublicNetIPv4{IP: net.ParseIP("1.2.3.11")},
 					},
 				},
 				{
 					Name: "cp-3",
-					PrivateNet: []hcloudAPI.ServerPrivateNet{
-						{IP: net.ParseIP("10.0.0.12")},
+					PublicNet: hcloudAPI.ServerPublicNet{
+						IPv4: hcloudAPI.ServerPublicNetIPv4{IP: net.ParseIP("1.2.3.12")},
 					},
 				},
 			},
@@ -182,14 +174,14 @@ func TestGetWorkerIPs(t *testing.T) {
 			return []*hcloudAPI.Server{
 				{
 					Name: "worker-1",
-					PrivateNet: []hcloudAPI.ServerPrivateNet{
-						{IP: net.ParseIP("10.0.1.10")},
+					PublicNet: hcloudAPI.ServerPublicNet{
+						IPv4: hcloudAPI.ServerPublicNetIPv4{IP: net.ParseIP("1.2.3.20")},
 					},
 				},
 				{
 					Name: "worker-2",
-					PrivateNet: []hcloudAPI.ServerPrivateNet{
-						{IP: net.ParseIP("10.0.1.11")},
+					PublicNet: hcloudAPI.ServerPublicNet{
+						IPv4: hcloudAPI.ServerPublicNetIPv4{IP: net.ParseIP("1.2.3.21")},
 					},
 				},
 			}, nil
@@ -207,14 +199,14 @@ func TestGetWorkerIPs(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Len(t, ips, 2)
-	assert.Contains(t, ips, "10.0.1.10")
-	assert.Contains(t, ips, "10.0.1.11")
+	assert.Contains(t, ips, "1.2.3.20")
+	assert.Contains(t, ips, "1.2.3.21")
 }
 
 func TestUpgradeControlPlane_SkipsNodesAlreadyAtTargetVersion(t *testing.T) {
 	nodeVersions := map[string]string{
-		"10.0.0.10": "v1.8.3", // Already at target
-		"10.0.0.11": "v1.8.2", // Needs upgrade
+		"1.2.3.10": "v1.8.3", // Already at target
+		"1.2.3.11": "v1.8.2", // Needs upgrade
 	}
 
 	upgradeCallCount := 0
@@ -225,14 +217,14 @@ func TestUpgradeControlPlane_SkipsNodesAlreadyAtTargetVersion(t *testing.T) {
 				return []*hcloudAPI.Server{
 					{
 						Name: "cp-1",
-						PrivateNet: []hcloudAPI.ServerPrivateNet{
-							{IP: net.ParseIP("10.0.0.10")},
+						PublicNet: hcloudAPI.ServerPublicNet{
+							IPv4: hcloudAPI.ServerPublicNetIPv4{IP: net.ParseIP("1.2.3.10")},
 						},
 					},
 					{
 						Name: "cp-2",
-						PrivateNet: []hcloudAPI.ServerPrivateNet{
-							{IP: net.ParseIP("10.0.0.11")},
+						PublicNet: hcloudAPI.ServerPublicNet{
+							IPv4: hcloudAPI.ServerPublicNetIPv4{IP: net.ParseIP("1.2.3.11")},
 						},
 					},
 				}, nil
@@ -281,8 +273,8 @@ func TestUpgradeControlPlane_DryRun(t *testing.T) {
 				return []*hcloudAPI.Server{
 					{
 						Name: "cp-1",
-						PrivateNet: []hcloudAPI.ServerPrivateNet{
-							{IP: net.ParseIP("10.0.0.10")},
+						PublicNet: hcloudAPI.ServerPublicNet{
+							IPv4: hcloudAPI.ServerPublicNetIPv4{IP: net.ParseIP("1.2.3.10")},
 						},
 					},
 				}, nil
@@ -320,8 +312,8 @@ func TestUpgradeControlPlane_DryRun(t *testing.T) {
 
 func TestUpgradeWorkers_SkipsNodesAlreadyAtTargetVersion(t *testing.T) {
 	nodeVersions := map[string]string{
-		"10.0.1.10": "v1.8.3", // Already at target
-		"10.0.1.11": "v1.8.2", // Needs upgrade
+		"1.2.3.20": "v1.8.3", // Already at target
+		"1.2.3.21": "v1.8.2", // Needs upgrade
 	}
 
 	upgradeCallCount := 0
@@ -332,14 +324,14 @@ func TestUpgradeWorkers_SkipsNodesAlreadyAtTargetVersion(t *testing.T) {
 				return []*hcloudAPI.Server{
 					{
 						Name: "worker-1",
-						PrivateNet: []hcloudAPI.ServerPrivateNet{
-							{IP: net.ParseIP("10.0.1.10")},
+						PublicNet: hcloudAPI.ServerPublicNet{
+							IPv4: hcloudAPI.ServerPublicNetIPv4{IP: net.ParseIP("1.2.3.20")},
 						},
 					},
 					{
 						Name: "worker-2",
-						PrivateNet: []hcloudAPI.ServerPrivateNet{
-							{IP: net.ParseIP("10.0.1.11")},
+						PublicNet: hcloudAPI.ServerPublicNet{
+							IPv4: hcloudAPI.ServerPublicNetIPv4{IP: net.ParseIP("1.2.3.21")},
 						},
 					},
 				}, nil
@@ -384,8 +376,8 @@ func TestUpgradeKubernetes_SkipsIfNoVersionSpecified(t *testing.T) {
 			return []*hcloudAPI.Server{
 				{
 					Name: "cp-1",
-					PrivateNet: []hcloudAPI.ServerPrivateNet{
-						{IP: net.ParseIP("10.0.0.10")},
+					PublicNet: hcloudAPI.ServerPublicNet{
+						IPv4: hcloudAPI.ServerPublicNetIPv4{IP: net.ParseIP("1.2.3.10")},
 					},
 				},
 			}, nil
@@ -424,8 +416,8 @@ func TestUpgradeKubernetes_DryRun(t *testing.T) {
 			return []*hcloudAPI.Server{
 				{
 					Name: "cp-1",
-					PrivateNet: []hcloudAPI.ServerPrivateNet{
-						{IP: net.ParseIP("10.0.0.10")},
+					PublicNet: hcloudAPI.ServerPublicNet{
+						IPv4: hcloudAPI.ServerPublicNetIPv4{IP: net.ParseIP("1.2.3.10")},
 					},
 				},
 			}, nil
@@ -466,8 +458,8 @@ func TestHealthCheckWithRetry_SucceedsOnFirstAttempt(t *testing.T) {
 			return []*hcloudAPI.Server{
 				{
 					Name: "cp-1",
-					PrivateNet: []hcloudAPI.ServerPrivateNet{
-						{IP: net.ParseIP("10.0.0.10")},
+					PublicNet: hcloudAPI.ServerPublicNet{
+						IPv4: hcloudAPI.ServerPublicNetIPv4{IP: net.ParseIP("1.2.3.10")},
 					},
 				},
 			}, nil
@@ -502,8 +494,8 @@ func TestHealthCheckWithRetry_SucceedsOnSecondAttempt(t *testing.T) {
 			return []*hcloudAPI.Server{
 				{
 					Name: "cp-1",
-					PrivateNet: []hcloudAPI.ServerPrivateNet{
-						{IP: net.ParseIP("10.0.0.10")},
+					PublicNet: hcloudAPI.ServerPublicNet{
+						IPv4: hcloudAPI.ServerPublicNetIPv4{IP: net.ParseIP("1.2.3.10")},
 					},
 				},
 			}, nil
