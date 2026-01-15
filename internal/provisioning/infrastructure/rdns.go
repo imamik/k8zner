@@ -34,11 +34,11 @@ func (p *Provisioner) applyLoadBalancerRDNS(ctx *provisioning.Context, lbID int6
 			Role:        role,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to render IPv4 RDNS template: %w", err)
+			return fmt.Errorf("failed to render IPv4 RDNS template for %s (template: %s): %w", lbName, rdnsIPv4, err)
 		}
 
 		if err := ctx.Infra.SetLoadBalancerRDNS(ctx, lbID, ipv4, dnsPtr); err != nil {
-			return fmt.Errorf("failed to set IPv4 RDNS: %w", err)
+			return fmt.Errorf("failed to set IPv4 RDNS for load balancer %s (ID: %d, IP: %s → %s): %w", lbName, lbID, ipv4, dnsPtr, err)
 		}
 
 		ctx.Logger.Printf("[%s] Set IPv4 RDNS: %s → %s", phase, ipv4, dnsPtr)
@@ -56,11 +56,11 @@ func (p *Provisioner) applyLoadBalancerRDNS(ctx *provisioning.Context, lbID int6
 			Role:        role,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to render IPv6 RDNS template: %w", err)
+			return fmt.Errorf("failed to render IPv6 RDNS template for %s (template: %s): %w", lbName, rdnsIPv6, err)
 		}
 
 		if err := ctx.Infra.SetLoadBalancerRDNS(ctx, lbID, ipv6, dnsPtr); err != nil {
-			return fmt.Errorf("failed to set IPv6 RDNS: %w", err)
+			return fmt.Errorf("failed to set IPv6 RDNS for load balancer %s (ID: %d, IP: %s → %s): %w", lbName, lbID, ipv6, dnsPtr, err)
 		}
 
 		ctx.Logger.Printf("[%s] Set IPv6 RDNS: %s → %s", phase, ipv6, dnsPtr)

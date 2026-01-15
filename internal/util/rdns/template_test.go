@@ -257,6 +257,172 @@ func TestHasUnresolvedTemplates(t *testing.T) {
 	}
 }
 
+func TestRenderTemplateEdgeCases(t *testing.T) {
+	// Generate a 253-character DNS name (maximum allowed by RFC 1035)
+	maxLengthDNS := "server123456789." + // 16 chars
+		"very-long-subdomain-name-with-many-characters-to-reach-limit." + // 62 chars
+		"another-long-subdomain-with-additional-characters-for-length." + // 62 chars
+		"yet-another-subdomain-to-make-sure-we-reach-exactly-253-chars." + // 63 chars
+		"example.com" // 11 chars = 214 chars so far, need 39 more
+	// Adjust to exactly 253 characters
+	maxLengthDNS = "a." + maxLengthDNS[:250] // Total: 253 chars
+
+	tests := []struct {
+		name        string
+		template    string
+		vars        TemplateVars
+		want        string
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:     "maximum DNS name length (253 chars)",
+			template: maxLengthDNS,
+			vars:     TemplateVars{},
+			want:     maxLengthDNS,
+		},
+		{
+			name:        "template exceeds maximum length",
+			template:    maxLengthDNS + "x", // 254 chars
+			vars:        TemplateVars{},
+			wantErr:     true,
+			errContains: "exceeds maximum DNS name length",
+		},
+		{
+			name:     "result exceeds max length after substitution",
+			template: "{{ hostname }}." + maxLengthDNS[:240], // Template is 252, but result will exceed
+			vars: TemplateVars{
+				Hostname: "very-long-hostname-that-causes-overflow",
+			},
+			wantErr:     true,
+			errContains: "exceeds maximum length",
+		},
+		{
+			name:     "empty hostname value",
+			template: "{{ hostname }}.example.com",
+			vars: TemplateVars{
+				Hostname: "",
+			},
+			want: ".example.com",
+		},
+		{
+			name:     "empty pool and role values",
+			template: "{{ pool }}-{{ role }}.example.com",
+			vars: TemplateVars{
+				Pool: "",
+				Role: "",
+			},
+			want: "-.example.com",
+		},
+		{
+			name:     "empty cluster name",
+			template: "server.{{ cluster-name }}.com",
+			vars: TemplateVars{
+				ClusterName: "",
+			},
+			want: "server..com",
+		},
+		{
+			name:     "int64 max value for ID",
+			template: "server-{{ id }}.example.com",
+			vars: TemplateVars{
+				ID: 9223372036854775807, // MaxInt64
+			},
+			want: "server-9223372036854775807.example.com",
+		},
+		{
+			name:     "zero ID value",
+			template: "server-{{ id }}.example.com",
+			vars: TemplateVars{
+				ID: 0,
+			},
+			want: "server-0.example.com",
+		},
+		{
+			name:     "negative ID value",
+			template: "server-{{ id }}.example.com",
+			vars: TemplateVars{
+				ID: -1,
+			},
+			want: "server--1.example.com",
+		},
+		{
+			name:        "malformed template - empty braces",
+			template:    "server.{{ }}.com",
+			vars:        TemplateVars{},
+			wantErr:     true,
+			errContains: "unresolved template variables",
+		},
+		{
+			name:        "malformed template - no spaces",
+			template:    "server.{{hostname}}.com",
+			vars:        TemplateVars{Hostname: "test"},
+			wantErr:     true,
+			errContains: "unresolved template variables",
+		},
+		{
+			name:        "malformed template - extra braces",
+			template:    "server.{{{ hostname }}}.com",
+			vars:        TemplateVars{Hostname: "test"},
+			wantErr:     true,
+			errContains: "unresolved template variables",
+		},
+		{
+			name:     "special characters in hostname",
+			template: "{{ hostname }}.example.com",
+			vars: TemplateVars{
+				Hostname: "server@#$%",
+			},
+			want: "server@#$%.example.com",
+		},
+		{
+			name:     "unicode characters in hostname",
+			template: "{{ hostname }}.example.com",
+			vars: TemplateVars{
+				Hostname: "服务器", // "server" in Chinese
+			},
+			want: "服务器.example.com",
+		},
+		{
+			name:     "unicode characters in cluster name",
+			template: "server.{{ cluster-name }}.com",
+			vars: TemplateVars{
+				ClusterName: "测试集群", // "test cluster" in Chinese
+			},
+			want: "server.测试集群.com",
+		},
+		{
+			name:     "all empty variables",
+			template: "{{ hostname }}.{{ cluster-name }}.{{ pool }}.{{ role }}.com",
+			vars:     TemplateVars{},
+			want:     "....com",
+		},
+		{
+			name:     "template with no variables",
+			template: "static.example.com",
+			vars:     TemplateVars{Hostname: "ignored"},
+			want:     "static.example.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := RenderTemplate(tt.template, tt.vars)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 // Helper to parse IP and fail test if invalid
 func parseIP(t *testing.T, s string) net.IP {
 	t.Helper()

@@ -363,19 +363,37 @@ func quickPortCheck(ip string, port int) error {
 }
 
 // verifyRDNS verifies that RDNS (PTR) records are configured correctly for a resource.
-// It performs a reverse DNS lookup and checks if the result matches expected patterns.
+// It performs a reverse DNS lookup with retry logic (for DNS propagation) and checks
+// if the result matches expected patterns.
 // Returns an error if the lookup fails or the record doesn't match expectations.
 func verifyRDNS(t *testing.T, ip, expectedPattern string) error {
 	t.Logf("  Verifying RDNS for %s (expected pattern: %s)...", ip, expectedPattern)
 
-	// Perform reverse DNS lookup
-	names, err := net.LookupAddr(ip)
+	var names []string
+	var err error
+	maxRetries := 5
+
+	// Retry with exponential backoff for DNS propagation
+	// Delays: 1s, 2s, 4s, 8s, 16s (total ~31 seconds max)
+	for i := 0; i < maxRetries; i++ {
+		names, err = net.LookupAddr(ip)
+		if err == nil && len(names) > 0 {
+			break
+		}
+
+		if i < maxRetries-1 {
+			delay := time.Duration(1<<uint(i)) * time.Second
+			t.Logf("    DNS lookup attempt %d/%d failed, retrying in %v...", i+1, maxRetries, delay)
+			time.Sleep(delay)
+		}
+	}
+
 	if err != nil {
-		return fmt.Errorf("failed to lookup PTR record for %s: %w", ip, err)
+		return fmt.Errorf("failed to lookup PTR record for %s after %d attempts: %w", ip, maxRetries, err)
 	}
 
 	if len(names) == 0 {
-		return fmt.Errorf("no PTR record found for %s", ip)
+		return fmt.Errorf("no PTR record found for %s after %d attempts", ip, maxRetries)
 	}
 
 	// Check if any of the returned names match the expected pattern

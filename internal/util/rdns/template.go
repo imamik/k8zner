@@ -8,6 +8,13 @@ import (
 	"strings"
 )
 
+// maxDNSNameLength is the maximum length of a DNS name according to RFC 1035.
+const maxDNSNameLength = 253
+
+// unresolvedTemplateRegex matches template variables like {{ variable-name }}.
+// Compiled once at package initialization for performance.
+var unresolvedTemplateRegex = regexp.MustCompile(`\{\{\s*[a-z-]+\s*\}\}`)
+
 // TemplateVars holds variables for RDNS template substitution.
 type TemplateVars struct {
 	ClusterDomain string // {{ cluster-domain }}
@@ -24,6 +31,11 @@ type TemplateVars struct {
 func RenderTemplate(template string, vars TemplateVars) (string, error) {
 	if template == "" {
 		return "", nil
+	}
+
+	// Validate template length
+	if len(template) > maxDNSNameLength {
+		return "", fmt.Errorf("template exceeds maximum DNS name length of %d characters: got %d", maxDNSNameLength, len(template))
 	}
 
 	result := template
@@ -50,14 +62,22 @@ func RenderTemplate(template string, vars TemplateVars) (string, error) {
 		"{{ role }}":           vars.Role,
 	}
 
-	// Apply all replacements
+	// Apply all replacements using strings.Replacer for O(n) performance
+	var oldNew []string
 	for pattern, value := range replacements {
-		result = strings.ReplaceAll(result, pattern, value)
+		oldNew = append(oldNew, pattern, value)
 	}
+	replacer := strings.NewReplacer(oldNew...)
+	result = replacer.Replace(result)
 
 	// Check for any remaining template variables (indicates missing var)
 	if hasUnresolvedTemplates(result) {
 		return "", fmt.Errorf("unresolved template variables in: %s", result)
+	}
+
+	// Validate result length
+	if len(result) > maxDNSNameLength {
+		return "", fmt.Errorf("rendered DNS name exceeds maximum length of %d characters: got %d (%s)", maxDNSNameLength, len(result), result)
 	}
 
 	return result, nil
@@ -136,6 +156,5 @@ func expandIPv6(ip net.IP) string {
 
 // hasUnresolvedTemplates checks if there are any {{ }} patterns left.
 func hasUnresolvedTemplates(s string) bool {
-	pattern := regexp.MustCompile(`\{\{\s*[a-z-]+\s*\}\}`)
-	return pattern.MatchString(s)
+	return unresolvedTemplateRegex.MatchString(s)
 }
