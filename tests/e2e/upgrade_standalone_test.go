@@ -156,6 +156,7 @@ func deployClusterWithVersion(t *testing.T, state *E2EState, talosVer, k8sVer, s
 		ClusterName: state.ClusterName,
 		HCloudToken: os.Getenv("HCLOUD_TOKEN"),
 		Location:    "nbg1",
+		SSHKeys:     []string{}, // Empty for now, will be created during provisioning
 		Network: config.NetworkConfig{
 			Zone:         "eu-central",
 			IPv4CIDR:     "10.0.0.0/16",
@@ -174,7 +175,7 @@ func deployClusterWithVersion(t *testing.T, state *E2EState, talosVer, k8sVer, s
 					Name:       "control-plane",
 					Location:   "nbg1",
 					ServerType: "cpx22",
-					Count:      1,
+					Count:      3, // 3 control planes for HA and proper upgrade testing
 					Image:      state.SnapshotAMD64,
 				},
 			},
@@ -184,7 +185,7 @@ func deployClusterWithVersion(t *testing.T, state *E2EState, talosVer, k8sVer, s
 				Name:       "pool1",
 				Location:   "nbg1",
 				ServerType: "cpx22",
-				Count:      1,
+				Count:      1, // 1 worker
 				Image:      state.SnapshotAMD64,
 			},
 		},
@@ -248,6 +249,7 @@ func upgradeCluster(t *testing.T, state *E2EState, talosVer, k8sVer, schematicID
 		ClusterName: state.ClusterName,
 		HCloudToken: os.Getenv("HCLOUD_TOKEN"),
 		Location:    "nbg1",
+		SSHKeys:     []string{}, // Empty for now
 		Network: config.NetworkConfig{
 			Zone:         "eu-central",
 			IPv4CIDR:     "10.0.0.0/16",
@@ -266,7 +268,7 @@ func upgradeCluster(t *testing.T, state *E2EState, talosVer, k8sVer, schematicID
 					Name:       "control-plane",
 					Location:   "nbg1",
 					ServerType: "cpx22",
-					Count:      1,
+					Count:      3, // 3 control planes
 				},
 			},
 		},
@@ -275,7 +277,7 @@ func upgradeCluster(t *testing.T, state *E2EState, talosVer, k8sVer, schematicID
 				Name:       "pool1",
 				Location:   "nbg1",
 				ServerType: "cpx22",
-				Count:      1,
+				Count:      1, // 1 worker
 			},
 		},
 	}

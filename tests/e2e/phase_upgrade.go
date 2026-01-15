@@ -80,6 +80,7 @@ func createUpgradeConfig(state *E2EState) *config.Config {
 		ClusterName: state.ClusterName,
 		HCloudToken: os.Getenv("HCLOUD_TOKEN"),
 		Location:    "nbg1",
+		SSHKeys:     []string{}, // Empty for now
 		Network: config.NetworkConfig{
 			Zone:         "eu-central",
 			IPv4CIDR:     "10.0.0.0/16",
@@ -98,7 +99,7 @@ func createUpgradeConfig(state *E2EState) *config.Config {
 					Name:       "control-plane",
 					Location:   "nbg1",
 					ServerType: "cpx22",
-					Count:      1,
+					Count:      3, // 3 control planes for HA
 				},
 			},
 		},
@@ -107,7 +108,7 @@ func createUpgradeConfig(state *E2EState) *config.Config {
 				Name:       "pool1",
 				Location:   "nbg1",
 				ServerType: "cpx22",
-				Count:      1,
+				Count:      1, // 1 worker
 			},
 		},
 	}
