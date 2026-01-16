@@ -9,6 +9,11 @@
 // This root package contains shared interfaces and state types used across subpackages.
 package provisioning
 
+import (
+	"context"
+	"time"
+)
+
 // Phase defines the interface for a provisioning phase.
 type Phase interface {
 	// Name returns the human-readable name of this phase.
@@ -35,4 +40,19 @@ type TalosConfigProducer interface {
 
 	// SetEndpoint updates the cluster endpoint (e.g., load balancer IP).
 	SetEndpoint(endpoint string)
+
+	// GetNodeVersion retrieves the current Talos version from a node.
+	GetNodeVersion(ctx context.Context, endpoint string) (string, error)
+
+	// UpgradeNode upgrades a single node to the specified image.
+	UpgradeNode(ctx context.Context, endpoint, imageURL string) error
+
+	// UpgradeKubernetes upgrades the Kubernetes control plane to the target version.
+	UpgradeKubernetes(ctx context.Context, endpoint, targetVersion string) error
+
+	// WaitForNodeReady waits for a node to become ready after reboot.
+	WaitForNodeReady(ctx context.Context, endpoint string, timeout time.Duration) error
+
+	// HealthCheck performs a cluster health check.
+	HealthCheck(ctx context.Context, endpoint string) error
 }

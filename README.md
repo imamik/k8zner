@@ -10,6 +10,7 @@
 - **Image Builder:** Create custom Talos snapshots on Hetzner Cloud.
 - **Cluster Reconciliation:** Provision and manage Control Plane servers (idempotent).
 - **Talos Config Generation:** Automatically generates secure Talos machine configurations and client secrets.
+- **Cluster Upgrades:** Safe, rolling upgrades of Talos OS and Kubernetes with automatic health checks.
 - **Persistence:** Saves cluster secrets and `talosconfig` locally for ongoing management.
 - **Privacy:** Enforces SSH key usage to prevent root password transmission via email.
 - **Reverse DNS (RDNS):** Automatic configuration of PTR records for servers and load balancers with template support.
@@ -66,6 +67,37 @@ This will:
 1.  Verify/Create the SSH keys and resources.
 2.  Provision 3 Control Plane servers.
 3.  Generate `secrets.yaml` (CA keys) and `talosconfig` in the current directory.
+
+### 5. Upgrade Cluster (Optional)
+
+Upgrade Talos OS and Kubernetes versions safely with rolling upgrades.
+
+```bash
+# Update versions in config.yaml
+vim config.yaml
+
+# Test what will be upgraded (recommended)
+./hcloud-k8s upgrade --config config.yaml --dry-run
+
+# Execute upgrade
+./hcloud-k8s upgrade --config config.yaml
+```
+
+**Features:**
+- Sequential control plane upgrades (maintains quorum)
+- Automatic health checks between upgrades
+- Version checking (skips nodes already at target version)
+- Kubernetes control plane upgrade after Talos upgrade
+
+**See [UPGRADE.md](UPGRADE.md) for detailed upgrade guide.**
+
+### 6. Destroy Cluster
+
+Remove all cluster resources when no longer needed.
+
+```bash
+./hcloud-k8s destroy --config config.yaml
+```
 
 ## Configuration
 

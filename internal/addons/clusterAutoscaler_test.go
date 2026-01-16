@@ -1,7 +1,9 @@
 package addons
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"hcloud-k8s/internal/addons/helm"
 	"hcloud-k8s/internal/config"
@@ -391,15 +393,15 @@ type mockTalosConfigProducer struct {
 	autoscalerError   error
 }
 
-func (m *mockTalosConfigProducer) GenerateControlPlaneConfig(san []string, hostname string) ([]byte, error) {
+func (m *mockTalosConfigProducer) GenerateControlPlaneConfig(_ []string, _ string) ([]byte, error) {
 	return nil, nil
 }
 
-func (m *mockTalosConfigProducer) GenerateWorkerConfig(hostname string) ([]byte, error) {
+func (m *mockTalosConfigProducer) GenerateWorkerConfig(_ string) ([]byte, error) {
 	return nil, nil
 }
 
-func (m *mockTalosConfigProducer) GenerateAutoscalerConfig(poolName string, labels map[string]string, taints []string) ([]byte, error) {
+func (m *mockTalosConfigProducer) GenerateAutoscalerConfig(poolName string, _ map[string]string, _ []string) ([]byte, error) {
 	if m.autoscalerError != nil {
 		return nil, m.autoscalerError
 	}
@@ -413,5 +415,25 @@ func (m *mockTalosConfigProducer) GetClientConfig() ([]byte, error) {
 	return nil, nil
 }
 
-func (m *mockTalosConfigProducer) SetEndpoint(endpoint string) {
+func (m *mockTalosConfigProducer) SetEndpoint(_ string) {
+}
+
+func (m *mockTalosConfigProducer) GetNodeVersion(_ context.Context, _ string) (string, error) {
+	return "v1.8.2", nil
+}
+
+func (m *mockTalosConfigProducer) UpgradeNode(_ context.Context, _, _ string) error {
+	return nil
+}
+
+func (m *mockTalosConfigProducer) UpgradeKubernetes(_ context.Context, _, _ string) error {
+	return nil
+}
+
+func (m *mockTalosConfigProducer) WaitForNodeReady(_ context.Context, _ string, _ time.Duration) error {
+	return nil
+}
+
+func (m *mockTalosConfigProducer) HealthCheck(_ context.Context, _ string) error {
+	return nil
 }

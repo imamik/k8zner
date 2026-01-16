@@ -35,7 +35,7 @@ Example:
   hcloud-k8s destroy -c cluster.yaml
 
 WARNING: This operation is irreversible. All cluster data will be lost.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return handlers.Destroy(cmd.Context(), configPath)
 		},
 	}

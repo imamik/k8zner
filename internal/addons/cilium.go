@@ -132,7 +132,7 @@ func buildCiliumValues(cfg *config.Config) helm.Values {
 
 // buildCiliumOperatorConfig creates operator configuration.
 // See: terraform/cilium.tf lines 139-177
-func buildCiliumOperatorConfig(cfg *config.Config, controlPlaneCount int) helm.Values {
+func buildCiliumOperatorConfig(_ *config.Config, controlPlaneCount int) helm.Values {
 	replicas := 1
 	if controlPlaneCount > 1 {
 		replicas = 2

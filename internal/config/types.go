@@ -141,9 +141,10 @@ type IngressConfig struct {
 
 // TalosConfig defines the Talos-specific configuration.
 type TalosConfig struct {
-	Version    string        `mapstructure:"version" yaml:"version"`
-	Extensions []string      `mapstructure:"extensions" yaml:"extensions"`
-	Upgrade    UpgradeConfig `mapstructure:"upgrade" yaml:"upgrade"`
+	Version     string        `mapstructure:"version" yaml:"version"`
+	SchematicID string        `mapstructure:"schematic_id" yaml:"schematic_id"`
+	Extensions  []string      `mapstructure:"extensions" yaml:"extensions"`
+	Upgrade     UpgradeConfig `mapstructure:"upgrade" yaml:"upgrade"`
 }
 
 // UpgradeConfig defines the upgrade-related configuration.
@@ -270,7 +271,7 @@ type OIDCRBACGroupMapping struct {
 	Roles        []OIDCRBACRole `mapstructure:"roles" yaml:"roles"`
 }
 
-// OIDCRBAC Role defines a namespaced role for OIDC mapping.
+// OIDCRBACRole defines a namespaced role for OIDC mapping.
 type OIDCRBACRole struct {
 	Name      string `mapstructure:"name" yaml:"name"`
 	Namespace string `mapstructure:"namespace" yaml:"namespace"`
@@ -331,9 +332,9 @@ type TalosBackupConfig struct {
 // RDNSConfig defines cluster-wide reverse DNS defaults.
 type RDNSConfig struct {
 	// Cluster-wide defaults (fallback for all resources)
-	ClusterRDNS      string `mapstructure:"cluster" yaml:"cluster"`
-	ClusterRDNSIPv4  string `mapstructure:"cluster_ipv4" yaml:"cluster_ipv4"`
-	ClusterRDNSIPv6  string `mapstructure:"cluster_ipv6" yaml:"cluster_ipv6"`
-	IngressRDNSIPv4  string `mapstructure:"ingress_ipv4" yaml:"ingress_ipv4"`
-	IngressRDNSIPv6  string `mapstructure:"ingress_ipv6" yaml:"ingress_ipv6"`
+	ClusterRDNS     string `mapstructure:"cluster" yaml:"cluster"`
+	ClusterRDNSIPv4 string `mapstructure:"cluster_ipv4" yaml:"cluster_ipv4"`
+	ClusterRDNSIPv6 string `mapstructure:"cluster_ipv6" yaml:"cluster_ipv6"`
+	IngressRDNSIPv4 string `mapstructure:"ingress_ipv4" yaml:"ingress_ipv4"`
+	IngressRDNSIPv6 string `mapstructure:"ingress_ipv6" yaml:"ingress_ipv6"`
 }

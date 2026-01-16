@@ -5,6 +5,7 @@ import (
 	"net"
 	"sync"
 	"testing"
+	"time"
 
 	"hcloud-k8s/internal/config"
 	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
@@ -38,6 +39,26 @@ func (m *mockTalosProducer) SetEndpoint(endpoint string) {
 
 func (m *mockTalosProducer) GenerateAutoscalerConfig(_ string, _ map[string]string, _ []string) ([]byte, error) {
 	return []byte("autoscaler-config"), nil
+}
+
+func (m *mockTalosProducer) GetNodeVersion(_ context.Context, _ string) (string, error) {
+	return "v1.8.2", nil
+}
+
+func (m *mockTalosProducer) UpgradeNode(_ context.Context, _, _ string) error {
+	return nil
+}
+
+func (m *mockTalosProducer) UpgradeKubernetes(_ context.Context, _, _ string) error {
+	return nil
+}
+
+func (m *mockTalosProducer) WaitForNodeReady(_ context.Context, _ string, _ time.Duration) error {
+	return nil
+}
+
+func (m *mockTalosProducer) HealthCheck(_ context.Context, _ string) error {
+	return nil
 }
 
 func createTestContext(t *testing.T, mockInfra *hcloud_internal.MockClient, cfg *config.Config) *provisioning.Context {
