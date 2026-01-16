@@ -551,6 +551,11 @@ func testAddonCilium(t *testing.T, state *E2EState) {
 
 	cfg := &config.Config{
 		ClusterName: state.ClusterName,
+		Network: config.NetworkConfig{
+			// IPv4CIDR is required for Cilium native routing mode with masquerading
+			// It's used as the ipv4NativeRoutingCIDR value
+			IPv4CIDR: "10.0.0.0/16",
+		},
 		Addons: config.AddonsConfig{
 			Cilium: config.CiliumConfig{
 				Enabled:                     true,
