@@ -20,6 +20,18 @@ func applyCilium(ctx context.Context, kubeconfigPath string, cfg *config.Config)
 		return nil
 	}
 
+	// Pre-create cilium-secrets namespace to avoid race condition
+	// The Cilium Helm chart creates this namespace and resources that reference it,
+	// but kubectl apply can fail if the resources are created before the namespace is fully ready.
+	ciliumSecretsNS := `apiVersion: v1
+kind: Namespace
+metadata:
+  name: cilium-secrets
+`
+	if err := applyWithKubectl(ctx, kubeconfigPath, "cilium-secrets-namespace", []byte(ciliumSecretsNS)); err != nil {
+		return fmt.Errorf("failed to create cilium-secrets namespace: %w", err)
+	}
+
 	// Generate and apply IPSec secret if IPSec encryption is enabled
 	if cfg.Addons.Cilium.EncryptionEnabled && cfg.Addons.Cilium.EncryptionType == "ipsec" {
 		secretManifest, err := buildCiliumIPSecSecret(cfg)
@@ -149,6 +161,19 @@ func buildCiliumOperatorConfig(_ *config.Config, controlPlaneCount int) helm.Val
 				"effect":   "NoSchedule",
 				"operator": "Exists",
 			},
+			{
+				"key":      "node-role.kubernetes.io/master",
+				"effect":   "NoSchedule",
+				"operator": "Exists",
+			},
+			{
+				"key":      "node.kubernetes.io/not-ready",
+				"operator": "Exists",
+			},
+			{
+				"key":      "node.cloudprovider.kubernetes.io/uninitialized",
+				"operator": "Exists",
+			},
 		},
 	}
 
@@ -200,6 +225,17 @@ func buildCiliumHubbleConfig(cfg *config.Config) helm.Values {
 	if cfg.Addons.Cilium.HubbleRelayEnabled {
 		hubbleConfig["relay"] = helm.Values{
 			"enabled": true,
+			"tolerations": []helm.Values{
+				{
+					"key":      "node-role.kubernetes.io/control-plane",
+					"effect":   "NoSchedule",
+					"operator": "Exists",
+				},
+				{
+					"key":      "node.cloudprovider.kubernetes.io/uninitialized",
+					"operator": "Exists",
+				},
+			},
 		}
 	}
 

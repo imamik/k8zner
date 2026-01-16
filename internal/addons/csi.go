@@ -105,6 +105,10 @@ func buildCSIValues(controlPlaneCount int, defaultStorageClass bool) helm.Values
 					"effect":   "NoSchedule",
 					"operator": "Exists",
 				},
+				{
+					"key":      "node.cloudprovider.kubernetes.io/uninitialized",
+					"operator": "Exists",
+				},
 			},
 		},
 		"storageClasses": storageClasses,

@@ -89,6 +89,10 @@ func buildCertManagerBaseConfig(replicas int) helm.Values {
 				"effect":   "NoSchedule",
 				"operator": "Exists",
 			},
+			{
+				"key":      "node.cloudprovider.kubernetes.io/uninitialized",
+				"operator": "Exists",
+			},
 		},
 	}
 }

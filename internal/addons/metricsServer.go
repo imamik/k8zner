@@ -98,11 +98,16 @@ func buildMetricsServerTopologySpread() []helm.Values {
 }
 
 // buildControlPlaneTolerations creates tolerations for control plane scheduling.
+// Includes tolerations for both control plane nodes and CCM uninitialized nodes.
 func buildControlPlaneTolerations() []helm.Values {
 	return []helm.Values{
 		{
 			"key":      "node-role.kubernetes.io/control-plane",
 			"effect":   "NoSchedule",
+			"operator": "Exists",
+		},
+		{
+			"key":      "node.cloudprovider.kubernetes.io/uninitialized",
 			"operator": "Exists",
 		},
 	}
