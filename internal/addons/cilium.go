@@ -23,6 +23,7 @@ func applyCilium(ctx context.Context, kubeconfigPath string, cfg *config.Config)
 	// Pre-create cilium-secrets namespace to avoid race condition
 	// The Cilium Helm chart creates this namespace and resources that reference it,
 	// but kubectl apply can fail if the resources are created before the namespace is fully ready.
+	//nolint:gosec // G101 false positive - "secrets" is a namespace name, not credentials
 	ciliumSecretsNS := `apiVersion: v1
 kind: Namespace
 metadata:
