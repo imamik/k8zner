@@ -54,9 +54,13 @@ func buildIngressNginxValues(cfg *config.Config) helm.Values {
 func buildIngressNginxController(workerCount, replicas int) helm.Values {
 	controller := helm.Values{
 		"admissionWebhooks": helm.Values{
-			"enabled": true,
 			"certManager": helm.Values{
-				"enabled": false, // Disabled to avoid startup delays in test environments
+				// Use cert-manager to generate webhook certificates.
+				// This avoids race conditions with kubectl apply where the
+				// kube-webhook-certgen Jobs (which use Helm hooks) may not
+				// complete before the controller deployment starts.
+				// See: terraform/ingress_nginx.tf line 44
+				"enabled": true,
 			},
 		},
 		"kind":                       "Deployment",
@@ -84,6 +88,14 @@ func buildIngressNginxController(workerCount, replicas int) helm.Values {
 		},
 		"networkPolicy": helm.Values{
 			"enabled": true,
+		},
+		// Add tolerations for CCM uninitialized taint
+		// This allows ingress-nginx to schedule before CCM has fully initialized nodes
+		"tolerations": []helm.Values{
+			{
+				"key":      "node.cloudprovider.kubernetes.io/uninitialized",
+				"operator": "Exists",
+			},
 		},
 	}
 
