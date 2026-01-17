@@ -111,38 +111,38 @@ func TestNewMachineConfigOptions(t *testing.T) {
 
 func TestBuildDiskEncryptionPatch(t *testing.T) {
 	tests := []struct {
-		name              string
-		stateEncryption   bool
-		ephemeralEncrypt  bool
-		expectStateKey    bool
+		name               string
+		stateEncryption    bool
+		ephemeralEncrypt   bool
+		expectStateKey     bool
 		expectEphemeralKey bool
 	}{
 		{
-			name:              "both enabled",
-			stateEncryption:   true,
-			ephemeralEncrypt:  true,
-			expectStateKey:    true,
+			name:               "both enabled",
+			stateEncryption:    true,
+			ephemeralEncrypt:   true,
+			expectStateKey:     true,
 			expectEphemeralKey: true,
 		},
 		{
-			name:              "only state enabled",
-			stateEncryption:   true,
-			ephemeralEncrypt:  false,
-			expectStateKey:    true,
+			name:               "only state enabled",
+			stateEncryption:    true,
+			ephemeralEncrypt:   false,
+			expectStateKey:     true,
 			expectEphemeralKey: false,
 		},
 		{
-			name:              "only ephemeral enabled",
-			stateEncryption:   false,
-			ephemeralEncrypt:  true,
-			expectStateKey:    false,
+			name:               "only ephemeral enabled",
+			stateEncryption:    false,
+			ephemeralEncrypt:   true,
+			expectStateKey:     false,
 			expectEphemeralKey: true,
 		},
 		{
-			name:              "both disabled",
-			stateEncryption:   false,
-			ephemeralEncrypt:  false,
-			expectStateKey:    false,
+			name:               "both disabled",
+			stateEncryption:    false,
+			ephemeralEncrypt:   false,
+			expectStateKey:     false,
 			expectEphemeralKey: false,
 		},
 	}
@@ -513,10 +513,10 @@ func TestBuildClusterPatch(t *testing.T) {
 
 func TestBuildDiscoveryPatch(t *testing.T) {
 	tests := []struct {
-		name          string
-		kubeEnabled   bool
+		name           string
+		kubeEnabled    bool
 		serviceEnabled bool
-		expectEnabled bool
+		expectEnabled  bool
 	}{
 		{
 			name:           "both enabled",
