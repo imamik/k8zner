@@ -25,6 +25,19 @@ var ValidNetworkZones = map[string]bool{
 	"ap-southeast": true, // Asia Pacific
 }
 
+// ValidCCMLBAlgorithms contains valid load balancer algorithms for CCM.
+var ValidCCMLBAlgorithms = map[string]bool{
+	"round_robin":       true,
+	"least_connections": true,
+}
+
+// ValidCCMLBTypes contains valid Hetzner load balancer types.
+var ValidCCMLBTypes = map[string]bool{
+	"lb11": true,
+	"lb21": true,
+	"lb31": true,
+}
+
 // Validate checks the configuration for common errors and returns a detailed error if validation fails.
 func (c *Config) Validate() error {
 	// Required fields
@@ -61,6 +74,11 @@ func (c *Config) Validate() error {
 	// Talos machine config validation
 	if err := c.validateTalosMachineConfig(); err != nil {
 		return fmt.Errorf("talos machine config validation failed: %w", err)
+	}
+
+	// CCM validation
+	if err := c.validateCCM(); err != nil {
+		return fmt.Errorf("ccm validation failed: %w", err)
 	}
 
 	return nil
@@ -301,6 +319,9 @@ func (c *Config) ApplyDefaults() error {
 	// Apply Kubernetes config defaults
 	c.applyKubernetesDefaults()
 
+	// Apply CCM defaults
+	c.applyCCMDefaults()
+
 	return nil
 }
 
@@ -394,4 +415,116 @@ func (c *Config) applyKubernetesDefaults() {
 // boolPtr returns a pointer to a bool value.
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+// applyCCMDefaults applies default values to CCM configuration.
+// These defaults match Terraform's hcloud_ccm_* variable defaults.
+func (c *Config) applyCCMDefaults() {
+	ccm := &c.Addons.CCM
+	lb := &ccm.LoadBalancers
+
+	// Network routes enabled by default
+	if ccm.NetworkRoutesEnabled == nil {
+		enabled := true
+		ccm.NetworkRoutesEnabled = &enabled
+	}
+
+	// Load balancer controller enabled by default
+	if lb.Enabled == nil {
+		enabled := true
+		lb.Enabled = &enabled
+	}
+
+	// Default LB type: lb11
+	if lb.Type == "" {
+		lb.Type = "lb11"
+	}
+
+	// Default algorithm: least_connections
+	if lb.Algorithm == "" {
+		lb.Algorithm = "least_connections"
+	}
+
+	// Use private IP by default
+	if lb.UsePrivateIP == nil {
+		enabled := true
+		lb.UsePrivateIP = &enabled
+	}
+
+	// Disable private ingress by default
+	if lb.DisablePrivateIngress == nil {
+		enabled := true
+		lb.DisablePrivateIngress = &enabled
+	}
+
+	// Don't disable public network by default
+	if lb.DisablePublicNetwork == nil {
+		disabled := false
+		lb.DisablePublicNetwork = &disabled
+	}
+
+	// Don't disable IPv6 by default
+	if lb.DisableIPv6 == nil {
+		disabled := false
+		lb.DisableIPv6 = &disabled
+	}
+
+	// Proxy protocol disabled by default
+	if lb.UsesProxyProtocol == nil {
+		enabled := false
+		lb.UsesProxyProtocol = &enabled
+	}
+
+	// Health check defaults
+	hc := &lb.HealthCheck
+	if hc.Interval == 0 {
+		hc.Interval = 3
+	}
+	if hc.Timeout == 0 {
+		hc.Timeout = 3
+	}
+	if hc.Retries == 0 {
+		hc.Retries = 3
+	}
+}
+
+// validateCCM validates CCM configuration.
+func (c *Config) validateCCM() error {
+	if !c.Addons.CCM.Enabled {
+		return nil // Skip validation if CCM is disabled
+	}
+
+	lb := &c.Addons.CCM.LoadBalancers
+
+	// Validate LB type if set
+	if lb.Type != "" && !ValidCCMLBTypes[lb.Type] {
+		return fmt.Errorf("invalid load_balancers.type %q: must be one of %v",
+			lb.Type, getMapKeys(ValidCCMLBTypes))
+	}
+
+	// Validate algorithm if set
+	if lb.Algorithm != "" && !ValidCCMLBAlgorithms[lb.Algorithm] {
+		return fmt.Errorf("invalid load_balancers.algorithm %q: must be one of %v",
+			lb.Algorithm, getMapKeys(ValidCCMLBAlgorithms))
+	}
+
+	// Validate location if set
+	if lb.Location != "" && !ValidLocations[lb.Location] {
+		return fmt.Errorf("invalid load_balancers.location %q: must be one of %v",
+			lb.Location, getMapKeys(ValidLocations))
+	}
+
+	// Validate health check settings
+	hc := &lb.HealthCheck
+	if hc.Interval != 0 && (hc.Interval < 3 || hc.Interval > 60) {
+		return fmt.Errorf("load_balancers.health_check.interval must be between 3 and 60 seconds, got %d", hc.Interval)
+	}
+	if hc.Timeout != 0 && (hc.Timeout < 1 || hc.Timeout > 60) {
+		return fmt.Errorf("load_balancers.health_check.timeout must be between 1 and 60 seconds, got %d", hc.Timeout)
+	}
+	if hc.Retries != 0 && (hc.Retries < 1 || hc.Retries > 10) {
+		return fmt.Errorf("load_balancers.health_check.retries must be between 1 and 10, got %d", hc.Retries)
+	}
+
+	return nil
 }

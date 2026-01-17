@@ -305,8 +305,80 @@ type AddonsConfig struct {
 }
 
 // CCMConfig defines the Hetzner Cloud Controller Manager configuration.
+// See: terraform/variables.tf hcloud_ccm_* variables
 type CCMConfig struct {
 	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// LoadBalancers configures the CCM Load Balancer controller.
+	// These settings control the default behavior for CCM-managed load balancers.
+	LoadBalancers CCMLoadBalancerConfig `mapstructure:"load_balancers" yaml:"load_balancers"`
+
+	// NetworkRoutesEnabled enables or disables the CCM Route Controller.
+	// When enabled, CCM manages routes for pod networking.
+	// Default: true (matching Terraform)
+	NetworkRoutesEnabled *bool `mapstructure:"network_routes_enabled" yaml:"network_routes_enabled"`
+}
+
+// CCMLoadBalancerConfig defines the CCM Load Balancer controller configuration.
+// See: terraform/variables.tf hcloud_ccm_load_balancers_* variables
+type CCMLoadBalancerConfig struct {
+	// Enabled enables or disables the CCM Service Controller (load balancer management).
+	// Default: true
+	Enabled *bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Location sets the default Hetzner location for CCM-managed Load Balancers.
+	// If not set, uses the cluster's default location.
+	Location string `mapstructure:"location" yaml:"location"`
+
+	// Type sets the default Load Balancer type (e.g., lb11, lb21, lb31).
+	// Default: "lb11"
+	Type string `mapstructure:"type" yaml:"type"`
+
+	// Algorithm sets the default load balancing algorithm.
+	// Valid values: "round_robin", "least_connections"
+	// Default: "least_connections"
+	Algorithm string `mapstructure:"algorithm" yaml:"algorithm"`
+
+	// UsePrivateIP configures Load Balancer server targets to use the private IP by default.
+	// Default: true
+	UsePrivateIP *bool `mapstructure:"use_private_ip" yaml:"use_private_ip"`
+
+	// DisablePrivateIngress disables the use of the private network for ingress by default.
+	// Default: true
+	DisablePrivateIngress *bool `mapstructure:"disable_private_ingress" yaml:"disable_private_ingress"`
+
+	// DisablePublicNetwork disables the public interface of CCM-managed Load Balancers by default.
+	// Default: false
+	DisablePublicNetwork *bool `mapstructure:"disable_public_network" yaml:"disable_public_network"`
+
+	// DisableIPv6 disables the use of IPv6 for Load Balancers by default.
+	// Default: false
+	DisableIPv6 *bool `mapstructure:"disable_ipv6" yaml:"disable_ipv6"`
+
+	// UsesProxyProtocol enables the PROXY protocol for CCM-managed Load Balancers by default.
+	// Default: false
+	UsesProxyProtocol *bool `mapstructure:"uses_proxy_protocol" yaml:"uses_proxy_protocol"`
+
+	// HealthCheck configures default health check settings for load balancers.
+	HealthCheck CCMHealthCheckConfig `mapstructure:"health_check" yaml:"health_check"`
+}
+
+// CCMHealthCheckConfig defines health check settings for CCM-managed load balancers.
+type CCMHealthCheckConfig struct {
+	// Interval is the time interval in seconds between health checks.
+	// Valid range: 3-60 seconds
+	// Default: 3
+	Interval int `mapstructure:"interval" yaml:"interval"`
+
+	// Timeout is the time in seconds after which a health check is considered failed.
+	// Valid range: 1-60 seconds
+	// Default: 3
+	Timeout int `mapstructure:"timeout" yaml:"timeout"`
+
+	// Retries is the number of unsuccessful retries before a target is considered unhealthy.
+	// Valid range: 1-10
+	// Default: 3
+	Retries int `mapstructure:"retries" yaml:"retries"`
 }
 
 // CSIConfig defines the Hetzner Cloud CSI driver configuration.

@@ -60,7 +60,7 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 	}
 
 	if cfg.Addons.CCM.Enabled {
-		if err := applyCCM(ctx, tmpKubeconfig, cfg.HCloudToken, networkID); err != nil {
+		if err := applyCCM(ctx, tmpKubeconfig, cfg, networkID); err != nil {
 			return fmt.Errorf("failed to install CCM: %w", err)
 		}
 	}
