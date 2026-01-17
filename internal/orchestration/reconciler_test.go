@@ -72,6 +72,10 @@ func (m *MockTalosProducer) HealthCheck(ctx context.Context, endpoint string) er
 	return args.Error(0)
 }
 
+func (m *MockTalosProducer) SetMachineConfigOptions(opts any) {
+	m.Called(opts)
+}
+
 func TestReconciler_Reconcile(t *testing.T) {
 	// Setup Mocks
 	mockInfra := &hcloud_internal.MockClient{}
@@ -159,6 +163,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 	}
 
 	// Talos
+	mockTalos.On("SetMachineConfigOptions", mock.Anything).Return()
 	mockTalos.On("SetEndpoint", "https://5.6.7.8:6443").Return()
 	mockTalos.On("GetClientConfig").Return([]byte("client-config"), nil)
 	// GenerateControlPlaneConfig is NOT called if cluster already exists (state marker present)
@@ -216,6 +221,7 @@ func TestReconciler_Reconcile_NetworkError(t *testing.T) {
 	// Setup Mocks
 	mockInfra := &hcloud_internal.MockClient{}
 	mockTalos := &MockTalosProducer{}
+	mockTalos.On("SetMachineConfigOptions", mock.Anything).Return()
 
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
@@ -246,6 +252,7 @@ func TestReconciler_Reconcile_ServerCreationError(t *testing.T) {
 	// Setup Mocks
 	mockInfra := &hcloud_internal.MockClient{}
 	mockTalos := &MockTalosProducer{}
+	mockTalos.On("SetMachineConfigOptions", mock.Anything).Return()
 
 	cfg := &config.Config{
 		ClusterName: "test-cluster",

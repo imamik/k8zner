@@ -437,3 +437,6 @@ func (m *mockTalosConfigProducer) WaitForNodeReady(_ context.Context, _ string, 
 func (m *mockTalosConfigProducer) HealthCheck(_ context.Context, _ string) error {
 	return nil
 }
+
+func (m *mockTalosConfigProducer) SetMachineConfigOptions(_ interface{}) {
+}

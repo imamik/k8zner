@@ -61,6 +61,9 @@ func (m *mockTalosProducer) HealthCheck(_ context.Context, _ string) error {
 	return nil
 }
 
+func (m *mockTalosProducer) SetMachineConfigOptions(_ interface{}) {
+}
+
 func createTestContext(t *testing.T, mockInfra *hcloud_internal.MockClient, cfg *config.Config) *provisioning.Context {
 	t.Helper()
 

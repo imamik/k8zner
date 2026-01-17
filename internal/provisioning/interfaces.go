@@ -26,6 +26,11 @@ type Phase interface {
 // TalosConfigProducer defines the interface for generating Talos configurations.
 // Implemented by internal/platform/talos.Generator.
 type TalosConfigProducer interface {
+	// SetMachineConfigOptions sets the machine configuration options.
+	// These options control disk encryption, network settings, and other machine-level config.
+	// The opts parameter should be *talos.MachineConfigOptions.
+	SetMachineConfigOptions(opts any)
+
 	// GenerateControlPlaneConfig generates machine configuration for a control plane node.
 	GenerateControlPlaneConfig(san []string, hostname string) ([]byte, error)
 

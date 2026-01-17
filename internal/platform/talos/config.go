@@ -24,6 +24,7 @@ type Generator struct {
 	talosVersion      string
 	endpoint          string
 	secretsBundle     *secrets.Bundle
+	machineOpts       *MachineConfigOptions
 }
 
 // NewGenerator creates a new Generator.
@@ -38,6 +39,19 @@ func NewGenerator(clusterName, kubernetesVersion, talosVersion, endpoint string,
 		talosVersion:      talosVersion,
 		endpoint:          endpoint,
 		secretsBundle:     sb,
+		machineOpts:       &MachineConfigOptions{}, // Default empty options
+	}
+}
+
+// SetMachineConfigOptions sets the machine configuration options.
+// These options control disk encryption, network settings, and other machine-level config.
+func (g *Generator) SetMachineConfigOptions(opts any) {
+	if opts == nil {
+		return
+	}
+	// Type assert to *MachineConfigOptions
+	if machineOpts, ok := opts.(*MachineConfigOptions); ok && machineOpts != nil {
+		g.machineOpts = machineOpts
 	}
 }
 
@@ -117,33 +131,93 @@ func (g *Generator) GenerateControlPlaneConfig(san []string, hostname string) ([
 		generate.WithAdditionalSubjectAltNames(san),
 	}
 
-	return g.generateConfig(machine.TypeControlPlane, hostname, opts...)
+	baseConfig, err := g.generateBaseConfig(machine.TypeControlPlane, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build installer image URL
+	installerImage := g.getInstallerImageURL()
+
+	// Build and apply enhanced patch with all machine config options
+	patch := buildControlPlanePatch(hostname, g.machineOpts, installerImage, san)
+	return applyConfigPatch(baseConfig, patch)
 }
 
 // GenerateWorkerConfig generates the configuration for a worker node.
 // If hostname is provided, it will be set in the machine config.
 func (g *Generator) GenerateWorkerConfig(hostname string) ([]byte, error) {
-	return g.generateConfig(machine.TypeWorker, hostname)
+	baseConfig, err := g.generateBaseConfig(machine.TypeWorker)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build installer image URL
+	installerImage := g.getInstallerImageURL()
+
+	// Build and apply enhanced patch with all machine config options
+	patch := buildWorkerPatch(hostname, g.machineOpts, installerImage, nil)
+	return applyConfigPatch(baseConfig, patch)
 }
 
 // GenerateAutoscalerConfig generates the configuration for an autoscaler node pool.
 // The configuration includes node labels and taints for the pool.
 func (g *Generator) GenerateAutoscalerConfig(poolName string, labels map[string]string, taints []string) ([]byte, error) {
-	bytes, err := g.generateConfig(machine.TypeWorker, "")
+	baseConfig, err := g.generateBaseConfig(machine.TypeWorker)
 	if err != nil {
 		return nil, err
 	}
 
-	// Apply autoscaler-specific patches (labels and taints)
-	bytes, err = applyAutoscalerPatches(bytes, poolName, labels, taints)
-	if err != nil {
-		return nil, fmt.Errorf("failed to apply autoscaler patches: %w", err)
+	// Build installer image URL
+	installerImage := g.getInstallerImageURL()
+
+	// Build worker patch
+	patch := buildWorkerPatch("", g.machineOpts, installerImage, nil)
+
+	// Add autoscaler-specific node labels and taints to the patch
+	machinePatch := patch["machine"].(map[string]any)
+
+	// Add node labels
+	nodeLabels := map[string]any{
+		"nodepool": poolName,
+	}
+	for k, v := range labels {
+		nodeLabels[k] = v
+	}
+	machinePatch["nodeLabels"] = nodeLabels
+
+	// Add node taints
+	if len(taints) > 0 {
+		nodeTaints := map[string]any{}
+		for _, taint := range taints {
+			// Parse taint format: "key=value:effect"
+			parts := strings.SplitN(taint, ":", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			keyValue := parts[0]
+			effect := parts[1]
+
+			kvParts := strings.SplitN(keyValue, "=", 2)
+			if len(kvParts) != 2 {
+				continue
+			}
+			key := kvParts[0]
+			value := kvParts[1]
+
+			nodeTaints[key] = fmt.Sprintf("%s:%s", value, effect)
+		}
+		if len(nodeTaints) > 0 {
+			machinePatch["nodeTaints"] = nodeTaints
+		}
 	}
 
-	return bytes, nil
+	return applyConfigPatch(baseConfig, patch)
 }
 
-func (g *Generator) generateConfig(machineType machine.Type, hostname string, extraOpts ...generate.Option) ([]byte, error) {
+// generateBaseConfig generates the base Talos config without custom patches.
+// This is used as the foundation that patches are applied to.
+func (g *Generator) generateBaseConfig(machineType machine.Type, extraOpts ...generate.Option) ([]byte, error) {
 	vc, err := config.ParseContractFromVersion(g.talosVersion)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse version contract: %w", err)
@@ -176,14 +250,49 @@ func (g *Generator) generateConfig(machineType machine.Type, hostname string, ex
 		return nil, err
 	}
 
-	// Apply patches
-	isControlPlane := machineType == machine.TypeControlPlane
-	bytes, err = applyPatches(bytes, isControlPlane, hostname)
-	if err != nil {
-		return nil, fmt.Errorf("failed to apply patches: %w", err)
+	return stripComments(bytes), nil
+}
+
+// getInstallerImageURL returns the Talos installer image URL.
+// Uses factory.talos.dev if a schematic ID is configured, otherwise uses the default image.
+func (g *Generator) getInstallerImageURL() string {
+	if g.machineOpts != nil && g.machineOpts.SchematicID != "" {
+		// Use factory.talos.dev with schematic ID for custom images with extensions
+		return fmt.Sprintf("factory.talos.dev/installer/%s:%s", g.machineOpts.SchematicID, g.talosVersion)
+	}
+	// Default installer image
+	return fmt.Sprintf("ghcr.io/siderolabs/installer:%s", g.talosVersion)
+}
+
+// applyConfigPatch applies a patch map to the base config using deep merge.
+func applyConfigPatch(baseConfig []byte, patch map[string]any) ([]byte, error) {
+	var configMap map[string]any
+	if err := yaml.Unmarshal(baseConfig, &configMap); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal base config: %w", err)
 	}
 
-	return stripComments(bytes), nil
+	// Deep merge the patch into the config
+	deepMerge(configMap, patch)
+
+	return yaml.Marshal(configMap)
+}
+
+// deepMerge recursively merges src into dst.
+// For maps, it merges recursively. For other types, src overwrites dst.
+func deepMerge(dst, src map[string]any) {
+	for key, srcVal := range src {
+		if dstVal, exists := dst[key]; exists {
+			// Both exist, check if we should merge recursively
+			srcMap, srcIsMap := srcVal.(map[string]any)
+			dstMap, dstIsMap := dstVal.(map[string]any)
+			if srcIsMap && dstIsMap {
+				deepMerge(dstMap, srcMap)
+				continue
+			}
+		}
+		// Either key doesn't exist in dst, or types don't match for recursive merge
+		dst[key] = srcVal
+	}
 }
 
 // GetClientConfig returns the talosconfig for the cluster.
@@ -227,94 +336,4 @@ func stripComments(data []byte) []byte {
 		result = append(result, line)
 	}
 	return []byte(strings.Join(result, "\n"))
-}
-
-// applyPatches applies necessary patches for Hetzner Cloud and sets the hostname.
-func applyPatches(configBytes []byte, isControlPlane bool, hostname string) ([]byte, error) {
-	var configMap map[string]interface{}
-	if err := yaml.Unmarshal(configBytes, &configMap); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
-	}
-
-	// 1. External cloud provider (Hetzner CCM)
-	cluster := getOrCreate(configMap, "cluster")
-	cluster["externalCloudProvider"] = map[string]interface{}{"enabled": true}
-
-	machine := getOrCreate(configMap, "machine")
-	kubelet := getOrCreate(machine, "kubelet")
-	extraArgs := getOrCreate(kubelet, "extraArgs")
-	extraArgs["cloud-provider"] = "external"
-
-	if isControlPlane {
-		cm := getOrCreate(cluster, "controllerManager")
-		cmExtraArgs := getOrCreate(cm, "extraArgs")
-		cmExtraArgs["cloud-provider"] = "external"
-	}
-
-	// 2. Disable default CNI (Flannel) to allow Cilium
-	// Talos includes Flannel as the default CNI, which conflicts with Cilium.
-	// Setting cni.name = "none" instructs Talos to not install any CNI,
-	// allowing Cilium to be deployed as the sole CNI provider.
-	clusterNetwork := getOrCreate(cluster, "network")
-	cni := getOrCreate(clusterNetwork, "cni")
-	cni["name"] = "none"
-
-	// 3. Hostname
-	if hostname != "" {
-		network := getOrCreate(machine, "network")
-		network["hostname"] = hostname
-	}
-
-	return yaml.Marshal(configMap)
-}
-
-// applyAutoscalerPatches applies labels and taints for autoscaler node pools.
-func applyAutoscalerPatches(configBytes []byte, poolName string, labels map[string]string, taints []string) ([]byte, error) {
-	var configMap map[string]interface{}
-	if err := yaml.Unmarshal(configBytes, &configMap); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
-	}
-
-	machine := getOrCreate(configMap, "machine")
-
-	// Add node labels
-	nodeLabels := getOrCreate(machine, "nodeLabels")
-	nodeLabels["nodepool"] = poolName
-	for k, v := range labels {
-		nodeLabels[k] = v
-	}
-
-	// Add node taints
-	if len(taints) > 0 {
-		nodeTaints := getOrCreate(machine, "nodeTaints")
-		for _, taint := range taints {
-			// Parse taint format: "key=value:effect"
-			parts := strings.SplitN(taint, ":", 2)
-			if len(parts) != 2 {
-				continue
-			}
-			keyValue := parts[0]
-			effect := parts[1]
-
-			kvParts := strings.SplitN(keyValue, "=", 2)
-			if len(kvParts) != 2 {
-				continue
-			}
-			key := kvParts[0]
-			value := kvParts[1]
-
-			nodeTaints[key] = fmt.Sprintf("%s:%s", value, effect)
-		}
-	}
-
-	return yaml.Marshal(configMap)
-}
-
-func getOrCreate(m map[string]interface{}, key string) map[string]interface{} {
-	if v, ok := m[key].(map[string]interface{}); ok {
-		return v
-	}
-	newMap := make(map[string]interface{})
-	m[key] = newMap
-	return newMap
 }

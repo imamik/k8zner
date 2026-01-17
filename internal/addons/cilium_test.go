@@ -189,10 +189,13 @@ func TestBuildCiliumOperatorConfig(t *testing.T) {
 			nodeSelector := config["nodeSelector"].(helm.Values)
 			assert.Contains(t, nodeSelector, "node-role.kubernetes.io/control-plane")
 
-			// Check tolerations
+			// Check tolerations (should have control-plane, master, not-ready, and CCM uninitialized)
 			tolerations := config["tolerations"].([]helm.Values)
-			assert.Len(t, tolerations, 1)
+			assert.Len(t, tolerations, 4)
 			assert.Equal(t, "node-role.kubernetes.io/control-plane", tolerations[0]["key"])
+			assert.Equal(t, "node-role.kubernetes.io/master", tolerations[1]["key"])
+			assert.Equal(t, "node.kubernetes.io/not-ready", tolerations[2]["key"])
+			assert.Equal(t, "node.cloudprovider.kubernetes.io/uninitialized", tolerations[3]["key"])
 
 			// Check PDB
 			if tt.expectPDB {
