@@ -58,6 +58,11 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("worker validation failed: %w", err)
 	}
 
+	// Talos machine config validation
+	if err := c.validateTalosMachineConfig(); err != nil {
+		return fmt.Errorf("talos machine config validation failed: %w", err)
+	}
+
 	return nil
 }
 
@@ -175,6 +180,86 @@ func (c *Config) validateWorkers() error {
 	return nil
 }
 
+// ValidConfigApplyModes contains valid Talos config apply modes.
+var ValidConfigApplyModes = map[string]bool{
+	"auto":      true,
+	"reboot":    true,
+	"no_reboot": true,
+	"staged":    true,
+}
+
+// validateTalosMachineConfig validates Talos machine configuration.
+func (c *Config) validateTalosMachineConfig() error {
+	m := &c.Talos.Machine
+
+	// Validate config apply mode
+	if m.ConfigApplyMode != "" && !ValidConfigApplyModes[m.ConfigApplyMode] {
+		return fmt.Errorf("invalid config_apply_mode %q: must be one of %v",
+			m.ConfigApplyMode, getMapKeys(ValidConfigApplyModes))
+	}
+
+	// Validate extra routes are valid CIDRs
+	for _, route := range m.ExtraRoutes {
+		if _, _, err := net.ParseCIDR(route); err != nil {
+			return fmt.Errorf("invalid extra_route CIDR %q: %w", route, err)
+		}
+	}
+
+	// Validate nameservers are valid IPs
+	for _, ns := range m.Nameservers {
+		if net.ParseIP(ns) == nil {
+			return fmt.Errorf("invalid nameserver IP %q", ns)
+		}
+	}
+
+	// Validate host entries
+	for i, entry := range m.ExtraHostEntries {
+		if net.ParseIP(entry.IP) == nil {
+			return fmt.Errorf("extra_host_entry %d: invalid IP %q", i, entry.IP)
+		}
+		if len(entry.Aliases) == 0 {
+			return fmt.Errorf("extra_host_entry %d (IP %s): must have at least one alias", i, entry.IP)
+		}
+	}
+
+	// Validate logging destinations
+	for i, dest := range m.LoggingDestinations {
+		if dest.Endpoint == "" {
+			return fmt.Errorf("logging_destination %d: endpoint is required", i)
+		}
+		// Validate format if specified
+		if dest.Format != "" && dest.Format != "json_lines" {
+			return fmt.Errorf("logging_destination %d: invalid format %q (must be 'json_lines' or empty)", i, dest.Format)
+		}
+	}
+
+	// Validate kernel modules
+	for i, mod := range m.KernelModules {
+		if mod.Name == "" {
+			return fmt.Errorf("kernel_module %d: name is required", i)
+		}
+	}
+
+	// Validate kubelet extra mounts
+	for i, mount := range m.KubeletExtraMounts {
+		if mount.Source == "" {
+			return fmt.Errorf("kubelet_extra_mount %d: source is required", i)
+		}
+	}
+
+	// Validate inline manifests
+	for i, manifest := range m.InlineManifests {
+		if manifest.Name == "" {
+			return fmt.Errorf("inline_manifest %d: name is required", i)
+		}
+		if manifest.Contents == "" {
+			return fmt.Errorf("inline_manifest %d (%s): contents is required", i, manifest.Name)
+		}
+	}
+
+	return nil
+}
+
 // ApplyDefaults applies sensible defaults to the configuration.
 func (c *Config) ApplyDefaults() error {
 	// Default Talos version
@@ -210,5 +295,103 @@ func (c *Config) ApplyDefaults() error {
 		}
 	}
 
+	// Apply Talos machine config defaults (matching Terraform)
+	c.applyTalosMachineDefaults()
+
+	// Apply Kubernetes config defaults
+	c.applyKubernetesDefaults()
+
 	return nil
+}
+
+// applyTalosMachineDefaults applies defaults for Talos machine configuration.
+// See: terraform/variables.tf for default values
+func (c *Config) applyTalosMachineDefaults() {
+	m := &c.Talos.Machine
+
+	// Disk encryption defaults (both true in Terraform)
+	if m.StateEncryption == nil {
+		m.StateEncryption = boolPtr(true)
+	}
+	if m.EphemeralEncryption == nil {
+		m.EphemeralEncryption = boolPtr(true)
+	}
+
+	// Network defaults
+	if m.IPv6Enabled == nil {
+		m.IPv6Enabled = boolPtr(true)
+	}
+	if m.PublicIPv4Enabled == nil {
+		m.PublicIPv4Enabled = boolPtr(true)
+	}
+	if m.PublicIPv6Enabled == nil {
+		m.PublicIPv6Enabled = boolPtr(true)
+	}
+
+	// Hetzner DNS servers (from terraform/variables.tf talos_nameservers)
+	if len(m.Nameservers) == 0 {
+		m.Nameservers = []string{
+			"185.12.64.1", "185.12.64.2", // Hetzner IPv4 DNS
+		}
+		if *m.IPv6Enabled {
+			m.Nameservers = append(m.Nameservers,
+				"2a01:4ff:ff00::add:1", "2a01:4ff:ff00::add:2", // Hetzner IPv6 DNS
+			)
+		}
+	}
+
+	// Hetzner NTP servers (from terraform/variables.tf talos_time_servers)
+	if len(m.TimeServers) == 0 {
+		m.TimeServers = []string{
+			"ntp1.hetzner.de",
+			"ntp2.hetzner.com",
+			"ntp3.hetzner.net",
+		}
+	}
+
+	// CoreDNS default
+	if m.CoreDNSEnabled == nil {
+		m.CoreDNSEnabled = boolPtr(true)
+	}
+
+	// Discovery defaults (from terraform/variables.tf)
+	if m.DiscoveryKubernetesEnabled == nil {
+		m.DiscoveryKubernetesEnabled = boolPtr(false)
+	}
+	if m.DiscoveryServiceEnabled == nil {
+		m.DiscoveryServiceEnabled = boolPtr(true)
+	}
+
+	// Config apply mode default
+	if m.ConfigApplyMode == "" {
+		m.ConfigApplyMode = "auto"
+	}
+}
+
+// applyKubernetesDefaults applies defaults for Kubernetes configuration.
+func (c *Config) applyKubernetesDefaults() {
+	// Cluster domain default (from terraform/variables.tf cluster_domain)
+	if c.Kubernetes.Domain == "" {
+		c.Kubernetes.Domain = "cluster.local"
+	}
+
+	// Allow scheduling on control planes default:
+	// If nil, auto-determine based on worker count (same as Terraform)
+	// If no workers, allow scheduling on control planes
+	if c.Kubernetes.AllowSchedulingOnCP == nil {
+		workerCount := 0
+		for _, pool := range c.Workers {
+			workerCount += pool.Count
+		}
+		// Also consider autoscaler max capacity
+		for _, pool := range c.Autoscaler.NodePools {
+			workerCount += pool.Max
+		}
+		c.Kubernetes.AllowSchedulingOnCP = boolPtr(workerCount == 0)
+	}
+}
+
+// boolPtr returns a pointer to a bool value.
+func boolPtr(b bool) *bool {
+	return &b
 }

@@ -145,6 +145,107 @@ type TalosConfig struct {
 	SchematicID string        `mapstructure:"schematic_id" yaml:"schematic_id"`
 	Extensions  []string      `mapstructure:"extensions" yaml:"extensions"`
 	Upgrade     UpgradeConfig `mapstructure:"upgrade" yaml:"upgrade"`
+
+	// Machine-level configuration options (matching Terraform talos_* variables)
+	Machine TalosMachineConfig `mapstructure:"machine" yaml:"machine"`
+}
+
+// TalosMachineConfig defines Talos machine-level configuration.
+// See: terraform/variables.tf talos_* variables
+type TalosMachineConfig struct {
+	// Disk Encryption (LUKS2 with nodeID key)
+	// See: terraform/talos_config.tf local.talos_system_disk_encryption
+	StateEncryption     *bool `mapstructure:"state_encryption" yaml:"state_encryption"`
+	EphemeralEncryption *bool `mapstructure:"ephemeral_encryption" yaml:"ephemeral_encryption"`
+
+	// Network Configuration
+	// See: terraform/variables.tf talos_ipv6_enabled, talos_public_ipv4_enabled, etc.
+	IPv6Enabled       *bool    `mapstructure:"ipv6_enabled" yaml:"ipv6_enabled"`
+	PublicIPv4Enabled *bool    `mapstructure:"public_ipv4_enabled" yaml:"public_ipv4_enabled"`
+	PublicIPv6Enabled *bool    `mapstructure:"public_ipv6_enabled" yaml:"public_ipv6_enabled"`
+	Nameservers       []string `mapstructure:"nameservers" yaml:"nameservers"`
+	TimeServers       []string `mapstructure:"time_servers" yaml:"time_servers"`
+	ExtraRoutes       []string `mapstructure:"extra_routes" yaml:"extra_routes"`
+
+	// DNS Configuration
+	// See: terraform/variables.tf talos_extra_host_entries, talos_coredns_enabled
+	ExtraHostEntries []TalosHostEntry `mapstructure:"extra_host_entries" yaml:"extra_host_entries"`
+	CoreDNSEnabled   *bool            `mapstructure:"coredns_enabled" yaml:"coredns_enabled"`
+
+	// Registry Configuration
+	// See: terraform/variables.tf talos_registries
+	Registries *TalosRegistryConfig `mapstructure:"registries" yaml:"registries"`
+
+	// Kernel Configuration
+	// See: terraform/variables.tf talos_extra_kernel_args, talos_kernel_modules, talos_sysctls_extra_args
+	KernelArgs    []string            `mapstructure:"kernel_args" yaml:"kernel_args"`
+	KernelModules []TalosKernelModule `mapstructure:"kernel_modules" yaml:"kernel_modules"`
+	Sysctls       map[string]string   `mapstructure:"sysctls" yaml:"sysctls"`
+
+	// Kubelet Configuration
+	// See: terraform/variables.tf talos_kubelet_extra_mounts, kubernetes_kubelet_extra_args
+	KubeletExtraMounts []TalosKubeletMount `mapstructure:"kubelet_extra_mounts" yaml:"kubelet_extra_mounts"`
+
+	// Bootstrap Manifests
+	// See: terraform/variables.tf talos_extra_inline_manifests, talos_extra_remote_manifests
+	InlineManifests []TalosInlineManifest `mapstructure:"inline_manifests" yaml:"inline_manifests"`
+	RemoteManifests []string              `mapstructure:"remote_manifests" yaml:"remote_manifests"`
+
+	// Discovery Services
+	// See: terraform/variables.tf talos_discovery_kubernetes_enabled, talos_discovery_service_enabled
+	DiscoveryKubernetesEnabled *bool `mapstructure:"discovery_kubernetes_enabled" yaml:"discovery_kubernetes_enabled"`
+	DiscoveryServiceEnabled    *bool `mapstructure:"discovery_service_enabled" yaml:"discovery_service_enabled"`
+
+	// Logging
+	// See: terraform/variables.tf talos_logging_destinations
+	LoggingDestinations []TalosLoggingDestination `mapstructure:"logging_destinations" yaml:"logging_destinations"`
+
+	// Config Apply Mode (auto, reboot, no_reboot, staged)
+	// See: terraform/variables.tf talos_machine_configuration_apply_mode
+	ConfigApplyMode string `mapstructure:"config_apply_mode" yaml:"config_apply_mode"`
+}
+
+// TalosHostEntry defines an extra host entry for /etc/hosts.
+type TalosHostEntry struct {
+	IP      string   `mapstructure:"ip" yaml:"ip"`
+	Aliases []string `mapstructure:"aliases" yaml:"aliases"`
+}
+
+// TalosKernelModule defines a kernel module to load.
+type TalosKernelModule struct {
+	Name       string   `mapstructure:"name" yaml:"name"`
+	Parameters []string `mapstructure:"parameters" yaml:"parameters"`
+}
+
+// TalosKubeletMount defines an extra mount for kubelet.
+type TalosKubeletMount struct {
+	Source      string   `mapstructure:"source" yaml:"source"`
+	Destination string   `mapstructure:"destination" yaml:"destination"`
+	Type        string   `mapstructure:"type" yaml:"type"`
+	Options     []string `mapstructure:"options" yaml:"options"`
+}
+
+// TalosInlineManifest defines an inline Kubernetes manifest for bootstrap.
+type TalosInlineManifest struct {
+	Name     string `mapstructure:"name" yaml:"name"`
+	Contents string `mapstructure:"contents" yaml:"contents"`
+}
+
+// TalosLoggingDestination defines a remote logging destination.
+type TalosLoggingDestination struct {
+	Endpoint  string            `mapstructure:"endpoint" yaml:"endpoint"`
+	Format    string            `mapstructure:"format" yaml:"format"`
+	ExtraTags map[string]string `mapstructure:"extra_tags" yaml:"extra_tags"`
+}
+
+// TalosRegistryConfig defines registry mirror configuration.
+type TalosRegistryConfig struct {
+	Mirrors map[string]TalosRegistryMirror `mapstructure:"mirrors" yaml:"mirrors"`
+}
+
+// TalosRegistryMirror defines a registry mirror.
+type TalosRegistryMirror struct {
+	Endpoints []string `mapstructure:"endpoints" yaml:"endpoints"`
 }
 
 // UpgradeConfig defines the upgrade-related configuration.
@@ -160,6 +261,20 @@ type KubernetesConfig struct {
 	Version string     `mapstructure:"version" yaml:"version"`
 	OIDC    OIDCConfig `mapstructure:"oidc" yaml:"oidc"`
 	CNI     CNIConfig  `mapstructure:"cni" yaml:"cni"`
+
+	// Cluster-level configuration
+	// See: terraform/variables.tf cluster_domain, cluster_allow_scheduling_on_control_planes
+	Domain              string `mapstructure:"domain" yaml:"domain"`
+	AllowSchedulingOnCP *bool  `mapstructure:"allow_scheduling_on_control_planes" yaml:"allow_scheduling_on_control_planes"`
+
+	// API Server Configuration
+	// See: terraform/variables.tf kube_api_admission_control, kube_api_extra_args
+	APIServerExtraArgs map[string]string `mapstructure:"api_server_extra_args" yaml:"api_server_extra_args"`
+
+	// Kubelet Configuration
+	// See: terraform/variables.tf kubernetes_kubelet_extra_args, kubernetes_kubelet_extra_config
+	KubeletExtraArgs   map[string]string `mapstructure:"kubelet_extra_args" yaml:"kubelet_extra_args"`
+	KubeletExtraConfig map[string]any    `mapstructure:"kubelet_extra_config" yaml:"kubelet_extra_config"`
 }
 
 // OIDCConfig defines the OIDC authentication configuration.

@@ -79,6 +79,9 @@ func (m *mockTalosClient) GenerateAutoscalerConfig(_ string, _ map[string]string
 	return nil, nil
 }
 
+func (m *mockTalosClient) SetMachineConfigOptions(_ interface{}) {
+}
+
 func TestProvisionerName(t *testing.T) {
 	p := NewProvisioner(ProvisionerOptions{})
 	assert.Equal(t, "Upgrade", p.Name())

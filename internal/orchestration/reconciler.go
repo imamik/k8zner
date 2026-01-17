@@ -11,6 +11,7 @@ import (
 	"hcloud-k8s/internal/addons"
 	"hcloud-k8s/internal/config"
 	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
+	"hcloud-k8s/internal/platform/talos"
 	"hcloud-k8s/internal/provisioning"
 	"hcloud-k8s/internal/provisioning/cluster"
 	"hcloud-k8s/internal/provisioning/compute"
@@ -55,10 +56,14 @@ func NewReconciler(
 // Reconcile ensures that the desired state matches the actual state.
 // Returns the kubeconfig bytes if bootstrap was performed, or nil if cluster already existed.
 func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
-	// 1. Setup Provisioning Context
+	// 1. Configure Talos generator with machine config options from config
+	machineOpts := talos.NewMachineConfigOptions(r.config)
+	r.talosGenerator.SetMachineConfigOptions(machineOpts)
+
+	// 2. Setup Provisioning Context
 	pCtx := provisioning.NewContext(ctx, r.config, r.infra, r.talosGenerator)
 
-	// 2. Execute Provisioning Pipeline
+	// 3. Execute Provisioning Pipeline
 	pipeline := provisioning.NewPipeline(
 		provisioning.NewValidationPhase(), // Validation first
 		r.infraProvisioner,
@@ -74,7 +79,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 	// Persist state back to reconciler (if needed for legacy reasons, though pCtx.State is what matters)
 	r.state = pCtx.State
 
-	// 3. Install addons (if cluster was bootstrapped)
+	// 4. Install addons (if cluster was bootstrapped)
 	if len(r.state.Kubeconfig) > 0 {
 		pCtx.Logger.Printf("[%s] Installing cluster addons...", phase)
 		networkID := r.state.Network.ID

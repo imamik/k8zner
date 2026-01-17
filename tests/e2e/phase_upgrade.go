@@ -73,8 +73,8 @@ func phaseUpgrade(t *testing.T, state *E2EState) {
 func createUpgradeConfig(state *E2EState) *config.Config {
 	// Use slightly newer versions for upgrade test
 	// In reality, these versions should be validated to ensure they're compatible
-	newTalosVersion := "v1.8.3"   // Upgrade from v1.8.3 to same (idempotent test)
-	newK8sVersion := "v1.31.0"    // Upgrade K8s if different
+	newTalosVersion := "v1.8.3" // Upgrade from v1.8.3 to same (idempotent test)
+	newK8sVersion := "v1.31.0"  // Upgrade K8s if different
 
 	return &config.Config{
 		ClusterName: state.ClusterName,

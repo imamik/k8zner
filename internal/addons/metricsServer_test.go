@@ -65,7 +65,7 @@ func TestBuildMetricsServerValues(t *testing.T) {
 			expectedReplicas:         2,
 			expectedScheduleOnCP:     true,
 			expectedNodeSelectorKeys: []string{"node-role.kubernetes.io/control-plane"},
-			expectedTolerationsCount: 1,
+			expectedTolerationsCount: 2, // control-plane + CCM uninitialized
 		},
 		{
 			name: "single control plane only",
@@ -80,7 +80,7 @@ func TestBuildMetricsServerValues(t *testing.T) {
 			expectedReplicas:         1,
 			expectedScheduleOnCP:     true,
 			expectedNodeSelectorKeys: []string{"node-role.kubernetes.io/control-plane"},
-			expectedTolerationsCount: 1,
+			expectedTolerationsCount: 2, // control-plane + CCM uninitialized
 		},
 	}
 
