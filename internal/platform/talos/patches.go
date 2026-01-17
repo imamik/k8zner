@@ -89,6 +89,14 @@ func NewMachineConfigOptions(cfg *config.Config) *MachineConfigOptions {
 		KubeletExtraArgs:    k.KubeletExtraArgs,
 		KubeletExtraConfig:  k.KubeletExtraConfig,
 
+		// Network context (from config)
+		// NodeIPv4CIDR is critical for kubelet to use the correct node IP
+		// and etcd to advertise on the correct subnet
+		NodeIPv4CIDR:    cfg.Network.NodeIPv4CIDR,
+		PodIPv4CIDR:     cfg.Network.PodIPv4CIDR,
+		ServiceIPv4CIDR: cfg.Network.ServiceIPv4CIDR,
+		EtcdSubnet:      cfg.Network.NodeIPv4CIDR, // etcd should advertise on the node subnet
+
 		// Cilium context
 		KubeProxyReplacement: cfg.Addons.Cilium.KubeProxyReplacementEnabled,
 	}
@@ -291,9 +299,11 @@ func buildNetworkPatch(hostname string, opts *MachineConfigOptions, _ bool) map[
 // See: terraform/talos_config.tf control_plane_talos_config_patch.machine.kubelet
 func buildKubeletPatch(opts *MachineConfigOptions, isControlPlane bool) map[string]any {
 	// Base extra args (matching Terraform)
+	// Note: rotate-server-certificates is NOT enabled because it requires a CSR approver.
+	// Without a CSR approver, the kubelet has no serving certificate, causing "tls: internal error".
+	// Talos manages kubelet certificates internally, so this flag is not needed.
 	extraArgs := map[string]any{
-		"cloud-provider":             "external",
-		"rotate-server-certificates": true,
+		"cloud-provider": "external",
 	}
 
 	// Merge user extra args

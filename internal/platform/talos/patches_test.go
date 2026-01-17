@@ -241,7 +241,7 @@ func TestBuildKubeletPatch(t *testing.T) {
 				// Check extra args
 				extraArgs := result["extraArgs"].(map[string]any)
 				assert.Equal(t, "external", extraArgs["cloud-provider"])
-				assert.Equal(t, true, extraArgs["rotate-server-certificates"])
+				// Note: rotate-server-certificates is NOT set because it requires a CSR approver
 
 				// Check control plane reserved resources
 				extraConfig := result["extraConfig"].(map[string]any)
