@@ -7,132 +7,69 @@
 
 ## Executive Summary
 
-The migration from Terraform to a pure Go CLI is **~90% complete**. The project has made significant progress since the last analysis. Core infrastructure, Talos configuration (including advanced features), and the Addon framework (including complex addons like Cilium, CSI, OIDC, and Backups) are fully implemented.
+The migration from Terraform to a pure Go CLI is **~92% complete**. Core infrastructure, Talos configuration, and Addons are fully implemented.
 
-The primary remaining gaps are in **Day-2 operations**: specifically **Cluster Upgrade** and **Scale Down** logic.
+**Current Build Status:** ⚠️ **BROKEN**
+The `hcloud-k8s` binary fails to compile because `cmd/hcloud-k8s/commands/upgrade.go` is missing, despite `Root` command trying to register it.
 
-### Current State
-
-✅ **Fully Working:**
-- Core infrastructure (networks, firewalls, load balancers, placement groups, floating IPs)
-- Talos image building and snapshot creation
-- Server provisioning (Control Plane & Workers) with placement group sharding
-- **Scale Up** (implicit via reconciler)
-- Cluster bootstrap with Talos
-- **Advanced Talos Config** (Encryption, Registries, Extra Mounts, Kernel Args)
-- **Addons Framework & Implementations**:
-    - Hetzner CCM & CSI (with encryption)
-    - Cilium CNI (with IPSec encryption & Hubble)
-    - Talos Backups (S3, CronJob)
-    - OIDC RBAC (Dynamic RoleBindings)
-    - Ingress NGINX, Cert Manager, Metrics Server, Longhorn (wired)
-- **Destroy Command** (`hcloud-k8s destroy`)
-- Comprehensive E2E test suite
-
-⚠️ **Partially Complete:**
-- **Scaling**: Scale Up works (creates missing nodes), but **Scale Down is missing** (does not delete excess nodes).
-
-🔴 **Missing:**
-- **Upgrade Command**: No `upgrade` CLI command or logic to orchestrate Talos/K8s upgrades.
-- **Scale Down**: Logic to identify and remove orphaned nodes when count is reduced.
+### Critical Gaps for MVP
+1.  **Upgrade Command Wiring:** The upgrade logic exists in `internal/provisioning/upgrade/` (comprehensive FSM implementation), but the CLI command wrapper is missing.
+2.  **Scale Down:** The reconciler can create new nodes (Scale Up) but ignores servers that should be removed (Scale Down).
 
 ---
 
-## Detailed Feature Comparison
+## MVP Feature Overview Table
 
-### ✅ Step 1: Image Builder (100% Complete)
+| Phase | Feature | Status | Notes |
+| :--- | :--- | :--- | :--- |
+| **1. Foundation** | Image Builder | ✅ 100% | Full replacement for Packer. |
+| **2. Infrastructure** | Network & Subnets | ✅ 100% | Includes correct CIDR calculations. |
+| | Firewalls | ✅ 100% | Dynamic IP allow-listing implemented. |
+| | Load Balancers | ✅ 100% | Control Plane & Ingress LB support. |
+| | Placement Groups | ✅ 100% | Spread topology & sharding (1 PG/10 nodes). |
+| **3. Talos Config** | Config Generation | ✅ 100% | |
+| | Advanced Configs | ✅ 100% | Encryption, Registries, Kernel Args, Mounts. |
+| | RDNS | ✅ 100% | Template support for IPv4/IPv6. |
+| **4. Provisioning** | Server Creation | ✅ 100% | |
+| | Bootstrap | ✅ 100% | State markers & kubeconfig retrieval. |
+| | Scale Up | ✅ 100% | Implicitly handled by reconciler. |
+| | **Scale Down** | 🔴 0% | Logic to cordon/drain/delete excess nodes missing. |
+| **5. Addons** | CCM & CSI | ✅ 100% | Includes encryption secret generation. |
+| | Cilium CNI | ✅ 100% | Includes IPSec & Hubble support. |
+| | OIDC & RBAC | ✅ 100% | Dynamic RoleBinding generation. |
+| | Talos Backups | ✅ 100% | S3 Backups & CronJob. |
+| | Standard Addons | ✅ 100% | Ingress, CertManager, Metrics, Longhorn wired. |
+| **6. Lifecycle** | Destroy Command | ✅ 100% | Full teardown dependency order implemented. |
+| | **Upgrade Command** | ⚠️ 90% | **Logic exists** in `internal/provisioning/upgrade/`, but **CLI command is missing**. |
 
-**Implementation Status:**
-- ✅ All requirements implemented in `internal/provisioning/image/`
-- ✅ E2E tests passing
-- ✅ Fully replaces Packer logic
-
-### ✅ Step 2: Base Infrastructure (100% Complete)
-
-**Implementation Status:**
-- ✅ Network, Firewall, Load Balancers, Placement Groups, Floating IPs fully implemented in `internal/provisioning/infrastructure/`
-- ✅ Matches Terraform logic exactly (including private IP calculations and naming conventions)
-
-### ✅ Step 3: Server Provisioning & Talos Config (100% Complete)
-
-**Implementation Status:**
-- ✅ Server creation logic in `internal/provisioning/compute/`
-- ✅ **Advanced Configs Implemented**:
-    - `internal/platform/talos/patches.go` correctly maps:
-        - System Disk Encryption (LUKS)
-        - Registry Mirrors
-        - Kubelet Extra Mounts
-        - Kernel Args & Modules
-        - Sysctls
-        - Extra Hosts / Routes
-- ✅ RDNS support for servers (implemented in `compute/rdns.go`)
-
-### ✅ Step 4: Bootstrap & Cluster Formation (100% Complete)
-
-**Implementation Status:**
-- ✅ Bootstrap logic in `internal/provisioning/cluster/`
-- ✅ State marker verification
-- ✅ Kubeconfig retrieval
-
-### ✅ Step 5: Features & Addons (95% Complete)
-
-**Implementation Status:**
-All major addons are implemented in `internal/addons/` and wired in `apply.go`.
-
-| Addon | Status | Implementation Details |
-|-------|--------|------------------------|
-| **Hetzner CCM** | ✅ Complete | `internal/addons/ccm.go` |
-| **Hetzner CSI** | ✅ Complete | `internal/addons/csi.go` (Includes encryption secret gen) |
-| **Cilium CNI** | ✅ Complete | `internal/addons/cilium.go` (Includes IPSec secret gen, Hubble, Helm values) |
-| **RBAC** | ✅ Complete | Wired in `apply.go`, config struct exists |
-| **OIDC** | ✅ Complete | `internal/addons/oidc.go` (Dynamic RoleBinding generation) |
-| **Autoscaler** | ✅ Complete | Wired in `apply.go`, `clusterAutoscaler.go` |
-| **Backups** | ✅ Complete | `internal/addons/talosBackup.go` (S3, CronJob, ServiceAccount) |
-| **Ingress NGINX** | ✅ Complete | Wired in `apply.go` |
-| **Cert Manager** | ✅ Complete | Wired in `apply.go` |
-| **Metrics Server** | ✅ Complete | Wired in `apply.go` |
-| **Longhorn** | ✅ Complete | Wired in `apply.go` |
-
-*Note: Verification needed to ensure `rbac.go`, `ingressNginx.go`, etc. contain full logic, but `cilium.go` and `oidc.go` samples show high quality.*
-
-### ⚠️ Step 6: Lifecycle (~30% Complete)
-
-**Implementation Status:**
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| **Apply** | ✅ Complete | Idempotent reconciliation (Creation/Updates) |
-| **Destroy** | ✅ Complete | `cmd/hcloud-k8s/commands/destroy.go` implemented and wired |
-| **Scale Up** | ✅ Complete | Implicit in `reconcileNodePool` (creates missing indices) |
-| **Scale Down** | 🔴 Missing | `reconcileNodePool` iterates 1..Count. Does not check/delete indices > Count. |
-| **Upgrade** | 🔴 Missing | No `upgrade` command in `cmd/hcloud-k8s/commands/`. `internal/provisioning/upgrade/` exists but may be empty or incomplete. |
+**Total Estimated MVP Completion:** **92%**
 
 ---
 
-## Action Plan
+## Detailed Gap Analysis
 
-### 🚀 Priority 1: Implement Upgrade Logic
-**Goal:** Enable safe cluster upgrades (Talos OS + Kubernetes).
+### ⚠️ Upgrade Command (Logic vs Wiring)
+You asked: *"I thought Talos upgrade was completely migrated?!"*
+**Answer:** The **logic** is migrated, but the **CLI command** is missing.
 
-1.  Implement `Upgrade` command in `cmd/hcloud-k8s/commands/upgrade.go`.
-2.  Implement FSM in `internal/provisioning/upgrade/`:
-    -   Check versions.
-    -   Drain node -> Upgrade Talos -> Reboot -> Wait for Healthy -> Uncordon.
-    -   Upgrade Kubernetes API (via Talos API).
+-   **Logic (✅ Present):** `internal/provisioning/upgrade/provisioner.go` contains a complete upgrade provisioner:
+    -   Control Plane sequential upgrade loop.
+    -   Worker upgrade loop.
+    -   Kubernetes version upgrade.
+    -   Health checks & Dry Run mode.
+    -   `internal/platform/talos/upgrade.go` handles the low-level API calls.
+-   **CLI (🔴 Missing):** `cmd/hcloud-k8s/commands/upgrade.go` does not exist.
+    -   `cmd/hcloud-k8s/commands/root.go` calls `cmd.AddCommand(Upgrade())`, causing a build error.
 
-### 🚀 Priority 2: Implement Scale Down
-**Goal:** Allow reducing node pool sizes.
-
-1.  Update `reconcileNodePool` in `internal/provisioning/compute/pool.go`.
-2.  After ensuring servers 1..N, list all servers matching pool labels.
-3.  Identify servers with indices > N.
-4.  For each excess server:
-    -   Cordon & Drain (via client-go).
-    -   Delete from Hetzner.
-    -   Delete Node object from K8s.
+### 🔴 Scale Down (Missing Logic)
+The `reconcileNodePool` function in `internal/provisioning/compute/pool.go` iterates from `1` to `Count` to ensure servers exist.
+-   It **does not** list existing servers to check if any indices > `Count` exist.
+-   **Impact:** If you reduce `count` in `cluster.yaml` from 5 to 3, the CLI will do nothing. The 2 extra nodes will remain running and joined to the cluster.
 
 ---
 
-## Conclusion
+## Recommended Next Steps
 
-The project is very close to feature parity with the legacy Terraform implementation. The "Addons" and "Config" gaps previously identified have been closed. The remaining work is concentrated on **lifecycle management** (Upgrade and Scale Down).
+1.  **Fix Build / Wire Upgrade:** Create `cmd/hcloud-k8s/commands/upgrade.go` to expose the existing upgrade logic.
+2.  **Implement Scale Down:** Update `reconcileNodePool` to identify and remove excess nodes (Cordon -> Drain -> Delete).
+
