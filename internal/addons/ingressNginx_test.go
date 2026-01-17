@@ -68,12 +68,12 @@ func TestBuildIngressNginxValues(t *testing.T) {
 			// Check kind
 			assert.Equal(t, "Deployment", controller["kind"])
 
-			// Check admission webhooks
+			// Check admission webhooks - certManager enabled to avoid race conditions
 			webhooks, ok := controller["admissionWebhooks"].(helm.Values)
 			require.True(t, ok)
 			certManager, ok := webhooks["certManager"].(helm.Values)
 			require.True(t, ok)
-			assert.Equal(t, false, certManager["enabled"]) // Changed to false per e2e fix
+			assert.Equal(t, true, certManager["enabled"]) // Use cert-manager for webhook certs
 
 			// Check maxUnavailable
 			assert.Equal(t, 1, controller["maxUnavailable"])
@@ -136,6 +136,13 @@ func TestBuildIngressNginxValues(t *testing.T) {
 			networkPolicy, ok := controller["networkPolicy"].(helm.Values)
 			require.True(t, ok)
 			assert.Equal(t, true, networkPolicy["enabled"])
+
+			// Check tolerations for CCM uninitialized taint
+			tolerations, ok := controller["tolerations"].([]helm.Values)
+			require.True(t, ok)
+			require.Len(t, tolerations, 1)
+			assert.Equal(t, "node.cloudprovider.kubernetes.io/uninitialized", tolerations[0]["key"])
+			assert.Equal(t, "Exists", tolerations[0]["operator"])
 		})
 	}
 }

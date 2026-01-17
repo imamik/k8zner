@@ -345,18 +345,23 @@ func verifyCRDExists(t *testing.T, kubeconfigPath, crdName string) {
 }
 
 func testMetricsAPI(t *testing.T, kubeconfigPath string) {
-	// Wait up to 2 minutes for metrics to be available
-	for i := 0; i < 12; i++ {
+	// Wait up to 3 minutes for metrics to be available
+	// Metrics server needs time to aggregate metrics from kubelets after startup
+	for i := 0; i < 18; i++ {
 		cmd := exec.CommandContext(context.Background(), "kubectl",
 			"--kubeconfig", kubeconfigPath,
 			"top", "nodes")
-		if err := cmd.Run(); err == nil {
+		output, err := cmd.CombinedOutput()
+		if err == nil {
 			t.Log("  ✓ Metrics API working")
 			return
 		}
+		if i%6 == 5 {
+			t.Logf("  Waiting for metrics API (attempt %d/18)... Error: %s", i+1, string(output))
+		}
 		time.Sleep(10 * time.Second)
 	}
-	t.Fatal("Metrics API not available after 2 minutes")
+	t.Fatal("Metrics API not available after 3 minutes")
 }
 
 // testCCMLoadBalancer tests CCM's ability to provision load balancers.
@@ -518,7 +523,8 @@ spec:
 	}
 
 	// Wait for pod to be running (confirms volume attached)
-	for i := 0; i < 36; i++ {
+	// Hetzner volume provisioning + attachment can take 3-4 minutes
+	for i := 0; i < 48; i++ {
 		cmd = exec.CommandContext(context.Background(), "kubectl",
 			"--kubeconfig", state.KubeconfigPath,
 			"get", "pod", podName, "-o", "jsonpath={.status.phase}")
@@ -527,8 +533,30 @@ spec:
 			t.Log("  ✓ CSI volume provisioned and mounted")
 			break
 		}
-		if i == 35 {
-			t.Fatal("  Timeout waiting for pod with CSI volume")
+		if i == 47 {
+			// Gather diagnostics before failing
+			t.Log("  Timeout - gathering diagnostics...")
+
+			// Get PVC status
+			pvcCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", state.KubeconfigPath,
+				"get", "pvc", pvcName, "-o", "wide")
+			if pvcOutput, _ := pvcCmd.CombinedOutput(); len(pvcOutput) > 0 {
+				t.Logf("  PVC status:\n%s", string(pvcOutput))
+			}
+
+			// Get pod events
+			descCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", state.KubeconfigPath,
+				"describe", "pod", podName)
+			if descOutput, _ := descCmd.CombinedOutput(); len(descOutput) > 0 {
+				t.Logf("  Pod description:\n%s", string(descOutput))
+			}
+
+			t.Fatal("  Timeout waiting for pod with CSI volume (4 minutes)")
+		}
+		if i > 0 && i%12 == 0 {
+			t.Logf("  Waiting for CSI volume (attempt %d/48, phase: %s)...", i+1, string(output))
 		}
 		time.Sleep(5 * time.Second)
 	}
