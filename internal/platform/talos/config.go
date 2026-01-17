@@ -251,7 +251,15 @@ func applyPatches(configBytes []byte, isControlPlane bool, hostname string) ([]b
 		cmExtraArgs["cloud-provider"] = "external"
 	}
 
-	// 2. Hostname
+	// 2. Disable default CNI (Flannel) to allow Cilium
+	// Talos includes Flannel as the default CNI, which conflicts with Cilium.
+	// Setting cni.name = "none" instructs Talos to not install any CNI,
+	// allowing Cilium to be deployed as the sole CNI provider.
+	clusterNetwork := getOrCreate(cluster, "network")
+	cni := getOrCreate(clusterNetwork, "cni")
+	cni["name"] = "none"
+
+	// 3. Hostname
 	if hostname != "" {
 		network := getOrCreate(machine, "network")
 		network["hostname"] = hostname
