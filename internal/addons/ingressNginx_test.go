@@ -68,12 +68,12 @@ func TestBuildIngressNginxValues(t *testing.T) {
 			// Check kind
 			assert.Equal(t, "Deployment", controller["kind"])
 
-			// Check admission webhooks - certManager enabled to avoid race conditions
+			// Check admission webhooks are disabled
+			// Admission webhooks require either Helm hooks or cert-manager integration,
+			// both of which have issues with kubectl apply workflow
 			webhooks, ok := controller["admissionWebhooks"].(helm.Values)
 			require.True(t, ok)
-			certManager, ok := webhooks["certManager"].(helm.Values)
-			require.True(t, ok)
-			assert.Equal(t, true, certManager["enabled"]) // Use cert-manager for webhook certs
+			assert.Equal(t, false, webhooks["enabled"])
 
 			// Check maxUnavailable
 			assert.Equal(t, 1, controller["maxUnavailable"])
@@ -182,118 +182,4 @@ func TestCreateIngressNginxNamespace(t *testing.T) {
 	assert.Contains(t, ns, "apiVersion: v1")
 	assert.Contains(t, ns, "kind: Namespace")
 	assert.Contains(t, ns, "name: ingress-nginx")
-}
-
-func TestSplitIngressNginxManifests(t *testing.T) {
-	// Sample manifests with cert-manager resources and other resources
-	manifests := `apiVersion: cert-manager.io/v1
-kind: Issuer
-metadata:
-  name: ingress-nginx-self-signed-issuer
-  namespace: ingress-nginx
-spec:
-  selfSigned: {}
----
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: ingress-nginx-admission
-  namespace: ingress-nginx
-spec:
-  secretName: ingress-nginx-admission
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: ingress-nginx
-  namespace: ingress-nginx
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: ingress-nginx-controller
-  namespace: ingress-nginx
-spec:
-  replicas: 2`
-
-	certManagerResources, otherResources := splitIngressNginxManifests(manifests)
-
-	// Verify cert-manager resources are split out
-	assert.Contains(t, certManagerResources, "kind: Issuer")
-	assert.Contains(t, certManagerResources, "kind: Certificate")
-	assert.NotContains(t, certManagerResources, "kind: ServiceAccount")
-	assert.NotContains(t, certManagerResources, "kind: Deployment")
-
-	// Verify other resources don't have cert-manager resources
-	assert.NotContains(t, otherResources, "kind: Issuer")
-	assert.NotContains(t, otherResources, "kind: Certificate")
-	assert.Contains(t, otherResources, "kind: ServiceAccount")
-	assert.Contains(t, otherResources, "kind: Deployment")
-}
-
-func TestSplitIngressNginxManifestsNoCertManager(t *testing.T) {
-	// Test when there are no cert-manager resources
-	manifests := `apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: ingress-nginx
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: ingress-nginx-controller`
-
-	certManagerResources, otherResources := splitIngressNginxManifests(manifests)
-
-	assert.Empty(t, certManagerResources)
-	assert.Contains(t, otherResources, "kind: ServiceAccount")
-	assert.Contains(t, otherResources, "kind: Deployment")
-}
-
-func TestIsCertManagerResource(t *testing.T) {
-	tests := []struct {
-		name     string
-		doc      string
-		expected bool
-	}{
-		{
-			name: "cert-manager Issuer",
-			doc: `apiVersion: cert-manager.io/v1
-kind: Issuer
-metadata:
-  name: test-issuer`,
-			expected: true,
-		},
-		{
-			name: "cert-manager Certificate",
-			doc: `apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: test-cert`,
-			expected: true,
-		},
-		{
-			name: "Kubernetes Deployment",
-			doc: `apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: test-deployment`,
-			expected: false,
-		},
-		{
-			name: "Kubernetes Service",
-			doc: `apiVersion: v1
-kind: Service
-metadata:
-  name: test-service`,
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := isCertManagerResource(tt.doc)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
 }
