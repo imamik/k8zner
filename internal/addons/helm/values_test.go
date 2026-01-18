@@ -248,3 +248,97 @@ func TestDeepMerge_RealWorldCSICase(t *testing.T) {
 	assert.Equal(t, "hcloud", existingSecret["name"])
 	assert.Equal(t, "token", existingSecret["key"])
 }
+
+func TestMergeCustomValues(t *testing.T) {
+	t.Run("nil custom values returns base unchanged", func(t *testing.T) {
+		base := Values{"replicas": 2, "image": "nginx"}
+		result := MergeCustomValues(base, nil)
+		assert.Equal(t, base, result)
+	})
+
+	t.Run("empty custom values returns base unchanged", func(t *testing.T) {
+		base := Values{"replicas": 2, "image": "nginx"}
+		result := MergeCustomValues(base, map[string]any{})
+		assert.Equal(t, base, result)
+	})
+
+	t.Run("custom values override base values", func(t *testing.T) {
+		base := Values{"replicas": 2, "image": "nginx"}
+		custom := map[string]any{"replicas": 5}
+		result := MergeCustomValues(base, custom)
+		assert.Equal(t, 5, result["replicas"])
+		assert.Equal(t, "nginx", result["image"])
+	})
+
+	t.Run("deep merge with nested custom values", func(t *testing.T) {
+		base := Values{
+			"controller": Values{
+				"replicas": 2,
+				"config": Values{
+					"setting1": "value1",
+					"setting2": "value2",
+				},
+			},
+		}
+		custom := map[string]any{
+			"controller": map[string]any{
+				"config": map[string]any{
+					"setting2": "override",
+					"setting3": "new",
+				},
+			},
+		}
+		result := MergeCustomValues(base, custom)
+
+		controller := toValuesMap(result["controller"])
+		require.NotNil(t, controller)
+		assert.Equal(t, 2, controller["replicas"], "replicas should be preserved")
+
+		config := toValuesMap(controller["config"])
+		require.NotNil(t, config)
+		assert.Equal(t, "value1", config["setting1"], "setting1 should be preserved")
+		assert.Equal(t, "override", config["setting2"], "setting2 should be overridden")
+		assert.Equal(t, "new", config["setting3"], "setting3 should be added")
+	})
+
+	t.Run("real-world helm override scenario", func(t *testing.T) {
+		// Simulates user overriding Cilium helm values
+		base := Values{
+			"ipam": Values{"mode": "kubernetes"},
+			"operator": Values{
+				"replicas": 1,
+				"nodeSelector": Values{
+					"node-role.kubernetes.io/control-plane": "",
+				},
+			},
+		}
+		custom := map[string]any{
+			"operator": map[string]any{
+				"replicas": 3,
+				"resources": map[string]any{
+					"limits": map[string]any{
+						"memory": "512Mi",
+					},
+				},
+			},
+		}
+		result := MergeCustomValues(base, custom)
+
+		// Check ipam preserved
+		ipam := toValuesMap(result["ipam"])
+		require.NotNil(t, ipam)
+		assert.Equal(t, "kubernetes", ipam["mode"])
+
+		// Check operator merged
+		operator := toValuesMap(result["operator"])
+		require.NotNil(t, operator)
+		assert.Equal(t, 3, operator["replicas"], "replicas should be overridden")
+
+		nodeSelector := toValuesMap(operator["nodeSelector"])
+		require.NotNil(t, nodeSelector, "nodeSelector should be preserved")
+		assert.Equal(t, "", nodeSelector["node-role.kubernetes.io/control-plane"])
+
+		resources := toValuesMap(operator["resources"])
+		require.NotNil(t, resources, "resources should be added")
+	})
+}

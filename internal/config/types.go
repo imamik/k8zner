@@ -15,6 +15,21 @@ type Config struct {
 	// Default: "public"
 	ClusterAccess string `mapstructure:"cluster_access" yaml:"cluster_access"`
 
+	// GracefulDestroy enables graceful node drain before deletion.
+	// See: terraform/variables.tf cluster_graceful_destroy
+	// Default: false
+	GracefulDestroy bool `mapstructure:"graceful_destroy" yaml:"graceful_destroy"`
+
+	// HealthcheckEnabled enables cluster health checks.
+	// See: terraform/variables.tf cluster_healthcheck_enabled
+	// Default: true
+	HealthcheckEnabled *bool `mapstructure:"healthcheck_enabled" yaml:"healthcheck_enabled"`
+
+	// DeleteProtection prevents accidental cluster deletion.
+	// See: terraform/variables.tf cluster_delete_protection
+	// Default: false
+	DeleteProtection bool `mapstructure:"delete_protection" yaml:"delete_protection"`
+
 	// Network Configuration
 	Network NetworkConfig `mapstructure:"network" yaml:"network"`
 
@@ -117,6 +132,10 @@ type ControlPlaneNodePool struct {
 	// See: terraform/variables.tf control_plane_nodepools.keep_disk
 	// Default: false
 	KeepDisk bool `mapstructure:"keep_disk" yaml:"keep_disk"`
+
+	// ConfigPatches allows applying raw Talos machine configuration patches.
+	// See: terraform/variables.tf control_plane_config_patches
+	ConfigPatches []string `mapstructure:"config_patches" yaml:"config_patches"`
 }
 
 // WorkerNodePool defines a node pool for workers.
@@ -142,6 +161,10 @@ type WorkerNodePool struct {
 	// See: terraform/variables.tf worker_nodepools.keep_disk
 	// Default: false
 	KeepDisk bool `mapstructure:"keep_disk" yaml:"keep_disk"`
+
+	// ConfigPatches allows applying raw Talos machine configuration patches.
+	// See: terraform/variables.tf worker_config_patches
+	ConfigPatches []string `mapstructure:"config_patches" yaml:"config_patches"`
 }
 
 // AutoscalerConfig defines the autoscaler configuration.
@@ -372,6 +395,11 @@ type KubernetesConfig struct {
 	// Enables the public interface for the Kubernetes API load balancer.
 	APILoadBalancerPublicNetwork *bool `mapstructure:"api_load_balancer_public_network" yaml:"api_load_balancer_public_network"`
 
+	// API Server Admission Control
+	// See: terraform/variables.tf kube_api_admission_control
+	// List of admission control plugins to enable.
+	AdmissionControl []AdmissionControlPlugin `mapstructure:"admission_control" yaml:"admission_control"`
+
 	// API Server Configuration
 	// See: terraform/variables.tf kube_api_admission_control, kube_api_extra_args
 	APIServerExtraArgs map[string]string `mapstructure:"api_server_extra_args" yaml:"api_server_extra_args"`
@@ -402,6 +430,16 @@ type OIDCConfig struct {
 // CNIConfig defines the CNI-related configuration.
 type CNIConfig struct {
 	Encryption string `mapstructure:"encryption" yaml:"encryption"` // ipsec, wireguard
+}
+
+// AdmissionControlPlugin defines an admission control plugin configuration.
+// See: terraform/variables.tf kube_api_admission_control
+type AdmissionControlPlugin struct {
+	// Name is the admission plugin name.
+	Name string `mapstructure:"name" yaml:"name"`
+
+	// Configuration is the plugin-specific configuration.
+	Configuration map[string]any `mapstructure:"configuration" yaml:"configuration"`
 }
 
 // AddonsConfig defines the addon-related configuration.

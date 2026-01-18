@@ -62,9 +62,12 @@ func buildIngressNginxValues(cfg *config.Config) helm.Values {
 
 	controller := buildIngressNginxController(nginxCfg, workerCount, replicas, kind)
 
-	return helm.Values{
+	values := helm.Values{
 		"controller": controller,
 	}
+
+	// Merge custom Helm values from config
+	return helm.MergeCustomValues(values, nginxCfg.Helm.Values)
 }
 
 // buildIngressNginxController creates the controller configuration.

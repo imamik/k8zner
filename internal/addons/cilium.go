@@ -156,7 +156,8 @@ func buildCiliumValues(cfg *config.Config) helm.Values {
 	// Operator configuration
 	values["operator"] = buildCiliumOperatorConfig(ciliumCfg, controlPlaneCount)
 
-	return values
+	// Merge custom Helm values from config
+	return helm.MergeCustomValues(values, ciliumCfg.Helm.Values)
 }
 
 // buildCiliumGatewayAPIConfig creates Gateway API configuration.

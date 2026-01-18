@@ -45,7 +45,7 @@ func buildCertManagerValues(cfg *config.Config) helm.Values {
 
 	baseConfig := buildCertManagerBaseConfig(replicas)
 
-	return helm.Values{
+	values := helm.Values{
 		"crds":                      helm.Values{"enabled": true},
 		"startupapicheck":           helm.Values{"enabled": false},
 		"config":                    buildCertManagerConfig(cfg),
@@ -69,6 +69,9 @@ func buildCertManagerValues(cfg *config.Config) helm.Values {
 			"tolerations":               baseConfig["tolerations"],
 		},
 	}
+
+	// Merge custom Helm values from config
+	return helm.MergeCustomValues(values, cfg.Addons.CertManager.Helm.Values)
 }
 
 // buildCertManagerBaseConfig creates the base configuration shared by all components.

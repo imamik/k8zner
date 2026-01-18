@@ -39,7 +39,7 @@ func applyLonghorn(ctx context.Context, kubeconfigPath string, cfg *config.Confi
 func buildLonghornValues(cfg *config.Config) helm.Values {
 	clusterAutoscalerEnabled := hasClusterAutoscaler(cfg)
 
-	return helm.Values{
+	values := helm.Values{
 		// Hotfix for https://github.com/longhorn/longhorn/issues/12259
 		"image": helm.Values{
 			"longhorn": helm.Values{
@@ -70,16 +70,16 @@ func buildLonghornValues(cfg *config.Config) helm.Values {
 			},
 		},
 	}
+
+	// Merge custom Helm values from config
+	return helm.MergeCustomValues(values, cfg.Addons.Longhorn.Helm.Values)
 }
 
 // hasClusterAutoscaler checks if cluster autoscaler is configured.
 // In terraform this is: local.cluster_autoscaler_enabled
 // which checks if length(local.cluster_autoscaler_nodepools) > 0
-func hasClusterAutoscaler(_ *config.Config) bool {
-	// Check if any worker pools have autoscaling configured
-	// This would need to be extended once autoscaling config is added
-	// For now, return false to match typical non-autoscaling setups
-	return false
+func hasClusterAutoscaler(cfg *config.Config) bool {
+	return cfg.Addons.ClusterAutoscaler.Enabled && len(cfg.Autoscaler.NodePools) > 0
 }
 
 // createLonghornNamespace returns the longhorn-system namespace with pod security labels.

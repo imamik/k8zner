@@ -8,11 +8,12 @@ import (
 	"os/exec"
 
 	"hcloud-k8s/internal/addons/helm"
+	"hcloud-k8s/internal/config"
 )
 
 // applyCSI installs the Hetzner Cloud CSI driver.
 // See: terraform/hcloud.tf (hcloud_csi)
-func applyCSI(ctx context.Context, kubeconfigPath, _ string, controlPlaneCount int, defaultStorageClass bool) error {
+func applyCSI(ctx context.Context, kubeconfigPath string, cfg *config.Config) error {
 	// Generate encryption passphrase
 	encryptionKey, err := generateEncryptionKey(32)
 	if err != nil {
@@ -25,7 +26,7 @@ func applyCSI(ctx context.Context, kubeconfigPath, _ string, controlPlaneCount i
 	}
 
 	// Build CSI values matching terraform configuration
-	values := buildCSIValues(controlPlaneCount, defaultStorageClass)
+	values := buildCSIValues(cfg)
 
 	// Render helm chart with values
 	manifestBytes, err := helm.RenderChart("hcloud-csi", "kube-system", values)
@@ -43,7 +44,10 @@ func applyCSI(ctx context.Context, kubeconfigPath, _ string, controlPlaneCount i
 
 // buildCSIValues creates helm values matching terraform configuration.
 // See: terraform/hcloud.tf lines 119-156
-func buildCSIValues(controlPlaneCount int, defaultStorageClass bool) helm.Values {
+func buildCSIValues(cfg *config.Config) helm.Values {
+	controlPlaneCount := getControlPlaneCount(cfg)
+	defaultStorageClass := cfg.Addons.CSI.DefaultStorageClass
+
 	replicas := 1
 	if controlPlaneCount > 1 {
 		replicas = 2
@@ -67,7 +71,7 @@ func buildCSIValues(controlPlaneCount int, defaultStorageClass bool) helm.Values
 		},
 	}
 
-	return helm.Values{
+	values := helm.Values{
 		"controller": helm.Values{
 			"replicaCount": replicas,
 			"hcloudToken": helm.Values{
@@ -113,6 +117,9 @@ func buildCSIValues(controlPlaneCount int, defaultStorageClass bool) helm.Values
 		},
 		"storageClasses": storageClasses,
 	}
+
+	// Merge custom Helm values from config
+	return helm.MergeCustomValues(values, cfg.Addons.CSI.Helm.Values)
 }
 
 // createCSISecret creates the hcloud-csi-secret for volume encryption.

@@ -58,7 +58,8 @@ func buildMetricsServerValues(cfg *config.Config) helm.Values {
 		values["tolerations"] = buildControlPlaneTolerations()
 	}
 
-	return values
+	// Merge custom Helm values from config
+	return helm.MergeCustomValues(values, cfg.Addons.MetricsServer.Helm.Values)
 }
 
 // buildMetricsServerPDB creates the pod disruption budget configuration.

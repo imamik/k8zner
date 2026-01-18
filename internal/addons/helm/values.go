@@ -125,3 +125,13 @@ func convertToInterface(v any) any {
 		return v
 	}
 }
+
+// MergeCustomValues merges custom Helm values from config into default values.
+// Custom values take precedence over defaults. The custom values map[string]any
+// is deeply merged with the base Values.
+func MergeCustomValues(base Values, customValues map[string]any) Values {
+	if len(customValues) == 0 {
+		return base
+	}
+	return DeepMerge(base, Values(customValues))
+}

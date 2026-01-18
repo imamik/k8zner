@@ -231,5 +231,6 @@ func buildClusterAutoscalerValues(cfg *config.Config, networkID int64, sshKeyNam
 		}
 	}
 
-	return values
+	// Merge custom Helm values from config
+	return helm.MergeCustomValues(values, cfg.Addons.ClusterAutoscaler.Helm.Values)
 }

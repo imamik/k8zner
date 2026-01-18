@@ -66,7 +66,8 @@ func buildCCMValues(cfg *config.Config, _ int64) helm.Values {
 		values["env"] = env
 	}
 
-	return values
+	// Merge custom Helm values from config
+	return helm.MergeCustomValues(values, ccm.Helm.Values)
 }
 
 // buildCCMEnvVars builds the environment variables for CCM load balancer configuration.
