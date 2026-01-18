@@ -10,6 +10,10 @@ import (
 )
 
 func TestBuildMetricsServerValues(t *testing.T) {
+	// Helper for creating bool pointers
+	boolPtr := func(b bool) *bool { return &b }
+	intPtr := func(i int) *int { return &i }
+
 	tests := []struct {
 		name                     string
 		cfg                      *config.Config
@@ -81,6 +85,74 @@ func TestBuildMetricsServerValues(t *testing.T) {
 			expectedScheduleOnCP:     true,
 			expectedNodeSelectorKeys: []string{"node-role.kubernetes.io/control-plane"},
 			expectedTolerationsCount: 2, // control-plane + CCM uninitialized
+		},
+		// New tests for explicit config overrides
+		{
+			name: "explicit schedule_on_control_plane override",
+			cfg: &config.Config{
+				ControlPlane: config.ControlPlaneConfig{
+					NodePools: []config.ControlPlaneNodePool{
+						{Count: 3},
+					},
+				},
+				Workers: []config.WorkerNodePool{
+					{Count: 5},
+				},
+				Addons: config.AddonsConfig{
+					MetricsServer: config.MetricsServerConfig{
+						Enabled:                true,
+						ScheduleOnControlPlane: boolPtr(true), // Force scheduling on CP even with workers
+					},
+				},
+			},
+			expectedReplicas:         2, // Based on CP count since scheduling on CP
+			expectedScheduleOnCP:     true,
+			expectedNodeSelectorKeys: []string{"node-role.kubernetes.io/control-plane"},
+			expectedTolerationsCount: 2,
+		},
+		{
+			name: "explicit replicas override",
+			cfg: &config.Config{
+				ControlPlane: config.ControlPlaneConfig{
+					NodePools: []config.ControlPlaneNodePool{
+						{Count: 1},
+					},
+				},
+				Workers: []config.WorkerNodePool{},
+				Addons: config.AddonsConfig{
+					MetricsServer: config.MetricsServerConfig{
+						Enabled:  true,
+						Replicas: intPtr(3), // Override to 3 replicas
+					},
+				},
+			},
+			expectedReplicas:         3, // Explicit override
+			expectedScheduleOnCP:     true,
+			expectedNodeSelectorKeys: []string{"node-role.kubernetes.io/control-plane"},
+			expectedTolerationsCount: 2,
+		},
+		{
+			name: "explicit schedule_on_control_plane disabled with no workers",
+			cfg: &config.Config{
+				ControlPlane: config.ControlPlaneConfig{
+					NodePools: []config.ControlPlaneNodePool{
+						{Count: 3},
+					},
+				},
+				Workers: []config.WorkerNodePool{},
+				Addons: config.AddonsConfig{
+					MetricsServer: config.MetricsServerConfig{
+						Enabled:                true,
+						ScheduleOnControlPlane: boolPtr(false), // Force disable CP scheduling
+					},
+				},
+			},
+			// Note: This is a misconfiguration (no workers, but CP scheduling disabled)
+			// With 0 workers and CP scheduling disabled, nodeCount = 0, so replicas = 1
+			expectedReplicas:         1,
+			expectedScheduleOnCP:     false,
+			expectedNodeSelectorKeys: nil,
+			expectedTolerationsCount: 0,
 		},
 	}
 

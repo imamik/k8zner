@@ -9,6 +9,7 @@ import (
 
 	"hcloud-k8s/internal/config"
 	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
+	"hcloud-k8s/internal/provisioning"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
@@ -52,8 +53,8 @@ func (m *MockTalosProducer) GetNodeVersion(ctx context.Context, endpoint string)
 	return args.String(0), args.Error(1)
 }
 
-func (m *MockTalosProducer) UpgradeNode(ctx context.Context, endpoint, imageURL string) error {
-	args := m.Called(ctx, endpoint, imageURL)
+func (m *MockTalosProducer) UpgradeNode(ctx context.Context, endpoint, imageURL string, opts provisioning.UpgradeOptions) error {
+	args := m.Called(ctx, endpoint, imageURL, opts)
 	return args.Error(0)
 }
 

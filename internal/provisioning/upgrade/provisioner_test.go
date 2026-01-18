@@ -18,7 +18,7 @@ import (
 // mockTalosClient implements TalosConfigProducer for testing.
 type mockTalosClient struct {
 	GetNodeVersionFunc    func(ctx context.Context, endpoint string) (string, error)
-	UpgradeNodeFunc       func(ctx context.Context, endpoint, imageURL string) error
+	UpgradeNodeFunc       func(ctx context.Context, endpoint, imageURL string, opts provisioning.UpgradeOptions) error
 	UpgradeKubernetesFunc func(ctx context.Context, endpoint, targetVersion string) error
 	WaitForNodeReadyFunc  func(ctx context.Context, endpoint string, timeout time.Duration) error
 	HealthCheckFunc       func(ctx context.Context, endpoint string) error
@@ -31,9 +31,9 @@ func (m *mockTalosClient) GetNodeVersion(ctx context.Context, endpoint string) (
 	return "v1.8.3", nil
 }
 
-func (m *mockTalosClient) UpgradeNode(ctx context.Context, endpoint, imageURL string) error {
+func (m *mockTalosClient) UpgradeNode(ctx context.Context, endpoint, imageURL string, opts provisioning.UpgradeOptions) error {
 	if m.UpgradeNodeFunc != nil {
-		return m.UpgradeNodeFunc(ctx, endpoint, imageURL)
+		return m.UpgradeNodeFunc(ctx, endpoint, imageURL, opts)
 	}
 	return nil
 }
@@ -240,7 +240,7 @@ func TestUpgradeControlPlane_SkipsNodesAlreadyAtTargetVersion(t *testing.T) {
 		GetNodeVersionFunc: func(_ context.Context, endpoint string) (string, error) {
 			return nodeVersions[endpoint], nil
 		},
-		UpgradeNodeFunc: func(_ context.Context, _, _ string) error {
+		UpgradeNodeFunc: func(_ context.Context, _, _ string, _ provisioning.UpgradeOptions) error {
 			upgradeCallCount++
 			return nil
 		},
@@ -287,7 +287,7 @@ func TestUpgradeControlPlane_DryRun(t *testing.T) {
 	}
 
 	mockTalos := &mockTalosClient{
-		UpgradeNodeFunc: func(_ context.Context, _, _ string) error {
+		UpgradeNodeFunc: func(_ context.Context, _, _ string, _ provisioning.UpgradeOptions) error {
 			upgradeCallCount++
 			return nil
 		},
@@ -347,7 +347,7 @@ func TestUpgradeWorkers_SkipsNodesAlreadyAtTargetVersion(t *testing.T) {
 		GetNodeVersionFunc: func(_ context.Context, endpoint string) (string, error) {
 			return nodeVersions[endpoint], nil
 		},
-		UpgradeNodeFunc: func(_ context.Context, _, _ string) error {
+		UpgradeNodeFunc: func(_ context.Context, _, _ string, _ provisioning.UpgradeOptions) error {
 			upgradeCallCount++
 			return nil
 		},
@@ -532,7 +532,7 @@ func TestUpgradeNode_BuildsCorrectImageURL(t *testing.T) {
 	var capturedImageURL string
 
 	mockTalos := &mockTalosClient{
-		UpgradeNodeFunc: func(_ context.Context, _, imageURL string) error {
+		UpgradeNodeFunc: func(_ context.Context, _, imageURL string, _ provisioning.UpgradeOptions) error {
 			capturedImageURL = imageURL
 			return nil
 		},

@@ -20,6 +20,7 @@ import (
 // manifests to the cluster using kubectl. Currently supports:
 //   - Gateway API CRDs
 //   - Prometheus Operator CRDs
+//   - Talos Cloud Controller Manager (Talos CCM)
 //   - Cilium CNI
 //   - Hetzner Cloud Controller Manager (CCM)
 //   - Hetzner Cloud CSI Driver
@@ -58,6 +59,13 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 	if cfg.Addons.PrometheusOperatorCRDs.Enabled {
 		if err := applyPrometheusOperatorCRDs(ctx, tmpKubeconfig, cfg); err != nil {
 			return fmt.Errorf("failed to install Prometheus Operator CRDs: %w", err)
+		}
+	}
+
+	// Install Talos CCM (node lifecycle management)
+	if cfg.Addons.TalosCCM.Enabled {
+		if err := applyTalosCCM(ctx, tmpKubeconfig, cfg); err != nil {
+			return fmt.Errorf("failed to install Talos CCM: %w", err)
 		}
 	}
 

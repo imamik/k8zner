@@ -15,6 +15,7 @@ import (
 	"hcloud-k8s/internal/orchestration"
 	"hcloud-k8s/internal/platform/hcloud"
 	"hcloud-k8s/internal/platform/talos"
+	"hcloud-k8s/internal/util/prerequisites"
 )
 
 const (
@@ -47,6 +48,11 @@ func Apply(ctx context.Context, configPath string) error {
 		return err
 	}
 
+	// Run prerequisites check if enabled (default: true)
+	if err := checkPrerequisites(cfg); err != nil {
+		return err
+	}
+
 	log.Printf("Applying configuration for cluster: %s", cfg.ClusterName)
 
 	client := initializeClient()
@@ -68,7 +74,7 @@ func Apply(ctx context.Context, configPath string) error {
 		return err
 	}
 
-	printSuccess(kubeconfig)
+	printSuccess(kubeconfig, cfg)
 	return nil
 }
 
@@ -159,18 +165,80 @@ func writeKubeconfig(kubeconfig []byte) error {
 
 // printSuccess outputs completion message and next steps for the user.
 // Message varies depending on whether this was initial bootstrap or re-apply.
-func printSuccess(kubeconfig []byte) {
+func printSuccess(kubeconfig []byte, cfg *config.Config) {
 	fmt.Printf("\nReconciliation complete!\n")
 	fmt.Printf("Secrets saved to: %s\n", secretsFile)
 	fmt.Printf("Talos config saved to: %s\n", talosConfigPath)
 
 	if len(kubeconfig) > 0 {
-		fmt.Printf("Kubeconfig saved to: %s\n\n", kubeconfigPath)
-		fmt.Printf("You can now access your cluster with:\n")
+		fmt.Printf("Kubeconfig saved to: %s\n", kubeconfigPath)
+		fmt.Printf("\nYou can now access your cluster with:\n")
 		fmt.Printf("  export KUBECONFIG=%s\n", kubeconfigPath)
 		fmt.Printf("  kubectl get nodes\n")
 	} else {
 		fmt.Printf("\nNote: Cluster was already bootstrapped. To retrieve kubeconfig, use talosctl:\n")
 		fmt.Printf("  talosctl --talosconfig %s kubeconfig\n", talosConfigPath)
 	}
+
+	// Print Cilium encryption info if Cilium is enabled
+	printCiliumEncryptionInfo(cfg)
+}
+
+// printCiliumEncryptionInfo outputs Cilium encryption settings.
+// Matches terraform/outputs.tf cilium_encryption_info output.
+func printCiliumEncryptionInfo(cfg *config.Config) {
+	if !cfg.Addons.Cilium.Enabled {
+		return
+	}
+
+	cilium := cfg.Addons.Cilium
+	if !cilium.EncryptionEnabled {
+		fmt.Printf("\nCilium encryption: disabled\n")
+		return
+	}
+
+	fmt.Printf("\nCilium encryption info:\n")
+	fmt.Printf("  Enabled: %t\n", cilium.EncryptionEnabled)
+	fmt.Printf("  Type: %s\n", cilium.EncryptionType)
+
+	if cilium.EncryptionType == "ipsec" {
+		fmt.Printf("  IPsec settings:\n")
+		fmt.Printf("    Algorithm: %s\n", cilium.IPSecAlgorithm)
+		fmt.Printf("    Key size (bits): %d\n", cilium.IPSecKeySize)
+		fmt.Printf("    Key ID: %d\n", cilium.IPSecKeyID)
+		fmt.Printf("    Secret name: cilium-ipsec-keys\n")
+		fmt.Printf("    Namespace: kube-system\n")
+	}
+}
+
+// checkPrerequisites verifies required client tools are available.
+// Enabled by default, can be disabled via prerequisites_check_enabled: false.
+func checkPrerequisites(cfg *config.Config) error {
+	// Default to enabled if not explicitly set
+	enabled := cfg.PrerequisitesCheckEnabled == nil || *cfg.PrerequisitesCheckEnabled
+
+	if !enabled {
+		return nil
+	}
+
+	log.Println("Checking prerequisites...")
+	results := prerequisites.CheckDefault()
+
+	// Log found tools
+	for _, r := range results.Results {
+		if r.Found {
+			version := r.Version
+			if version == "" {
+				version = "unknown version"
+			}
+			log.Printf("  Found %s (%s)", r.Tool.Name, version)
+		}
+	}
+
+	// Return error if required tools are missing
+	if err := results.Error(); err != nil {
+		return fmt.Errorf("prerequisites check failed: %w", err)
+	}
+
+	return nil
 }

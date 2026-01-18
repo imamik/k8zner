@@ -57,12 +57,6 @@ func (p *Provisioner) EnsureAllImages(ctx *provisioning.Context) error {
 		k8sVersion = "v1.31.0"
 	}
 
-	// Get location from first control plane node, or default to nbg1
-	location := "nbg1"
-	if len(ctx.Config.ControlPlane.NodePools) > 0 && ctx.Config.ControlPlane.NodePools[0].Location != "" {
-		location = ctx.Config.ControlPlane.NodePools[0].Location
-	}
-
 	// Build images in parallel using async.RunParallel
 	archList := getKeys(architectures)
 	tasks := make([]async.Task, len(archList))
@@ -72,7 +66,9 @@ func (p *Provisioner) EnsureAllImages(ctx *provisioning.Context) error {
 		tasks[i] = async.Task{
 			Name: fmt.Sprintf("image-%s", arch),
 			Func: func(_ context.Context) error {
-				return p.ensureImageForArch(ctx, arch, talosVersion, k8sVersion, location)
+				// Get architecture-specific server type and location from config
+				serverType, location := p.getImageBuilderConfig(ctx, arch)
+				return p.ensureImageForArch(ctx, arch, talosVersion, k8sVersion, serverType, location)
 			},
 		}
 	}
@@ -94,8 +90,38 @@ func getKeys(m map[string]bool) []string {
 	return keys
 }
 
+// getImageBuilderConfig returns the server type and location for building images of the given architecture.
+// Uses config values if set, otherwise returns defaults (architecture-appropriate server type, nbg1 location).
+func (p *Provisioner) getImageBuilderConfig(ctx *provisioning.Context, arch string) (serverType, location string) {
+	// Get location from first control plane node as default
+	location = "nbg1"
+	if len(ctx.Config.ControlPlane.NodePools) > 0 && ctx.Config.ControlPlane.NodePools[0].Location != "" {
+		location = ctx.Config.ControlPlane.NodePools[0].Location
+	}
+
+	// Get architecture-specific config (serverType defaults to empty, meaning auto-detect)
+	switch arch {
+	case "amd64":
+		if ctx.Config.Talos.ImageBuilder.AMD64.ServerType != "" {
+			serverType = ctx.Config.Talos.ImageBuilder.AMD64.ServerType
+		}
+		if ctx.Config.Talos.ImageBuilder.AMD64.ServerLocation != "" {
+			location = ctx.Config.Talos.ImageBuilder.AMD64.ServerLocation
+		}
+	case "arm64":
+		if ctx.Config.Talos.ImageBuilder.ARM64.ServerType != "" {
+			serverType = ctx.Config.Talos.ImageBuilder.ARM64.ServerType
+		}
+		if ctx.Config.Talos.ImageBuilder.ARM64.ServerLocation != "" {
+			location = ctx.Config.Talos.ImageBuilder.ARM64.ServerLocation
+		}
+	}
+
+	return serverType, location
+}
+
 // ensureImageForArch ensures a Talos image exists for the given architecture.
-func (p *Provisioner) ensureImageForArch(ctx *provisioning.Context, arch, talosVersion, k8sVersion, location string) error {
+func (p *Provisioner) ensureImageForArch(ctx *provisioning.Context, arch, talosVersion, k8sVersion, serverType, location string) error {
 	labels := map[string]string{
 		"os":            "talos",
 		"talos-version": talosVersion,
@@ -121,7 +147,7 @@ func (p *Provisioner) ensureImageForArch(ctx *provisioning.Context, arch, talosV
 		return fmt.Errorf("image builder not available")
 	}
 
-	snapshotID, err := builder.Build(ctx, talosVersion, k8sVersion, arch, location, labels)
+	snapshotID, err := builder.Build(ctx, talosVersion, k8sVersion, arch, serverType, location, labels)
 	if err != nil {
 		return fmt.Errorf("failed to build image: %w", err)
 	}
