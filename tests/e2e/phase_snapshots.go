@@ -89,7 +89,7 @@ func buildSnapshot(ctx context.Context, builder *image.Builder, arch, clusterNam
 	}
 
 	startTime := time.Now()
-	snapshotID, err := builder.Build(ctx, talosVersion, k8sVersion, arch, "nbg1", labels)
+	snapshotID, err := builder.Build(ctx, talosVersion, k8sVersion, arch, "", "nbg1", labels)
 	if err != nil {
 		return "", fmt.Errorf("snapshot build failed: %w", err)
 	}

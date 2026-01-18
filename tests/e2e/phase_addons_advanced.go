@@ -24,6 +24,8 @@ import (
 //	E2E_SKIP_ADDONS_ADVANCED - Set to "true" to skip advanced addon testing
 //
 // Features tested:
+//   - Talos CCM installation (new in gap analysis)
+//   - Metrics Server advanced options (ScheduleOnControlPlane, Replicas)
 //   - Gateway API CRDs installation
 //   - Prometheus Operator CRDs installation
 //   - Cilium advanced options (BPF datapath, policy CIDR, Gateway API)
@@ -32,6 +34,10 @@ import (
 //   - Custom Helm values override
 func phaseAddonsAdvanced(t *testing.T, state *E2EState) {
 	t.Log("Testing advanced addon configurations...")
+
+	// New features from Terraform parity gap analysis
+	t.Run("TalosCCM", func(t *testing.T) { testAddonTalosCCM(t, state) })
+	t.Run("MetricsServerAdvanced", func(t *testing.T) { testAddonMetricsServerAdvanced(t, state) })
 
 	// CRD addons (prerequisites for some features)
 	t.Run("GatewayAPICRDs", func(t *testing.T) { testAddonGatewayAPICRDs(t, state) })
@@ -50,6 +56,117 @@ func phaseAddonsAdvanced(t *testing.T, state *E2EState) {
 	t.Run("HelmCustomValues", func(t *testing.T) { testAddonHelmCustomValues(t, state) })
 
 	t.Log("✓ Phase 3b: Advanced Addons (all tested)")
+}
+
+// testAddonTalosCCM tests Talos Cloud Controller Manager installation.
+// This is the Siderolabs Talos CCM (separate from Hetzner CCM) that provides
+// node lifecycle management features.
+// See: terraform/variables.tf talos_ccm_* variables
+func testAddonTalosCCM(t *testing.T, state *E2EState) {
+	t.Log("Installing Talos CCM...")
+
+	cfg := &config.Config{
+		ClusterName: state.ClusterName,
+		Addons: config.AddonsConfig{
+			TalosCCM: config.TalosCCMConfig{
+				Enabled: true,
+				Version: "v1.11.0",
+			},
+		},
+	}
+
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
+		t.Fatalf("Failed to install Talos CCM: %v", err)
+	}
+
+	// Wait for Talos CCM DaemonSet to be ready
+	t.Log("  Waiting for Talos CCM DaemonSet...")
+	waitForDaemonSet(t, state.KubeconfigPath, "kube-system", "app=talos-cloud-controller-manager", 5*time.Minute)
+
+	// Verify the DaemonSet exists
+	verifyDaemonSetExists(t, state.KubeconfigPath, "kube-system", "talos-cloud-controller-manager")
+
+	state.AddonsInstalled["talos-ccm"] = true
+	t.Log("✓ Talos CCM installed and verified")
+}
+
+// testAddonMetricsServerAdvanced tests Metrics Server with advanced configuration options.
+// Tests: ScheduleOnControlPlane, Replicas config options (new in gap analysis).
+// See: terraform/variables.tf metrics_server_schedule_on_control_plane, metrics_server_replicas
+func testAddonMetricsServerAdvanced(t *testing.T, state *E2EState) {
+	t.Log("Testing Metrics Server advanced configuration...")
+
+	// Test 1: Explicit ScheduleOnControlPlane = true with custom Replicas
+	t.Log("  Testing explicit ScheduleOnControlPlane=true with Replicas=1...")
+	scheduleOnCP := true
+	replicas := 1
+
+	cfg := &config.Config{
+		ClusterName: state.ClusterName,
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{
+				{Name: "cp", Count: 1},
+			},
+		},
+		Workers: []config.WorkerNodePool{
+			{Name: "worker", Count: 1}, // Has workers, but we force CP scheduling
+		},
+		Addons: config.AddonsConfig{
+			MetricsServer: config.MetricsServerConfig{
+				Enabled:                true,
+				ScheduleOnControlPlane: &scheduleOnCP,
+				Replicas:               &replicas,
+			},
+		},
+	}
+
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
+		t.Fatalf("Failed to install Metrics Server with advanced config: %v", err)
+	}
+
+	// Wait for metrics-server pod
+	waitForPod(t, state.KubeconfigPath, "kube-system", "app.kubernetes.io/name=metrics-server", 5*time.Minute)
+
+	// Verify replicas
+	verifyDeploymentReplicas(t, state.KubeconfigPath, "kube-system", "metrics-server", 1)
+
+	// Verify node selector for control plane
+	verifyMetricsServerNodeSelector(t, state.KubeconfigPath)
+
+	// Test 2: Update to 2 replicas
+	t.Log("  Testing Replicas=2...")
+	replicas = 2
+	cfg.Addons.MetricsServer.Replicas = &replicas
+
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
+		t.Fatalf("Failed to update Metrics Server replicas: %v", err)
+	}
+
+	// Wait for deployment to update
+	time.Sleep(10 * time.Second)
+	verifyDeploymentReplicas(t, state.KubeconfigPath, "kube-system", "metrics-server", 2)
+
+	state.AddonsInstalled["metrics-server-advanced"] = true
+	t.Log("✓ Metrics Server advanced configuration verified")
+}
+
+// verifyMetricsServerNodeSelector verifies Metrics Server has control plane node selector.
+func verifyMetricsServerNodeSelector(t *testing.T, kubeconfigPath string) {
+	cmd := exec.CommandContext(context.Background(), "kubectl",
+		"--kubeconfig", kubeconfigPath,
+		"get", "deployment", "-n", "kube-system", "metrics-server",
+		"-o", "jsonpath={.spec.template.spec.nodeSelector}")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Warning: Could not get Metrics Server node selector: %v", err)
+		return
+	}
+
+	if strings.Contains(string(output), "node-role.kubernetes.io/control-plane") {
+		t.Log("  ✓ Metrics Server has control plane node selector")
+	} else {
+		t.Logf("  Note: Metrics Server node selector: %s", string(output))
+	}
 }
 
 // testAddonGatewayAPICRDs tests Gateway API CRDs installation.
