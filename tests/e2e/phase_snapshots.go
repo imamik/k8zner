@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"hcloud-k8s/internal/provisioning/image"
+	"hcloud-k8s/internal/util/keygen"
 )
 
 const (
@@ -69,10 +70,17 @@ func phaseSnapshots(t *testing.T, state *E2EState) {
 		t.Logf("✓ Built %s snapshot: %s", res.arch, res.snapshotID)
 	}
 
+	// Create temporary SSH key for verification servers
+	verifyKeyName, cleanupKey, err := createVerificationSSHKey(ctx, t, state)
+	if err != nil {
+		t.Fatalf("Failed to create verification SSH key: %v", err)
+	}
+	defer cleanupKey()
+
 	// Verify both snapshots boot correctly
 	t.Log("Verifying snapshots boot correctly...")
-	verifySnapshot(ctx, t, state, "amd64", state.SnapshotAMD64)
-	verifySnapshot(ctx, t, state, "arm64", state.SnapshotARM64)
+	verifySnapshot(ctx, t, state, "amd64", state.SnapshotAMD64, verifyKeyName)
+	verifySnapshot(ctx, t, state, "arm64", state.SnapshotARM64, verifyKeyName)
 
 	t.Log("✓ Phase 1: Snapshots (built and verified)")
 }
@@ -99,8 +107,40 @@ func buildSnapshot(ctx context.Context, builder *image.Builder, arch, clusterNam
 	return snapshotID, nil
 }
 
+// createVerificationSSHKey creates a temporary SSH key for snapshot verification.
+// Returns the key name and a cleanup function to delete the key.
+func createVerificationSSHKey(ctx context.Context, t *testing.T, state *E2EState) (string, func(), error) {
+	keyName := fmt.Sprintf("%s-verify-key-%d", state.ClusterName, time.Now().UnixNano())
+
+	keyPair, err := keygen.GenerateRSAKeyPair(2048)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to generate key pair: %w", err)
+	}
+
+	labels := map[string]string{
+		"cluster": state.ClusterName,
+		"test-id": state.TestID,
+		"type":    "e2e-verify-key",
+	}
+
+	_, err = state.Client.CreateSSHKey(ctx, keyName, string(keyPair.PublicKey), labels)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to upload SSH key: %w", err)
+	}
+
+	cleanup := func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+		defer cancel()
+		if err := state.Client.DeleteSSHKey(cleanupCtx, keyName); err != nil {
+			t.Logf("Warning: failed to delete verification SSH key %s: %v", keyName, err)
+		}
+	}
+
+	return keyName, cleanup, nil
+}
+
 // verifySnapshot creates a test server from the snapshot and verifies Talos boots.
-func verifySnapshot(ctx context.Context, t *testing.T, state *E2EState, arch, snapshotID string) {
+func verifySnapshot(ctx context.Context, t *testing.T, state *E2EState, arch, snapshotID, sshKeyName string) {
 	serverName := fmt.Sprintf("%s-verify-%s-%d", state.ClusterName, arch, time.Now().Unix())
 
 	serverType := "cpx22"
@@ -116,7 +156,7 @@ func verifySnapshot(ctx context.Context, t *testing.T, state *E2EState, arch, sn
 	}
 
 	t.Logf("Creating verification server %s from snapshot...", serverName)
-	_, err := state.Client.CreateServer(ctx, serverName, snapshotID, serverType, "", []string{state.SSHKeyName}, labels, "", nil, 0, "")
+	_, err := state.Client.CreateServer(ctx, serverName, snapshotID, serverType, "", []string{sshKeyName}, labels, "", nil, 0, "")
 	if err != nil {
 		t.Fatalf("Failed to create verification server: %v", err)
 	}
