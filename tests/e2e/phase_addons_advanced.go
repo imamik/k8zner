@@ -81,7 +81,7 @@ func testAddonTalosCCM(t *testing.T, state *E2EState) {
 
 	// Wait for Talos CCM DaemonSet to be ready
 	t.Log("  Waiting for Talos CCM DaemonSet...")
-	waitForDaemonSet(t, state.KubeconfigPath, "kube-system", "app=talos-cloud-controller-manager", 5*time.Minute)
+	waitForDaemonSet(t, state.KubeconfigPath, "kube-system", "app.kubernetes.io/name=talos-cloud-controller-manager", 5*time.Minute)
 
 	// Verify the DaemonSet exists
 	verifyDaemonSetExists(t, state.KubeconfigPath, "kube-system", "talos-cloud-controller-manager")
