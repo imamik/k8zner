@@ -10,11 +10,12 @@ import (
 // E2EConfig controls which phases of E2E tests to run.
 type E2EConfig struct {
 	// Phase control
-	SkipSnapshots bool
-	SkipCluster   bool
-	SkipAddons    bool
-	SkipScale     bool
-	SkipUpgrade   bool
+	SkipSnapshots       bool
+	SkipCluster         bool
+	SkipAddons          bool
+	SkipAddonsAdvanced  bool
+	SkipScale           bool
+	SkipUpgrade         bool
 
 	// Cluster reuse
 	ReuseCluster   bool   // Use existing cluster instead of creating new one
@@ -35,11 +36,12 @@ type E2EConfig struct {
 func LoadE2EConfig() *E2EConfig {
 	return &E2EConfig{
 		// Phase control
-		SkipSnapshots: getEnvBool("E2E_SKIP_SNAPSHOTS"),
-		SkipCluster:   getEnvBool("E2E_SKIP_CLUSTER"),
-		SkipAddons:    getEnvBool("E2E_SKIP_ADDONS"),
-		SkipScale:     getEnvBool("E2E_SKIP_SCALE"),
-		SkipUpgrade:   getEnvBool("E2E_SKIP_UPGRADE"),
+		SkipSnapshots:      getEnvBool("E2E_SKIP_SNAPSHOTS"),
+		SkipCluster:        getEnvBool("E2E_SKIP_CLUSTER"),
+		SkipAddons:         getEnvBool("E2E_SKIP_ADDONS"),
+		SkipAddonsAdvanced: getEnvBool("E2E_SKIP_ADDONS_ADVANCED"),
+		SkipScale:          getEnvBool("E2E_SKIP_SCALE"),
+		SkipUpgrade:        getEnvBool("E2E_SKIP_UPGRADE"),
 
 		// Cluster reuse
 		ReuseCluster:   getEnvBool("E2E_REUSE_CLUSTER"),
@@ -82,6 +84,9 @@ func (c *E2EConfig) RunPhases() []string {
 	}
 	if !c.SkipAddons {
 		phases = append(phases, "addons")
+	}
+	if !c.SkipAddonsAdvanced {
+		phases = append(phases, "addons-advanced")
 	}
 	if !c.SkipScale {
 		phases = append(phases, "scale")
