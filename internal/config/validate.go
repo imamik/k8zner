@@ -86,6 +86,11 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("cilium validation failed: %w", err)
 	}
 
+	// Ingress NGINX validation
+	if err := c.validateIngressNginx(); err != nil {
+		return fmt.Errorf("ingress_nginx validation failed: %w", err)
+	}
+
 	return nil
 }
 
@@ -491,6 +496,51 @@ func (c *Config) applyCCMDefaults() {
 	if hc.Retries == 0 {
 		hc.Retries = 3
 	}
+}
+
+// ValidIngressNginxKinds contains valid controller kinds for Ingress NGINX.
+var ValidIngressNginxKinds = map[string]bool{
+	"Deployment": true,
+	"DaemonSet":  true,
+}
+
+// ValidIngressNginxExternalTrafficPolicies contains valid external traffic policies.
+var ValidIngressNginxExternalTrafficPolicies = map[string]bool{
+	"Cluster": true,
+	"Local":   true,
+}
+
+// validateIngressNginx validates Ingress NGINX addon configuration.
+func (c *Config) validateIngressNginx() error {
+	if !c.Addons.IngressNginx.Enabled {
+		return nil // Skip validation if Ingress NGINX is disabled
+	}
+
+	nginx := &c.Addons.IngressNginx
+
+	// Validate kind
+	if nginx.Kind != "" && !ValidIngressNginxKinds[nginx.Kind] {
+		return fmt.Errorf("invalid kind %q: must be one of %v",
+			nginx.Kind, getMapKeys(ValidIngressNginxKinds))
+	}
+
+	// Validate external traffic policy
+	if nginx.ExternalTrafficPolicy != "" && !ValidIngressNginxExternalTrafficPolicies[nginx.ExternalTrafficPolicy] {
+		return fmt.Errorf("invalid external_traffic_policy %q: must be one of %v",
+			nginx.ExternalTrafficPolicy, getMapKeys(ValidIngressNginxExternalTrafficPolicies))
+	}
+
+	// Validate replicas must be nil when kind is DaemonSet
+	if nginx.Kind == "DaemonSet" && nginx.Replicas != nil {
+		return fmt.Errorf("replicas must not be set when kind is 'DaemonSet'")
+	}
+
+	// Validate replicas is positive if set
+	if nginx.Replicas != nil && *nginx.Replicas < 1 {
+		return fmt.Errorf("replicas must be at least 1, got %d", *nginx.Replicas)
+	}
+
+	return nil
 }
 
 // ValidCiliumBPFDatapathModes contains valid BPF datapath modes for Cilium.

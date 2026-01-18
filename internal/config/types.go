@@ -402,8 +402,32 @@ type CertManagerConfig struct {
 }
 
 // IngressNginxConfig defines the ingress-nginx configuration.
+// See: terraform/variables.tf ingress_nginx_* variables
 type IngressNginxConfig struct {
 	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Kind specifies the Kubernetes controller type: "Deployment" or "DaemonSet".
+	// Default: "Deployment"
+	Kind string `mapstructure:"kind" yaml:"kind"`
+
+	// Replicas specifies the number of controller replicas.
+	// If nil, auto-calculated: 2 for <3 workers, 3 for >=3 workers.
+	// Must be nil when Kind is "DaemonSet".
+	Replicas *int `mapstructure:"replicas" yaml:"replicas"`
+
+	// TopologyAwareRouting enables topology-aware traffic routing.
+	// Sets service.kubernetes.io/topology-mode annotation.
+	// Default: false
+	TopologyAwareRouting bool `mapstructure:"topology_aware_routing" yaml:"topology_aware_routing"`
+
+	// ExternalTrafficPolicy controls how external traffic is routed.
+	// Valid values: "Cluster" (cluster-wide) or "Local" (node-local).
+	// Default: "Local" (preserves client IP with PROXY protocol)
+	ExternalTrafficPolicy string `mapstructure:"external_traffic_policy" yaml:"external_traffic_policy"`
+
+	// Config provides global nginx configuration via ConfigMap.
+	// Reference: https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/configmap/
+	Config map[string]string `mapstructure:"config" yaml:"config"`
 }
 
 // LonghornConfig defines the Longhorn storage configuration.

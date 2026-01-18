@@ -43,13 +43,24 @@ func applyIngressNginx(ctx context.Context, kubeconfigPath string, cfg *config.C
 // buildIngressNginxValues creates helm values matching terraform configuration.
 // See: terraform/ingress_nginx.tf lines 39-129
 func buildIngressNginxValues(cfg *config.Config) helm.Values {
+	nginxCfg := cfg.Addons.IngressNginx
 	workerCount := getWorkerCount(cfg)
+
+	// Determine replicas
 	replicas := 2
-	if workerCount >= 3 {
+	if nginxCfg.Replicas != nil {
+		replicas = *nginxCfg.Replicas
+	} else if workerCount >= 3 {
 		replicas = 3
 	}
 
-	controller := buildIngressNginxController(workerCount, replicas)
+	// Determine kind (default: Deployment)
+	kind := nginxCfg.Kind
+	if kind == "" {
+		kind = "Deployment"
+	}
+
+	controller := buildIngressNginxController(nginxCfg, workerCount, replicas, kind)
 
 	return helm.Values{
 		"controller": controller,
@@ -57,7 +68,22 @@ func buildIngressNginxValues(cfg *config.Config) helm.Values {
 }
 
 // buildIngressNginxController creates the controller configuration.
-func buildIngressNginxController(workerCount, replicas int) helm.Values {
+func buildIngressNginxController(nginxCfg config.IngressNginxConfig, workerCount, replicas int, kind string) helm.Values {
+	// External traffic policy - default to "Local" (preserves client IP)
+	externalTrafficPolicy := nginxCfg.ExternalTrafficPolicy
+	if externalTrafficPolicy == "" {
+		externalTrafficPolicy = "Local"
+	}
+
+	// Build config map values - start with defaults then merge user config
+	configMap := helm.Values{
+		"compute-full-forwarded-for": "true",
+		"use-proxy-protocol":         "true",
+	}
+	for k, v := range nginxCfg.Config {
+		configMap[k] = v
+	}
+
 	controller := helm.Values{
 		// Disable admission webhooks for kubectl apply workflow.
 		// The admission webhooks require either:
@@ -68,12 +94,12 @@ func buildIngressNginxController(workerCount, replicas int) helm.Values {
 		"admissionWebhooks": helm.Values{
 			"enabled": false,
 		},
-		"kind":                       "Deployment",
+		"kind":                       kind,
 		"replicaCount":               replicas,
 		"minAvailable":               nil,
 		"maxUnavailable":             1,
 		"watchIngressWithoutClass":   true,
-		"enableTopologyAwareRouting": false,
+		"enableTopologyAwareRouting": nginxCfg.TopologyAwareRouting,
 		"topologySpreadConstraints":  buildIngressNginxTopologySpread(workerCount),
 		"metrics": helm.Values{
 			"enabled": false,
@@ -81,16 +107,13 @@ func buildIngressNginxController(workerCount, replicas int) helm.Values {
 		"extraArgs": helm.Values{},
 		"service": helm.Values{
 			"type":                  "NodePort",
-			"externalTrafficPolicy": "Local",
+			"externalTrafficPolicy": externalTrafficPolicy,
 			"nodePorts": helm.Values{
 				"http":  30000,
 				"https": 30001,
 			},
 		},
-		"config": helm.Values{
-			"compute-full-forwarded-for": true,
-			"use-proxy-protocol":         true,
-		},
+		"config":        configMap,
 		"networkPolicy": helm.Values{
 			"enabled": true,
 		},

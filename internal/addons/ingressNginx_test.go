@@ -129,8 +129,8 @@ func TestBuildIngressNginxValues(t *testing.T) {
 			// Check proxy config
 			proxyConfig, ok := controller["config"].(helm.Values)
 			require.True(t, ok)
-			assert.Equal(t, true, proxyConfig["compute-full-forwarded-for"])
-			assert.Equal(t, true, proxyConfig["use-proxy-protocol"])
+			assert.Equal(t, "true", proxyConfig["compute-full-forwarded-for"])
+			assert.Equal(t, "true", proxyConfig["use-proxy-protocol"])
 
 			// Check network policy
 			networkPolicy, ok := controller["networkPolicy"].(helm.Values)
@@ -182,4 +182,238 @@ func TestCreateIngressNginxNamespace(t *testing.T) {
 	assert.Contains(t, ns, "apiVersion: v1")
 	assert.Contains(t, ns, "kind: Namespace")
 	assert.Contains(t, ns, "name: ingress-nginx")
+}
+
+func TestBuildIngressNginxValuesKind(t *testing.T) {
+	tests := []struct {
+		name         string
+		kind         string
+		expectedKind string
+	}{
+		{
+			name:         "default is Deployment",
+			kind:         "",
+			expectedKind: "Deployment",
+		},
+		{
+			name:         "explicit Deployment",
+			kind:         "Deployment",
+			expectedKind: "Deployment",
+		},
+		{
+			name:         "DaemonSet",
+			kind:         "DaemonSet",
+			expectedKind: "DaemonSet",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &config.Config{
+				Workers: []config.WorkerNodePool{{Count: 2}},
+				Addons: config.AddonsConfig{
+					IngressNginx: config.IngressNginxConfig{
+						Enabled: true,
+						Kind:    tt.kind,
+					},
+				},
+			}
+
+			values := buildIngressNginxValues(cfg)
+			controller := values["controller"].(helm.Values)
+			assert.Equal(t, tt.expectedKind, controller["kind"])
+		})
+	}
+}
+
+func TestBuildIngressNginxValuesReplicas(t *testing.T) {
+	tests := []struct {
+		name             string
+		replicas         *int
+		workerCount      int
+		expectedReplicas int
+	}{
+		{
+			name:             "auto-calculate for small cluster",
+			replicas:         nil,
+			workerCount:      2,
+			expectedReplicas: 2,
+		},
+		{
+			name:             "auto-calculate for large cluster",
+			replicas:         nil,
+			workerCount:      5,
+			expectedReplicas: 3,
+		},
+		{
+			name:             "explicit replicas",
+			replicas:         intPtr(5),
+			workerCount:      2,
+			expectedReplicas: 5,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &config.Config{
+				Workers: []config.WorkerNodePool{{Count: tt.workerCount}},
+				Addons: config.AddonsConfig{
+					IngressNginx: config.IngressNginxConfig{
+						Enabled:  true,
+						Replicas: tt.replicas,
+					},
+				},
+			}
+
+			values := buildIngressNginxValues(cfg)
+			controller := values["controller"].(helm.Values)
+			assert.Equal(t, tt.expectedReplicas, controller["replicaCount"])
+		})
+	}
+}
+
+func TestBuildIngressNginxValuesExternalTrafficPolicy(t *testing.T) {
+	tests := []struct {
+		name           string
+		policy         string
+		expectedPolicy string
+	}{
+		{
+			name:           "default is Local",
+			policy:         "",
+			expectedPolicy: "Local",
+		},
+		{
+			name:           "explicit Local",
+			policy:         "Local",
+			expectedPolicy: "Local",
+		},
+		{
+			name:           "Cluster policy",
+			policy:         "Cluster",
+			expectedPolicy: "Cluster",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &config.Config{
+				Workers: []config.WorkerNodePool{{Count: 2}},
+				Addons: config.AddonsConfig{
+					IngressNginx: config.IngressNginxConfig{
+						Enabled:               true,
+						ExternalTrafficPolicy: tt.policy,
+					},
+				},
+			}
+
+			values := buildIngressNginxValues(cfg)
+			controller := values["controller"].(helm.Values)
+			service := controller["service"].(helm.Values)
+			assert.Equal(t, tt.expectedPolicy, service["externalTrafficPolicy"])
+		})
+	}
+}
+
+func TestBuildIngressNginxValuesTopologyAwareRouting(t *testing.T) {
+	tests := []struct {
+		name     string
+		enabled  bool
+		expected bool
+	}{
+		{
+			name:     "disabled by default",
+			enabled:  false,
+			expected: false,
+		},
+		{
+			name:     "enabled",
+			enabled:  true,
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &config.Config{
+				Workers: []config.WorkerNodePool{{Count: 2}},
+				Addons: config.AddonsConfig{
+					IngressNginx: config.IngressNginxConfig{
+						Enabled:              true,
+						TopologyAwareRouting: tt.enabled,
+					},
+				},
+			}
+
+			values := buildIngressNginxValues(cfg)
+			controller := values["controller"].(helm.Values)
+			assert.Equal(t, tt.expected, controller["enableTopologyAwareRouting"])
+		})
+	}
+}
+
+func TestBuildIngressNginxValuesConfig(t *testing.T) {
+	tests := []struct {
+		name           string
+		customConfig   map[string]string
+		expectedConfig map[string]string
+	}{
+		{
+			name:         "default config",
+			customConfig: nil,
+			expectedConfig: map[string]string{
+				"compute-full-forwarded-for": "true",
+				"use-proxy-protocol":         "true",
+			},
+		},
+		{
+			name: "custom config merges with defaults",
+			customConfig: map[string]string{
+				"proxy-body-size": "100m",
+				"ssl-protocols":   "TLSv1.3",
+			},
+			expectedConfig: map[string]string{
+				"compute-full-forwarded-for": "true",
+				"use-proxy-protocol":         "true",
+				"proxy-body-size":            "100m",
+				"ssl-protocols":              "TLSv1.3",
+			},
+		},
+		{
+			name: "custom config can override defaults",
+			customConfig: map[string]string{
+				"use-proxy-protocol": "false",
+			},
+			expectedConfig: map[string]string{
+				"compute-full-forwarded-for": "true",
+				"use-proxy-protocol":         "false",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &config.Config{
+				Workers: []config.WorkerNodePool{{Count: 2}},
+				Addons: config.AddonsConfig{
+					IngressNginx: config.IngressNginxConfig{
+						Enabled: true,
+						Config:  tt.customConfig,
+					},
+				},
+			}
+
+			values := buildIngressNginxValues(cfg)
+			controller := values["controller"].(helm.Values)
+			configMap := controller["config"].(helm.Values)
+
+			for k, v := range tt.expectedConfig {
+				assert.Equal(t, v, configMap[k], "key %s should be %s", k, v)
+			}
+		})
+	}
+}
+
+func intPtr(i int) *int {
+	return &i
 }
