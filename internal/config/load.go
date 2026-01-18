@@ -34,6 +34,21 @@ func LoadFile(path string) (*Config, error) {
 		cfg.Network.Zone = "eu-central"
 	}
 
+	// Default cluster access mode to "public" (matches Terraform behavior)
+	if cfg.ClusterAccess == "" {
+		cfg.ClusterAccess = "public"
+	}
+
+	// Default OIDC claim settings (matches Terraform behavior)
+	if cfg.Kubernetes.OIDC.Enabled {
+		if cfg.Kubernetes.OIDC.UsernameClaim == "" {
+			cfg.Kubernetes.OIDC.UsernameClaim = "sub"
+		}
+		if cfg.Kubernetes.OIDC.GroupsClaim == "" {
+			cfg.Kubernetes.OIDC.GroupsClaim = "groups"
+		}
+	}
+
 	// Default CCM to enabled (matches Terraform behavior and provides cloud integration)
 	if !cfg.Addons.CCM.Enabled {
 		cfg.Addons.CCM.Enabled = shouldEnableCCMByDefault(rawConfig)
@@ -47,6 +62,13 @@ func LoadFile(path string) (*Config, error) {
 	// Default Prometheus Operator CRDs to enabled (matches Terraform behavior)
 	if !cfg.Addons.PrometheusOperatorCRDs.Enabled {
 		cfg.Addons.PrometheusOperatorCRDs.Enabled = shouldEnableAddonByDefault(rawConfig, "prometheus_operator_crds")
+	}
+
+	// Default ingress load balancer pool count to 1 if not specified
+	for i := range cfg.IngressLoadBalancerPools {
+		if cfg.IngressLoadBalancerPools[i].Count == 0 {
+			cfg.IngressLoadBalancerPools[i].Count = 1
+		}
 	}
 
 	// Validate configuration

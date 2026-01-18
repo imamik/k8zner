@@ -25,6 +25,12 @@ var ValidNetworkZones = map[string]bool{
 	"ap-southeast": true, // Asia Pacific
 }
 
+// ValidClusterAccessModes contains valid cluster access modes.
+var ValidClusterAccessModes = map[string]bool{
+	"public":  true,
+	"private": true,
+}
+
 // ValidCCMLBAlgorithms contains valid load balancer algorithms for CCM.
 var ValidCCMLBAlgorithms = map[string]bool{
 	"round_robin":       true,
@@ -51,6 +57,12 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("location is required")
 	}
 
+	// Cluster access mode validation
+	if c.ClusterAccess != "" && !ValidClusterAccessModes[c.ClusterAccess] {
+		return fmt.Errorf("invalid cluster_access %q: must be one of %v",
+			c.ClusterAccess, getMapKeys(ValidClusterAccessModes))
+	}
+
 	// Location/Zone validation
 	if err := c.validateLocations(); err != nil {
 		return fmt.Errorf("location validation failed: %w", err)
@@ -69,6 +81,11 @@ func (c *Config) Validate() error {
 	// Worker validation
 	if err := c.validateWorkers(); err != nil {
 		return fmt.Errorf("worker validation failed: %w", err)
+	}
+
+	// Ingress load balancer pools validation
+	if err := c.validateIngressLoadBalancerPools(); err != nil {
+		return fmt.Errorf("ingress_load_balancer_pools validation failed: %w", err)
 	}
 
 	// Talos machine config validation
@@ -634,6 +651,49 @@ func (c *Config) validateCCM() error {
 	}
 	if hc.Retries != 0 && (hc.Retries < 1 || hc.Retries > 10) {
 		return fmt.Errorf("load_balancers.health_check.retries must be between 1 and 10, got %d", hc.Retries)
+	}
+
+	return nil
+}
+
+// validateIngressLoadBalancerPools validates ingress load balancer pools configuration.
+func (c *Config) validateIngressLoadBalancerPools() error {
+	seen := make(map[string]bool)
+	for i, pool := range c.IngressLoadBalancerPools {
+		// Name is required and must be unique
+		if pool.Name == "" {
+			return fmt.Errorf("pool %d: name is required", i)
+		}
+		if seen[pool.Name] {
+			return fmt.Errorf("pool %d: duplicate name %q", i, pool.Name)
+		}
+		seen[pool.Name] = true
+
+		// Location is required
+		if pool.Location == "" {
+			return fmt.Errorf("pool %q: location is required", pool.Name)
+		}
+		if !ValidLocations[pool.Location] {
+			return fmt.Errorf("pool %q: invalid location %q: must be one of %v",
+				pool.Name, pool.Location, getMapKeys(ValidLocations))
+		}
+
+		// Validate load balancer type if specified
+		if pool.Type != "" && !ValidCCMLBTypes[pool.Type] {
+			return fmt.Errorf("pool %q: invalid type %q: must be one of %v",
+				pool.Name, pool.Type, getMapKeys(ValidCCMLBTypes))
+		}
+
+		// Validate algorithm if specified
+		if pool.Algorithm != "" && !ValidCCMLBAlgorithms[pool.Algorithm] {
+			return fmt.Errorf("pool %q: invalid algorithm %q: must be one of %v",
+				pool.Name, pool.Algorithm, getMapKeys(ValidCCMLBAlgorithms))
+		}
+
+		// Count must be positive if specified
+		if pool.Count < 0 {
+			return fmt.Errorf("pool %q: count cannot be negative, got %d", pool.Name, pool.Count)
+		}
 	}
 
 	return nil

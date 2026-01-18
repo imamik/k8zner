@@ -9,6 +9,12 @@ type Config struct {
 	SSHKeys     []string `mapstructure:"ssh_keys" yaml:"ssh_keys"` // List of SSH key names/IDs
 	TestID      string   `mapstructure:"test_id" yaml:"test_id"`   // Optional test ID for E2E test resource tracking
 
+	// Cluster Access Mode
+	// See: terraform/variables.tf cluster_access
+	// Defines how the cluster is accessed externally (public or private IPs).
+	// Default: "public"
+	ClusterAccess string `mapstructure:"cluster_access" yaml:"cluster_access"`
+
 	// Network Configuration
 	Network NetworkConfig `mapstructure:"network" yaml:"network"`
 
@@ -27,6 +33,11 @@ type Config struct {
 	// Load Balancer (Ingress)
 	Ingress IngressConfig `mapstructure:"ingress" yaml:"ingress"`
 
+	// Ingress Load Balancer Pools
+	// See: terraform/variables.tf ingress_load_balancer_pools
+	// Allows configuring multiple load balancer pools for different ingress needs.
+	IngressLoadBalancerPools []IngressLoadBalancerPool `mapstructure:"ingress_load_balancer_pools" yaml:"ingress_load_balancer_pools"`
+
 	// Talos Configuration
 	Talos TalosConfig `mapstructure:"talos" yaml:"talos"`
 
@@ -42,6 +53,10 @@ type Config struct {
 
 // NetworkConfig defines the network-related configuration.
 type NetworkConfig struct {
+	// ExistingID specifies an existing Hetzner network ID to use instead of creating one.
+	// See: terraform/variables.tf hcloud_network_id
+	ExistingID int `mapstructure:"id" yaml:"id"`
+
 	IPv4CIDR              string `mapstructure:"ipv4_cidr" yaml:"ipv4_cidr"`
 	NodeIPv4CIDR          string `mapstructure:"node_ipv4_cidr" yaml:"node_ipv4_cidr"`
 	NodeIPv4SubnetMask    int    `mapstructure:"node_ipv4_subnet_mask_size" yaml:"node_ipv4_subnet_mask_size"`
@@ -92,6 +107,16 @@ type ControlPlaneNodePool struct {
 	Image       string            `mapstructure:"image" yaml:"image"` // Optional override
 	RDNSIPv4    string            `mapstructure:"rdns_ipv4" yaml:"rdns_ipv4"`
 	RDNSIPv6    string            `mapstructure:"rdns_ipv6" yaml:"rdns_ipv6"`
+
+	// Backups enables Hetzner server backups.
+	// See: terraform/variables.tf control_plane_nodepools.backups
+	// Default: false
+	Backups bool `mapstructure:"backups" yaml:"backups"`
+
+	// KeepDisk keeps the disk when the server is deleted.
+	// See: terraform/variables.tf control_plane_nodepools.keep_disk
+	// Default: false
+	KeepDisk bool `mapstructure:"keep_disk" yaml:"keep_disk"`
 }
 
 // WorkerNodePool defines a node pool for workers.
@@ -107,6 +132,16 @@ type WorkerNodePool struct {
 	Image          string            `mapstructure:"image" yaml:"image"` // Optional override
 	RDNSIPv4       string            `mapstructure:"rdns_ipv4" yaml:"rdns_ipv4"`
 	RDNSIPv6       string            `mapstructure:"rdns_ipv6" yaml:"rdns_ipv6"`
+
+	// Backups enables Hetzner server backups.
+	// See: terraform/variables.tf worker_nodepools.backups
+	// Default: false
+	Backups bool `mapstructure:"backups" yaml:"backups"`
+
+	// KeepDisk keeps the disk when the server is deleted.
+	// See: terraform/variables.tf worker_nodepools.keep_disk
+	// Default: false
+	KeepDisk bool `mapstructure:"keep_disk" yaml:"keep_disk"`
 }
 
 // AutoscalerConfig defines the autoscaler configuration.
@@ -137,6 +172,61 @@ type IngressConfig struct {
 	HealthCheckTimeout int    `mapstructure:"health_check_timeout" yaml:"health_check_timeout"`
 	RDNSIPv4           string `mapstructure:"rdns_ipv4" yaml:"rdns_ipv4"`
 	RDNSIPv6           string `mapstructure:"rdns_ipv6" yaml:"rdns_ipv6"`
+}
+
+// IngressLoadBalancerPool defines a load balancer pool for ingress.
+// See: terraform/variables.tf ingress_load_balancer_pools
+type IngressLoadBalancerPool struct {
+	// Name is a unique identifier for the load balancer pool.
+	Name string `mapstructure:"name" yaml:"name"`
+
+	// Location specifies the Hetzner location for this load balancer.
+	Location string `mapstructure:"location" yaml:"location"`
+
+	// Type specifies the load balancer type (e.g., lb11, lb21, lb31).
+	Type string `mapstructure:"type" yaml:"type"`
+
+	// Labels are custom labels to apply to the load balancer.
+	Labels map[string]string `mapstructure:"labels" yaml:"labels"`
+
+	// Count specifies the number of load balancers in this pool.
+	// Default: 1
+	Count int `mapstructure:"count" yaml:"count"`
+
+	// TargetLabelSelector specifies node labels to target for this pool.
+	TargetLabelSelector []string `mapstructure:"target_label_selector" yaml:"target_label_selector"`
+
+	// LocalTraffic enables local traffic policy (externalTrafficPolicy=Local).
+	// Default: false
+	LocalTraffic bool `mapstructure:"local_traffic" yaml:"local_traffic"`
+
+	// Algorithm specifies the load balancing algorithm.
+	// Valid values: "round_robin", "least_connections"
+	Algorithm string `mapstructure:"algorithm" yaml:"algorithm"`
+
+	// PublicNetworkEnabled enables the public interface for this load balancer.
+	PublicNetworkEnabled *bool `mapstructure:"public_network_enabled" yaml:"public_network_enabled"`
+
+	// RDNS settings for the load balancer
+	RDNS     string `mapstructure:"rdns" yaml:"rdns"`
+	RDNSIPv4 string `mapstructure:"rdns_ipv4" yaml:"rdns_ipv4"`
+	RDNSIPv6 string `mapstructure:"rdns_ipv6" yaml:"rdns_ipv6"`
+}
+
+// HelmChartConfig defines custom Helm chart configuration for addons.
+// This allows overriding the default repository, chart, version, and values.
+type HelmChartConfig struct {
+	// Repository specifies a custom Helm repository URL.
+	Repository string `mapstructure:"repository" yaml:"repository"`
+
+	// Chart specifies a custom chart name.
+	Chart string `mapstructure:"chart" yaml:"chart"`
+
+	// Version specifies a custom chart version.
+	Version string `mapstructure:"version" yaml:"version"`
+
+	// Values specifies custom Helm values to merge with defaults.
+	Values map[string]any `mapstructure:"values" yaml:"values"`
 }
 
 // TalosConfig defines the Talos-specific configuration.
@@ -267,6 +357,21 @@ type KubernetesConfig struct {
 	Domain              string `mapstructure:"domain" yaml:"domain"`
 	AllowSchedulingOnCP *bool  `mapstructure:"allow_scheduling_on_control_planes" yaml:"allow_scheduling_on_control_planes"`
 
+	// API Server Hostname
+	// See: terraform/variables.tf kube_api_hostname
+	// Specifies the hostname for external access to the Kubernetes API server.
+	APIHostname string `mapstructure:"api_hostname" yaml:"api_hostname"`
+
+	// API Server Load Balancer
+	// See: terraform/variables.tf kube_api_load_balancer_enabled
+	// Enables a load balancer for the Kubernetes API server for high availability.
+	APILoadBalancerEnabled bool `mapstructure:"api_load_balancer_enabled" yaml:"api_load_balancer_enabled"`
+
+	// API Server Load Balancer Public Network
+	// See: terraform/variables.tf kube_api_load_balancer_public_network_enabled
+	// Enables the public interface for the Kubernetes API load balancer.
+	APILoadBalancerPublicNetwork *bool `mapstructure:"api_load_balancer_public_network" yaml:"api_load_balancer_public_network"`
+
 	// API Server Configuration
 	// See: terraform/variables.tf kube_api_admission_control, kube_api_extra_args
 	APIServerExtraArgs map[string]string `mapstructure:"api_server_extra_args" yaml:"api_server_extra_args"`
@@ -282,6 +387,16 @@ type OIDCConfig struct {
 	Enabled   bool   `mapstructure:"enabled" yaml:"enabled"`
 	IssuerURL string `mapstructure:"issuer_url" yaml:"issuer_url"`
 	ClientID  string `mapstructure:"client_id" yaml:"client_id"`
+
+	// UsernameClaim specifies the JWT claim to use as the username.
+	// See: terraform/variables.tf oidc_username_claim
+	// Default: "sub"
+	UsernameClaim string `mapstructure:"username_claim" yaml:"username_claim"`
+
+	// GroupsClaim specifies the JWT claim to use as the user's groups.
+	// See: terraform/variables.tf oidc_groups_claim
+	// Default: "groups"
+	GroupsClaim string `mapstructure:"groups_claim" yaml:"groups_claim"`
 }
 
 // CNIConfig defines the CNI-related configuration.
@@ -310,6 +425,9 @@ type AddonsConfig struct {
 // See: terraform/variables.tf hcloud_ccm_* variables
 type CCMConfig struct {
 	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Helm allows customizing the Helm chart repository, version, and values.
+	Helm HelmChartConfig `mapstructure:"helm" yaml:"helm"`
 
 	// LoadBalancers configures the CCM Load Balancer controller.
 	// These settings control the default behavior for CCM-managed load balancers.
@@ -385,26 +503,43 @@ type CCMHealthCheckConfig struct {
 
 // CSIConfig defines the Hetzner Cloud CSI driver configuration.
 type CSIConfig struct {
-	Enabled              bool           `mapstructure:"enabled" yaml:"enabled"`
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Helm allows customizing the Helm chart repository, version, and values.
+	Helm HelmChartConfig `mapstructure:"helm" yaml:"helm"`
+
 	DefaultStorageClass  bool           `mapstructure:"default_storage_class" yaml:"default_storage_class"`
 	EncryptionPassphrase string         `mapstructure:"encryption_passphrase" yaml:"encryption_passphrase"`
 	StorageClasses       []StorageClass `mapstructure:"storage_classes" yaml:"storage_classes"`
+
+	// VolumeExtraLabels specifies additional labels to apply to Hetzner volumes.
+	// See: terraform/variables.tf hcloud_csi_volume_extra_labels
+	VolumeExtraLabels map[string]string `mapstructure:"volume_extra_labels" yaml:"volume_extra_labels"`
 }
 
 // MetricsServerConfig defines the Kubernetes Metrics Server configuration.
 type MetricsServerConfig struct {
 	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Helm allows customizing the Helm chart repository, version, and values.
+	Helm HelmChartConfig `mapstructure:"helm" yaml:"helm"`
 }
 
 // CertManagerConfig defines the cert-manager configuration.
 type CertManagerConfig struct {
 	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Helm allows customizing the Helm chart repository, version, and values.
+	Helm HelmChartConfig `mapstructure:"helm" yaml:"helm"`
 }
 
 // IngressNginxConfig defines the ingress-nginx configuration.
 // See: terraform/variables.tf ingress_nginx_* variables
 type IngressNginxConfig struct {
 	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Helm allows customizing the Helm chart repository, version, and values.
+	Helm HelmChartConfig `mapstructure:"helm" yaml:"helm"`
 
 	// Kind specifies the Kubernetes controller type: "Deployment" or "DaemonSet".
 	// Default: "Deployment"
@@ -432,7 +567,11 @@ type IngressNginxConfig struct {
 
 // LonghornConfig defines the Longhorn storage configuration.
 type LonghornConfig struct {
-	Enabled             bool `mapstructure:"enabled" yaml:"enabled"`
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Helm allows customizing the Helm chart repository, version, and values.
+	Helm HelmChartConfig `mapstructure:"helm" yaml:"helm"`
+
 	DefaultStorageClass bool `mapstructure:"default_storage_class" yaml:"default_storage_class"`
 }
 
@@ -494,6 +633,9 @@ type OIDCRBACRole struct {
 type CiliumConfig struct {
 	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
 
+	// Helm allows customizing the Helm chart repository, version, and values.
+	Helm HelmChartConfig `mapstructure:"helm" yaml:"helm"`
+
 	// Encryption
 	EncryptionEnabled bool   `mapstructure:"encryption_enabled" yaml:"encryption_enabled"`
 	EncryptionType    string `mapstructure:"encryption_type" yaml:"encryption_type"` // wireguard, ipsec
@@ -554,6 +696,19 @@ type CiliumConfig struct {
 // ClusterAutoscalerConfig defines the Cluster Autoscaler addon configuration.
 type ClusterAutoscalerConfig struct {
 	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Helm allows customizing the Helm chart repository, version, and values.
+	Helm HelmChartConfig `mapstructure:"helm" yaml:"helm"`
+
+	// DiscoveryEnabled enables cluster-api based node discovery.
+	// See: terraform/variables.tf cluster_autoscaler_discovery_enabled
+	// Default: false
+	DiscoveryEnabled bool `mapstructure:"discovery_enabled" yaml:"discovery_enabled"`
+
+	// ImageTag specifies the cluster-autoscaler image tag.
+	// See: terraform/variables.tf cluster_autoscaler_image_tag
+	// Default: uses latest compatible version
+	ImageTag string `mapstructure:"image_tag" yaml:"image_tag"`
 }
 
 // TalosBackupConfig defines the Talos etcd backup configuration.
