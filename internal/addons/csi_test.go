@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"hcloud-k8s/internal/addons/helm"
+	"hcloud-k8s/internal/config"
 )
 
 func TestBuildCSIValues(t *testing.T) {
@@ -35,7 +36,19 @@ func TestBuildCSIValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			values := buildCSIValues(tt.controlPlaneCount, tt.defaultStorageClass)
+			cfg := &config.Config{
+				ControlPlane: config.ControlPlaneConfig{
+					NodePools: []config.ControlPlaneNodePool{
+						{Name: "cp", Count: tt.controlPlaneCount},
+					},
+				},
+				Addons: config.AddonsConfig{
+					CSI: config.CSIConfig{
+						DefaultStorageClass: tt.defaultStorageClass,
+					},
+				},
+			}
+			values := buildCSIValues(cfg)
 
 			// Check controller configuration
 			controller, ok := values["controller"].(helm.Values)

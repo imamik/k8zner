@@ -605,12 +605,8 @@ func (c *Config) validateCilium() error {
 			cilium.GatewayAPIExternalTrafficPolicy, getMapKeys(ValidCiliumGatewayAPIExternalTrafficPolicies))
 	}
 
-	// Warn about netkit with IPsec (not an error, but should be noted)
-	if cilium.BPFDatapathMode != "" && cilium.BPFDatapathMode != "veth" &&
-		cilium.EncryptionEnabled && cilium.EncryptionType == "ipsec" {
-		// This combination is not recommended but we allow it
-		// The user should be aware from the documentation
-	}
+	// Note: netkit with IPsec is not recommended but allowed.
+	// Users should be aware of this combination from the documentation.
 
 	return nil
 }

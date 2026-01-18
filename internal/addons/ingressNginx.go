@@ -116,7 +116,7 @@ func buildIngressNginxController(nginxCfg config.IngressNginxConfig, workerCount
 				"https": 30001,
 			},
 		},
-		"config":        configMap,
+		"config": configMap,
 		"networkPolicy": helm.Values{
 			"enabled": true,
 		},

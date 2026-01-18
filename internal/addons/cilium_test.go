@@ -611,11 +611,11 @@ func TestBuildCiliumValuesSocketLBHostNamespaceOnly(t *testing.T) {
 
 func TestBuildCiliumGatewayAPIConfig(t *testing.T) {
 	tests := []struct {
-		name                      string
-		proxyProtocolEnabled      *bool
-		externalTrafficPolicy     string
-		expectedProxyProtocol     bool
-		expectedExternalTraffic   string
+		name                    string
+		proxyProtocolEnabled    *bool
+		externalTrafficPolicy   string
+		expectedProxyProtocol   bool
+		expectedExternalTraffic string
 	}{
 		{
 			name:                    "defaults",
