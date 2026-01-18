@@ -81,6 +81,11 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("ccm validation failed: %w", err)
 	}
 
+	// Cilium validation
+	if err := c.validateCilium(); err != nil {
+		return fmt.Errorf("cilium validation failed: %w", err)
+	}
+
 	return nil
 }
 
@@ -486,6 +491,61 @@ func (c *Config) applyCCMDefaults() {
 	if hc.Retries == 0 {
 		hc.Retries = 3
 	}
+}
+
+// ValidCiliumBPFDatapathModes contains valid BPF datapath modes for Cilium.
+var ValidCiliumBPFDatapathModes = map[string]bool{
+	"veth":      true,
+	"netkit":    true,
+	"netkit-l2": true,
+}
+
+// ValidCiliumPolicyCIDRMatchModes contains valid policy CIDR match modes for Cilium.
+var ValidCiliumPolicyCIDRMatchModes = map[string]bool{
+	"":      true, // disabled
+	"nodes": true, // allow targeting nodes by CIDR
+}
+
+// ValidCiliumGatewayAPIExternalTrafficPolicies contains valid external traffic policies.
+var ValidCiliumGatewayAPIExternalTrafficPolicies = map[string]bool{
+	"Cluster": true,
+	"Local":   true,
+}
+
+// validateCilium validates Cilium addon configuration.
+func (c *Config) validateCilium() error {
+	if !c.Addons.Cilium.Enabled {
+		return nil // Skip validation if Cilium is disabled
+	}
+
+	cilium := &c.Addons.Cilium
+
+	// Validate BPF datapath mode
+	if cilium.BPFDatapathMode != "" && !ValidCiliumBPFDatapathModes[cilium.BPFDatapathMode] {
+		return fmt.Errorf("invalid bpf_datapath_mode %q: must be one of %v",
+			cilium.BPFDatapathMode, getMapKeys(ValidCiliumBPFDatapathModes))
+	}
+
+	// Validate policy CIDR match mode
+	if !ValidCiliumPolicyCIDRMatchModes[cilium.PolicyCIDRMatchMode] {
+		return fmt.Errorf("invalid policy_cidr_match_mode %q: must be one of %v",
+			cilium.PolicyCIDRMatchMode, getMapKeys(ValidCiliumPolicyCIDRMatchModes))
+	}
+
+	// Validate Gateway API external traffic policy
+	if cilium.GatewayAPIExternalTrafficPolicy != "" && !ValidCiliumGatewayAPIExternalTrafficPolicies[cilium.GatewayAPIExternalTrafficPolicy] {
+		return fmt.Errorf("invalid gateway_api_external_traffic_policy %q: must be one of %v",
+			cilium.GatewayAPIExternalTrafficPolicy, getMapKeys(ValidCiliumGatewayAPIExternalTrafficPolicies))
+	}
+
+	// Warn about netkit with IPsec (not an error, but should be noted)
+	if cilium.BPFDatapathMode != "" && cilium.BPFDatapathMode != "veth" &&
+		cilium.EncryptionEnabled && cilium.EncryptionType == "ipsec" {
+		// This combination is not recommended but we allow it
+		// The user should be aware from the documentation
+	}
+
+	return nil
 }
 
 // validateCCM validates CCM configuration.

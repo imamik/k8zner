@@ -180,8 +180,8 @@ func TestBuildCiliumOperatorConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := &config.Config{}
-			config := buildCiliumOperatorConfig(cfg, tt.controlPlaneCount)
+			ciliumCfg := config.CiliumConfig{}
+			config := buildCiliumOperatorConfig(ciliumCfg, tt.controlPlaneCount)
 
 			assert.Equal(t, tt.expectedReplicas, config["replicas"])
 
@@ -481,4 +481,224 @@ func TestBuildCiliumValuesKubeProxyReplacement(t *testing.T) {
 	// Check BPF masquerade
 	bpf := values["bpf"].(helm.Values)
 	assert.True(t, bpf["masquerade"].(bool))
+}
+
+func TestBuildCiliumValuesBPFDatapathMode(t *testing.T) {
+	tests := []struct {
+		name         string
+		datapathMode string
+		expected     string
+	}{
+		{
+			name:         "default to veth",
+			datapathMode: "",
+			expected:     "veth",
+		},
+		{
+			name:         "explicit veth",
+			datapathMode: "veth",
+			expected:     "veth",
+		},
+		{
+			name:         "netkit mode",
+			datapathMode: "netkit",
+			expected:     "netkit",
+		},
+		{
+			name:         "netkit-l2 mode",
+			datapathMode: "netkit-l2",
+			expected:     "netkit-l2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &config.Config{
+				Network: config.NetworkConfig{IPv4CIDR: "10.0.0.0/8"},
+				ControlPlane: config.ControlPlaneConfig{
+					NodePools: []config.ControlPlaneNodePool{{Count: 1}},
+				},
+				Addons: config.AddonsConfig{
+					Cilium: config.CiliumConfig{
+						Enabled:         true,
+						BPFDatapathMode: tt.datapathMode,
+					},
+				},
+			}
+
+			values := buildCiliumValues(cfg)
+			bpf := values["bpf"].(helm.Values)
+			assert.Equal(t, tt.expected, bpf["datapathMode"])
+		})
+	}
+}
+
+func TestBuildCiliumValuesPolicyCIDRMatchMode(t *testing.T) {
+	tests := []struct {
+		name          string
+		matchMode     string
+		expectedValue any
+	}{
+		{
+			name:          "disabled by default",
+			matchMode:     "",
+			expectedValue: "",
+		},
+		{
+			name:          "nodes mode",
+			matchMode:     "nodes",
+			expectedValue: []string{"nodes"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &config.Config{
+				Network: config.NetworkConfig{IPv4CIDR: "10.0.0.0/8"},
+				ControlPlane: config.ControlPlaneConfig{
+					NodePools: []config.ControlPlaneNodePool{{Count: 1}},
+				},
+				Addons: config.AddonsConfig{
+					Cilium: config.CiliumConfig{
+						Enabled:             true,
+						PolicyCIDRMatchMode: tt.matchMode,
+					},
+				},
+			}
+
+			values := buildCiliumValues(cfg)
+			assert.Equal(t, tt.expectedValue, values["policyCIDRMatchMode"])
+		})
+	}
+}
+
+func TestBuildCiliumValuesSocketLBHostNamespaceOnly(t *testing.T) {
+	tests := []struct {
+		name              string
+		hostNamespaceOnly bool
+	}{
+		{
+			name:              "disabled",
+			hostNamespaceOnly: false,
+		},
+		{
+			name:              "enabled",
+			hostNamespaceOnly: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &config.Config{
+				Network: config.NetworkConfig{IPv4CIDR: "10.0.0.0/8"},
+				ControlPlane: config.ControlPlaneConfig{
+					NodePools: []config.ControlPlaneNodePool{{Count: 1}},
+				},
+				Addons: config.AddonsConfig{
+					Cilium: config.CiliumConfig{
+						Enabled:                   true,
+						SocketLBHostNamespaceOnly: tt.hostNamespaceOnly,
+					},
+				},
+			}
+
+			values := buildCiliumValues(cfg)
+			socketLB := values["socketLB"].(helm.Values)
+			assert.Equal(t, tt.hostNamespaceOnly, socketLB["hostNamespaceOnly"])
+		})
+	}
+}
+
+func TestBuildCiliumGatewayAPIConfig(t *testing.T) {
+	tests := []struct {
+		name                      string
+		proxyProtocolEnabled      *bool
+		externalTrafficPolicy     string
+		expectedProxyProtocol     bool
+		expectedExternalTraffic   string
+	}{
+		{
+			name:                    "defaults",
+			proxyProtocolEnabled:    nil,
+			externalTrafficPolicy:   "",
+			expectedProxyProtocol:   true,
+			expectedExternalTraffic: "Cluster",
+		},
+		{
+			name:                    "proxy protocol disabled",
+			proxyProtocolEnabled:    boolPtr(false),
+			externalTrafficPolicy:   "",
+			expectedProxyProtocol:   false,
+			expectedExternalTraffic: "Cluster",
+		},
+		{
+			name:                    "local traffic policy",
+			proxyProtocolEnabled:    nil,
+			externalTrafficPolicy:   "Local",
+			expectedProxyProtocol:   true,
+			expectedExternalTraffic: "Local",
+		},
+		{
+			name:                    "custom settings",
+			proxyProtocolEnabled:    boolPtr(true),
+			externalTrafficPolicy:   "Local",
+			expectedProxyProtocol:   true,
+			expectedExternalTraffic: "Local",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ciliumCfg := config.CiliumConfig{
+				GatewayAPIEnabled:               true,
+				GatewayAPIProxyProtocolEnabled:  tt.proxyProtocolEnabled,
+				GatewayAPIExternalTrafficPolicy: tt.externalTrafficPolicy,
+			}
+
+			values := buildCiliumGatewayAPIConfig(ciliumCfg)
+
+			assert.True(t, values["enabled"].(bool))
+			assert.Equal(t, tt.expectedProxyProtocol, values["enableProxyProtocol"])
+			assert.Equal(t, tt.expectedExternalTraffic, values["externalTrafficPolicy"])
+			assert.True(t, values["enableAppProtocol"].(bool))
+			assert.True(t, values["enableAlpn"].(bool))
+		})
+	}
+}
+
+func TestBuildCiliumPrometheusConfig(t *testing.T) {
+	tests := []struct {
+		name                  string
+		serviceMonitorEnabled bool
+	}{
+		{
+			name:                  "service monitor disabled",
+			serviceMonitorEnabled: false,
+		},
+		{
+			name:                  "service monitor enabled",
+			serviceMonitorEnabled: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ciliumCfg := config.CiliumConfig{
+				ServiceMonitorEnabled: tt.serviceMonitorEnabled,
+			}
+
+			values := buildCiliumPrometheusConfig(ciliumCfg)
+
+			assert.True(t, values["enabled"].(bool))
+
+			serviceMonitor := values["serviceMonitor"].(helm.Values)
+			assert.Equal(t, tt.serviceMonitorEnabled, serviceMonitor["enabled"])
+			assert.Equal(t, tt.serviceMonitorEnabled, serviceMonitor["trustCRDsExist"])
+			assert.Equal(t, "15s", serviceMonitor["interval"])
+		})
+	}
+}
+
+func boolPtr(b bool) *bool {
+	return &b
 }

@@ -66,6 +66,7 @@ metadata:
 // See: terraform/cilium.tf lines 45-207
 func buildCiliumValues(cfg *config.Config) helm.Values {
 	controlPlaneCount := getControlPlaneCount(cfg)
+	ciliumCfg := cfg.Addons.Cilium
 
 	// Native routing CIDR (use network CIDR or explicit native routing CIDR)
 	nativeRoutingCIDR := cfg.Network.IPv4CIDR
@@ -73,31 +74,45 @@ func buildCiliumValues(cfg *config.Config) helm.Values {
 		nativeRoutingCIDR = cfg.Network.NativeRoutingIPv4CIDR
 	}
 
+	// BPF datapath mode - default to "veth"
+	bpfDatapathMode := ciliumCfg.BPFDatapathMode
+	if bpfDatapathMode == "" {
+		bpfDatapathMode = "veth"
+	}
+
+	// Policy CIDR match mode - can be empty or "nodes"
+	var policyCIDRMatchMode any
+	if ciliumCfg.PolicyCIDRMatchMode == "nodes" {
+		policyCIDRMatchMode = []string{"nodes"}
+	} else {
+		policyCIDRMatchMode = ""
+	}
+
 	values := helm.Values{
 		"ipam": helm.Values{
 			"mode": "kubernetes",
 		},
-		"routingMode":           cfg.Addons.Cilium.RoutingMode,
+		"routingMode":           ciliumCfg.RoutingMode,
 		"ipv4NativeRoutingCIDR": nativeRoutingCIDR,
-		"policyCIDRMatchMode":   []string{"nodes"},
+		"policyCIDRMatchMode":   policyCIDRMatchMode,
 		"bpf": helm.Values{
-			"masquerade":        cfg.Addons.Cilium.KubeProxyReplacementEnabled,
-			"datapathMode":      "veth",
-			"hostLegacyRouting": cfg.Addons.Cilium.EncryptionEnabled && cfg.Addons.Cilium.EncryptionType == "ipsec",
+			"masquerade":        ciliumCfg.KubeProxyReplacementEnabled,
+			"datapathMode":      bpfDatapathMode,
+			"hostLegacyRouting": ciliumCfg.EncryptionEnabled && ciliumCfg.EncryptionType == "ipsec",
 		},
 		"encryption": helm.Values{
-			"enabled": cfg.Addons.Cilium.EncryptionEnabled,
-			"type":    cfg.Addons.Cilium.EncryptionType,
+			"enabled": ciliumCfg.EncryptionEnabled,
+			"type":    ciliumCfg.EncryptionType,
 		},
 		"k8s": helm.Values{
 			"requireIPv4PodCIDR": true,
 		},
 		"k8sServiceHost":                  "127.0.0.1",
 		"k8sServicePort":                  7445,
-		"kubeProxyReplacement":            cfg.Addons.Cilium.KubeProxyReplacementEnabled,
-		"installNoConntrackIptablesRules": cfg.Addons.Cilium.KubeProxyReplacementEnabled && cfg.Addons.Cilium.RoutingMode == "native",
+		"kubeProxyReplacement":            ciliumCfg.KubeProxyReplacementEnabled,
+		"installNoConntrackIptablesRules": ciliumCfg.KubeProxyReplacementEnabled && ciliumCfg.RoutingMode == "native",
 		"socketLB": helm.Values{
-			"hostNamespaceOnly": false,
+			"hostNamespaceOnly": ciliumCfg.SocketLBHostNamespaceOnly,
 		},
 		"cgroup": helm.Values{
 			"autoMount": helm.Values{"enabled": false},
@@ -113,7 +128,7 @@ func buildCiliumValues(cfg *config.Config) helm.Values {
 			"enableTransparentMode": true,
 		},
 		"egressGateway": helm.Values{
-			"enabled": cfg.Addons.Cilium.EgressGatewayEnabled,
+			"enabled": ciliumCfg.EgressGatewayEnabled,
 		},
 		"loadBalancer": helm.Values{
 			"acceleration": "native",
@@ -121,31 +136,75 @@ func buildCiliumValues(cfg *config.Config) helm.Values {
 	}
 
 	// KubeProxy replacement specific settings
-	if cfg.Addons.Cilium.KubeProxyReplacementEnabled {
+	if ciliumCfg.KubeProxyReplacementEnabled {
 		values["kubeProxyReplacementHealthzBindAddr"] = "0.0.0.0:10256"
 	}
 
 	// Gateway API configuration
-	if cfg.Addons.Cilium.GatewayAPIEnabled {
-		values["gatewayAPI"] = helm.Values{
-			"enabled": true,
-		}
+	if ciliumCfg.GatewayAPIEnabled {
+		values["gatewayAPI"] = buildCiliumGatewayAPIConfig(ciliumCfg)
 	}
 
 	// Hubble configuration
-	if cfg.Addons.Cilium.HubbleEnabled {
+	if ciliumCfg.HubbleEnabled {
 		values["hubble"] = buildCiliumHubbleConfig(cfg)
 	}
 
+	// Prometheus configuration
+	values["prometheus"] = buildCiliumPrometheusConfig(ciliumCfg)
+
 	// Operator configuration
-	values["operator"] = buildCiliumOperatorConfig(cfg, controlPlaneCount)
+	values["operator"] = buildCiliumOperatorConfig(ciliumCfg, controlPlaneCount)
 
 	return values
 }
 
+// buildCiliumGatewayAPIConfig creates Gateway API configuration.
+// See: terraform/cilium.tf lines 101-110
+func buildCiliumGatewayAPIConfig(ciliumCfg config.CiliumConfig) helm.Values {
+	// Gateway API proxy protocol - default to true
+	proxyProtocolEnabled := true
+	if ciliumCfg.GatewayAPIProxyProtocolEnabled != nil {
+		proxyProtocolEnabled = *ciliumCfg.GatewayAPIProxyProtocolEnabled
+	}
+
+	// External traffic policy - default to "Cluster"
+	externalTrafficPolicy := ciliumCfg.GatewayAPIExternalTrafficPolicy
+	if externalTrafficPolicy == "" {
+		externalTrafficPolicy = "Cluster"
+	}
+
+	return helm.Values{
+		"enabled":               true,
+		"enableProxyProtocol":   proxyProtocolEnabled,
+		"enableAppProtocol":     true,
+		"enableAlpn":            true,
+		"externalTrafficPolicy": externalTrafficPolicy,
+		"gatewayClass": helm.Values{
+			"create": "true",
+		},
+	}
+}
+
+// buildCiliumPrometheusConfig creates Prometheus integration configuration.
+// See: terraform/cilium.tf lines 119-126
+func buildCiliumPrometheusConfig(ciliumCfg config.CiliumConfig) helm.Values {
+	prometheusConfig := helm.Values{
+		"enabled": true,
+	}
+
+	prometheusConfig["serviceMonitor"] = helm.Values{
+		"enabled":        ciliumCfg.ServiceMonitorEnabled,
+		"trustCRDsExist": ciliumCfg.ServiceMonitorEnabled,
+		"interval":       "15s",
+	}
+
+	return prometheusConfig
+}
+
 // buildCiliumOperatorConfig creates operator configuration.
 // See: terraform/cilium.tf lines 139-177
-func buildCiliumOperatorConfig(_ *config.Config, controlPlaneCount int) helm.Values {
+func buildCiliumOperatorConfig(_ config.CiliumConfig, controlPlaneCount int) helm.Values {
 	replicas := 1
 	if controlPlaneCount > 1 {
 		replicas = 2

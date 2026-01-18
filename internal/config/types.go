@@ -482,11 +482,35 @@ type CiliumConfig struct {
 	// Routing
 	RoutingMode string `mapstructure:"routing_mode" yaml:"routing_mode"` // native, tunnel
 
+	// BPF Configuration
+	// BPFDatapathMode sets the mode for Pod devices. Valid values: veth, netkit, netkit-l2.
+	// Warning: Netkit is still in beta and should not be used with IPsec encryption.
+	// Default: "veth"
+	BPFDatapathMode string `mapstructure:"bpf_datapath_mode" yaml:"bpf_datapath_mode"`
+
+	// PolicyCIDRMatchMode allows cluster nodes to be selected by CIDR network policies.
+	// Set to "nodes" to enable targeting the kube-api server with k8s NetworkPolicy.
+	// Default: "" (disabled)
+	PolicyCIDRMatchMode string `mapstructure:"policy_cidr_match_mode" yaml:"policy_cidr_match_mode"`
+
+	// SocketLBHostNamespaceOnly limits Cilium's socket-level load-balancing to the host namespace only.
+	// Default: false
+	SocketLBHostNamespaceOnly bool `mapstructure:"socket_lb_host_namespace_only" yaml:"socket_lb_host_namespace_only"`
+
 	// KubeProxy Replacement
 	KubeProxyReplacementEnabled bool `mapstructure:"kube_proxy_replacement_enabled" yaml:"kube_proxy_replacement_enabled"`
 
 	// Gateway API
 	GatewayAPIEnabled bool `mapstructure:"gateway_api_enabled" yaml:"gateway_api_enabled"`
+
+	// GatewayAPIProxyProtocolEnabled enables PROXY Protocol on Cilium Gateway API for external LB traffic.
+	// Default: true
+	GatewayAPIProxyProtocolEnabled *bool `mapstructure:"gateway_api_proxy_protocol_enabled" yaml:"gateway_api_proxy_protocol_enabled"`
+
+	// GatewayAPIExternalTrafficPolicy controls traffic routing for Gateway API services.
+	// Valid values: "Cluster" (cluster-wide) or "Local" (node-local endpoints).
+	// Default: "Cluster"
+	GatewayAPIExternalTrafficPolicy string `mapstructure:"gateway_api_external_traffic_policy" yaml:"gateway_api_external_traffic_policy"`
 
 	// Egress Gateway
 	EgressGatewayEnabled bool `mapstructure:"egress_gateway_enabled" yaml:"egress_gateway_enabled"`
@@ -495,6 +519,12 @@ type CiliumConfig struct {
 	HubbleEnabled      bool `mapstructure:"hubble_enabled" yaml:"hubble_enabled"`
 	HubbleRelayEnabled bool `mapstructure:"hubble_relay_enabled" yaml:"hubble_relay_enabled"`
 	HubbleUIEnabled    bool `mapstructure:"hubble_ui_enabled" yaml:"hubble_ui_enabled"`
+
+	// Prometheus Integration
+	// ServiceMonitorEnabled enables Prometheus ServiceMonitor resources.
+	// Requires Prometheus Operator CRDs to be installed.
+	// Default: false
+	ServiceMonitorEnabled bool `mapstructure:"service_monitor_enabled" yaml:"service_monitor_enabled"`
 }
 
 // ClusterAutoscalerConfig defines the Cluster Autoscaler addon configuration.
