@@ -61,6 +61,7 @@ func createScaledClusterConfig(state *E2EState) *config.Config {
 
 	cfg := &config.Config{
 		ClusterName: state.ClusterName,
+		TestID:      state.TestID, // Required for label-based cleanup
 		HCloudToken: token,
 		Location:    "nbg1",
 		Network: config.NetworkConfig{
