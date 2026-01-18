@@ -291,17 +291,19 @@ type CNIConfig struct {
 
 // AddonsConfig defines the addon-related configuration.
 type AddonsConfig struct {
-	Cilium            CiliumConfig            `mapstructure:"cilium" yaml:"cilium"`
-	CCM               CCMConfig               `mapstructure:"ccm" yaml:"ccm"`
-	CSI               CSIConfig               `mapstructure:"csi" yaml:"csi"`
-	MetricsServer     MetricsServerConfig     `mapstructure:"metrics_server" yaml:"metrics_server"`
-	CertManager       CertManagerConfig       `mapstructure:"cert_manager" yaml:"cert_manager"`
-	IngressNginx      IngressNginxConfig      `mapstructure:"ingress_nginx" yaml:"ingress_nginx"`
-	Longhorn          LonghornConfig          `mapstructure:"longhorn" yaml:"longhorn"`
-	ClusterAutoscaler ClusterAutoscalerConfig `mapstructure:"cluster_autoscaler" yaml:"cluster_autoscaler"`
-	RBAC              RBACConfig              `mapstructure:"rbac" yaml:"rbac"`
-	OIDCRBAC          OIDCRBACConfig          `mapstructure:"oidc_rbac" yaml:"oidc_rbac"`
-	TalosBackup       TalosBackupConfig       `mapstructure:"talos_backup" yaml:"talos_backup"`
+	Cilium                 CiliumConfig                 `mapstructure:"cilium" yaml:"cilium"`
+	CCM                    CCMConfig                    `mapstructure:"ccm" yaml:"ccm"`
+	CSI                    CSIConfig                    `mapstructure:"csi" yaml:"csi"`
+	MetricsServer          MetricsServerConfig          `mapstructure:"metrics_server" yaml:"metrics_server"`
+	CertManager            CertManagerConfig            `mapstructure:"cert_manager" yaml:"cert_manager"`
+	IngressNginx           IngressNginxConfig           `mapstructure:"ingress_nginx" yaml:"ingress_nginx"`
+	Longhorn               LonghornConfig               `mapstructure:"longhorn" yaml:"longhorn"`
+	ClusterAutoscaler      ClusterAutoscalerConfig      `mapstructure:"cluster_autoscaler" yaml:"cluster_autoscaler"`
+	RBAC                   RBACConfig                   `mapstructure:"rbac" yaml:"rbac"`
+	OIDCRBAC               OIDCRBACConfig               `mapstructure:"oidc_rbac" yaml:"oidc_rbac"`
+	TalosBackup            TalosBackupConfig            `mapstructure:"talos_backup" yaml:"talos_backup"`
+	GatewayAPICRDs         GatewayAPICRDsConfig         `mapstructure:"gateway_api_crds" yaml:"gateway_api_crds"`
+	PrometheusOperatorCRDs PrometheusOperatorCRDsConfig `mapstructure:"prometheus_operator_crds" yaml:"prometheus_operator_crds"`
 }
 
 // CCMConfig defines the Hetzner Cloud Controller Manager configuration.
@@ -524,4 +526,32 @@ type RDNSConfig struct {
 	ClusterRDNSIPv6 string `mapstructure:"cluster_ipv6" yaml:"cluster_ipv6"`
 	IngressRDNSIPv4 string `mapstructure:"ingress_ipv4" yaml:"ingress_ipv4"`
 	IngressRDNSIPv6 string `mapstructure:"ingress_ipv6" yaml:"ingress_ipv6"`
+}
+
+// GatewayAPICRDsConfig defines the Gateway API CRDs configuration.
+// See: terraform/variables.tf gateway_api_crds_* variables
+type GatewayAPICRDsConfig struct {
+	// Enabled enables the Gateway API CRDs deployment.
+	// Default: true (matching Terraform)
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Version specifies the Gateway API CRDs version.
+	// Default: "v1.4.1"
+	Version string `mapstructure:"version" yaml:"version"`
+
+	// ReleaseChannel specifies the release channel (standard or experimental).
+	// Default: "standard"
+	ReleaseChannel string `mapstructure:"release_channel" yaml:"release_channel"`
+}
+
+// PrometheusOperatorCRDsConfig defines the Prometheus Operator CRDs configuration.
+// See: terraform/variables.tf prometheus_operator_crds_* variables
+type PrometheusOperatorCRDsConfig struct {
+	// Enabled enables the Prometheus Operator CRDs deployment.
+	// Default: true (matching Terraform)
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Version specifies the Prometheus Operator CRDs version.
+	// Default: "v0.87.1"
+	Version string `mapstructure:"version" yaml:"version"`
 }

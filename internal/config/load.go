@@ -39,6 +39,16 @@ func LoadFile(path string) (*Config, error) {
 		cfg.Addons.CCM.Enabled = shouldEnableCCMByDefault(rawConfig)
 	}
 
+	// Default Gateway API CRDs to enabled (matches Terraform behavior)
+	if !cfg.Addons.GatewayAPICRDs.Enabled {
+		cfg.Addons.GatewayAPICRDs.Enabled = shouldEnableAddonByDefault(rawConfig, "gateway_api_crds")
+	}
+
+	// Default Prometheus Operator CRDs to enabled (matches Terraform behavior)
+	if !cfg.Addons.PrometheusOperatorCRDs.Enabled {
+		cfg.Addons.PrometheusOperatorCRDs.Enabled = shouldEnableAddonByDefault(rawConfig, "prometheus_operator_crds")
+	}
+
 	// Validate configuration
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
@@ -50,17 +60,22 @@ func LoadFile(path string) (*Config, error) {
 // shouldEnableCCMByDefault determines if CCM should be enabled when not explicitly configured.
 // Returns true if the CCM enabled field was not explicitly set to false in the raw config.
 func shouldEnableCCMByDefault(rawConfig map[string]interface{}) bool {
-	// Check if addons.ccm.enabled was explicitly set to false
+	return shouldEnableAddonByDefault(rawConfig, "ccm")
+}
+
+// shouldEnableAddonByDefault determines if an addon should be enabled when not explicitly configured.
+// Returns true if the addon's enabled field was not explicitly set in the raw config.
+func shouldEnableAddonByDefault(rawConfig map[string]interface{}, addonKey string) bool {
 	addonsMap, ok := rawConfig["addons"].(map[string]interface{})
 	if !ok {
 		return true // No addons section, default to enabled
 	}
 
-	ccmMap, ok := addonsMap["ccm"].(map[string]interface{})
+	addonMap, ok := addonsMap[addonKey].(map[string]interface{})
 	if !ok {
-		return true // No ccm section, default to enabled
+		return true // No addon section, default to enabled
 	}
 
-	_, explicitlySet := ccmMap["enabled"]
+	_, explicitlySet := addonMap["enabled"]
 	return !explicitlySet // Default to enabled if not explicitly set
 }

@@ -18,9 +18,19 @@ import (
 //
 // This function checks the addon configuration and applies the appropriate
 // manifests to the cluster using kubectl. Currently supports:
+//   - Gateway API CRDs
+//   - Prometheus Operator CRDs
+//   - Cilium CNI
 //   - Hetzner Cloud Controller Manager (CCM)
 //   - Hetzner Cloud CSI Driver
+//   - Metrics Server
+//   - Cert Manager
+//   - Ingress NGINX
+//   - Longhorn
 //   - Cluster Autoscaler
+//   - RBAC
+//   - OIDC RBAC
+//   - Talos Backup
 //
 // The kubeconfig must be valid and the cluster must be accessible.
 // Addon manifests are embedded in the binary and processed as templates
@@ -37,6 +47,19 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 	defer func() {
 		_ = os.Remove(tmpKubeconfig)
 	}()
+
+	// Install CRDs first (before addons that depend on them)
+	if cfg.Addons.GatewayAPICRDs.Enabled {
+		if err := applyGatewayAPICRDs(ctx, tmpKubeconfig, cfg); err != nil {
+			return fmt.Errorf("failed to install Gateway API CRDs: %w", err)
+		}
+	}
+
+	if cfg.Addons.PrometheusOperatorCRDs.Enabled {
+		if err := applyPrometheusOperatorCRDs(ctx, tmpKubeconfig, cfg); err != nil {
+			return fmt.Errorf("failed to install Prometheus Operator CRDs: %w", err)
+		}
+	}
 
 	// Install Cilium CNI first (network foundation)
 	if cfg.Addons.Cilium.Enabled {
