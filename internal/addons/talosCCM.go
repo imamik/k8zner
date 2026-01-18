@@ -8,24 +8,14 @@ import (
 	"hcloud-k8s/internal/config"
 )
 
-// Default values matching Terraform
-const (
-	defaultTalosCCMVersion = "v1.11.0"
-)
-
 // applyTalosCCM installs the Talos Cloud Controller Manager.
 // This is separate from the Hetzner CCM - it's the Siderolabs Talos CCM
 // which provides node lifecycle management features.
 // See: terraform/variables.tf talos_ccm_* variables
 // See: terraform/talos_config.tf lines 29-31
+// Note: Default version is set in load.go during config loading.
 func applyTalosCCM(ctx context.Context, kubeconfigPath string, cfg *config.Config) error {
-	talosCCMConfig := cfg.Addons.TalosCCM
-
-	// Use default if not specified
-	version := talosCCMConfig.Version
-	if version == "" {
-		version = defaultTalosCCMVersion
-	}
+	version := cfg.Addons.TalosCCM.Version
 
 	// Build the manifest URL
 	// Format: https://raw.githubusercontent.com/siderolabs/talos-cloud-controller-manager/{version}/docs/deploy/cloud-controller-manager-daemonset.yml

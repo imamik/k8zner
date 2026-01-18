@@ -108,6 +108,11 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("ingress_nginx validation failed: %w", err)
 	}
 
+	// Talos backup validation
+	if err := c.validateTalosBackup(); err != nil {
+		return fmt.Errorf("talos_backup validation failed: %w", err)
+	}
+
 	return nil
 }
 
@@ -689,6 +694,21 @@ func (c *Config) validateIngressLoadBalancerPools() error {
 		// Count must be positive if specified
 		if pool.Count < 0 {
 			return fmt.Errorf("pool %q: count cannot be negative, got %d", pool.Name, pool.Count)
+		}
+	}
+
+	return nil
+}
+
+// validateTalosBackup validates Talos backup configuration.
+func (c *Config) validateTalosBackup() error {
+	backup := &c.Addons.TalosBackup
+
+	// Validate S3 Hcloud URL format if provided
+	if backup.S3HcloudURL != "" {
+		if !hcloudS3URLRegex.MatchString(backup.S3HcloudURL) {
+			return fmt.Errorf("invalid s3_hcloud_url %q: must match format 'bucket.region.your-objectstorage.com' or 'https://bucket.region.your-objectstorage.com'",
+				backup.S3HcloudURL)
 		}
 	}
 

@@ -128,13 +128,21 @@ func CheckDefault() *CheckResults {
 
 // CheckAll checks all tools (default + optional).
 func CheckAll() *CheckResults {
-	all := append(DefaultTools(), OptionalTools()...)
+	defaults := DefaultTools()
+	optional := OptionalTools()
+	all := make([]Tool, 0, len(defaults)+len(optional))
+	all = append(all, defaults...)
+	all = append(all, optional...)
 	return Check(all)
 }
 
 // CheckForImageBuild checks tools needed for image building.
 func CheckForImageBuild() *CheckResults {
-	all := append(DefaultTools(), ImageBuildTools()...)
+	defaults := DefaultTools()
+	imageBuild := ImageBuildTools()
+	all := make([]Tool, 0, len(defaults)+len(imageBuild))
+	all = append(all, defaults...)
+	all = append(all, imageBuild...)
 	return Check(all)
 }
 

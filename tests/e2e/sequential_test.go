@@ -19,7 +19,7 @@ import (
 //  1. Snapshots - Build and verify Talos snapshots
 //  2. Cluster - Provision infrastructure and bootstrap Kubernetes
 //  3. Addons - Install and test each addon sequentially
-//  3b. Advanced Addons - Test advanced addon configurations (Gateway API, Prometheus CRDs, etc.)
+//     3b. Advanced Addons - Test advanced addon configurations (Gateway API, Prometheus CRDs, etc.)
 //  4. Scale - Scale cluster and verify operation
 //  5. Upgrade - Upgrade Talos and Kubernetes versions
 //
