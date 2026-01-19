@@ -29,8 +29,16 @@ func applyMetricsServer(ctx context.Context, kubeconfigPath string, cfg *config.
 func buildMetricsServerValues(cfg *config.Config) helm.Values {
 	controlPlaneCount := getControlPlaneCount(cfg)
 	workerCount := getWorkerCount(cfg)
-	scheduleOnControlPlane := workerCount == 0
 
+	// Calculate schedule_on_control_plane: use config value if set, otherwise auto-detect
+	// Auto-detection: schedule on control plane when no workers exist
+	scheduleOnControlPlane := workerCount == 0
+	if cfg.Addons.MetricsServer.ScheduleOnControlPlane != nil {
+		scheduleOnControlPlane = *cfg.Addons.MetricsServer.ScheduleOnControlPlane
+	}
+
+	// Calculate replicas: use config value if set, otherwise auto-calculate
+	// Auto-calculation: 2 replicas if >1 node available, otherwise 1
 	nodeCount := workerCount
 	if scheduleOnControlPlane {
 		nodeCount = controlPlaneCount
@@ -39,6 +47,9 @@ func buildMetricsServerValues(cfg *config.Config) helm.Values {
 	replicas := 1
 	if nodeCount > 1 {
 		replicas = 2
+	}
+	if cfg.Addons.MetricsServer.Replicas != nil {
+		replicas = *cfg.Addons.MetricsServer.Replicas
 	}
 
 	values := helm.Values{

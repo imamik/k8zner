@@ -846,3 +846,103 @@ func TestValidateCCM_HealthCheckRetriesOutOfRange(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "retries must be between 1 and 10")
 }
+
+// Test TalosBackup S3 URL validation
+func TestValidateTalosBackup_ValidS3HcloudURL(t *testing.T) {
+	validURLs := []string{
+		"mybucket.fsn1.your-objectstorage.com",
+		"https://mybucket.fsn1.your-objectstorage.com",
+		"http://mybucket.nbg1.your-objectstorage.com",
+		"mybucket.hel1.your-objectstorage.com.",
+	}
+
+	for _, url := range validURLs {
+		cfg := &Config{
+			ClusterName: "test",
+			HCloudToken: "token",
+			Location:    "nbg1",
+			Network: NetworkConfig{
+				IPv4CIDR: "10.0.0.0/16",
+				Zone:     "eu-central",
+			},
+			ControlPlane: ControlPlaneConfig{
+				NodePools: []ControlPlaneNodePool{{
+					Name:       "cp",
+					ServerType: "cpx22",
+					Count:      1,
+				}},
+			},
+			Addons: AddonsConfig{
+				TalosBackup: TalosBackupConfig{
+					S3HcloudURL: url,
+				},
+			},
+		}
+		err := cfg.Validate()
+		assert.NoError(t, err, "s3_hcloud_url %q should be valid", url)
+	}
+}
+
+func TestValidateTalosBackup_InvalidS3HcloudURL(t *testing.T) {
+	invalidURLs := []string{
+		"s3.amazonaws.com/mybucket",
+		"mybucket.s3.amazonaws.com",
+		"example.com",
+		"just-random-text",
+		"mybucket.your-objectstorage.com", // Missing region
+	}
+
+	for _, url := range invalidURLs {
+		cfg := &Config{
+			ClusterName: "test",
+			HCloudToken: "token",
+			Location:    "nbg1",
+			Network: NetworkConfig{
+				IPv4CIDR: "10.0.0.0/16",
+				Zone:     "eu-central",
+			},
+			ControlPlane: ControlPlaneConfig{
+				NodePools: []ControlPlaneNodePool{{
+					Name:       "cp",
+					ServerType: "cpx22",
+					Count:      1,
+				}},
+			},
+			Addons: AddonsConfig{
+				TalosBackup: TalosBackupConfig{
+					S3HcloudURL: url,
+				},
+			},
+		}
+		err := cfg.Validate()
+		require.Error(t, err, "s3_hcloud_url %q should be invalid", url)
+		assert.Contains(t, err.Error(), "invalid s3_hcloud_url")
+	}
+}
+
+func TestValidateTalosBackup_EmptyS3HcloudURL(t *testing.T) {
+	// Empty URL should be valid (it's optional)
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network: NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+			Zone:     "eu-central",
+		},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{
+				Name:       "cp",
+				ServerType: "cpx22",
+				Count:      1,
+			}},
+		},
+		Addons: AddonsConfig{
+			TalosBackup: TalosBackupConfig{
+				S3HcloudURL: "",
+			},
+		},
+	}
+	err := cfg.Validate()
+	assert.NoError(t, err)
+}

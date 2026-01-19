@@ -260,8 +260,15 @@ func (p *Provisioner) upgradeNode(ctx *provisioning.Context, nodeIP, _ string) e
 			ctx.Config.Talos.Version)
 	}
 
+	// Build upgrade options from config
+	// See: terraform/variables.tf talos_upgrade_* variables
+	opts := provisioning.UpgradeOptions{
+		Stage: ctx.Config.Talos.Upgrade.Stage,
+		Force: ctx.Config.Talos.Upgrade.Force,
+	}
+
 	// Perform upgrade
-	if err := ctx.Talos.UpgradeNode(ctx, nodeIP, imageURL); err != nil {
+	if err := ctx.Talos.UpgradeNode(ctx, nodeIP, imageURL, opts); err != nil {
 		return err
 	}
 

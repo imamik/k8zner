@@ -132,7 +132,7 @@ func buildSharedSnapshots(client *hcloud_client.RealClient) error {
 	if needAMD64 {
 		go func() {
 			log.Printf("[amd64] Starting build at %s", time.Now().Format("15:04:05"))
-			snapshotID, err := builder.Build(ctx, "v1.8.3", "v1.31.0", "amd64", "nbg1", labelsAMD64)
+			snapshotID, err := builder.Build(ctx, "v1.8.3", "v1.31.0", "amd64", "", "nbg1", labelsAMD64)
 			if err != nil {
 				log.Printf("[amd64] Build failed at %s: %v", time.Now().Format("15:04:05"), err)
 				resultChan <- buildResult{arch: "amd64", err: err}
@@ -147,7 +147,7 @@ func buildSharedSnapshots(client *hcloud_client.RealClient) error {
 	if needARM64 {
 		go func() {
 			log.Printf("[arm64] Starting build at %s", time.Now().Format("15:04:05"))
-			snapshotID, err := builder.Build(ctx, "v1.8.3", "v1.31.0", "arm64", "nbg1", labelsARM64)
+			snapshotID, err := builder.Build(ctx, "v1.8.3", "v1.31.0", "arm64", "", "nbg1", labelsARM64)
 			if err != nil {
 				log.Printf("[arm64] Build failed at %s: %v", time.Now().Format("15:04:05"), err)
 				resultChan <- buildResult{arch: "arm64", err: err}

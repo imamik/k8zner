@@ -130,7 +130,7 @@ func buildSnapshotsForVersion(t *testing.T, client *hcloud.RealClient, state *E2
 
 	// Build new snapshot
 	builder := image.NewBuilder(client)
-	snapshotID, err := builder.Build(ctx, talosVer, k8sVer, "amd64", "nbg1", labels)
+	snapshotID, err := builder.Build(ctx, talosVer, k8sVer, "amd64", "", "nbg1", labels)
 	if err != nil {
 		t.Fatalf("Failed to build snapshot: %v", err)
 	}

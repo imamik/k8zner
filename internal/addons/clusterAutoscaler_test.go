@@ -7,6 +7,7 @@ import (
 
 	"hcloud-k8s/internal/addons/helm"
 	"hcloud-k8s/internal/config"
+	"hcloud-k8s/internal/provisioning"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -422,7 +423,7 @@ func (m *mockTalosConfigProducer) GetNodeVersion(_ context.Context, _ string) (s
 	return "v1.8.2", nil
 }
 
-func (m *mockTalosConfigProducer) UpgradeNode(_ context.Context, _, _ string) error {
+func (m *mockTalosConfigProducer) UpgradeNode(_ context.Context, _, _ string, _ provisioning.UpgradeOptions) error {
 	return nil
 }
 

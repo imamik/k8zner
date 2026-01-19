@@ -25,6 +25,11 @@ type Config struct {
 	// Default: true
 	HealthcheckEnabled *bool `mapstructure:"healthcheck_enabled" yaml:"healthcheck_enabled"`
 
+	// PrerequisitesCheckEnabled enables preflight check for required client tools.
+	// See: terraform/variables.tf client_prerequisites_check_enabled
+	// Default: true
+	PrerequisitesCheckEnabled *bool `mapstructure:"prerequisites_check_enabled" yaml:"prerequisites_check_enabled"`
+
 	// DeleteProtection prevents accidental cluster deletion.
 	// See: terraform/variables.tf cluster_delete_protection
 	// Default: false
@@ -259,6 +264,10 @@ type TalosConfig struct {
 	Extensions  []string      `mapstructure:"extensions" yaml:"extensions"`
 	Upgrade     UpgradeConfig `mapstructure:"upgrade" yaml:"upgrade"`
 
+	// ImageBuilder configures the server used for building Talos images.
+	// See: terraform/variables.tf packer_amd64_builder, packer_arm64_builder
+	ImageBuilder ImageBuilderConfig `mapstructure:"image_builder" yaml:"image_builder"`
+
 	// Machine-level configuration options (matching Terraform talos_* variables)
 	Machine TalosMachineConfig `mapstructure:"machine" yaml:"machine"`
 }
@@ -367,6 +376,25 @@ type UpgradeConfig struct {
 	Force      bool   `mapstructure:"force" yaml:"force"`
 	Insecure   bool   `mapstructure:"insecure" yaml:"insecure"`
 	RebootMode string `mapstructure:"reboot_mode" yaml:"reboot_mode"`
+	Stage      bool   `mapstructure:"stage" yaml:"stage"`
+}
+
+// ImageBuilderConfig defines the server configuration for building Talos images.
+// See: terraform/variables.tf packer_amd64_builder, packer_arm64_builder
+type ImageBuilderConfig struct {
+	AMD64 ImageBuilderArchConfig `mapstructure:"amd64" yaml:"amd64"`
+	ARM64 ImageBuilderArchConfig `mapstructure:"arm64" yaml:"arm64"`
+}
+
+// ImageBuilderArchConfig defines architecture-specific image builder settings.
+type ImageBuilderArchConfig struct {
+	// ServerType specifies the Hetzner server type for building images.
+	// Defaults: AMD64="cpx11", ARM64="cax11"
+	ServerType string `mapstructure:"server_type" yaml:"server_type"`
+
+	// ServerLocation specifies the Hetzner location for the build server.
+	// Defaults: AMD64="ash", ARM64="nbg1"
+	ServerLocation string `mapstructure:"server_location" yaml:"server_location"`
 }
 
 // KubernetesConfig defines the Kubernetes-specific configuration.
@@ -457,6 +485,7 @@ type AddonsConfig struct {
 	TalosBackup            TalosBackupConfig            `mapstructure:"talos_backup" yaml:"talos_backup"`
 	GatewayAPICRDs         GatewayAPICRDsConfig         `mapstructure:"gateway_api_crds" yaml:"gateway_api_crds"`
 	PrometheusOperatorCRDs PrometheusOperatorCRDsConfig `mapstructure:"prometheus_operator_crds" yaml:"prometheus_operator_crds"`
+	TalosCCM               TalosCCMConfig               `mapstructure:"talos_ccm" yaml:"talos_ccm"`
 }
 
 // CCMConfig defines the Hetzner Cloud Controller Manager configuration.
@@ -561,6 +590,16 @@ type MetricsServerConfig struct {
 
 	// Helm allows customizing the Helm chart repository, version, and values.
 	Helm HelmChartConfig `mapstructure:"helm" yaml:"helm"`
+
+	// ScheduleOnControlPlane determines whether to schedule the Metrics Server on control plane nodes.
+	// If nil, defaults to true when there are no worker nodes.
+	// See: terraform/variables.tf metrics_server_schedule_on_control_plane
+	ScheduleOnControlPlane *bool `mapstructure:"schedule_on_control_plane" yaml:"schedule_on_control_plane"`
+
+	// Replicas specifies the number of replicas for the Metrics Server.
+	// If nil, auto-calculated: 2 for clusters with >1 schedulable nodes, 1 otherwise.
+	// See: terraform/variables.tf metrics_server_replicas
+	Replicas *int `mapstructure:"replicas" yaml:"replicas"`
 }
 
 // CertManagerConfig defines the cert-manager configuration.
@@ -763,6 +802,12 @@ type TalosBackupConfig struct {
 	S3PathStyle        bool   `mapstructure:"s3_path_style" yaml:"s3_path_style"`
 	AGEX25519PublicKey string `mapstructure:"age_x25519_public_key" yaml:"age_x25519_public_key"`
 	EnableCompression  bool   `mapstructure:"enable_compression" yaml:"enable_compression"`
+
+	// S3HcloudURL is a convenience field for Hetzner Object Storage.
+	// Format: bucket.region.your-objectstorage.com or https://bucket.region.your-objectstorage.com
+	// When set, automatically extracts S3Bucket, S3Region, and S3Endpoint.
+	// See: terraform/variables.tf talos_backup_s3_hcloud_url
+	S3HcloudURL string `mapstructure:"s3_hcloud_url" yaml:"s3_hcloud_url"`
 }
 
 // RDNSConfig defines cluster-wide reverse DNS defaults.
@@ -800,5 +845,18 @@ type PrometheusOperatorCRDsConfig struct {
 
 	// Version specifies the Prometheus Operator CRDs version.
 	// Default: "v0.87.1"
+	Version string `mapstructure:"version" yaml:"version"`
+}
+
+// TalosCCMConfig defines the Talos Cloud Controller Manager configuration.
+// See: terraform/variables.tf talos_ccm_* variables
+// This is separate from the Hetzner CCM - it's the Siderolabs Talos CCM.
+type TalosCCMConfig struct {
+	// Enabled enables the Talos CCM deployment.
+	// Default: true (matching Terraform)
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Version specifies the Talos CCM version.
+	// Default: "v1.11.0"
 	Version string `mapstructure:"version" yaml:"version"`
 }

@@ -25,7 +25,8 @@ func Build(ctx context.Context, imageName, talosVersion, arch, location string) 
 
 	log.Printf("Building image %s (Talos %s, Arch %s) in location %s...", imageName, talosVersion, arch, location)
 
-	snapshotID, err := builder.Build(ctx, imageName, talosVersion, arch, location, nil)
+	// serverType is empty to use auto-detection based on architecture
+	snapshotID, err := builder.Build(ctx, imageName, talosVersion, arch, "", location, nil)
 	if err != nil {
 		return fmt.Errorf("build failed: %w", err)
 	}

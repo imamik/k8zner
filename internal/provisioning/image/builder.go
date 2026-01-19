@@ -26,7 +26,8 @@ func NewBuilder(infra hcloud.InfrastructureManager) *Builder {
 }
 
 // Build creates a temporary server, installs Talos, creates a snapshot, and cleans up.
-func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architecture, location string, labels map[string]string) (string, error) {
+// serverType and location can be empty to use defaults (architecture-appropriate server type, nbg1 location).
+func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architecture, serverType, location string, labels map[string]string) (string, error) {
 	// Generate image name from versions and architecture
 	imageName := fmt.Sprintf("talos-%s-k8s-%s-%s", talosVersion, k8sVersion, architecture)
 	serverName := fmt.Sprintf("build-%s-%s", imageName, time.Now().Format("20060102150405"))
@@ -34,6 +35,11 @@ func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architect
 	// Default to nbg1 if no location specified
 	if location == "" {
 		location = "nbg1"
+	}
+
+	// Default to architecture-appropriate server type if not specified
+	if serverType == "" {
+		serverType = hcloud.GetDefaultServerType(hcloud.Architecture(architecture))
 	}
 
 	// 0. Setup SSH Key.
@@ -67,9 +73,6 @@ func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architect
 
 	// We need to pass the ssh key NAME to CreateServer
 	sshKeys := []string{keyName}
-
-	// Select appropriate server type for the architecture
-	serverType := hcloud.GetDefaultServerType(hcloud.Architecture(architecture))
 
 	defer func() {
 		b.cleanupServer(serverName)

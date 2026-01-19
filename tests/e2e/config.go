@@ -10,12 +10,12 @@ import (
 // E2EConfig controls which phases of E2E tests to run.
 type E2EConfig struct {
 	// Phase control
-	SkipSnapshots       bool
-	SkipCluster         bool
-	SkipAddons          bool
-	SkipAddonsAdvanced  bool
-	SkipScale           bool
-	SkipUpgrade         bool
+	SkipSnapshots      bool
+	SkipCluster        bool
+	SkipAddons         bool
+	SkipAddonsAdvanced bool
+	SkipScale          bool
+	SkipUpgrade        bool
 
 	// Cluster reuse
 	ReuseCluster   bool   // Use existing cluster instead of creating new one

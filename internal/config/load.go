@@ -3,10 +3,15 @@ package config
 import (
 	"fmt"
 	"os"
+	"regexp"
 
 	"github.com/mitchellh/mapstructure"
 	"gopkg.in/yaml.v3"
 )
+
+// hcloudS3URLRegex matches Hetzner Object Storage URLs
+// Format: bucket.region.your-objectstorage.com or https://bucket.region.your-objectstorage.com
+var hcloudS3URLRegex = regexp.MustCompile(`^(?:https?://)?([^.]+)\.([^.]+)\.your-objectstorage\.com\.?$`)
 
 // LoadFile reads and parses the configuration from a YAML file.
 func LoadFile(path string) (*Config, error) {
@@ -64,6 +69,33 @@ func LoadFile(path string) (*Config, error) {
 		cfg.Addons.PrometheusOperatorCRDs.Enabled = shouldEnableAddonByDefault(rawConfig, "prometheus_operator_crds")
 	}
 
+	// Default Talos CCM to enabled (matches Terraform behavior)
+	if !cfg.Addons.TalosCCM.Enabled {
+		cfg.Addons.TalosCCM.Enabled = shouldEnableAddonByDefault(rawConfig, "talos_ccm")
+	}
+
+	// Default Talos CCM version (matches Terraform default)
+	if cfg.Addons.TalosCCM.Enabled && cfg.Addons.TalosCCM.Version == "" {
+		cfg.Addons.TalosCCM.Version = "v1.11.0"
+	}
+
+	// Default image builder configuration (matches Terraform packer_* defaults)
+	if cfg.Talos.ImageBuilder.AMD64.ServerType == "" {
+		cfg.Talos.ImageBuilder.AMD64.ServerType = "cpx11"
+	}
+	if cfg.Talos.ImageBuilder.AMD64.ServerLocation == "" {
+		cfg.Talos.ImageBuilder.AMD64.ServerLocation = "ash"
+	}
+	if cfg.Talos.ImageBuilder.ARM64.ServerType == "" {
+		cfg.Talos.ImageBuilder.ARM64.ServerType = "cax11"
+	}
+	if cfg.Talos.ImageBuilder.ARM64.ServerLocation == "" {
+		cfg.Talos.ImageBuilder.ARM64.ServerLocation = "nbg1"
+	}
+
+	// Parse Talos Backup S3 Hcloud URL if provided
+	applyTalosBackupS3Defaults(&cfg)
+
 	// Default ingress load balancer pool count to 1 if not specified
 	for i := range cfg.IngressLoadBalancerPools {
 		if cfg.IngressLoadBalancerPools[i].Count == 0 {
@@ -100,4 +132,31 @@ func shouldEnableAddonByDefault(rawConfig map[string]interface{}, addonKey strin
 
 	_, explicitlySet := addonMap["enabled"]
 	return !explicitlySet // Default to enabled if not explicitly set
+}
+
+// applyTalosBackupS3Defaults parses S3HcloudURL and sets derived values.
+// This is a convenience feature matching terraform/talos_backup.tf
+func applyTalosBackupS3Defaults(cfg *Config) {
+	backup := &cfg.Addons.TalosBackup
+
+	// Parse Hcloud URL if provided
+	if backup.S3HcloudURL != "" {
+		matches := hcloudS3URLRegex.FindStringSubmatch(backup.S3HcloudURL)
+		if len(matches) == 3 {
+			// Extract bucket and region from URL
+			bucket := matches[1]
+			region := matches[2]
+
+			// Only set if not already configured (explicit config takes precedence)
+			if backup.S3Bucket == "" {
+				backup.S3Bucket = bucket
+			}
+			if backup.S3Region == "" {
+				backup.S3Region = region
+			}
+			if backup.S3Endpoint == "" {
+				backup.S3Endpoint = fmt.Sprintf("https://%s.your-objectstorage.com", region)
+			}
+		}
+	}
 }

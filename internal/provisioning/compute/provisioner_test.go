@@ -45,7 +45,7 @@ func (m *mockTalosProducer) GetNodeVersion(_ context.Context, _ string) (string,
 	return "v1.8.2", nil
 }
 
-func (m *mockTalosProducer) UpgradeNode(_ context.Context, _, _ string) error {
+func (m *mockTalosProducer) UpgradeNode(_ context.Context, _, _ string, _ provisioning.UpgradeOptions) error {
 	return nil
 }
 

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"hcloud-k8s/internal/provisioning"
+
 	"github.com/siderolabs/talos/pkg/machinery/client"
 	"github.com/siderolabs/talos/pkg/machinery/client/config"
 )
@@ -72,7 +74,9 @@ func (g *Generator) GetSchematicID(ctx context.Context, endpoint string) (string
 }
 
 // UpgradeNode upgrades a single node to the specified image.
-func (g *Generator) UpgradeNode(ctx context.Context, endpoint, imageURL string) error {
+// The opts parameter allows configuring upgrade behavior (stage, force).
+// See: terraform/talos.tf talosctl_upgrade_command
+func (g *Generator) UpgradeNode(ctx context.Context, endpoint, imageURL string, opts provisioning.UpgradeOptions) error {
 	talosClient, err := g.createClient(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to create Talos client: %w", err)
@@ -84,9 +88,9 @@ func (g *Generator) UpgradeNode(ctx context.Context, endpoint, imageURL string) 
 	nodeCtx := client.WithNode(ctx, endpoint)
 
 	// Perform upgrade
-	// Note: This will cause the node to reboot
-	// Parameters: ctx, image, stage=false (upgrade immediately), force=false (don't force)
-	_, err = talosClient.Upgrade(nodeCtx, imageURL, false, false)
+	// Note: This will cause the node to reboot (unless opts.Stage is true)
+	// Parameters: ctx, image, stage, force
+	_, err = talosClient.Upgrade(nodeCtx, imageURL, opts.Stage, opts.Force)
 	if err != nil {
 		return fmt.Errorf("failed to initiate upgrade: %w", err)
 	}

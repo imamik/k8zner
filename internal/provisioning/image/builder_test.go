@@ -45,7 +45,8 @@ func TestBuild(t *testing.T) {
 	}
 
 	builder := NewBuilder(mockClient)
-	snapshotID, err := builder.Build(context.Background(), "test-image", "v1.8.0", "amd64", "nbg1", nil)
+	// serverType is empty to use auto-detection based on architecture
+	snapshotID, err := builder.Build(context.Background(), "test-image", "v1.8.0", "amd64", "", "nbg1", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

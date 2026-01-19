@@ -14,6 +14,16 @@ import (
 	"time"
 )
 
+// UpgradeOptions configures the behavior of node upgrades.
+// See: terraform/variables.tf talos_upgrade_* variables
+type UpgradeOptions struct {
+	// Stage stages the upgrade to be performed on next reboot instead of immediately.
+	Stage bool
+
+	// Force forces the upgrade by skipping etcd health and member checks.
+	Force bool
+}
+
 // Phase defines the interface for a provisioning phase.
 type Phase interface {
 	// Name returns the human-readable name of this phase.
@@ -50,7 +60,8 @@ type TalosConfigProducer interface {
 	GetNodeVersion(ctx context.Context, endpoint string) (string, error)
 
 	// UpgradeNode upgrades a single node to the specified image.
-	UpgradeNode(ctx context.Context, endpoint, imageURL string) error
+	// The opts parameter allows configuring upgrade behavior (stage, force).
+	UpgradeNode(ctx context.Context, endpoint, imageURL string, opts UpgradeOptions) error
 
 	// UpgradeKubernetes upgrades the Kubernetes control plane to the target version.
 	UpgradeKubernetes(ctx context.Context, endpoint, targetVersion string) error
