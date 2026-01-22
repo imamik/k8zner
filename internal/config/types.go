@@ -251,7 +251,7 @@ type IngressLoadBalancerPool struct {
 
 	// Algorithm specifies the load balancing algorithm.
 	// Valid values: "round_robin", "least_connections"
-	Algorithm string `mapstructure:"algorithm" yaml:"algorithm"`
+	Algorithm string `mapstructure:"load_balancer_algorithm" yaml:"load_balancer_algorithm"`
 
 	// PublicNetworkEnabled enables the public interface for this load balancer.
 	PublicNetworkEnabled *bool `mapstructure:"public_network_enabled" yaml:"public_network_enabled"`
