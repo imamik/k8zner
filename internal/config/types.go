@@ -219,6 +219,7 @@ type IngressConfig struct {
 	HealthCheckInt     int    `mapstructure:"health_check_interval" yaml:"health_check_interval"`
 	HealthCheckRetry   int    `mapstructure:"health_check_retries" yaml:"health_check_retries"`
 	HealthCheckTimeout int    `mapstructure:"health_check_timeout" yaml:"health_check_timeout"`
+	RDNS               string `mapstructure:"rdns" yaml:"rdns"`
 	RDNSIPv4           string `mapstructure:"rdns_ipv4" yaml:"rdns_ipv4"`
 	RDNSIPv6           string `mapstructure:"rdns_ipv6" yaml:"rdns_ipv6"`
 }
@@ -655,7 +656,7 @@ type IngressNginxConfig struct {
 
 	// ExternalTrafficPolicy controls how external traffic is routed.
 	// Valid values: "Cluster" (cluster-wide) or "Local" (node-local).
-	// Default: "Local" (preserves client IP with PROXY protocol)
+	// Default: "Cluster"
 	ExternalTrafficPolicy string `mapstructure:"external_traffic_policy" yaml:"external_traffic_policy"`
 
 	// Config provides global nginx configuration via ConfigMap.
