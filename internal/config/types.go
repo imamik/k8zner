@@ -143,6 +143,7 @@ type ControlPlaneNodePool struct {
 	Annotations map[string]string `mapstructure:"annotations" yaml:"annotations"`
 	Taints      []string          `mapstructure:"taints" yaml:"taints"`
 	Image       string            `mapstructure:"image" yaml:"image"` // Optional override
+	RDNS        string            `mapstructure:"rdns" yaml:"rdns"`
 	RDNSIPv4    string            `mapstructure:"rdns_ipv4" yaml:"rdns_ipv4"`
 	RDNSIPv6    string            `mapstructure:"rdns_ipv6" yaml:"rdns_ipv6"`
 
@@ -172,6 +173,7 @@ type WorkerNodePool struct {
 	Taints         []string          `mapstructure:"taints" yaml:"taints"`
 	PlacementGroup bool              `mapstructure:"placement_group" yaml:"placement_group"`
 	Image          string            `mapstructure:"image" yaml:"image"` // Optional override
+	RDNS           string            `mapstructure:"rdns" yaml:"rdns"`
 	RDNSIPv4       string            `mapstructure:"rdns_ipv4" yaml:"rdns_ipv4"`
 	RDNSIPv6       string            `mapstructure:"rdns_ipv6" yaml:"rdns_ipv6"`
 
@@ -673,11 +675,11 @@ type LonghornConfig struct {
 
 // StorageClass defines a Kubernetes StorageClass for CSI.
 type StorageClass struct {
-	Name            string            `mapstructure:"name" yaml:"name"`
-	Encrypted       bool              `mapstructure:"encrypted" yaml:"encrypted"`
-	ReclaimPolicy   string            `mapstructure:"reclaim_policy" yaml:"reclaim_policy"`
-	IsDefault       bool              `mapstructure:"is_default" yaml:"is_default"`
-	ExtraParameters map[string]string `mapstructure:"extra_parameters" yaml:"extra_parameters"`
+	Name                string            `mapstructure:"name" yaml:"name"`
+	Encrypted           bool              `mapstructure:"encrypted" yaml:"encrypted"`
+	ReclaimPolicy       string            `mapstructure:"reclaim_policy" yaml:"reclaim_policy"`
+	DefaultStorageClass bool              `mapstructure:"default_storage_class" yaml:"default_storage_class"`
+	ExtraParameters     map[string]string `mapstructure:"extra_parameters" yaml:"extra_parameters"`
 }
 
 // RBACConfig defines RBAC roles and cluster roles.
