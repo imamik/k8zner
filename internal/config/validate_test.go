@@ -420,6 +420,7 @@ func TestValidateIngressNginx_ValidKinds(t *testing.T) {
 				}},
 			},
 			Addons: AddonsConfig{
+				CertManager: CertManagerConfig{Enabled: true},
 				IngressNginx: IngressNginxConfig{
 					Enabled: true,
 					Kind:    kind,
@@ -448,6 +449,7 @@ func TestValidateIngressNginx_InvalidKind(t *testing.T) {
 			}},
 		},
 		Addons: AddonsConfig{
+			CertManager: CertManagerConfig{Enabled: true},
 			IngressNginx: IngressNginxConfig{
 				Enabled: true,
 				Kind:    "StatefulSet",
@@ -477,6 +479,7 @@ func TestValidateIngressNginx_ReplicasWithDaemonSet(t *testing.T) {
 			}},
 		},
 		Addons: AddonsConfig{
+			CertManager: CertManagerConfig{Enabled: true},
 			IngressNginx: IngressNginxConfig{
 				Enabled:  true,
 				Kind:     "DaemonSet",
@@ -506,6 +509,7 @@ func TestValidateIngressNginx_InvalidExternalTrafficPolicy(t *testing.T) {
 			}},
 		},
 		Addons: AddonsConfig{
+			CertManager: CertManagerConfig{Enabled: true},
 			IngressNginx: IngressNginxConfig{
 				Enabled:               true,
 				ExternalTrafficPolicy: "Invalid",
@@ -836,7 +840,7 @@ func TestValidateCCM_HealthCheckRetriesOutOfRange(t *testing.T) {
 				Enabled: true,
 				LoadBalancers: CCMLoadBalancerConfig{
 					HealthCheck: CCMHealthCheckConfig{
-						Retries: 20, // Out of range (1-10)
+						Retries: 10, // Out of range (0-5)
 					},
 				},
 			},
@@ -844,7 +848,7 @@ func TestValidateCCM_HealthCheckRetriesOutOfRange(t *testing.T) {
 	}
 	err := cfg.Validate()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "retries must be between 1 and 10")
+	assert.Contains(t, err.Error(), "retries must be between 0 and 5")
 }
 
 // Test TalosBackup S3 URL validation
@@ -945,4 +949,645 @@ func TestValidateTalosBackup_EmptyS3HcloudURL(t *testing.T) {
 	}
 	err := cfg.Validate()
 	assert.NoError(t, err)
+}
+
+// Test cluster name validation
+func TestValidateClusterName_Valid(t *testing.T) {
+	validNames := []string{
+		"a",
+		"a1",
+		"test",
+		"my-cluster",
+		"cluster123",
+		"a-b-c-d",
+		"abcdefghijklmnopqrstuvwxyz12345", // 31 chars
+	}
+	for _, name := range validNames {
+		cfg := &Config{
+			ClusterName: name,
+			HCloudToken: "token",
+			Location:    "nbg1",
+			Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+			ControlPlane: ControlPlaneConfig{
+				NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+			},
+		}
+		err := cfg.Validate()
+		assert.NoError(t, err, "cluster name %q should be valid", name)
+	}
+}
+
+func TestValidateClusterName_Invalid(t *testing.T) {
+	invalidNames := []string{
+		"",                                    // empty
+		"-test",                               // starts with hyphen
+		"test-",                               // ends with hyphen
+		"TEST",                                // uppercase
+		"Test",                                // mixed case
+		"test_cluster",                        // underscore
+		"test.cluster",                        // dot
+		"abcdefghijklmnopqrstuvwxyz123456789", // too long (>32)
+	}
+	for _, name := range invalidNames {
+		cfg := &Config{
+			ClusterName: name,
+			HCloudToken: "token",
+			Location:    "nbg1",
+			Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+			ControlPlane: ControlPlaneConfig{
+				NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+			},
+		}
+		err := cfg.Validate()
+		if name == "" {
+			assert.Error(t, err, "empty cluster name should fail")
+		} else {
+			require.Error(t, err, "cluster name %q should be invalid", name)
+			assert.Contains(t, err.Error(), "invalid cluster_name")
+		}
+	}
+}
+
+// Test node pool uniqueness validation
+func TestValidateNodePoolUniqueness_DuplicateControlPlane(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{
+				{Name: "cp1", ServerType: "cpx22", Count: 1},
+				{Name: "cp1", ServerType: "cpx22", Count: 1}, // duplicate
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate control plane pool name")
+}
+
+func TestValidateNodePoolUniqueness_DuplicateWorker(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Workers: []WorkerNodePool{
+			{Name: "worker", ServerType: "cpx22", Count: 1},
+			{Name: "worker", ServerType: "cpx22", Count: 1}, // duplicate
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate worker pool name")
+}
+
+func TestValidateNodePoolUniqueness_DuplicateAutoscaler(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Autoscaler: AutoscalerConfig{
+			NodePools: []AutoscalerNodePool{
+				{Name: "as1", Type: "cpx22", Location: "nbg1", Min: 0, Max: 5},
+				{Name: "as1", Type: "cpx22", Location: "nbg1", Min: 0, Max: 5}, // duplicate
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate autoscaler pool name")
+}
+
+// Test node count constraints validation
+func TestValidateNodeCounts_ControlPlaneExceeds9(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{
+				{Name: "cp1", ServerType: "cpx22", Count: 5},
+				{Name: "cp2", ServerType: "cpx22", Count: 5}, // total 10
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "total control plane nodes must be <= 9")
+}
+
+func TestValidateNodeCounts_TotalExceeds100(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 3}},
+		},
+		Workers: []WorkerNodePool{
+			{Name: "worker", ServerType: "cpx22", Count: 50},
+		},
+		Autoscaler: AutoscalerConfig{
+			NodePools: []AutoscalerNodePool{
+				{Name: "as", Type: "cpx22", Location: "nbg1", Min: 0, Max: 50},
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "total nodes")
+	assert.Contains(t, err.Error(), "must be <= 100")
+}
+
+// Test combined name length validation
+func TestValidateCombinedNameLengths_Exceeds56(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "this-is-a-very-long-cluster-name", // 32 chars
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{
+				{Name: "this-is-also-a-long-pool-name", ServerType: "cpx22", Count: 1}, // 29 chars, total 62
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "combined length")
+	assert.Contains(t, err.Error(), "exceeds")
+}
+
+// Test firewall rule cross-validation
+func TestValidateFirewallRules_InDirectionRequiresSourceIPs(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Firewall: FirewallConfig{
+			ExtraRules: []FirewallRule{
+				{Direction: "in", Protocol: "tcp", Port: "443"}, // missing source_ips
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "'in' direction requires source_ips")
+}
+
+func TestValidateFirewallRules_OutDirectionRequiresDestinationIPs(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Firewall: FirewallConfig{
+			ExtraRules: []FirewallRule{
+				{Direction: "out", Protocol: "tcp", Port: "443"}, // missing destination_ips
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "'out' direction requires destination_ips")
+}
+
+func TestValidateFirewallRules_TCPRequiresPort(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Firewall: FirewallConfig{
+			ExtraRules: []FirewallRule{
+				{Direction: "in", Protocol: "tcp", SourceIPs: []string{"0.0.0.0/0"}}, // missing port
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "tcp protocol requires port")
+}
+
+func TestValidateFirewallRules_ICMPCannotHavePort(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Firewall: FirewallConfig{
+			ExtraRules: []FirewallRule{
+				{Direction: "in", Protocol: "icmp", Port: "80", SourceIPs: []string{"0.0.0.0/0"}},
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "icmp protocol cannot have port")
+}
+
+func TestValidateFirewallRules_ValidRule(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Firewall: FirewallConfig{
+			ExtraRules: []FirewallRule{
+				{Direction: "in", Protocol: "tcp", Port: "443", SourceIPs: []string{"0.0.0.0/0"}},
+				{Direction: "out", Protocol: "tcp", Port: "443", DestinationIPs: []string{"0.0.0.0/0"}},
+				{Direction: "in", Protocol: "icmp", SourceIPs: []string{"0.0.0.0/0"}},
+			},
+		},
+	}
+	err := cfg.Validate()
+	assert.NoError(t, err)
+}
+
+// Test Cilium dependency chain validation
+func TestValidateCilium_EgressGatewayRequiresKubeProxyReplacement(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Addons: AddonsConfig{
+			Cilium: CiliumConfig{
+				Enabled:                     true,
+				EgressGatewayEnabled:        true,
+				KubeProxyReplacementEnabled: false,
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "egress_gateway_enabled requires kube_proxy_replacement_enabled=true")
+}
+
+func TestValidateCilium_HubbleRelayRequiresHubble(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Addons: AddonsConfig{
+			Cilium: CiliumConfig{
+				Enabled:            true,
+				HubbleRelayEnabled: true,
+				HubbleEnabled:      false,
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "hubble_relay_enabled requires hubble_enabled=true")
+}
+
+func TestValidateCilium_HubbleUIRequiresRelay(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Addons: AddonsConfig{
+			Cilium: CiliumConfig{
+				Enabled:            true,
+				HubbleEnabled:      true,
+				HubbleRelayEnabled: false,
+				HubbleUIEnabled:    true,
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "hubble_ui_enabled requires hubble_relay_enabled=true")
+}
+
+func TestValidateCilium_IPSecKeyIDOutOfRange(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Addons: AddonsConfig{
+			Cilium: CiliumConfig{
+				Enabled:        true,
+				EncryptionType: "ipsec",
+				IPSecKeyID:     16, // Out of range (1-15)
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ipsec_key_id must be 1-15")
+}
+
+func TestValidateCilium_IPSecKeySizeInvalid(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Addons: AddonsConfig{
+			Cilium: CiliumConfig{
+				Enabled:        true,
+				EncryptionType: "ipsec",
+				IPSecKeySize:   64, // Invalid (must be 128, 192, or 256)
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ipsec_key_size must be 128, 192, or 256")
+}
+
+// Test OIDC required fields validation
+func TestValidateOIDC_RequiresIssuerURL(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Kubernetes: KubernetesConfig{
+			OIDC: OIDCConfig{
+				Enabled:   true,
+				ClientID:  "client-id",
+				IssuerURL: "", // missing
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "oidc.issuer_url is required")
+}
+
+func TestValidateOIDC_RequiresClientID(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Kubernetes: KubernetesConfig{
+			OIDC: OIDCConfig{
+				Enabled:   true,
+				IssuerURL: "https://issuer.example.com",
+				ClientID:  "", // missing
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "oidc.client_id is required")
+}
+
+func TestValidateOIDC_DuplicateGroupMapping(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Kubernetes: KubernetesConfig{
+			OIDC: OIDCConfig{
+				Enabled:   true,
+				IssuerURL: "https://issuer.example.com",
+				ClientID:  "client-id",
+			},
+		},
+		Addons: AddonsConfig{
+			OIDCRBAC: OIDCRBACConfig{
+				GroupMappings: []OIDCRBACGroupMapping{
+					{Group: "admins", ClusterRoles: []string{"cluster-admin"}},
+					{Group: "admins", ClusterRoles: []string{"cluster-admin"}}, // duplicate
+				},
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate OIDC group mapping")
+}
+
+// Test autoscaler min/max validation
+func TestValidateAutoscaler_MaxLessThanMin(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Autoscaler: AutoscalerConfig{
+			NodePools: []AutoscalerNodePool{
+				{Name: "as", Type: "cpx22", Location: "nbg1", Min: 5, Max: 3},
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "max")
+	assert.Contains(t, err.Error(), "min")
+}
+
+func TestValidateAutoscaler_NegativeMin(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Autoscaler: AutoscalerConfig{
+			NodePools: []AutoscalerNodePool{
+				{Name: "as", Type: "cpx22", Location: "nbg1", Min: -1, Max: 5},
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "min cannot be negative")
+}
+
+// Test CSI passphrase validation
+func TestValidateCSI_PassphraseTooShort(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Addons: AddonsConfig{
+			CSI: CSIConfig{
+				Enabled:              true,
+				EncryptionPassphrase: "short", // <8 chars
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "encryption_passphrase must be 8-512 characters")
+}
+
+func TestValidateCSI_PassphraseNonPrintableASCII(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Addons: AddonsConfig{
+			CSI: CSIConfig{
+				Enabled:              true,
+				EncryptionPassphrase: "test\x00pass", // contains null byte
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "non-printable ASCII")
+}
+
+func TestValidateCSI_ValidPassphrase(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Addons: AddonsConfig{
+			CSI: CSIConfig{
+				Enabled:              true,
+				EncryptionPassphrase: "my-secure-passphrase-123!",
+			},
+		},
+	}
+	err := cfg.Validate()
+	assert.NoError(t, err)
+}
+
+// Test Ingress NGINX cert-manager dependency
+func TestValidateIngressNginx_RequiresCertManager(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Addons: AddonsConfig{
+			IngressNginx: IngressNginxConfig{Enabled: true},
+			CertManager:  CertManagerConfig{Enabled: false},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ingress_nginx requires cert_manager to be enabled")
+}
+
+// Test kubelet mount validations
+func TestValidateTalosKubeletMounts_DuplicateDestination(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Talos: TalosConfig{
+			Machine: TalosMachineConfig{
+				KubeletExtraMounts: []TalosKubeletMount{
+					{Source: "/data1", Destination: "/mnt/data"},
+					{Source: "/data2", Destination: "/mnt/data"}, // duplicate destination
+				},
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate destination")
+}
+
+func TestValidateTalosKubeletMounts_LonghornConflict(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Talos: TalosConfig{
+			Machine: TalosMachineConfig{
+				KubeletExtraMounts: []TalosKubeletMount{
+					{Source: "/my-longhorn", Destination: "/var/lib/longhorn"},
+				},
+			},
+		},
+		Addons: AddonsConfig{
+			Longhorn: LonghornConfig{Enabled: true},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "/var/lib/longhorn conflicts with Longhorn addon")
 }

@@ -71,14 +71,14 @@ func (p *Provisioner) ProvisionFirewall(ctx *provisioning.Context) error {
 }
 
 // collectAPISources collects IP sources with fallback and current IP logic.
-func collectAPISources(specific, fallback []string, publicIP string, useCurrentIP bool) []string {
+func collectAPISources(specific, fallback []string, publicIP string, useCurrentIP *bool) []string {
 	sources := []string{}
 	if len(specific) > 0 {
 		sources = append(sources, specific...)
 	} else if len(fallback) > 0 {
 		sources = append(sources, fallback...)
 	}
-	if publicIP != "" && useCurrentIP {
+	if publicIP != "" && useCurrentIP != nil && *useCurrentIP {
 		sources = append(sources, publicIP+"/32")
 	}
 	return sources

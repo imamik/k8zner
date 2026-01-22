@@ -29,7 +29,7 @@ func (p *Provisioner) ProvisionNetwork(ctx *provisioning.Context) error {
 	ctx.State.Network = network
 
 	// Detect Public IP for Firewall (if needed)
-	if ctx.Config.Firewall.UseCurrentIPv4 && ctx.State.PublicIP == "" {
+	if ctx.Config.Firewall.UseCurrentIPv4 != nil && *ctx.Config.Firewall.UseCurrentIPv4 && ctx.State.PublicIP == "" {
 		ip, err := ctx.Infra.GetPublicIP(ctx)
 		if err != nil {
 			ctx.Observer.Printf("[Infra:Network] Warning: failed to detect public IP: %v", err)

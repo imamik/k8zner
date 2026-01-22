@@ -35,6 +35,24 @@ type Config struct {
 	// Default: false
 	DeleteProtection bool `mapstructure:"delete_protection" yaml:"delete_protection"`
 
+	// KubeconfigPath specifies where to write the kubeconfig file.
+	// See: terraform/variables.tf cluster_kubeconfig_path
+	KubeconfigPath string `mapstructure:"kubeconfig_path" yaml:"kubeconfig_path"`
+
+	// TalosconfigPath specifies where to write the talosconfig file.
+	// See: terraform/variables.tf cluster_talosconfig_path
+	TalosconfigPath string `mapstructure:"talosconfig_path" yaml:"talosconfig_path"`
+
+	// TalosctlVersionCheckEnabled verifies talosctl version compatibility.
+	// See: terraform/variables.tf talosctl_version_check_enabled
+	// Default: true
+	TalosctlVersionCheckEnabled *bool `mapstructure:"talosctl_version_check_enabled" yaml:"talosctl_version_check_enabled"`
+
+	// TalosctlRetryCount specifies retry attempts for talosctl operations.
+	// See: terraform/variables.tf talosctl_retry_count
+	// Default: 5
+	TalosctlRetryCount int `mapstructure:"talosctl_retry_count" yaml:"talosctl_retry_count"`
+
 	// Network Configuration
 	Network NetworkConfig `mapstructure:"network" yaml:"network"`
 
@@ -88,8 +106,8 @@ type NetworkConfig struct {
 
 // FirewallConfig defines the firewall-related configuration.
 type FirewallConfig struct {
-	UseCurrentIPv4 bool           `mapstructure:"use_current_ipv4" yaml:"use_current_ipv4"`
-	UseCurrentIPv6 bool           `mapstructure:"use_current_ipv6" yaml:"use_current_ipv6"`
+	UseCurrentIPv4 *bool          `mapstructure:"use_current_ipv4" yaml:"use_current_ipv4"`
+	UseCurrentIPv6 *bool          `mapstructure:"use_current_ipv6" yaml:"use_current_ipv6"`
 	APISource      []string       `mapstructure:"api_source" yaml:"api_source"`
 	KubeAPISource  []string       `mapstructure:"kube_api_source" yaml:"kube_api_source"`
 	TalosAPISource []string       `mapstructure:"talos_api_source" yaml:"talos_api_source"`
@@ -180,13 +198,14 @@ type AutoscalerConfig struct {
 
 // AutoscalerNodePool defines a node pool for the autoscaler.
 type AutoscalerNodePool struct {
-	Name     string            `mapstructure:"name" yaml:"name"`
-	Location string            `mapstructure:"location" yaml:"location"`
-	Type     string            `mapstructure:"type" yaml:"type"`
-	Min      int               `mapstructure:"min" yaml:"min"`
-	Max      int               `mapstructure:"max" yaml:"max"`
-	Labels   map[string]string `mapstructure:"labels" yaml:"labels"`
-	Taints   []string          `mapstructure:"taints" yaml:"taints"`
+	Name        string            `mapstructure:"name" yaml:"name"`
+	Location    string            `mapstructure:"location" yaml:"location"`
+	Type        string            `mapstructure:"type" yaml:"type"`
+	Min         int               `mapstructure:"min" yaml:"min"`
+	Max         int               `mapstructure:"max" yaml:"max"`
+	Labels      map[string]string `mapstructure:"labels" yaml:"labels"`
+	Annotations map[string]string `mapstructure:"annotations" yaml:"annotations"`
+	Taints      []string          `mapstructure:"taints" yaml:"taints"`
 }
 
 // IngressConfig defines the ingress (load balancer) configuration.
@@ -654,9 +673,11 @@ type LonghornConfig struct {
 
 // StorageClass defines a Kubernetes StorageClass for CSI.
 type StorageClass struct {
-	Name          string `mapstructure:"name" yaml:"name"`
-	ReclaimPolicy string `mapstructure:"reclaim_policy" yaml:"reclaim_policy"`
-	IsDefault     bool   `mapstructure:"is_default" yaml:"is_default"`
+	Name            string            `mapstructure:"name" yaml:"name"`
+	Encrypted       bool              `mapstructure:"encrypted" yaml:"encrypted"`
+	ReclaimPolicy   string            `mapstructure:"reclaim_policy" yaml:"reclaim_policy"`
+	IsDefault       bool              `mapstructure:"is_default" yaml:"is_default"`
+	ExtraParameters map[string]string `mapstructure:"extra_parameters" yaml:"extra_parameters"`
 }
 
 // RBACConfig defines RBAC roles and cluster roles.
@@ -816,6 +837,8 @@ type RDNSConfig struct {
 	ClusterRDNS     string `mapstructure:"cluster" yaml:"cluster"`
 	ClusterRDNSIPv4 string `mapstructure:"cluster_ipv4" yaml:"cluster_ipv4"`
 	ClusterRDNSIPv6 string `mapstructure:"cluster_ipv6" yaml:"cluster_ipv6"`
+	// Ingress load balancer RDNS (generic, without IP version suffix)
+	IngressRDNS     string `mapstructure:"ingress" yaml:"ingress"`
 	IngressRDNSIPv4 string `mapstructure:"ingress_ipv4" yaml:"ingress_ipv4"`
 	IngressRDNSIPv6 string `mapstructure:"ingress_ipv6" yaml:"ingress_ipv6"`
 }

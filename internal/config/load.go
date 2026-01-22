@@ -103,6 +103,9 @@ func LoadFile(path string) (*Config, error) {
 		}
 	}
 
+	// Apply auto-calculated defaults (matches Terraform behavior)
+	applyAutoCalculatedDefaults(&cfg)
+
 	// Validate configuration
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
@@ -157,6 +160,54 @@ func applyTalosBackupS3Defaults(cfg *Config) {
 			if backup.S3Endpoint == "" {
 				backup.S3Endpoint = fmt.Sprintf("https://%s.your-objectstorage.com", region)
 			}
+		}
+	}
+}
+
+// applyAutoCalculatedDefaults sets computed defaults based on cluster configuration.
+// These match Terraform's local value calculations.
+func applyAutoCalculatedDefaults(cfg *Config) {
+	// Calculate schedulable worker count
+	workerCount := 0
+	for _, pool := range cfg.Workers {
+		workerCount += pool.Count
+	}
+
+	// Metrics server replicas: 1 for ≤1 schedulable, 2 for >1
+	if cfg.Addons.MetricsServer.Enabled && cfg.Addons.MetricsServer.Replicas == nil {
+		replicas := 2
+		if workerCount <= 1 {
+			replicas = 1
+		}
+		cfg.Addons.MetricsServer.Replicas = &replicas
+	}
+
+	// Metrics server schedule on control plane: default true when no workers
+	if cfg.Addons.MetricsServer.Enabled && cfg.Addons.MetricsServer.ScheduleOnControlPlane == nil {
+		scheduleOnCP := workerCount == 0
+		cfg.Addons.MetricsServer.ScheduleOnControlPlane = &scheduleOnCP
+	}
+
+	// Ingress NGINX replicas: 2 for <3 workers, 3 for ≥3 workers
+	if cfg.Addons.IngressNginx.Enabled && cfg.Addons.IngressNginx.Replicas == nil {
+		if cfg.Addons.IngressNginx.Kind != "DaemonSet" {
+			replicas := 2
+			if workerCount >= 3 {
+				replicas = 3
+			}
+			cfg.Addons.IngressNginx.Replicas = &replicas
+		}
+	}
+
+	// Firewall IP defaults: use current IPv4/IPv6 when cluster_access is public
+	if cfg.ClusterAccess == "public" {
+		if cfg.Firewall.UseCurrentIPv4 == nil {
+			useIPv4 := true
+			cfg.Firewall.UseCurrentIPv4 = &useIPv4
+		}
+		if cfg.Firewall.UseCurrentIPv6 == nil {
+			useIPv6 := true
+			cfg.Firewall.UseCurrentIPv6 = &useIPv6
 		}
 	}
 }

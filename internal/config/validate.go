@@ -3,7 +3,11 @@ package config
 import (
 	"fmt"
 	"net"
+	"regexp"
 )
+
+// clusterNameRegex validates cluster name format: 1-32 lowercase alphanumeric with hyphens.
+var clusterNameRegex = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$`)
 
 // ValidLocations contains all valid Hetzner Cloud datacenter locations.
 // https://docs.hetzner.com/cloud/general/locations/
@@ -57,6 +61,11 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("location is required")
 	}
 
+	// Cluster name format validation
+	if err := c.validateClusterName(); err != nil {
+		return err
+	}
+
 	// Cluster access mode validation
 	if c.ClusterAccess != "" && !ValidClusterAccessModes[c.ClusterAccess] {
 		return fmt.Errorf("invalid cluster_access %q: must be one of %v",
@@ -83,6 +92,31 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("worker validation failed: %w", err)
 	}
 
+	// Node pool uniqueness validation
+	if err := c.validateNodePoolUniqueness(); err != nil {
+		return err
+	}
+
+	// Node count constraints validation
+	if err := c.validateNodeCounts(); err != nil {
+		return err
+	}
+
+	// Combined name length validation
+	if err := c.validateCombinedNameLengths(); err != nil {
+		return err
+	}
+
+	// Autoscaler validation
+	if err := c.validateAutoscaler(); err != nil {
+		return fmt.Errorf("autoscaler validation failed: %w", err)
+	}
+
+	// Firewall rules validation
+	if err := c.validateFirewallRules(); err != nil {
+		return fmt.Errorf("firewall validation failed: %w", err)
+	}
+
 	// Ingress load balancer pools validation
 	if err := c.validateIngressLoadBalancerPools(); err != nil {
 		return fmt.Errorf("ingress_load_balancer_pools validation failed: %w", err)
@@ -93,14 +127,29 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("talos machine config validation failed: %w", err)
 	}
 
+	// Kubelet mounts validation
+	if err := c.validateKubeletMounts(); err != nil {
+		return fmt.Errorf("kubelet_extra_mounts validation failed: %w", err)
+	}
+
 	// CCM validation
 	if err := c.validateCCM(); err != nil {
 		return fmt.Errorf("ccm validation failed: %w", err)
 	}
 
+	// CSI validation
+	if err := c.validateCSI(); err != nil {
+		return fmt.Errorf("csi validation failed: %w", err)
+	}
+
 	// Cilium validation
 	if err := c.validateCilium(); err != nil {
 		return fmt.Errorf("cilium validation failed: %w", err)
+	}
+
+	// OIDC validation
+	if err := c.validateOIDC(); err != nil {
+		return fmt.Errorf("oidc validation failed: %w", err)
 	}
 
 	// Ingress NGINX validation
@@ -532,39 +581,6 @@ var ValidIngressNginxExternalTrafficPolicies = map[string]bool{
 	"Local":   true,
 }
 
-// validateIngressNginx validates Ingress NGINX addon configuration.
-func (c *Config) validateIngressNginx() error {
-	if !c.Addons.IngressNginx.Enabled {
-		return nil // Skip validation if Ingress NGINX is disabled
-	}
-
-	nginx := &c.Addons.IngressNginx
-
-	// Validate kind
-	if nginx.Kind != "" && !ValidIngressNginxKinds[nginx.Kind] {
-		return fmt.Errorf("invalid kind %q: must be one of %v",
-			nginx.Kind, getMapKeys(ValidIngressNginxKinds))
-	}
-
-	// Validate external traffic policy
-	if nginx.ExternalTrafficPolicy != "" && !ValidIngressNginxExternalTrafficPolicies[nginx.ExternalTrafficPolicy] {
-		return fmt.Errorf("invalid external_traffic_policy %q: must be one of %v",
-			nginx.ExternalTrafficPolicy, getMapKeys(ValidIngressNginxExternalTrafficPolicies))
-	}
-
-	// Validate replicas must be nil when kind is DaemonSet
-	if nginx.Kind == "DaemonSet" && nginx.Replicas != nil {
-		return fmt.Errorf("replicas must not be set when kind is 'DaemonSet'")
-	}
-
-	// Validate replicas is positive if set
-	if nginx.Replicas != nil && *nginx.Replicas < 1 {
-		return fmt.Errorf("replicas must be at least 1, got %d", *nginx.Replicas)
-	}
-
-	return nil
-}
-
 // ValidCiliumBPFDatapathModes contains valid BPF datapath modes for Cilium.
 var ValidCiliumBPFDatapathModes = map[string]bool{
 	"veth":      true,
@@ -582,38 +598,6 @@ var ValidCiliumPolicyCIDRMatchModes = map[string]bool{
 var ValidCiliumGatewayAPIExternalTrafficPolicies = map[string]bool{
 	"Cluster": true,
 	"Local":   true,
-}
-
-// validateCilium validates Cilium addon configuration.
-func (c *Config) validateCilium() error {
-	if !c.Addons.Cilium.Enabled {
-		return nil // Skip validation if Cilium is disabled
-	}
-
-	cilium := &c.Addons.Cilium
-
-	// Validate BPF datapath mode
-	if cilium.BPFDatapathMode != "" && !ValidCiliumBPFDatapathModes[cilium.BPFDatapathMode] {
-		return fmt.Errorf("invalid bpf_datapath_mode %q: must be one of %v",
-			cilium.BPFDatapathMode, getMapKeys(ValidCiliumBPFDatapathModes))
-	}
-
-	// Validate policy CIDR match mode
-	if !ValidCiliumPolicyCIDRMatchModes[cilium.PolicyCIDRMatchMode] {
-		return fmt.Errorf("invalid policy_cidr_match_mode %q: must be one of %v",
-			cilium.PolicyCIDRMatchMode, getMapKeys(ValidCiliumPolicyCIDRMatchModes))
-	}
-
-	// Validate Gateway API external traffic policy
-	if cilium.GatewayAPIExternalTrafficPolicy != "" && !ValidCiliumGatewayAPIExternalTrafficPolicies[cilium.GatewayAPIExternalTrafficPolicy] {
-		return fmt.Errorf("invalid gateway_api_external_traffic_policy %q: must be one of %v",
-			cilium.GatewayAPIExternalTrafficPolicy, getMapKeys(ValidCiliumGatewayAPIExternalTrafficPolicies))
-	}
-
-	// Note: netkit with IPsec is not recommended but allowed.
-	// Users should be aware of this combination from the documentation.
-
-	return nil
 }
 
 // validateCCM validates CCM configuration.
@@ -650,8 +634,8 @@ func (c *Config) validateCCM() error {
 	if hc.Timeout != 0 && (hc.Timeout < 1 || hc.Timeout > 60) {
 		return fmt.Errorf("load_balancers.health_check.timeout must be between 1 and 60 seconds, got %d", hc.Timeout)
 	}
-	if hc.Retries != 0 && (hc.Retries < 1 || hc.Retries > 10) {
-		return fmt.Errorf("load_balancers.health_check.retries must be between 1 and 10, got %d", hc.Retries)
+	if hc.Retries < 0 || hc.Retries > 5 {
+		return fmt.Errorf("load_balancers.health_check.retries must be between 0 and 5, got %d", hc.Retries)
 	}
 
 	return nil
@@ -710,6 +694,384 @@ func (c *Config) validateTalosBackup() error {
 			return fmt.Errorf("invalid s3_hcloud_url %q: must match format 'bucket.region.your-objectstorage.com' or 'https://bucket.region.your-objectstorage.com'",
 				backup.S3HcloudURL)
 		}
+	}
+
+	return nil
+}
+
+// validateClusterName validates cluster name format matches Terraform requirements.
+func (c *Config) validateClusterName() error {
+	if !clusterNameRegex.MatchString(c.ClusterName) {
+		return fmt.Errorf("invalid cluster_name %q: must be 1-32 lowercase alphanumeric characters or hyphens, starting and ending with alphanumeric", c.ClusterName)
+	}
+	return nil
+}
+
+// validateNodePoolUniqueness ensures all node pool names are unique within their category.
+func (c *Config) validateNodePoolUniqueness() error {
+	// Check control plane pool names
+	cpNames := make(map[string]bool)
+	for _, pool := range c.ControlPlane.NodePools {
+		if cpNames[pool.Name] {
+			return fmt.Errorf("duplicate control plane pool name: %q", pool.Name)
+		}
+		cpNames[pool.Name] = true
+	}
+
+	// Check worker pool names
+	workerNames := make(map[string]bool)
+	for _, pool := range c.Workers {
+		if workerNames[pool.Name] {
+			return fmt.Errorf("duplicate worker pool name: %q", pool.Name)
+		}
+		workerNames[pool.Name] = true
+	}
+
+	// Check autoscaler pool names
+	asNames := make(map[string]bool)
+	for _, pool := range c.Autoscaler.NodePools {
+		if asNames[pool.Name] {
+			return fmt.Errorf("duplicate autoscaler pool name: %q", pool.Name)
+		}
+		asNames[pool.Name] = true
+	}
+
+	return nil
+}
+
+// validateNodeCounts validates total node counts don't exceed limits.
+func (c *Config) validateNodeCounts() error {
+	// Sum control plane nodes
+	cpTotal := 0
+	for _, pool := range c.ControlPlane.NodePools {
+		cpTotal += pool.Count
+	}
+	if cpTotal > 9 {
+		return fmt.Errorf("total control plane nodes must be <= 9, got %d", cpTotal)
+	}
+
+	// Sum all nodes (CP + workers + autoscaler max)
+	totalNodes := cpTotal
+	for _, pool := range c.Workers {
+		totalNodes += pool.Count
+	}
+	for _, pool := range c.Autoscaler.NodePools {
+		totalNodes += pool.Max
+	}
+	if totalNodes > 100 {
+		return fmt.Errorf("total nodes (control plane + workers + autoscaler max) must be <= 100, got %d", totalNodes)
+	}
+
+	return nil
+}
+
+// validateCombinedNameLengths ensures cluster_name + pool_name <= 56 chars.
+func (c *Config) validateCombinedNameLengths() error {
+	const maxLen = 56
+
+	// Check control plane pools
+	for _, pool := range c.ControlPlane.NodePools {
+		if len(c.ClusterName)+len(pool.Name)+1 > maxLen {
+			return fmt.Errorf("control plane pool %q: combined length of cluster name and pool name exceeds %d characters", pool.Name, maxLen)
+		}
+	}
+
+	// Check worker pools
+	for _, pool := range c.Workers {
+		if len(c.ClusterName)+len(pool.Name)+1 > maxLen {
+			return fmt.Errorf("worker pool %q: combined length of cluster name and pool name exceeds %d characters", pool.Name, maxLen)
+		}
+	}
+
+	// Check autoscaler pools
+	for _, pool := range c.Autoscaler.NodePools {
+		if len(c.ClusterName)+len(pool.Name)+1 > maxLen {
+			return fmt.Errorf("autoscaler pool %q: combined length of cluster name and pool name exceeds %d characters", pool.Name, maxLen)
+		}
+	}
+
+	// Check ingress LB pools
+	for _, pool := range c.IngressLoadBalancerPools {
+		if len(c.ClusterName)+len(pool.Name)+1 > maxLen {
+			return fmt.Errorf("ingress load balancer pool %q: combined length of cluster name and pool name exceeds %d characters", pool.Name, maxLen)
+		}
+	}
+
+	return nil
+}
+
+// validateAutoscaler validates autoscaler configuration.
+func (c *Config) validateAutoscaler() error {
+	for _, pool := range c.Autoscaler.NodePools {
+		if pool.Name == "" {
+			return fmt.Errorf("autoscaler pool name is required")
+		}
+		if pool.Type == "" {
+			return fmt.Errorf("autoscaler pool %q: server type is required", pool.Name)
+		}
+		if pool.Location == "" {
+			return fmt.Errorf("autoscaler pool %q: location is required", pool.Name)
+		}
+		if !ValidLocations[pool.Location] {
+			return fmt.Errorf("autoscaler pool %q: invalid location %q: must be one of %v",
+				pool.Name, pool.Location, getMapKeys(ValidLocations))
+		}
+		if pool.Max < pool.Min {
+			return fmt.Errorf("autoscaler pool %q: max (%d) must be >= min (%d)", pool.Name, pool.Max, pool.Min)
+		}
+		if pool.Min < 0 {
+			return fmt.Errorf("autoscaler pool %q: min cannot be negative", pool.Name)
+		}
+	}
+	return nil
+}
+
+// ValidFirewallDirections contains valid firewall rule directions.
+var ValidFirewallDirections = map[string]bool{
+	"in":  true,
+	"out": true,
+}
+
+// ValidFirewallProtocols contains valid firewall rule protocols.
+var ValidFirewallProtocols = map[string]bool{
+	"tcp":  true,
+	"udp":  true,
+	"icmp": true,
+	"gre":  true,
+	"esp":  true,
+}
+
+// validateFirewallRules validates firewall extra rules configuration.
+func (c *Config) validateFirewallRules() error {
+	for i, rule := range c.Firewall.ExtraRules {
+		// Validate direction
+		if !ValidFirewallDirections[rule.Direction] {
+			return fmt.Errorf("firewall rule %d: direction must be 'in' or 'out', got %q", i, rule.Direction)
+		}
+
+		// Validate protocol
+		if !ValidFirewallProtocols[rule.Protocol] {
+			return fmt.Errorf("firewall rule %d: protocol must be one of tcp, udp, icmp, gre, esp, got %q", i, rule.Protocol)
+		}
+
+		// Validate direction-specific IP requirements
+		switch rule.Direction {
+		case "in":
+			if len(rule.SourceIPs) == 0 {
+				return fmt.Errorf("firewall rule %d: 'in' direction requires source_ips", i)
+			}
+			if len(rule.DestinationIPs) > 0 {
+				return fmt.Errorf("firewall rule %d: 'in' direction cannot have destination_ips", i)
+			}
+		case "out":
+			if len(rule.DestinationIPs) == 0 {
+				return fmt.Errorf("firewall rule %d: 'out' direction requires destination_ips", i)
+			}
+			if len(rule.SourceIPs) > 0 {
+				return fmt.Errorf("firewall rule %d: 'out' direction cannot have source_ips", i)
+			}
+		}
+
+		// Validate port requirements based on protocol
+		switch rule.Protocol {
+		case "tcp", "udp":
+			if rule.Port == "" {
+				return fmt.Errorf("firewall rule %d: %s protocol requires port", i, rule.Protocol)
+			}
+		case "icmp", "gre", "esp":
+			if rule.Port != "" {
+				return fmt.Errorf("firewall rule %d: %s protocol cannot have port", i, rule.Protocol)
+			}
+		}
+	}
+	return nil
+}
+
+// validateKubeletMounts validates kubelet extra mounts configuration.
+func (c *Config) validateKubeletMounts() error {
+	mounts := c.Talos.Machine.KubeletExtraMounts
+	if len(mounts) == 0 {
+		return nil
+	}
+
+	// Check for unique destinations
+	destinations := make(map[string]bool)
+	for i, mount := range mounts {
+		dest := mount.Destination
+		if dest == "" {
+			dest = mount.Source // Default destination is source
+		}
+
+		if destinations[dest] {
+			return fmt.Errorf("kubelet_extra_mount %d: duplicate destination %q", i, dest)
+		}
+		destinations[dest] = true
+
+		// Check for Longhorn path conflict
+		if c.Addons.Longhorn.Enabled && dest == "/var/lib/longhorn" {
+			return fmt.Errorf("kubelet_extra_mount %d: /var/lib/longhorn conflicts with Longhorn addon", i)
+		}
+	}
+
+	return nil
+}
+
+// validateCSI validates CSI configuration.
+func (c *Config) validateCSI() error {
+	csi := &c.Addons.CSI
+	if !csi.Enabled {
+		return nil
+	}
+
+	// Validate encryption passphrase if provided
+	if csi.EncryptionPassphrase != "" {
+		if len(csi.EncryptionPassphrase) < 8 || len(csi.EncryptionPassphrase) > 512 {
+			return fmt.Errorf("csi encryption_passphrase must be 8-512 characters, got %d", len(csi.EncryptionPassphrase))
+		}
+		// Validate printable ASCII (32-126)
+		for i, r := range csi.EncryptionPassphrase {
+			if r < 32 || r > 126 {
+				return fmt.Errorf("csi encryption_passphrase contains non-printable ASCII at position %d", i)
+			}
+		}
+	}
+
+	return nil
+}
+
+// ValidCiliumEncryptionTypes contains valid Cilium encryption types.
+var ValidCiliumEncryptionTypes = map[string]bool{
+	"":          true,
+	"wireguard": true,
+	"ipsec":     true,
+}
+
+// ValidIPSecKeySizes contains valid IPSec key sizes.
+var ValidIPSecKeySizes = map[int]bool{
+	0:   true, // Not set
+	128: true,
+	192: true,
+	256: true,
+}
+
+// validateCilium validates Cilium addon configuration with dependency checks.
+func (c *Config) validateCilium() error {
+	if !c.Addons.Cilium.Enabled {
+		return nil
+	}
+
+	cilium := &c.Addons.Cilium
+
+	// Validate BPF datapath mode
+	if cilium.BPFDatapathMode != "" && !ValidCiliumBPFDatapathModes[cilium.BPFDatapathMode] {
+		return fmt.Errorf("invalid bpf_datapath_mode %q: must be one of %v",
+			cilium.BPFDatapathMode, getMapKeys(ValidCiliumBPFDatapathModes))
+	}
+
+	// Validate policy CIDR match mode
+	if !ValidCiliumPolicyCIDRMatchModes[cilium.PolicyCIDRMatchMode] {
+		return fmt.Errorf("invalid policy_cidr_match_mode %q: must be one of %v",
+			cilium.PolicyCIDRMatchMode, getMapKeys(ValidCiliumPolicyCIDRMatchModes))
+	}
+
+	// Validate Gateway API external traffic policy
+	if cilium.GatewayAPIExternalTrafficPolicy != "" && !ValidCiliumGatewayAPIExternalTrafficPolicies[cilium.GatewayAPIExternalTrafficPolicy] {
+		return fmt.Errorf("invalid gateway_api_external_traffic_policy %q: must be one of %v",
+			cilium.GatewayAPIExternalTrafficPolicy, getMapKeys(ValidCiliumGatewayAPIExternalTrafficPolicies))
+	}
+
+	// Validate encryption type
+	if !ValidCiliumEncryptionTypes[cilium.EncryptionType] {
+		return fmt.Errorf("invalid encryption_type %q: must be one of wireguard, ipsec, or empty",
+			cilium.EncryptionType)
+	}
+
+	// Validate egress gateway dependency (requires kube-proxy replacement)
+	if cilium.EgressGatewayEnabled && !cilium.KubeProxyReplacementEnabled {
+		return fmt.Errorf("egress_gateway_enabled requires kube_proxy_replacement_enabled=true")
+	}
+
+	// Validate Hubble dependency chain
+	if cilium.HubbleRelayEnabled && !cilium.HubbleEnabled {
+		return fmt.Errorf("hubble_relay_enabled requires hubble_enabled=true")
+	}
+	if cilium.HubbleUIEnabled && !cilium.HubbleRelayEnabled {
+		return fmt.Errorf("hubble_ui_enabled requires hubble_relay_enabled=true")
+	}
+
+	// Validate IPSec settings if using IPSec encryption
+	if cilium.EncryptionType == "ipsec" {
+		if cilium.IPSecKeyID != 0 && (cilium.IPSecKeyID < 1 || cilium.IPSecKeyID > 15) {
+			return fmt.Errorf("ipsec_key_id must be 1-15, got %d", cilium.IPSecKeyID)
+		}
+		if !ValidIPSecKeySizes[cilium.IPSecKeySize] {
+			return fmt.Errorf("ipsec_key_size must be 128, 192, or 256, got %d", cilium.IPSecKeySize)
+		}
+	}
+
+	return nil
+}
+
+// validateOIDC validates OIDC configuration.
+func (c *Config) validateOIDC() error {
+	oidc := &c.Kubernetes.OIDC
+	if !oidc.Enabled {
+		return nil
+	}
+
+	// Required fields when OIDC is enabled
+	if oidc.IssuerURL == "" {
+		return fmt.Errorf("oidc.issuer_url is required when OIDC is enabled")
+	}
+	if oidc.ClientID == "" {
+		return fmt.Errorf("oidc.client_id is required when OIDC is enabled")
+	}
+
+	// Validate group mapping uniqueness
+	groupNames := make(map[string]bool)
+	for _, mapping := range c.Addons.OIDCRBAC.GroupMappings {
+		if groupNames[mapping.Group] {
+			return fmt.Errorf("duplicate OIDC group mapping: %q", mapping.Group)
+		}
+		groupNames[mapping.Group] = true
+	}
+
+	return nil
+}
+
+// validateIngressNginx validates Ingress NGINX addon configuration with dependencies.
+func (c *Config) validateIngressNginx() error {
+	if !c.Addons.IngressNginx.Enabled {
+		return nil
+	}
+
+	nginx := &c.Addons.IngressNginx
+
+	// Ingress NGINX requires cert-manager
+	if !c.Addons.CertManager.Enabled {
+		return fmt.Errorf("ingress_nginx requires cert_manager to be enabled")
+	}
+
+	// Validate kind
+	if nginx.Kind != "" && !ValidIngressNginxKinds[nginx.Kind] {
+		return fmt.Errorf("invalid kind %q: must be one of %v",
+			nginx.Kind, getMapKeys(ValidIngressNginxKinds))
+	}
+
+	// Validate external traffic policy
+	if nginx.ExternalTrafficPolicy != "" && !ValidIngressNginxExternalTrafficPolicies[nginx.ExternalTrafficPolicy] {
+		return fmt.Errorf("invalid external_traffic_policy %q: must be one of %v",
+			nginx.ExternalTrafficPolicy, getMapKeys(ValidIngressNginxExternalTrafficPolicies))
+	}
+
+	// Validate replicas must be nil when kind is DaemonSet
+	if nginx.Kind == "DaemonSet" && nginx.Replicas != nil {
+		return fmt.Errorf("replicas must not be set when kind is 'DaemonSet'")
+	}
+
+	// Validate replicas is positive if set
+	if nginx.Replicas != nil && *nginx.Replicas < 1 {
+		return fmt.Errorf("replicas must be at least 1, got %d", *nginx.Replicas)
 	}
 
 	return nil
