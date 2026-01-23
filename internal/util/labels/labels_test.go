@@ -286,3 +286,49 @@ func TestBuilderIsolation(t *testing.T) {
 		}
 	})
 }
+
+func TestWithTestIDIfSet(t *testing.T) {
+	tests := []struct {
+		name        string
+		testID      string
+		expectLabel bool
+		expectedVal string
+	}{
+		{"non-empty adds label", "e2e-12345", true, "e2e-12345"},
+		{"empty does not add label", "", false, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lb := NewLabelBuilder("test-cluster").WithTestIDIfSet(tt.testID)
+			labels := lb.Build()
+
+			_, exists := labels["test-id"]
+			if exists != tt.expectLabel {
+				t.Errorf("expected label exists=%v, got %v", tt.expectLabel, exists)
+			}
+			if tt.expectLabel && labels["test-id"] != tt.expectedVal {
+				t.Errorf("expected test-id=%q, got %q", tt.expectedVal, labels["test-id"])
+			}
+		})
+	}
+}
+
+func TestWithTestIDIfSetChaining(t *testing.T) {
+	// Test that it works in a fluent chain
+	labels := NewLabelBuilder("test-cluster").
+		WithRole("worker").
+		WithTestIDIfSet("e2e-test-123").
+		WithPool("workers").
+		Build()
+
+	if labels["test-id"] != "e2e-test-123" {
+		t.Errorf("expected test-id=e2e-test-123, got %q", labels["test-id"])
+	}
+	if labels["role"] != "worker" {
+		t.Errorf("expected role=worker, got %q", labels["role"])
+	}
+	if labels["pool"] != "workers" {
+		t.Errorf("expected pool=workers, got %q", labels["pool"])
+	}
+}

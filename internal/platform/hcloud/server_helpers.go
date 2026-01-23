@@ -169,3 +169,35 @@ func (c *RealClient) attachServerToNetwork(ctx context.Context, server *hcloud.S
 
 	return nil
 }
+
+// ServerIPv4 extracts the public IPv4 address from a server, or empty string if not set.
+func ServerIPv4(s *hcloud.Server) string {
+	if s != nil && s.PublicNet.IPv4.IP != nil {
+		return s.PublicNet.IPv4.IP.String()
+	}
+	return ""
+}
+
+// ServerIPv6 extracts the public IPv6 address from a server, or empty string if not set.
+func ServerIPv6(s *hcloud.Server) string {
+	if s != nil && s.PublicNet.IPv6.IP != nil {
+		return s.PublicNet.IPv6.IP.String()
+	}
+	return ""
+}
+
+// LoadBalancerIPv4 extracts the public IPv4 address from a load balancer, or empty string if not set.
+func LoadBalancerIPv4(lb *hcloud.LoadBalancer) string {
+	if lb != nil && lb.PublicNet.IPv4.IP != nil {
+		return lb.PublicNet.IPv4.IP.String()
+	}
+	return ""
+}
+
+// LoadBalancerIPv6 extracts the public IPv6 address from a load balancer, or empty string if not set.
+func LoadBalancerIPv6(lb *hcloud.LoadBalancer) string {
+	if lb != nil && lb.PublicNet.IPv6.IP != nil {
+		return lb.PublicNet.IPv6.IP.String()
+	}
+	return ""
+}

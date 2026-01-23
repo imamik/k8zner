@@ -12,6 +12,7 @@ import (
 
 	"hcloud-k8s/internal/config"
 	"hcloud-k8s/internal/orchestration"
+	"hcloud-k8s/internal/platform/hcloud"
 	"hcloud-k8s/internal/platform/talos"
 	"hcloud-k8s/internal/util/keygen"
 )
@@ -89,7 +90,7 @@ func phaseCluster(t *testing.T, state *E2EState) {
 
 	lb, err := state.Client.GetLoadBalancer(ctx, state.ClusterName+"-kube-api")
 	if err == nil && lb != nil {
-		state.LoadBalancerIP = lb.PublicNet.IPv4.IP.String()
+		state.LoadBalancerIP = hcloud.LoadBalancerIPv4(lb)
 	}
 
 	// Verify cluster is accessible

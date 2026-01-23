@@ -56,11 +56,9 @@ func (p *Provisioner) ProvisionFirewall(ctx *provisioning.Context) error {
 		rules = append(rules, buildFirewallRule(rule))
 	}
 
-	lb := labels.NewLabelBuilder(ctx.Config.ClusterName)
-	if ctx.Config.TestID != "" {
-		lb = lb.WithTestID(ctx.Config.TestID)
-	}
-	firewallLabels := lb.Build()
+	firewallLabels := labels.NewLabelBuilder(ctx.Config.ClusterName).
+		WithTestIDIfSet(ctx.Config.TestID).
+		Build()
 
 	result, err := ctx.Infra.EnsureFirewall(ctx, ctx.Config.ClusterName, rules, firewallLabels)
 	if err != nil {

@@ -58,7 +58,6 @@ func Upgrade(ctx context.Context, opts UpgradeOptions) error {
 
 	// Initialize Talos generator
 	// For upgrade, we need to load existing secrets from disk
-	secretsFile := "secrets.yaml"
 	sb, err := talos.LoadSecrets(secretsFile)
 	if err != nil {
 		return fmt.Errorf("failed to load Talos secrets from %s: %w (secrets must exist for upgrade)", secretsFile, err)

@@ -158,3 +158,14 @@ func expandIPv6(ip net.IP) string {
 func hasUnresolvedTemplates(s string) bool {
 	return unresolvedTemplateRegex.MatchString(s)
 }
+
+// ResolveTemplate returns the first non-empty template from the provided fallbacks.
+// Useful for cascading template resolution from specific to general defaults.
+func ResolveTemplate(templates ...string) string {
+	for _, t := range templates {
+		if t != "" {
+			return t
+		}
+	}
+	return ""
+}

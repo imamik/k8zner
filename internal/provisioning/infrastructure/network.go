@@ -15,11 +15,9 @@ func (p *Provisioner) ProvisionNetwork(ctx *provisioning.Context) error {
 
 	// Subnets are calculated during validation phase
 
-	lb := labels.NewLabelBuilder(ctx.Config.ClusterName)
-	if ctx.Config.TestID != "" {
-		lb = lb.WithTestID(ctx.Config.TestID)
-	}
-	networkLabels := lb.Build()
+	networkLabels := labels.NewLabelBuilder(ctx.Config.ClusterName).
+		WithTestIDIfSet(ctx.Config.TestID).
+		Build()
 
 	network, err := ctx.Infra.EnsureNetwork(ctx, ctx.Config.ClusterName, ctx.Config.Network.IPv4CIDR, ctx.Config.Network.Zone, networkLabels)
 	if err != nil {

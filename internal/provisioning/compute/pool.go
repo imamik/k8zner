@@ -94,14 +94,12 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 
 			if usePG {
 				pgIndex := (j-1)/10 + 1
-				lb := labels.NewLabelBuilder(ctx.Config.ClusterName).
+				pgLabels := labels.NewLabelBuilder(ctx.Config.ClusterName).
 					WithRole("worker").
 					WithPool(spec.Name).
-					WithNodePool(spec.Name)
-				if ctx.Config.TestID != "" {
-					lb = lb.WithTestID(ctx.Config.TestID)
-				}
-				pgLabels := lb.Build()
+					WithNodePool(spec.Name).
+					WithTestIDIfSet(ctx.Config.TestID).
+					Build()
 				pg, err := ctx.Infra.EnsurePlacementGroup(ctx, naming.WorkerPlacementGroupShard(ctx.Config.ClusterName, spec.Name, pgIndex), "spread", pgLabels)
 				if err != nil {
 					return nil, err

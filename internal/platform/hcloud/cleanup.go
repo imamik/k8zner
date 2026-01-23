@@ -8,6 +8,65 @@ import (
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
+// resource is a constraint for Hetzner Cloud resources that have Name and ID fields.
+type resource interface {
+	*hcloud.Server | *hcloud.LoadBalancer | *hcloud.FloatingIP | *hcloud.Firewall |
+		*hcloud.Network | *hcloud.PlacementGroup | *hcloud.SSHKey | *hcloud.Certificate
+}
+
+// resourceInfo extracts common fields from a resource for logging.
+type resourceInfo struct {
+	Name string
+	ID   int64
+}
+
+// getResourceInfo extracts name and ID from various resource types.
+func getResourceInfo[T resource](r T) resourceInfo {
+	switch v := any(r).(type) {
+	case *hcloud.Server:
+		return resourceInfo{Name: v.Name, ID: v.ID}
+	case *hcloud.LoadBalancer:
+		return resourceInfo{Name: v.Name, ID: v.ID}
+	case *hcloud.FloatingIP:
+		return resourceInfo{Name: v.Name, ID: v.ID}
+	case *hcloud.Firewall:
+		return resourceInfo{Name: v.Name, ID: v.ID}
+	case *hcloud.Network:
+		return resourceInfo{Name: v.Name, ID: v.ID}
+	case *hcloud.PlacementGroup:
+		return resourceInfo{Name: v.Name, ID: v.ID}
+	case *hcloud.SSHKey:
+		return resourceInfo{Name: v.Name, ID: v.ID}
+	case *hcloud.Certificate:
+		return resourceInfo{Name: v.Name, ID: v.ID}
+	default:
+		return resourceInfo{}
+	}
+}
+
+// deleteResourcesByLabel is a generic helper for deleting resources by label selector.
+func deleteResourcesByLabel[T resource](
+	ctx context.Context,
+	resourceType string,
+	listFn func(context.Context) ([]T, error),
+	deleteFn func(context.Context, T) error,
+) error {
+	resources, err := listFn(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list %s: %w", resourceType, err)
+	}
+
+	for _, r := range resources {
+		info := getResourceInfo(r)
+		log.Printf("[Cleanup] Deleting %s: %s (ID: %d)", resourceType, info.Name, info.ID)
+		if err := deleteFn(ctx, r); err != nil {
+			log.Printf("[Cleanup] Warning: Failed to delete %s %s: %v", resourceType, info.Name, err)
+		}
+	}
+
+	return nil
+}
+
 // CleanupByLabel deletes all Hetzner Cloud resources matching the given label selector.
 // This is useful for cleaning up E2E test resources or orphaned resources.
 func (c *RealClient) CleanupByLabel(ctx context.Context, labelSelector map[string]string) error {
@@ -24,8 +83,7 @@ func (c *RealClient) CleanupByLabel(ctx context.Context, labelSelector map[strin
 	// 5. Networks
 	// 6. Placement Groups
 	// 7. SSH Keys
-	// 8. Certificates (Talos state)
-	// 9. Snapshots (if specified)
+	// 8. Certificates
 
 	if err := c.deleteServersByLabel(ctx, labelString); err != nil {
 		log.Printf("[Cleanup] Warning: Failed to delete servers: %v", err)
@@ -81,152 +139,120 @@ func buildLabelSelector(labels map[string]string) string {
 
 // deleteServersByLabel deletes all servers matching the label selector.
 func (c *RealClient) deleteServersByLabel(ctx context.Context, labelSelector string) error {
-	servers, err := c.client.Server.AllWithOpts(ctx, hcloud.ServerListOpts{
-		ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to list servers: %w", err)
-	}
-
-	for _, server := range servers {
-		log.Printf("[Cleanup] Deleting server: %s (ID: %d)", server.Name, server.ID)
-		if _, _, err := c.client.Server.DeleteWithResult(ctx, server); err != nil {
-			log.Printf("[Cleanup] Warning: Failed to delete server %s: %v", server.Name, err)
-		}
-	}
-
-	return nil
+	return deleteResourcesByLabel(ctx, "server",
+		func(ctx context.Context) ([]*hcloud.Server, error) {
+			return c.client.Server.AllWithOpts(ctx, hcloud.ServerListOpts{
+				ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
+			})
+		},
+		func(ctx context.Context, s *hcloud.Server) error {
+			_, _, err := c.client.Server.DeleteWithResult(ctx, s)
+			return err
+		},
+	)
 }
 
 // deleteLoadBalancersByLabel deletes all load balancers matching the label selector.
 func (c *RealClient) deleteLoadBalancersByLabel(ctx context.Context, labelSelector string) error {
-	lbs, err := c.client.LoadBalancer.AllWithOpts(ctx, hcloud.LoadBalancerListOpts{
-		ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to list load balancers: %w", err)
-	}
-
-	for _, lb := range lbs {
-		log.Printf("[Cleanup] Deleting load balancer: %s (ID: %d)", lb.Name, lb.ID)
-		if _, err := c.client.LoadBalancer.Delete(ctx, lb); err != nil {
-			log.Printf("[Cleanup] Warning: Failed to delete load balancer %s: %v", lb.Name, err)
-		}
-	}
-
-	return nil
+	return deleteResourcesByLabel(ctx, "load balancer",
+		func(ctx context.Context) ([]*hcloud.LoadBalancer, error) {
+			return c.client.LoadBalancer.AllWithOpts(ctx, hcloud.LoadBalancerListOpts{
+				ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
+			})
+		},
+		func(ctx context.Context, lb *hcloud.LoadBalancer) error {
+			_, err := c.client.LoadBalancer.Delete(ctx, lb)
+			return err
+		},
+	)
 }
 
 // deleteFloatingIPsByLabel deletes all floating IPs matching the label selector.
 func (c *RealClient) deleteFloatingIPsByLabel(ctx context.Context, labelSelector string) error {
-	fips, err := c.client.FloatingIP.AllWithOpts(ctx, hcloud.FloatingIPListOpts{
-		ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to list floating IPs: %w", err)
-	}
-
-	for _, fip := range fips {
-		log.Printf("[Cleanup] Deleting floating IP: %s (ID: %d)", fip.Name, fip.ID)
-		if _, err := c.client.FloatingIP.Delete(ctx, fip); err != nil {
-			log.Printf("[Cleanup] Warning: Failed to delete floating IP %s: %v", fip.Name, err)
-		}
-	}
-
-	return nil
+	return deleteResourcesByLabel(ctx, "floating IP",
+		func(ctx context.Context) ([]*hcloud.FloatingIP, error) {
+			return c.client.FloatingIP.AllWithOpts(ctx, hcloud.FloatingIPListOpts{
+				ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
+			})
+		},
+		func(ctx context.Context, fip *hcloud.FloatingIP) error {
+			_, err := c.client.FloatingIP.Delete(ctx, fip)
+			return err
+		},
+	)
 }
 
 // deleteFirewallsByLabel deletes all firewalls matching the label selector.
 func (c *RealClient) deleteFirewallsByLabel(ctx context.Context, labelSelector string) error {
-	firewalls, err := c.client.Firewall.AllWithOpts(ctx, hcloud.FirewallListOpts{
-		ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to list firewalls: %w", err)
-	}
-
-	for _, fw := range firewalls {
-		log.Printf("[Cleanup] Deleting firewall: %s (ID: %d)", fw.Name, fw.ID)
-		if _, err := c.client.Firewall.Delete(ctx, fw); err != nil {
-			log.Printf("[Cleanup] Warning: Failed to delete firewall %s: %v", fw.Name, err)
-		}
-	}
-
-	return nil
+	return deleteResourcesByLabel(ctx, "firewall",
+		func(ctx context.Context) ([]*hcloud.Firewall, error) {
+			return c.client.Firewall.AllWithOpts(ctx, hcloud.FirewallListOpts{
+				ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
+			})
+		},
+		func(ctx context.Context, fw *hcloud.Firewall) error {
+			_, err := c.client.Firewall.Delete(ctx, fw)
+			return err
+		},
+	)
 }
 
 // deleteNetworksByLabel deletes all networks matching the label selector.
 func (c *RealClient) deleteNetworksByLabel(ctx context.Context, labelSelector string) error {
-	networks, err := c.client.Network.AllWithOpts(ctx, hcloud.NetworkListOpts{
-		ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to list networks: %w", err)
-	}
-
-	for _, network := range networks {
-		log.Printf("[Cleanup] Deleting network: %s (ID: %d)", network.Name, network.ID)
-		if _, err := c.client.Network.Delete(ctx, network); err != nil {
-			log.Printf("[Cleanup] Warning: Failed to delete network %s: %v", network.Name, err)
-		}
-	}
-
-	return nil
+	return deleteResourcesByLabel(ctx, "network",
+		func(ctx context.Context) ([]*hcloud.Network, error) {
+			return c.client.Network.AllWithOpts(ctx, hcloud.NetworkListOpts{
+				ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
+			})
+		},
+		func(ctx context.Context, n *hcloud.Network) error {
+			_, err := c.client.Network.Delete(ctx, n)
+			return err
+		},
+	)
 }
 
 // deletePlacementGroupsByLabel deletes all placement groups matching the label selector.
 func (c *RealClient) deletePlacementGroupsByLabel(ctx context.Context, labelSelector string) error {
-	pgs, err := c.client.PlacementGroup.AllWithOpts(ctx, hcloud.PlacementGroupListOpts{
-		ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to list placement groups: %w", err)
-	}
-
-	for _, pg := range pgs {
-		log.Printf("[Cleanup] Deleting placement group: %s (ID: %d)", pg.Name, pg.ID)
-		if _, err := c.client.PlacementGroup.Delete(ctx, pg); err != nil {
-			log.Printf("[Cleanup] Warning: Failed to delete placement group %s: %v", pg.Name, err)
-		}
-	}
-
-	return nil
+	return deleteResourcesByLabel(ctx, "placement group",
+		func(ctx context.Context) ([]*hcloud.PlacementGroup, error) {
+			return c.client.PlacementGroup.AllWithOpts(ctx, hcloud.PlacementGroupListOpts{
+				ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
+			})
+		},
+		func(ctx context.Context, pg *hcloud.PlacementGroup) error {
+			_, err := c.client.PlacementGroup.Delete(ctx, pg)
+			return err
+		},
+	)
 }
 
 // deleteSSHKeysByLabel deletes all SSH keys matching the label selector.
 func (c *RealClient) deleteSSHKeysByLabel(ctx context.Context, labelSelector string) error {
-	keys, err := c.client.SSHKey.AllWithOpts(ctx, hcloud.SSHKeyListOpts{
-		ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to list SSH keys: %w", err)
-	}
-
-	for _, key := range keys {
-		log.Printf("[Cleanup] Deleting SSH key: %s (ID: %d)", key.Name, key.ID)
-		if _, err := c.client.SSHKey.Delete(ctx, key); err != nil {
-			log.Printf("[Cleanup] Warning: Failed to delete SSH key %s: %v", key.Name, err)
-		}
-	}
-
-	return nil
+	return deleteResourcesByLabel(ctx, "SSH key",
+		func(ctx context.Context) ([]*hcloud.SSHKey, error) {
+			return c.client.SSHKey.AllWithOpts(ctx, hcloud.SSHKeyListOpts{
+				ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
+			})
+		},
+		func(ctx context.Context, k *hcloud.SSHKey) error {
+			_, err := c.client.SSHKey.Delete(ctx, k)
+			return err
+		},
+	)
 }
 
 // deleteCertificatesByLabel deletes all certificates matching the label selector.
 func (c *RealClient) deleteCertificatesByLabel(ctx context.Context, labelSelector string) error {
-	certs, err := c.client.Certificate.AllWithOpts(ctx, hcloud.CertificateListOpts{
-		ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to list certificates: %w", err)
-	}
-
-	for _, cert := range certs {
-		log.Printf("[Cleanup] Deleting certificate: %s (ID: %d)", cert.Name, cert.ID)
-		if _, err := c.client.Certificate.Delete(ctx, cert); err != nil {
-			log.Printf("[Cleanup] Warning: Failed to delete certificate %s: %v", cert.Name, err)
-		}
-	}
-
-	return nil
+	return deleteResourcesByLabel(ctx, "certificate",
+		func(ctx context.Context) ([]*hcloud.Certificate, error) {
+			return c.client.Certificate.AllWithOpts(ctx, hcloud.CertificateListOpts{
+				ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
+			})
+		},
+		func(ctx context.Context, cert *hcloud.Certificate) error {
+			_, err := c.client.Certificate.Delete(ctx, cert)
+			return err
+		},
+	)
 }

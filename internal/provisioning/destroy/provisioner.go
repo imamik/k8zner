@@ -26,11 +26,9 @@ func (p *Provisioner) Provision(ctx *provisioning.Context) error {
 	ctx.Observer.Printf("[Destroy] Starting cluster destruction for: %s", ctx.Config.ClusterName)
 
 	// Build label selector for cluster resources
-	lb := labels.NewLabelBuilder(ctx.Config.ClusterName)
-	if ctx.Config.TestID != "" {
-		lb = lb.WithTestID(ctx.Config.TestID)
-	}
-	clusterLabels := lb.Build()
+	clusterLabels := labels.NewLabelBuilder(ctx.Config.ClusterName).
+		WithTestIDIfSet(ctx.Config.TestID).
+		Build()
 
 	provisioning.LogResourceDeleting(ctx.Observer, "destroy", "cluster", ctx.Config.ClusterName)
 
