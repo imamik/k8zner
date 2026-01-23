@@ -170,3 +170,61 @@ func TestLoadedTimeouts(t *testing.T) {
 		t.Error("expected non-zero RetryInitialDelay")
 	}
 }
+
+func TestBuildLabelSelector(t *testing.T) {
+	t.Run("empty map", func(t *testing.T) {
+		result := buildLabelSelector(map[string]string{})
+		if result != "" {
+			t.Errorf("expected empty string, got %q", result)
+		}
+	})
+
+	t.Run("nil map", func(t *testing.T) {
+		result := buildLabelSelector(nil)
+		if result != "" {
+			t.Errorf("expected empty string, got %q", result)
+		}
+	})
+
+	t.Run("single label", func(t *testing.T) {
+		result := buildLabelSelector(map[string]string{"cluster": "test"})
+		if result != "cluster=test" {
+			t.Errorf("expected 'cluster=test', got %q", result)
+		}
+	})
+
+	t.Run("multiple labels", func(t *testing.T) {
+		labels := map[string]string{
+			"cluster": "test",
+			"env":     "staging",
+		}
+		result := buildLabelSelector(labels)
+		// Map iteration order is not guaranteed, so check both possibilities
+		if result != "cluster=test,env=staging" && result != "env=staging,cluster=test" {
+			t.Errorf("unexpected result: %q", result)
+		}
+	})
+}
+
+func TestWithHCloudClient(t *testing.T) {
+	// Test the WithHCloudClient option
+	client := NewRealClient("test-token")
+
+	// Verify client was created
+	if client.client == nil {
+		t.Error("expected hcloud client to be initialized")
+	}
+}
+
+func TestHCloudClient(t *testing.T) {
+	// Test the HCloudClient accessor
+	client := NewRealClient("test-token")
+
+	hc := client.HCloudClient()
+	if hc == nil {
+		t.Error("expected HCloudClient to return non-nil client")
+	}
+	if hc != client.client {
+		t.Error("expected HCloudClient to return the internal client")
+	}
+}

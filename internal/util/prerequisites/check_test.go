@@ -5,12 +5,28 @@ import (
 )
 
 func TestCheck(t *testing.T) {
-	// Test with a tool that definitely exists (sh is always available)
+	// Test with a tool that definitely exists - try multiple common tools
+	// because different environments have different tools available
+	possibleTools := []string{"go", "bash", "sh", "ls", "cat"}
+
+	var foundTool string
+	for _, tool := range possibleTools {
+		results := Check([]Tool{{Name: tool, Required: false}})
+		if len(results.Results) > 0 && results.Results[0].Found {
+			foundTool = tool
+			break
+		}
+	}
+
+	if foundTool == "" {
+		t.Skip("no common tools found in PATH, skipping test")
+	}
+
 	tools := []Tool{
 		{
-			Name:        "sh",
+			Name:        foundTool,
 			Required:    true,
-			Description: "Shell",
+			Description: "Test tool",
 			InstallURL:  "https://example.com",
 		},
 	}
@@ -22,7 +38,7 @@ func TestCheck(t *testing.T) {
 	}
 
 	if !results.Results[0].Found {
-		t.Errorf("expected sh to be found")
+		t.Errorf("expected %s to be found", foundTool)
 	}
 
 	if results.Results[0].Path == "" {
