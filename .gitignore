@@ -18,7 +18,7 @@ e2e.test
 run-e2e-test.sh
 tests/e2e/*.old
 
-# Downloaded tools
-hcloud
-hcloud-*
+# Downloaded tools (at root only)
+/hcloud
+/hcloud-*.tar.gz
 *.tar.gz.*

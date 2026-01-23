@@ -21,6 +21,7 @@ func Root() *cobra.Command {
 	cmd.AddCommand(Image())
 	cmd.AddCommand(Destroy())
 	cmd.AddCommand(Upgrade())
+	cmd.AddCommand(Version())
 
 	return cmd
 }
