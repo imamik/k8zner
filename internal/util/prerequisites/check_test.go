@@ -106,24 +106,9 @@ func TestCheckOptionalMissing(t *testing.T) {
 func TestDefaultTools(t *testing.T) {
 	tools := DefaultTools()
 
-	if len(tools) == 0 {
-		t.Error("expected DefaultTools to return at least one tool")
-	}
-
-	// kubectl should be in default tools
-	found := false
-	for _, tool := range tools {
-		if tool.Name == "kubectl" {
-			found = true
-			if !tool.Required {
-				t.Error("kubectl should be required")
-			}
-			break
-		}
-	}
-
-	if !found {
-		t.Error("expected kubectl in DefaultTools")
+	// The main binary is self-contained and requires no external CLI tools at runtime
+	if len(tools) != 0 {
+		t.Errorf("expected DefaultTools to return empty list, got %d tools", len(tools))
 	}
 }
 
@@ -151,10 +136,33 @@ func TestImageBuildTools(t *testing.T) {
 func TestOptionalTools(t *testing.T) {
 	tools := OptionalTools()
 
+	if len(tools) == 0 {
+		t.Error("expected OptionalTools to return at least one tool")
+	}
+
 	// All optional tools should have Required = false
 	for _, tool := range tools {
 		if tool.Required {
 			t.Errorf("optional tool %s should have Required = false", tool.Name)
 		}
+	}
+
+	// kubectl should be in optional tools
+	foundKubectl := false
+	foundTalosctl := false
+	for _, tool := range tools {
+		if tool.Name == "kubectl" {
+			foundKubectl = true
+		}
+		if tool.Name == "talosctl" {
+			foundTalosctl = true
+		}
+	}
+
+	if !foundKubectl {
+		t.Error("expected kubectl in OptionalTools")
+	}
+	if !foundTalosctl {
+		t.Error("expected talosctl in OptionalTools")
 	}
 }

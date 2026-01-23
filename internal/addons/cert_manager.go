@@ -5,15 +5,16 @@ import (
 	"fmt"
 
 	"hcloud-k8s/internal/addons/helm"
+	"hcloud-k8s/internal/addons/k8sclient"
 	"hcloud-k8s/internal/config"
 )
 
 // applyCertManager installs cert-manager for TLS certificate management.
 // See: terraform/cert_manager.tf
-func applyCertManager(ctx context.Context, kubeconfigPath string, cfg *config.Config) error {
+func applyCertManager(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	// Create namespace first
 	namespaceYAML := createCertManagerNamespace()
-	if err := applyWithKubectl(ctx, kubeconfigPath, "cert-manager-namespace", []byte(namespaceYAML)); err != nil {
+	if err := applyManifests(ctx, client, "cert-manager-namespace", []byte(namespaceYAML)); err != nil {
 		return fmt.Errorf("failed to create cert-manager namespace: %w", err)
 	}
 
@@ -27,7 +28,7 @@ func applyCertManager(ctx context.Context, kubeconfigPath string, cfg *config.Co
 	}
 
 	// Apply manifests
-	if err := applyWithKubectl(ctx, kubeconfigPath, "cert-manager", manifestBytes); err != nil {
+	if err := applyManifests(ctx, client, "cert-manager", manifestBytes); err != nil {
 		return fmt.Errorf("failed to apply cert-manager manifests: %w", err)
 	}
 

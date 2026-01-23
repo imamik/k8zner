@@ -5,11 +5,12 @@ import (
 	"fmt"
 
 	"hcloud-k8s/internal/addons/helm"
+	"hcloud-k8s/internal/addons/k8sclient"
 	"hcloud-k8s/internal/config"
 )
 
 // applyMetricsServer installs the Kubernetes Metrics Server.
-func applyMetricsServer(ctx context.Context, kubeconfigPath string, cfg *config.Config) error {
+func applyMetricsServer(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	values := buildMetricsServerValues(cfg)
 
 	manifestBytes, err := helm.RenderChart("metrics-server", "kube-system", values)
@@ -17,7 +18,7 @@ func applyMetricsServer(ctx context.Context, kubeconfigPath string, cfg *config.
 		return fmt.Errorf("failed to render metrics-server chart: %w", err)
 	}
 
-	if err := applyWithKubectl(ctx, kubeconfigPath, "metrics-server", manifestBytes); err != nil {
+	if err := applyManifests(ctx, client, "metrics-server", manifestBytes); err != nil {
 		return fmt.Errorf("failed to apply metrics-server manifests: %w", err)
 	}
 

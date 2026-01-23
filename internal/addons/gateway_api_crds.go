@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 
+	"hcloud-k8s/internal/addons/k8sclient"
 	"hcloud-k8s/internal/config"
 )
 
@@ -16,7 +17,7 @@ const (
 
 // applyGatewayAPICRDs installs the Gateway API Custom Resource Definitions.
 // See: terraform/talos_config.tf lines 35-37
-func applyGatewayAPICRDs(ctx context.Context, kubeconfigPath string, cfg *config.Config) error {
+func applyGatewayAPICRDs(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	gatewayConfig := cfg.Addons.GatewayAPICRDs
 
 	// Use defaults if not specified
@@ -45,7 +46,7 @@ func applyGatewayAPICRDs(ctx context.Context, kubeconfigPath string, cfg *config
 
 	log.Printf("Installing Gateway API CRDs %s (%s channel)...", version, releaseChannel)
 
-	if err := applyFromURL(ctx, kubeconfigPath, "gateway-api-crds", manifestURL); err != nil {
+	if err := applyFromURL(ctx, client, "gateway-api-crds", manifestURL); err != nil {
 		return fmt.Errorf("failed to apply Gateway API CRDs from %s: %w", manifestURL, err)
 	}
 

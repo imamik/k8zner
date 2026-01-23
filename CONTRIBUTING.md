@@ -47,6 +47,10 @@ Feature requests are welcome! Please:
 - golangci-lint
 - make
 
+Optional (for E2E tests and manual debugging):
+- kubectl (for cluster operations)
+- talosctl (for Talos-specific operations)
+
 ### Building
 
 ```bash

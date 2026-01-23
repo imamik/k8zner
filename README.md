@@ -21,8 +21,10 @@ Production-ready Kubernetes clusters on Hetzner Cloud using [Talos Linux](https:
 ### Prerequisites
 
 - [Hetzner Cloud account](https://www.hetzner.com/cloud) with API token
-- [kubectl](https://kubernetes.io/docs/tasks/tools/) installed
-- [talosctl](https://www.talos.dev/latest/introduction/getting-started/#talosctl) installed
+
+Optional (for manual debugging):
+- [kubectl](https://kubernetes.io/docs/tasks/tools/) for cluster operations
+- [talosctl](https://www.talos.dev/latest/introduction/getting-started/#talosctl) for Talos-specific operations
 
 ### Installation
 

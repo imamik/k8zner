@@ -7,12 +7,13 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"hcloud-k8s/internal/addons/k8sclient"
 	"hcloud-k8s/internal/config"
 )
 
 // applyRBAC installs RBAC roles and cluster roles.
 // See: terraform/rbac.tf
-func applyRBAC(ctx context.Context, kubeconfigPath string, cfg *config.Config) error {
+func applyRBAC(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	if len(cfg.Addons.RBAC.Roles) == 0 && len(cfg.Addons.RBAC.ClusterRoles) == 0 {
 		return nil // Nothing to apply
 	}
@@ -27,7 +28,7 @@ func applyRBAC(ctx context.Context, kubeconfigPath string, cfg *config.Config) e
 	combined := strings.Join(manifests, "\n---\n")
 
 	// Apply manifests
-	if err := applyWithKubectl(ctx, kubeconfigPath, "kube-rbac", []byte(combined)); err != nil {
+	if err := applyManifests(ctx, client, "kube-rbac", []byte(combined)); err != nil {
 		return fmt.Errorf("failed to apply RBAC manifests: %w", err)
 	}
 

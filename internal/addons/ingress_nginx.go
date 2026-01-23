@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"hcloud-k8s/internal/addons/helm"
+	"hcloud-k8s/internal/addons/k8sclient"
 	"hcloud-k8s/internal/config"
 )
 
@@ -16,10 +17,10 @@ import (
 // 2. Cert-manager integration has race conditions with certificate chain creation
 // Admission webhooks are optional - they provide Ingress validation but the
 // controller works fine without them.
-func applyIngressNginx(ctx context.Context, kubeconfigPath string, cfg *config.Config) error {
+func applyIngressNginx(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	// Create namespace first
 	namespaceYAML := createIngressNginxNamespace()
-	if err := applyWithKubectl(ctx, kubeconfigPath, "ingress-nginx-namespace", []byte(namespaceYAML)); err != nil {
+	if err := applyManifests(ctx, client, "ingress-nginx-namespace", []byte(namespaceYAML)); err != nil {
 		return fmt.Errorf("failed to create ingress-nginx namespace: %w", err)
 	}
 
@@ -33,7 +34,7 @@ func applyIngressNginx(ctx context.Context, kubeconfigPath string, cfg *config.C
 	}
 
 	// Apply all manifests
-	if err := applyWithKubectl(ctx, kubeconfigPath, "ingress-nginx", manifestBytes); err != nil {
+	if err := applyManifests(ctx, client, "ingress-nginx", manifestBytes); err != nil {
 		return fmt.Errorf("failed to apply ingress-nginx manifests: %w", err)
 	}
 

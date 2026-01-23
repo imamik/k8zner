@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"hcloud-k8s/internal/addons/helm"
+	"hcloud-k8s/internal/addons/k8sclient"
 	"hcloud-k8s/internal/config"
 	"hcloud-k8s/internal/provisioning"
 )
@@ -15,7 +16,7 @@ import (
 // See: terraform/autoscaler.tf
 func applyClusterAutoscaler(
 	ctx context.Context,
-	kubeconfigPath string,
+	client k8sclient.Client,
 	cfg *config.Config,
 	networkID int64,
 	sshKeyName string,
@@ -33,7 +34,7 @@ func applyClusterAutoscaler(
 	}
 
 	// Create cluster-config Secret
-	if err := createAutoscalerSecret(ctx, kubeconfigPath, cfg, nodepoolConfigs); err != nil {
+	if err := createAutoscalerSecret(ctx, client, cfg, nodepoolConfigs); err != nil {
 		return fmt.Errorf("failed to create autoscaler secret: %w", err)
 	}
 
@@ -47,7 +48,7 @@ func applyClusterAutoscaler(
 	}
 
 	// Apply manifests
-	if err := applyWithKubectl(ctx, kubeconfigPath, "cluster-autoscaler", manifestBytes); err != nil {
+	if err := applyManifests(ctx, client, "cluster-autoscaler", manifestBytes); err != nil {
 		return fmt.Errorf("failed to apply Cluster Autoscaler manifests: %w", err)
 	}
 
@@ -74,7 +75,7 @@ func generateAutoscalerNodepoolConfigs(cfg *config.Config, talosGen provisioning
 
 // createAutoscalerSecret creates the cluster-config Secret with nodepool configurations.
 // See: terraform/autoscaler.tf lines 9-35
-func createAutoscalerSecret(ctx context.Context, kubeconfigPath string, cfg *config.Config, nodepoolConfigs map[string]string) error {
+func createAutoscalerSecret(ctx context.Context, client k8sclient.Client, cfg *config.Config, nodepoolConfigs map[string]string) error {
 	// Build the secret data structure
 	secretData := buildAutoscalerSecretData(cfg, nodepoolConfigs)
 
@@ -98,7 +99,7 @@ data:
 `, base64Data)
 
 	// Apply the secret
-	if err := applyWithKubectl(ctx, kubeconfigPath, "cluster-autoscaler-secret", []byte(secretYAML)); err != nil {
+	if err := applyManifests(ctx, client, "cluster-autoscaler-secret", []byte(secretYAML)); err != nil {
 		return fmt.Errorf("failed to apply autoscaler secret: %w", err)
 	}
 

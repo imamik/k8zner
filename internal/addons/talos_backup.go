@@ -8,12 +8,13 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"hcloud-k8s/internal/addons/k8sclient"
 	"hcloud-k8s/internal/config"
 )
 
 // applyTalosBackup installs the Talos etcd backup CronJob.
 // See: terraform/talos_backup.tf
-func applyTalosBackup(ctx context.Context, kubeconfigPath string, cfg *config.Config) error {
+func applyTalosBackup(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	if !cfg.Addons.TalosBackup.Enabled {
 		return nil
 	}
@@ -30,7 +31,7 @@ func applyTalosBackup(ctx context.Context, kubeconfigPath string, cfg *config.Co
 	combined := strings.Join(manifests, "\n---\n")
 
 	// Apply manifests
-	if err := applyWithKubectl(ctx, kubeconfigPath, "talos-backup", []byte(combined)); err != nil {
+	if err := applyManifests(ctx, client, "talos-backup", []byte(combined)); err != nil {
 		return fmt.Errorf("failed to apply Talos Backup manifests: %w", err)
 	}
 

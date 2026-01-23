@@ -10,12 +10,13 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"hcloud-k8s/internal/addons/helm"
+	"hcloud-k8s/internal/addons/k8sclient"
 	"hcloud-k8s/internal/config"
 )
 
 // applyCilium installs the Cilium CNI network plugin.
 // See: terraform/cilium.tf
-func applyCilium(ctx context.Context, kubeconfigPath string, cfg *config.Config) error {
+func applyCilium(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	if !cfg.Addons.Cilium.Enabled {
 		return nil
 	}
@@ -29,7 +30,7 @@ kind: Namespace
 metadata:
   name: cilium-secrets
 `
-	if err := applyWithKubectl(ctx, kubeconfigPath, "cilium-secrets-namespace", []byte(ciliumSecretsNS)); err != nil {
+	if err := applyManifests(ctx, client, "cilium-secrets-namespace", []byte(ciliumSecretsNS)); err != nil {
 		return fmt.Errorf("failed to create cilium-secrets namespace: %w", err)
 	}
 
@@ -40,7 +41,7 @@ metadata:
 			return fmt.Errorf("failed to generate IPSec secret: %w", err)
 		}
 
-		if err := applyWithKubectl(ctx, kubeconfigPath, "cilium-ipsec-keys", []byte(secretManifest)); err != nil {
+		if err := applyManifests(ctx, client, "cilium-ipsec-keys", []byte(secretManifest)); err != nil {
 			return fmt.Errorf("failed to apply Cilium IPSec secret: %w", err)
 		}
 	}
@@ -55,7 +56,7 @@ metadata:
 	}
 
 	// Apply manifests
-	if err := applyWithKubectl(ctx, kubeconfigPath, "cilium", manifestBytes); err != nil {
+	if err := applyManifests(ctx, client, "cilium", manifestBytes); err != nil {
 		return fmt.Errorf("failed to apply Cilium manifests: %w", err)
 	}
 

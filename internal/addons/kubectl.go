@@ -5,64 +5,23 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"os/exec"
 	"time"
+
+	"hcloud-k8s/internal/addons/k8sclient"
 )
 
-// applyWithKubectl applies Kubernetes manifests using kubectl.
-// It writes the manifests to a temporary file, executes kubectl apply,
-// and cleans up the temporary file.
-func applyWithKubectl(ctx context.Context, kubeconfigPath, addonName string, manifestBytes []byte) error {
-	tmpfile, err := os.CreateTemp("", fmt.Sprintf("%s-*.yaml", addonName))
-	if err != nil {
-		return fmt.Errorf("failed to create temp manifest file: %w", err)
+// applyManifests applies Kubernetes manifests using the k8sclient.
+// It uses Server-Side Apply with the given field manager name.
+func applyManifests(ctx context.Context, client k8sclient.Client, addonName string, manifestBytes []byte) error {
+	if err := client.ApplyManifests(ctx, manifestBytes, addonName); err != nil {
+		return fmt.Errorf("failed to apply manifests for addon %s: %w", addonName, err)
 	}
-	// Best-effort cleanup; failure to remove temp file is non-critical
-	defer func() { _ = os.Remove(tmpfile.Name()) }()
-
-	if _, err := tmpfile.Write(manifestBytes); err != nil {
-		_ = tmpfile.Close()
-		return fmt.Errorf("failed to write manifest to temp file: %w", err)
-	}
-	if err := tmpfile.Close(); err != nil {
-		return fmt.Errorf("failed to close temp manifest file: %w", err)
-	}
-
-	// #nosec G204 - kubeconfigPath is from internal config, tmpfile.Name() is a secure temp file we created
-	cmd := exec.CommandContext(ctx, "kubectl", "--kubeconfig", kubeconfigPath, "apply", "-f", tmpfile.Name())
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("kubectl apply failed for addon %s: %w\nOutput: %s", addonName, err, string(output))
-	}
-
 	return nil
 }
 
-// writeTempKubeconfig writes kubeconfig to a temporary file and returns the path.
-func writeTempKubeconfig(kubeconfig []byte) (string, error) {
-	tmpfile, err := os.CreateTemp("", "kubeconfig-*.yaml")
-	if err != nil {
-		return "", fmt.Errorf("failed to create temp kubeconfig: %w", err)
-	}
-
-	if _, err := tmpfile.Write(kubeconfig); err != nil {
-		_ = tmpfile.Close()
-		_ = os.Remove(tmpfile.Name())
-		return "", fmt.Errorf("failed to write temp kubeconfig: %w", err)
-	}
-
-	if err := tmpfile.Close(); err != nil {
-		_ = os.Remove(tmpfile.Name())
-		return "", fmt.Errorf("failed to close temp kubeconfig: %w", err)
-	}
-
-	return tmpfile.Name(), nil
-}
-
-// applyFromURL downloads a manifest from a URL and applies it using kubectl.
+// applyFromURL downloads a manifest from a URL and applies it using the k8sclient.
 // This is useful for applying CRDs or other manifests hosted remotely.
-func applyFromURL(ctx context.Context, kubeconfigPath, addonName, manifestURL string) error {
+func applyFromURL(ctx context.Context, client k8sclient.Client, addonName, manifestURL string) error {
 	// Create HTTP request with context
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, manifestURL, nil)
 	if err != nil {
@@ -70,8 +29,8 @@ func applyFromURL(ctx context.Context, kubeconfigPath, addonName, manifestURL st
 	}
 
 	// Download the manifest
-	client := &http.Client{Timeout: 60 * time.Second}
-	resp, err := client.Do(req)
+	httpClient := &http.Client{Timeout: 60 * time.Second}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to download manifest from %s: %w", manifestURL, err)
 	}
@@ -87,6 +46,6 @@ func applyFromURL(ctx context.Context, kubeconfigPath, addonName, manifestURL st
 		return fmt.Errorf("failed to read manifest from %s: %w", manifestURL, err)
 	}
 
-	// Apply using the existing helper
-	return applyWithKubectl(ctx, kubeconfigPath, addonName, manifestBytes)
+	// Apply using the k8sclient
+	return applyManifests(ctx, client, addonName, manifestBytes)
 }

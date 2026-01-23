@@ -6,12 +6,13 @@ import (
 	"strconv"
 
 	"hcloud-k8s/internal/addons/helm"
+	"hcloud-k8s/internal/addons/k8sclient"
 	"hcloud-k8s/internal/config"
 )
 
 // applyCCM installs the Hetzner Cloud Controller Manager.
 // See: terraform/hcloud.tf (hcloud_ccm)
-func applyCCM(ctx context.Context, kubeconfigPath string, cfg *config.Config, networkID int64) error {
+func applyCCM(ctx context.Context, client k8sclient.Client, cfg *config.Config, networkID int64) error {
 	if !cfg.Addons.CCM.Enabled {
 		return nil
 	}
@@ -26,7 +27,7 @@ func applyCCM(ctx context.Context, kubeconfigPath string, cfg *config.Config, ne
 	}
 
 	// Apply manifests to cluster
-	if err := applyWithKubectl(ctx, kubeconfigPath, "hcloud-ccm", manifestBytes); err != nil {
+	if err := applyManifests(ctx, client, "hcloud-ccm", manifestBytes); err != nil {
 		return fmt.Errorf("failed to apply CCM manifests: %w", err)
 	}
 

@@ -5,15 +5,18 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"os/exec"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"hcloud-k8s/internal/addons/helm"
+	"hcloud-k8s/internal/addons/k8sclient"
 	"hcloud-k8s/internal/config"
 )
 
 // applyCSI installs the Hetzner Cloud CSI driver.
 // See: terraform/hcloud.tf (hcloud_csi)
-func applyCSI(ctx context.Context, kubeconfigPath string, cfg *config.Config) error {
+func applyCSI(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	// Generate encryption passphrase
 	encryptionKey, err := generateEncryptionKey(32)
 	if err != nil {
@@ -21,7 +24,7 @@ func applyCSI(ctx context.Context, kubeconfigPath string, cfg *config.Config) er
 	}
 
 	// Create hcloud-csi-secret for encryption
-	if err := createCSISecret(ctx, kubeconfigPath, encryptionKey); err != nil {
+	if err := createCSISecret(ctx, client, encryptionKey); err != nil {
 		return fmt.Errorf("failed to create CSI secret: %w", err)
 	}
 
@@ -35,7 +38,7 @@ func applyCSI(ctx context.Context, kubeconfigPath string, cfg *config.Config) er
 	}
 
 	// Apply manifests to cluster
-	if err := applyWithKubectl(ctx, kubeconfigPath, "hcloud-csi", manifestBytes); err != nil {
+	if err := applyManifests(ctx, client, "hcloud-csi", manifestBytes); err != nil {
 		return fmt.Errorf("failed to apply CSI manifests: %w", err)
 	}
 
@@ -123,28 +126,20 @@ func buildCSIValues(cfg *config.Config) helm.Values {
 }
 
 // createCSISecret creates the hcloud-csi-secret for volume encryption.
-func createCSISecret(ctx context.Context, kubeconfigPath, encryptionKey string) error {
-	// Delete existing secret if it exists (ignore errors)
-	deleteCmd := exec.CommandContext(ctx, "kubectl",
-		"--kubeconfig", kubeconfigPath,
-		"delete", "secret", "hcloud-csi-secret",
-		"--namespace", "kube-system",
-		"--ignore-not-found",
-	)
-	_ = deleteCmd.Run()
+func createCSISecret(ctx context.Context, client k8sclient.Client, encryptionKey string) error {
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "hcloud-csi-secret",
+			Namespace: "kube-system",
+		},
+		Type: corev1.SecretTypeOpaque,
+		StringData: map[string]string{
+			"encryption-passphrase": encryptionKey,
+		},
+	}
 
-	// Create new secret
-	//nolint:gosec // kubectl command with internally generated encryption key
-	cmd := exec.CommandContext(ctx, "kubectl",
-		"--kubeconfig", kubeconfigPath,
-		"create", "secret", "generic", "hcloud-csi-secret",
-		"--namespace", "kube-system",
-		"--from-literal=encryption-passphrase="+encryptionKey,
-	)
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to create hcloud-csi-secret: %w\nOutput: %s", err, output)
+	if err := client.CreateSecret(ctx, secret); err != nil {
+		return fmt.Errorf("failed to create hcloud-csi-secret: %w", err)
 	}
 
 	return nil

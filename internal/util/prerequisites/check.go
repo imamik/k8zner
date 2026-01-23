@@ -24,16 +24,9 @@ type Tool struct {
 }
 
 // DefaultTools returns the default set of tools to check.
-// kubectl is always required for addon installation.
+// The main binary is self-contained and requires no external CLI tools at runtime.
 func DefaultTools() []Tool {
-	return []Tool{
-		{
-			Name:        "kubectl",
-			Required:    true,
-			Description: "Required for applying Kubernetes manifests and managing addons",
-			InstallURL:  "https://kubernetes.io/docs/tasks/tools/",
-		},
-	}
+	return []Tool{}
 }
 
 // ImageBuildTools returns additional tools needed for image building.
@@ -51,6 +44,12 @@ func ImageBuildTools() []Tool {
 // OptionalTools returns tools that are useful but not required.
 func OptionalTools() []Tool {
 	return []Tool{
+		{
+			Name:        "kubectl",
+			Required:    false,
+			Description: "Useful for manual cluster operations and debugging",
+			InstallURL:  "https://kubernetes.io/docs/tasks/tools/",
+		},
 		{
 			Name:        "talosctl",
 			Required:    false,

@@ -7,12 +7,13 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"hcloud-k8s/internal/addons/k8sclient"
 	"hcloud-k8s/internal/config"
 )
 
 // applyOIDC installs OIDC RBAC role bindings and cluster role bindings.
 // See: terraform/oidc.tf
-func applyOIDC(ctx context.Context, kubeconfigPath string, cfg *config.Config) error {
+func applyOIDC(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	if len(cfg.Addons.OIDCRBAC.GroupMappings) == 0 {
 		return nil // Nothing to apply
 	}
@@ -55,7 +56,7 @@ func applyOIDC(ctx context.Context, kubeconfigPath string, cfg *config.Config) e
 
 	// Combine and apply manifests
 	combined := strings.Join(manifests, "\n---\n")
-	if err := applyWithKubectl(ctx, kubeconfigPath, "kube-oidc-rbac", []byte(combined)); err != nil {
+	if err := applyManifests(ctx, client, "kube-oidc-rbac", []byte(combined)); err != nil {
 		return fmt.Errorf("failed to apply OIDC RBAC manifests: %w", err)
 	}
 

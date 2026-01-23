@@ -2,7 +2,6 @@ package addons
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"hcloud-k8s/internal/config"
@@ -122,33 +121,4 @@ func TestGetControlPlaneCount(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
-}
-
-func TestWriteTempKubeconfig(t *testing.T) {
-	kubeconfig := []byte("test kubeconfig content")
-
-	path, err := writeTempKubeconfig(kubeconfig)
-	assert.NoError(t, err)
-	assert.NotEmpty(t, path)
-
-	// Cleanup
-	defer func() { _ = os.Remove(path) }()
-
-	// Verify file exists and has correct content
-	content, err := os.ReadFile(path) //nolint:gosec // G304: path is from our own test function
-	assert.NoError(t, err)
-	assert.Equal(t, kubeconfig, content)
-}
-
-func TestWriteTempKubeconfig_EmptyContent(t *testing.T) {
-	path, err := writeTempKubeconfig([]byte{})
-	assert.NoError(t, err)
-
-	// Cleanup
-	defer func() { _ = os.Remove(path) }()
-
-	// File should exist but be empty
-	content, err := os.ReadFile(path) //nolint:gosec // G304: path is from our own test function
-	assert.NoError(t, err)
-	assert.Empty(t, content)
 }

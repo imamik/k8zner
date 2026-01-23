@@ -5,15 +5,16 @@ import (
 	"fmt"
 
 	"hcloud-k8s/internal/addons/helm"
+	"hcloud-k8s/internal/addons/k8sclient"
 	"hcloud-k8s/internal/config"
 )
 
 // applyLonghorn installs Longhorn distributed block storage.
 // See: terraform/longhorn.tf
-func applyLonghorn(ctx context.Context, kubeconfigPath string, cfg *config.Config) error {
+func applyLonghorn(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	// Create namespace with pod security labels first
 	namespaceYAML := createLonghornNamespace()
-	if err := applyWithKubectl(ctx, kubeconfigPath, "longhorn-namespace", []byte(namespaceYAML)); err != nil {
+	if err := applyManifests(ctx, client, "longhorn-namespace", []byte(namespaceYAML)); err != nil {
 		return fmt.Errorf("failed to create longhorn namespace: %w", err)
 	}
 
@@ -27,7 +28,7 @@ func applyLonghorn(ctx context.Context, kubeconfigPath string, cfg *config.Confi
 	}
 
 	// Apply manifests
-	if err := applyWithKubectl(ctx, kubeconfigPath, "longhorn", manifestBytes); err != nil {
+	if err := applyManifests(ctx, client, "longhorn", manifestBytes); err != nil {
 		return fmt.Errorf("failed to apply longhorn manifests: %w", err)
 	}
 

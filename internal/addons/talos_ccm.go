@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 
+	"hcloud-k8s/internal/addons/k8sclient"
 	"hcloud-k8s/internal/config"
 )
 
@@ -14,7 +15,7 @@ import (
 // See: terraform/variables.tf talos_ccm_* variables
 // See: terraform/talos_config.tf lines 29-31
 // Note: Default version is set in load.go during config loading.
-func applyTalosCCM(ctx context.Context, kubeconfigPath string, cfg *config.Config) error {
+func applyTalosCCM(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	version := cfg.Addons.TalosCCM.Version
 
 	// Build the manifest URL
@@ -26,7 +27,7 @@ func applyTalosCCM(ctx context.Context, kubeconfigPath string, cfg *config.Confi
 
 	log.Printf("Installing Talos CCM %s...", version)
 
-	if err := applyFromURL(ctx, kubeconfigPath, "talos-ccm", manifestURL); err != nil {
+	if err := applyFromURL(ctx, client, "talos-ccm", manifestURL); err != nil {
 		return fmt.Errorf("failed to apply Talos CCM from %s: %w", manifestURL, err)
 	}
 

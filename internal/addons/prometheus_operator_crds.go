@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 
+	"hcloud-k8s/internal/addons/k8sclient"
 	"hcloud-k8s/internal/config"
 )
 
@@ -15,7 +16,7 @@ const (
 
 // applyPrometheusOperatorCRDs installs the Prometheus Operator Custom Resource Definitions.
 // See: terraform/talos_config.tf lines 32-34
-func applyPrometheusOperatorCRDs(ctx context.Context, kubeconfigPath string, cfg *config.Config) error {
+func applyPrometheusOperatorCRDs(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	promConfig := cfg.Addons.PrometheusOperatorCRDs
 
 	// Use default if not specified
@@ -33,7 +34,7 @@ func applyPrometheusOperatorCRDs(ctx context.Context, kubeconfigPath string, cfg
 
 	log.Printf("Installing Prometheus Operator CRDs %s...", version)
 
-	if err := applyFromURL(ctx, kubeconfigPath, "prometheus-operator-crds", manifestURL); err != nil {
+	if err := applyFromURL(ctx, client, "prometheus-operator-crds", manifestURL); err != nil {
 		return fmt.Errorf("failed to apply Prometheus Operator CRDs from %s: %w", manifestURL, err)
 	}
 
