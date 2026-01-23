@@ -4,8 +4,8 @@ package destroy
 import (
 	"fmt"
 
-	"hcloud-k8s/internal/provisioning"
-	"hcloud-k8s/internal/util/labels"
+	"k8zner/internal/provisioning"
+	"k8zner/internal/util/labels"
 )
 
 // Provisioner handles cluster destruction.

@@ -1,6 +1,6 @@
-// Package main is the entry point for the hcloud-k8s CLI.
+// Package main is the entry point for the k8zner CLI.
 //
-// hcloud-k8s is a command-line tool for provisioning production-ready
+// k8zner is a command-line tool for provisioning production-ready
 // Kubernetes clusters on Hetzner Cloud using Talos Linux. It provides
 // a stateless, declarative approach to infrastructure management without
 // requiring Terraform or other IaC tools.
@@ -11,14 +11,14 @@
 //
 // For detailed usage information, run:
 //
-//	hcloud-k8s --help
+//	k8zner --help
 package main
 
 import (
 	"fmt"
 	"os"
 
-	"hcloud-k8s/cmd/hcloud-k8s/commands"
+	"k8zner/cmd/k8zner/commands"
 )
 
 // Version information set by goreleaser at build time.

@@ -3,8 +3,8 @@ package infrastructure
 import (
 	"fmt"
 
-	"hcloud-k8s/internal/provisioning"
-	"hcloud-k8s/internal/util/rdns"
+	"k8zner/internal/provisioning"
+	"k8zner/internal/util/rdns"
 )
 
 // applyLoadBalancerRDNS configures reverse DNS for a load balancer's IP addresses.

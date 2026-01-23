@@ -25,7 +25,7 @@ func Version() *cobra.Command {
 		Use:   "version",
 		Short: "Print version information",
 		Run: func(_ *cobra.Command, _ []string) {
-			fmt.Printf("hcloud-k8s %s\n", version)
+			fmt.Printf("k8zner %s\n", version)
 			fmt.Printf("  commit: %s\n", commit)
 			fmt.Printf("  built:  %s\n", date)
 		},

@@ -1,7 +1,7 @@
 package compute
 
 import (
-	"hcloud-k8s/internal/provisioning"
+	"k8zner/internal/provisioning"
 )
 
 // Provisioner handles compute resource provisioning (servers, node pools).

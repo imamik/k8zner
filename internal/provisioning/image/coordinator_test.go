@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"hcloud-k8s/internal/config"
-	"hcloud-k8s/internal/provisioning"
+	"k8zner/internal/config"
+	"k8zner/internal/provisioning"
 )
 
 func TestGetImageBuilderConfig(t *testing.T) {

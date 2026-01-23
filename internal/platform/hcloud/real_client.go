@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"hcloud-k8s/internal/config"
+	"k8zner/internal/config"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )

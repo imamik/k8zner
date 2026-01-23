@@ -1,4 +1,4 @@
-# Full Example Cluster Configuration for hcloud-k8s
+# Full Example Cluster Configuration for k8zner
 # This shows all available configuration options with their defaults commented out.
 # Copy this file and uncomment/modify the options you need.
 

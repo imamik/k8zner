@@ -3,7 +3,7 @@ package provisioning
 import (
 	"testing"
 
-	"hcloud-k8s/internal/config"
+	"k8zner/internal/config"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

@@ -5,11 +5,11 @@ import (
 	"net"
 	"time"
 
-	"hcloud-k8s/internal/config"
-	hcloud "hcloud-k8s/internal/platform/hcloud"
-	"hcloud-k8s/internal/provisioning"
-	"hcloud-k8s/internal/util/labels"
-	"hcloud-k8s/internal/util/naming"
+	"k8zner/internal/config"
+	hcloud "k8zner/internal/platform/hcloud"
+	"k8zner/internal/provisioning"
+	"k8zner/internal/util/labels"
+	"k8zner/internal/util/naming"
 
 	hcloudgo "github.com/hetznercloud/hcloud-go/v2/hcloud"
 )

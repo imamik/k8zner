@@ -12,11 +12,11 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"hcloud-k8s/internal/config"
-	"hcloud-k8s/internal/orchestration"
-	"hcloud-k8s/internal/platform/hcloud"
-	"hcloud-k8s/internal/platform/talos"
-	"hcloud-k8s/internal/provisioning/image"
+	"k8zner/internal/config"
+	"k8zner/internal/orchestration"
+	"k8zner/internal/platform/hcloud"
+	"k8zner/internal/platform/talos"
+	"k8zner/internal/provisioning/image"
 
 	"github.com/stretchr/testify/require"
 )
@@ -303,7 +303,7 @@ func upgradeCluster(t *testing.T, state *E2EState, talosVer, k8sVer, schematicID
 	startTime := time.Now()
 
 	// Binary is in project root, tests are in tests/e2e/
-	binaryPath := "../../hcloud-k8s"
+	binaryPath := "../../bin/k8zner"
 	cmd := exec.CommandContext(ctx, binaryPath, "upgrade", "--config", configPath)
 	cmd.Env = append(os.Environ(), "HCLOUD_TOKEN="+os.Getenv("HCLOUD_TOKEN"))
 	output, err := cmd.CombinedOutput()

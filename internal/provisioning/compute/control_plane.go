@@ -5,12 +5,12 @@ package compute
 import (
 	"fmt"
 
-	"hcloud-k8s/internal/config"
-	"hcloud-k8s/internal/platform/hcloud"
-	"hcloud-k8s/internal/provisioning"
-	"hcloud-k8s/internal/util/labels"
-	"hcloud-k8s/internal/util/naming"
-	"hcloud-k8s/internal/util/rdns"
+	"k8zner/internal/config"
+	"k8zner/internal/platform/hcloud"
+	"k8zner/internal/provisioning"
+	"k8zner/internal/util/labels"
+	"k8zner/internal/util/naming"
+	"k8zner/internal/util/rdns"
 )
 
 const phase = "compute"

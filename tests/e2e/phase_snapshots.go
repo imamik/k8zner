@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"hcloud-k8s/internal/provisioning/image"
-	"hcloud-k8s/internal/util/keygen"
+	"k8zner/internal/provisioning/image"
+	"k8zner/internal/util/keygen"
 )
 
 const (

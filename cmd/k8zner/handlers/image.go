@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"hcloud-k8s/internal/provisioning/image"
+	"k8zner/internal/provisioning/image"
 )
 
 // Build creates a custom Talos Linux snapshot on Hetzner Cloud.

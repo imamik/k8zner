@@ -8,8 +8,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"hcloud-k8s/internal/addons/k8sclient"
-	"hcloud-k8s/internal/config"
+	"k8zner/internal/addons/k8sclient"
+	"k8zner/internal/config"
 )
 
 // applyTalosBackup installs the Talos etcd backup CronJob.

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"net"
 
-	"hcloud-k8s/internal/config"
-	"hcloud-k8s/internal/provisioning"
-	"hcloud-k8s/internal/util/labels"
+	"k8zner/internal/config"
+	"k8zner/internal/provisioning"
+	"k8zner/internal/util/labels"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )

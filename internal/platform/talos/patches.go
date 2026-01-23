@@ -1,7 +1,7 @@
 package talos
 
 import (
-	"hcloud-k8s/internal/config"
+	"k8zner/internal/config"
 )
 
 // MachineConfigOptions holds all options needed to build Talos machine config patches.

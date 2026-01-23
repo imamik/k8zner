@@ -23,7 +23,7 @@ const (
 	RoleAutoscaler = "autoscaler"
 )
 
-// CalculateSubnets calculates the standard subnets used in hcloud-k8s based on the main network CIDR.
+// CalculateSubnets calculates the standard subnets used in k8zner based on the main network CIDR.
 func (c *Config) CalculateSubnets() error {
 	if c.Network.IPv4CIDR == "" {
 		c.Network.IPv4CIDR = "10.0.0.0/16"

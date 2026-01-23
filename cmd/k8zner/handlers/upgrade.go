@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"log"
 
-	"hcloud-k8s/internal/config"
-	"hcloud-k8s/internal/platform/hcloud"
-	"hcloud-k8s/internal/platform/talos"
-	"hcloud-k8s/internal/provisioning"
-	"hcloud-k8s/internal/provisioning/upgrade"
+	"k8zner/internal/config"
+	"k8zner/internal/platform/hcloud"
+	"k8zner/internal/platform/talos"
+	"k8zner/internal/provisioning"
+	"k8zner/internal/provisioning/upgrade"
 )
 
 // UpgradeOptions contains options for the upgrade command.

@@ -26,7 +26,7 @@ What actually happened.
 
 ## Environment
 
-- **hcloud-k8s version**: (output of `hcloud-k8s version` or commit hash)
+- **k8zner version**: (output of `k8zner version` or commit hash)
 - **OS**: (e.g., macOS 14.0, Ubuntu 22.04)
 - **Hetzner Cloud location**: (e.g., nbg1, fsn1)
 - **Talos version**: (from config)

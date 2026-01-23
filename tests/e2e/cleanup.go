@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"hcloud-k8s/internal/platform/hcloud"
+	"k8zner/internal/platform/hcloud"
 )
 
 // cleanupE2ECluster removes all resources created during the E2E test using label-based cleanup.

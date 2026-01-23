@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"hcloud-k8s/internal/util/retry"
+	"k8zner/internal/util/retry"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )

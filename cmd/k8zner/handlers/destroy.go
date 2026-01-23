@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log"
 
-	"hcloud-k8s/internal/config"
-	"hcloud-k8s/internal/platform/hcloud"
-	"hcloud-k8s/internal/provisioning"
-	"hcloud-k8s/internal/provisioning/destroy"
+	"k8zner/internal/config"
+	"k8zner/internal/platform/hcloud"
+	"k8zner/internal/provisioning"
+	"k8zner/internal/provisioning/destroy"
 )
 
 // Destroy handles the destroy command.

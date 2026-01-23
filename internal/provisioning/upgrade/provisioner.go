@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"hcloud-k8s/internal/platform/hcloud"
-	"hcloud-k8s/internal/provisioning"
+	"k8zner/internal/platform/hcloud"
+	"k8zner/internal/provisioning"
 )
 
 const phase = "Upgrade"

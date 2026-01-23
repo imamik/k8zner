@@ -51,7 +51,7 @@ Please include as much of the following information as possible:
 
 ## Security Best Practices
 
-When using hcloud-k8s, please follow these security recommendations:
+When using k8zner, please follow these security recommendations:
 
 ### API Token Security
 
@@ -81,7 +81,7 @@ When using hcloud-k8s, please follow these security recommendations:
 
 ## Security Features
 
-hcloud-k8s includes several security features:
+k8zner includes several security features:
 
 - **Talos Linux**: Immutable, minimal OS with no SSH access by default
 - **Firewall Management**: Automatic firewall configuration for cluster traffic

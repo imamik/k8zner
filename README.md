@@ -1,10 +1,10 @@
-# hcloud-k8s
+# k8zner
 
-[![CI](https://github.com/hcloud-k8s/hcloud-k8s/actions/workflows/ci.yaml/badge.svg)](https://github.com/hcloud-k8s/hcloud-k8s/actions/workflows/ci.yaml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/hcloud-k8s/hcloud-k8s)](https://goreportcard.com/report/github.com/hcloud-k8s/hcloud-k8s)
+[![CI](https://github.com/imamik/k8zner/actions/workflows/ci.yaml/badge.svg)](https://github.com/imamik/k8zner/actions/workflows/ci.yaml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/imamik/k8zner)](https://goreportcard.com/report/github.com/imamik/k8zner)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-Production-ready Kubernetes clusters on Hetzner Cloud using [Talos Linux](https://www.talos.dev/).
+**k8zner** (k8s + Hetzner) — Production-ready Kubernetes clusters on Hetzner Cloud using [Talos Linux](https://www.talos.dev/).
 
 ## Features
 
@@ -15,6 +15,7 @@ Production-ready Kubernetes clusters on Hetzner Cloud using [Talos Linux](https:
 - **Full Addon Suite** — Cilium CNI, Hetzner CCM/CSI, cert-manager, ingress-nginx, and more
 - **Snapshot-based Provisioning** — Fast node creation from pre-built Talos images
 - **Idempotent Operations** — Safe to run repeatedly, only applies necessary changes
+- **Self-Contained Binary** — No runtime dependencies (kubectl, talosctl not required)
 
 ## Quick Start
 
@@ -22,17 +23,17 @@ Production-ready Kubernetes clusters on Hetzner Cloud using [Talos Linux](https:
 
 - [Hetzner Cloud account](https://www.hetzner.com/cloud) with API token
 
-Optional (for manual debugging):
-- [kubectl](https://kubernetes.io/docs/tasks/tools/) for cluster operations
-- [talosctl](https://www.talos.dev/latest/introduction/getting-started/#talosctl) for Talos-specific operations
+Optional (for manual debugging only):
+- [kubectl](https://kubernetes.io/docs/tasks/tools/) — for ad-hoc cluster operations
+- [talosctl](https://www.talos.dev/latest/introduction/getting-started/#talosctl) — for Talos-specific debugging
 
 ### Installation
 
-Download the latest release from the [releases page](https://github.com/hcloud-k8s/hcloud-k8s/releases), or build from source:
+Download the latest release from the [releases page](https://github.com/imamik/k8zner/releases), or build from source:
 
 ```bash
-git clone https://github.com/hcloud-k8s/hcloud-k8s.git
-cd hcloud-k8s
+git clone https://github.com/imamik/k8zner.git
+cd k8zner
 make build
 ```
 
@@ -78,13 +79,13 @@ addons:
 3. **Build Talos image snapshot** (one-time):
 
 ```bash
-./bin/hcloud-k8s image build --config cluster.yaml
+./bin/k8zner image build --config cluster.yaml
 ```
 
 4. **Apply the cluster:**
 
 ```bash
-./bin/hcloud-k8s apply --config cluster.yaml
+./bin/k8zner apply --config cluster.yaml
 ```
 
 5. **Access your cluster:**
@@ -98,11 +99,11 @@ kubectl get nodes
 
 | Command | Description |
 |---------|-------------|
-| `hcloud-k8s apply` | Create or update cluster infrastructure and configuration |
-| `hcloud-k8s destroy` | Tear down all cluster resources |
-| `hcloud-k8s upgrade` | Upgrade Talos and/or Kubernetes versions |
-| `hcloud-k8s image build` | Build Talos image snapshot for faster provisioning |
-| `hcloud-k8s image delete` | Delete Talos image snapshots |
+| `k8zner apply` | Create or update cluster infrastructure and configuration |
+| `k8zner destroy` | Tear down all cluster resources |
+| `k8zner upgrade` | Upgrade Talos and/or Kubernetes versions |
+| `k8zner image build` | Build Talos image snapshot for faster provisioning |
+| `k8zner image delete` | Delete Talos image snapshots |
 
 ## Configuration Reference
 
@@ -157,7 +158,7 @@ worker_pools:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        hcloud-k8s CLI                           │
+│                         k8zner CLI                              │
 ├─────────────────────────────────────────────────────────────────┤
 │                      Orchestration Layer                        │
 │              (Reconciler, Pipeline, Phases)                     │
@@ -206,7 +207,7 @@ make e2e-fast   # Faster iteration (keeps snapshots)
 
 ```
 cmd/
-├── hcloud-k8s/
+├── k8zner/
 │   ├── commands/     # CLI command definitions (Cobra)
 │   └── handlers/     # Business logic for commands
 internal/
@@ -218,6 +219,7 @@ internal/
 │   ├── image/
 │   └── cluster/
 ├── addons/           # Kubernetes addon management
+│   ├── k8sclient/    # Kubernetes client (replaces kubectl)
 │   └── helm/         # Helm chart rendering
 ├── platform/         # External system integrations
 │   ├── hcloud/       # Hetzner Cloud client

@@ -15,7 +15,7 @@ import (
 	"math/big"
 	"time"
 
-	"hcloud-k8s/internal/provisioning"
+	"k8zner/internal/provisioning"
 
 	"github.com/siderolabs/talos/pkg/machinery/api/machine"
 	"github.com/siderolabs/talos/pkg/machinery/client"

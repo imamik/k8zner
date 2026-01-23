@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"hcloud-k8s/internal/config"
-	"hcloud-k8s/internal/platform/hcloud"
-	"hcloud-k8s/internal/provisioning"
+	"k8zner/internal/config"
+	"k8zner/internal/platform/hcloud"
+	"k8zner/internal/provisioning"
 
 	hcloudAPI "github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"

@@ -8,7 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"hcloud-k8s/internal/addons/k8sclient"
+	"k8zner/internal/addons/k8sclient"
 )
 
 // createHCloudSecret creates the hcloud secret that addon charts reference.

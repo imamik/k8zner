@@ -1,7 +1,7 @@
 package infrastructure
 
 import (
-	"hcloud-k8s/internal/provisioning"
+	"k8zner/internal/provisioning"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )

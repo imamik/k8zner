@@ -16,7 +16,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"hcloud-k8s/internal/util/retry"
+	"k8zner/internal/util/retry"
 )
 
 const (

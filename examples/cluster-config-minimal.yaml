@@ -1,4 +1,4 @@
-# Minimal Cluster Configuration for hcloud-k8s
+# Minimal Cluster Configuration for k8zner
 # This is the simplest working configuration for a single-node cluster.
 # For production use, see cluster-config-full.yaml.
 

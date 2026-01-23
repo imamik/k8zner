@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"sync"
 
-	"hcloud-k8s/internal/config"
-	"hcloud-k8s/internal/provisioning"
-	"hcloud-k8s/internal/util/async"
-	"hcloud-k8s/internal/util/labels"
-	"hcloud-k8s/internal/util/naming"
+	"k8zner/internal/config"
+	"k8zner/internal/provisioning"
+	"k8zner/internal/util/async"
+	"k8zner/internal/util/labels"
+	"k8zner/internal/util/naming"
 )
 
 // NodePoolSpec defines the configuration for provisioning a pool of servers.

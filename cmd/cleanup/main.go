@@ -26,7 +26,7 @@ import (
 	"os"
 	"strings"
 
-	"hcloud-k8s/internal/platform/hcloud"
+	"k8zner/internal/platform/hcloud"
 )
 
 type labelFlags []string

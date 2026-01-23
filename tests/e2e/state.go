@@ -3,7 +3,7 @@
 package e2e
 
 import (
-	"hcloud-k8s/internal/platform/hcloud"
+	"k8zner/internal/platform/hcloud"
 )
 
 // E2EState holds the cluster state as it progresses through test phases.

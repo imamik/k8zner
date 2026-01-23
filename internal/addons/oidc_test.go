@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	yamlpkg "gopkg.in/yaml.v3"
 
-	"hcloud-k8s/internal/config"
+	"k8zner/internal/config"
 )
 
 func TestCollectUniqueClusterRoles(t *testing.T) {

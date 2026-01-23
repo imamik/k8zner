@@ -11,11 +11,11 @@ import (
 	"log"
 	"os"
 
-	"hcloud-k8s/internal/config"
-	"hcloud-k8s/internal/orchestration"
-	"hcloud-k8s/internal/platform/hcloud"
-	"hcloud-k8s/internal/platform/talos"
-	"hcloud-k8s/internal/util/prerequisites"
+	"k8zner/internal/config"
+	"k8zner/internal/orchestration"
+	"k8zner/internal/platform/hcloud"
+	"k8zner/internal/platform/talos"
+	"k8zner/internal/util/prerequisites"
 )
 
 const (

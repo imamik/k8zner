@@ -6,8 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"hcloud-k8s/internal/addons/helm"
-	"hcloud-k8s/internal/config"
+	"k8zner/internal/addons/helm"
+	"k8zner/internal/config"
 )
 
 func TestBuildCertManagerValues(t *testing.T) {

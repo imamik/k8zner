@@ -12,8 +12,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"hcloud-k8s/cmd/hcloud-k8s/handlers"
-	"hcloud-k8s/internal/config"
+	"k8zner/cmd/k8zner/handlers"
+	"k8zner/internal/config"
 )
 
 // phaseUpgrade tests cluster upgrade functionality.

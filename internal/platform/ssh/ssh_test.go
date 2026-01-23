@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"hcloud-k8s/internal/util/keygen"
+	"k8zner/internal/util/keygen"
 )
 
 // generateTestKey generates a test RSA key pair for use in tests.

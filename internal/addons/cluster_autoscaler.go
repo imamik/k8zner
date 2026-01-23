@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"hcloud-k8s/internal/addons/helm"
-	"hcloud-k8s/internal/addons/k8sclient"
-	"hcloud-k8s/internal/config"
-	"hcloud-k8s/internal/provisioning"
+	"k8zner/internal/addons/helm"
+	"k8zner/internal/addons/k8sclient"
+	"k8zner/internal/config"
+	"k8zner/internal/provisioning"
 )
 
 // applyClusterAutoscaler installs the Cluster Autoscaler for dynamic node scaling.

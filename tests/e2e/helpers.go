@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"hcloud-k8s/internal/platform/hcloud"
-	"hcloud-k8s/internal/util/keygen"
+	"k8zner/internal/platform/hcloud"
+	"k8zner/internal/util/keygen"
 
 	"github.com/siderolabs/talos/pkg/machinery/api/machine"
 	"github.com/siderolabs/talos/pkg/machinery/client"

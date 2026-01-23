@@ -1,7 +1,7 @@
 package image
 
 import (
-	"hcloud-k8s/internal/provisioning"
+	"k8zner/internal/provisioning"
 )
 
 // Provisioner handles image provisioning (building and managing Talos images).

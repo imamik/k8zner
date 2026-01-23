@@ -1,7 +1,7 @@
 package cluster
 
 import (
-	"hcloud-k8s/internal/provisioning"
+	"k8zner/internal/provisioning"
 )
 
 // Provisioner handles cluster lifecycle operations (bootstrap, upgrade).

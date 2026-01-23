@@ -9,9 +9,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"hcloud-k8s/internal/addons/helm"
-	"hcloud-k8s/internal/addons/k8sclient"
-	"hcloud-k8s/internal/config"
+	"k8zner/internal/addons/helm"
+	"k8zner/internal/addons/k8sclient"
+	"k8zner/internal/config"
 )
 
 // applyCSI installs the Hetzner Cloud CSI driver.

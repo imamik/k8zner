@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"hcloud-k8s/internal/config"
+	"k8zner/internal/config"
 )
 
 func TestNewRealClient_Defaults(t *testing.T) {

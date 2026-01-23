@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"hcloud-k8s/internal/provisioning"
-	"hcloud-k8s/internal/util/rdns"
+	"k8zner/internal/provisioning"
+	"k8zner/internal/util/rdns"
 )
 
 // retryRDNS executes a function with exponential backoff retry logic.

@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"hcloud-k8s/internal/platform/hcloud"
-	"hcloud-k8s/internal/provisioning"
-	"hcloud-k8s/internal/util/labels"
-	"hcloud-k8s/internal/util/retry"
+	"k8zner/internal/platform/hcloud"
+	"k8zner/internal/provisioning"
+	"k8zner/internal/util/labels"
+	"k8zner/internal/util/retry"
 )
 
 // ServerSpec defines the configuration for creating a server.

@@ -3,7 +3,7 @@ package commands
 import (
 	"github.com/spf13/cobra"
 
-	"hcloud-k8s/cmd/hcloud-k8s/handlers"
+	"k8zner/cmd/k8zner/handlers"
 )
 
 // Destroy returns the destroy command.
@@ -32,7 +32,7 @@ This command deletes all resources associated with the cluster including:
 Resources are deleted in dependency order to ensure clean teardown.
 
 Example:
-  hcloud-k8s destroy -c cluster.yaml
+  k8zner destroy -c cluster.yaml
 
 WARNING: This operation is irreversible. All cluster data will be lost.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {

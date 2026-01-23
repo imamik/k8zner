@@ -1,4 +1,4 @@
-module hcloud-k8s
+module k8zner
 
 go 1.25.5
 

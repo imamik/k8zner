@@ -1,5 +1,5 @@
 bin/
-/hcloud-k8s
+/k8zner
 
 .envrc
 .env

@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 
-	"hcloud-k8s/internal/addons/helm"
-	"hcloud-k8s/internal/config"
+	"k8zner/internal/addons/helm"
+	"k8zner/internal/config"
 )
 
 func TestBuildCiliumValues(t *testing.T) {

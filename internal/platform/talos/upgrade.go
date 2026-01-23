@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"hcloud-k8s/internal/provisioning"
+	"k8zner/internal/provisioning"
 
 	"github.com/siderolabs/talos/pkg/machinery/client"
 	"github.com/siderolabs/talos/pkg/machinery/client/config"

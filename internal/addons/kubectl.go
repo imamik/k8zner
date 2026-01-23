@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"hcloud-k8s/internal/addons/k8sclient"
+	"k8zner/internal/addons/k8sclient"
 )
 
 // applyManifests applies Kubernetes manifests using the k8sclient.

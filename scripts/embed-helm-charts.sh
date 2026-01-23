@@ -56,7 +56,7 @@ download_chart() {
     fi
 
     # Add repository
-    local repo_name="hcloud-k8s-${chart_name}"
+    local repo_name="k8zner-${chart_name}"
     log "  Adding helm repository: $repository"
     helm repo add "$repo_name" "$repository" --force-update >/dev/null 2>&1
 

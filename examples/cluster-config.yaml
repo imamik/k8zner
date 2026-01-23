@@ -1,4 +1,4 @@
-# Example Cluster Configuration for hcloud-k8s
+# Example Cluster Configuration for k8zner
 
 # The name of the cluster. Resources will be tagged with cluster=<name>.
 cluster_name: "talos-k8s-example"
@@ -24,7 +24,7 @@ control_plane:
   # Server Type (e.g., cpx22 for AMD64, cax11 for ARM).
   server_type: "cpx22"
 
-  # Image snapshot name to use (created via `hcloud-k8s image build`).
+  # Image snapshot name to use (created via `k8zner image build`).
   # You can also use "debian-12" for testing, but Talos config injection requires a Talos image.
   image: "talos-v1.9.0-amd64"
 

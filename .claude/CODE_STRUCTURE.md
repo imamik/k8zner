@@ -1,6 +1,6 @@
 # Code Organization & Quality Rules
 
-This document defines the structural patterns and quality standards for the hcloud-k8s codebase. These rules emerged from active refactoring and represent our agreed-upon approach.
+This document defines the structural patterns and quality standards for the k8zner codebase. These rules emerged from active refactoring and represent our agreed-upon approach.
 
 ## 1. Package Structure
 
@@ -46,7 +46,7 @@ This document defines the structural patterns and quality standards for the hclo
 ## 5. Dependencies
 
 - Trust dependencies to validate their inputs (don't duplicate validation)
-- Simple module path (`hcloud-k8s` not `github.com/...`)
+- Simple module path (`k8zner` not `github.com/...`)
 - Minimal abstractions - only create interfaces when needed (2+ implementations)
 
 ## 6. Error Handling
@@ -138,8 +138,8 @@ Split when a single file exceeds ~200 lines AND has clear sub-responsibilities:
 - ✅ `internal/provisioning` - Cohesive domain (cluster provisioning), all related operations together
 - ✅ `internal/addons` - Clear domain (cluster addons), reusable, external boundary (kubectl)
 - ✅ `internal/platform/hcloud` - External system boundary, many operations
-- ✅ `cmd/hcloud-k8s/commands` - CLI commands separate from handlers
-- ✅ `cmd/hcloud-k8s/handlers` - Business logic separate from CLI framework
+- ✅ `cmd/k8zner/commands` - CLI commands separate from handlers
+- ✅ `cmd/k8zner/handlers` - Business logic separate from CLI framework
 - ✅ `internal/util/*` - Small, focused utilities (async, naming, labels, retry)
 
 ### Provisioning subpackage structure:

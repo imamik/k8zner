@@ -5,8 +5,8 @@ import (
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 
-	"hcloud-k8s/internal/provisioning"
-	"hcloud-k8s/internal/util/naming"
+	"k8zner/internal/provisioning"
+	"k8zner/internal/util/naming"
 )
 
 // ProvisionFloatingIPs provisions floating IPs for the control plane.

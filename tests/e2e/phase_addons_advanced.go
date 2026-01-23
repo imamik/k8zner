@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"hcloud-k8s/internal/addons"
-	"hcloud-k8s/internal/config"
+	"k8zner/internal/addons"
+	"k8zner/internal/config"
 )
 
 // phaseAddonsAdvanced tests advanced addon configurations.

@@ -1,6 +1,6 @@
-# Contributing to hcloud-k8s
+# Contributing to k8zner
 
-Thank you for your interest in contributing to hcloud-k8s! This document provides guidelines and information for contributors.
+Thank you for your interest in contributing to k8zner! This document provides guidelines and information for contributors.
 
 ## Code of Conduct
 
@@ -15,7 +15,7 @@ Before creating an issue, please:
 1. Check existing issues to avoid duplicates
 2. Use the issue templates when available
 3. Include relevant details:
-   - hcloud-k8s version
+   - k8zner version
    - Go version
    - Talos/Kubernetes versions
    - Hetzner Cloud location
@@ -54,8 +54,8 @@ Optional (for E2E tests and manual debugging):
 ### Building
 
 ```bash
-git clone https://github.com/hcloud-k8s/hcloud-k8s.git
-cd hcloud-k8s
+git clone https://github.com/imamik/k8zner.git
+cd k8zner
 make build
 ```
 
@@ -153,8 +153,8 @@ refactor(hcloud): extract common delete operation logic
 Understanding the codebase structure helps when contributing:
 
 ```
-hcloud-k8s
-├── cmd/hcloud-k8s/
+k8zner
+├── cmd/k8zner/
 │   ├── commands/     # CLI definitions (Cobra)
 │   └── handlers/     # Command business logic
 ├── internal/
@@ -166,6 +166,7 @@ hcloud-k8s
 │   │   ├── image/           # Talos snapshots
 │   │   └── cluster/         # Bootstrap
 │   ├── addons/       # Kubernetes addon installation
+│   │   └── k8sclient/       # Kubernetes client (replaces kubectl)
 │   ├── platform/     # External integrations
 │   │   ├── hcloud/   # Hetzner Cloud API client
 │   │   ├── talos/    # Talos configuration

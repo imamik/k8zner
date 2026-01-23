@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"hcloud-k8s/internal/config"
+	"k8zner/internal/config"
 )
 
 func TestTalosCCMURLGeneration(t *testing.T) {

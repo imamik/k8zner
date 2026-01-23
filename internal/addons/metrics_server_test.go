@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"hcloud-k8s/internal/addons/helm"
-	"hcloud-k8s/internal/config"
+	"k8zner/internal/addons/helm"
+	"k8zner/internal/config"
 )
 
 func TestBuildMetricsServerValues(t *testing.T) {

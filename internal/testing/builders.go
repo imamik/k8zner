@@ -3,7 +3,7 @@ package testing
 import (
 	"maps"
 
-	"hcloud-k8s/internal/config"
+	"k8zner/internal/config"
 )
 
 // ConfigBuilder provides a fluent interface for constructing test configs.

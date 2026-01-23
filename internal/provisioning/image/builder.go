@@ -8,9 +8,9 @@ import (
 	"log"
 	"time"
 
-	"hcloud-k8s/internal/platform/hcloud"
-	"hcloud-k8s/internal/platform/ssh"
-	"hcloud-k8s/internal/util/keygen"
+	"k8zner/internal/platform/hcloud"
+	"k8zner/internal/platform/ssh"
+	"k8zner/internal/util/keygen"
 )
 
 // Builder builds a Talos image on Hetzner Cloud.

@@ -7,13 +7,13 @@ package commands
 
 import "github.com/spf13/cobra"
 
-// Root returns the root command for the hcloud-k8s CLI.
+// Root returns the root command for the k8zner CLI.
 //
 // The root command serves as the entry point and parent for all subcommands.
 // It provides basic CLI metadata and organizes the command hierarchy.
 func Root() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "hcloud-k8s",
+		Use:   "k8zner",
 		Short: "Provision Kubernetes on Hetzner Cloud using Talos",
 	}
 

@@ -78,13 +78,13 @@ jobs:
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
           CGO_ENABLED: 0
-        run: go build -v -o bin/hcloud-k8s-${{ matrix.os }}-${{ matrix.arch }} ./cmd/hcloud-k8s
+        run: go build -v -o bin/k8zner-${{ matrix.os }}-${{ matrix.arch }} ./cmd/k8zner
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: hcloud-k8s-${{ matrix.os }}-${{ matrix.arch }}
-          path: bin/hcloud-k8s-${{ matrix.os }}-${{ matrix.arch }}*
+          name: k8zner-${{ matrix.os }}-${{ matrix.arch }}
+          path: bin/k8zner-${{ matrix.os }}-${{ matrix.arch }}*
           retention-days: 7
 
   # Summary job for branch protection rules

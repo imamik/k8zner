@@ -18,10 +18,10 @@ test-coverage:
 	@echo "Coverage report: coverage.html"
 
 build:
-	go build -o bin/hcloud-k8s ./cmd/hcloud-k8s
+	go build -o bin/k8zner ./cmd/k8zner
 
 install: build
-	cp bin/hcloud-k8s $(GOPATH)/bin/ 2>/dev/null || cp bin/hcloud-k8s /usr/local/bin/
+	cp bin/k8zner $(GOPATH)/bin/ 2>/dev/null || cp bin/k8zner /usr/local/bin/
 
 # Run all checks: format, lint, test, and build
 check: fmt lint test build
@@ -48,7 +48,7 @@ clean:
 	rm -rf bin/ coverage.out coverage.html
 
 help:
-	@echo "hcloud-k8s development commands:"
+	@echo "k8zner development commands:"
 	@echo ""
 	@echo "  make build          Build the binary"
 	@echo "  make install        Build and install to GOPATH/bin or /usr/local/bin"

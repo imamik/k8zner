@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"hcloud-k8s/internal/config"
+	"k8zner/internal/config"
 )
 
 func TestNewMachineConfigOptions(t *testing.T) {

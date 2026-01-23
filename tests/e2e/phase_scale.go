@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"hcloud-k8s/internal/config"
-	"hcloud-k8s/internal/orchestration"
-	"hcloud-k8s/internal/platform/talos"
+	"k8zner/internal/config"
+	"k8zner/internal/orchestration"
+	"k8zner/internal/platform/talos"
 )
 
 // phaseScale tests scaling the cluster by adding more control plane and worker nodes.

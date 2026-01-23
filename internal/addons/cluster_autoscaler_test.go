@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"hcloud-k8s/internal/addons/helm"
-	"hcloud-k8s/internal/config"
-	"hcloud-k8s/internal/provisioning"
+	"k8zner/internal/addons/helm"
+	"k8zner/internal/config"
+	"k8zner/internal/provisioning"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

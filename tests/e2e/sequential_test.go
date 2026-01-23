@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"hcloud-k8s/internal/platform/hcloud"
+	"k8zner/internal/platform/hcloud"
 )
 
 // TestE2ELifecycle runs the complete E2E test lifecycle sequentially.

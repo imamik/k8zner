@@ -4,8 +4,8 @@ import (
 	"context"
 	"log"
 
-	"hcloud-k8s/internal/config"
-	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
+	"k8zner/internal/config"
+	hcloud_internal "k8zner/internal/platform/hcloud"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )

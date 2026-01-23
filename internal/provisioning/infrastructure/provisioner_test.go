@@ -5,9 +5,9 @@ import (
 	"net"
 	"testing"
 
-	"hcloud-k8s/internal/config"
-	hcloud_internal "hcloud-k8s/internal/platform/hcloud"
-	"hcloud-k8s/internal/provisioning"
+	"k8zner/internal/config"
+	hcloud_internal "k8zner/internal/platform/hcloud"
+	"k8zner/internal/provisioning"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"

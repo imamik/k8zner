@@ -3,7 +3,7 @@ package commands
 import (
 	"github.com/spf13/cobra"
 
-	"hcloud-k8s/cmd/hcloud-k8s/handlers"
+	"k8zner/cmd/k8zner/handlers"
 )
 
 // Upgrade returns the command for upgrading Talos OS and Kubernetes.

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"sync"
 
-	"hcloud-k8s/internal/provisioning"
-	"hcloud-k8s/internal/util/async"
-	"hcloud-k8s/internal/util/rdns"
+	"k8zner/internal/provisioning"
+	"k8zner/internal/util/async"
+	"k8zner/internal/util/rdns"
 )
 
 // ProvisionWorkers provisions worker node pools.
