@@ -6,8 +6,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"hcloud-k8s/internal/config"
+
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
 // RealClient implements InfrastructureManager using the Hetzner Cloud API.

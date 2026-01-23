@@ -41,13 +41,14 @@ func TestGenerateRBACManifests(t *testing.T) {
 		},
 	}
 
-	manifests := generateRBACManifests(rbac)
+	manifests, err := generateRBACManifests(rbac)
+	require.NoError(t, err)
 
 	assert.Len(t, manifests, 2)
 
 	// First manifest should be the Role
 	var roleManifest map[string]any
-	err := yaml.Unmarshal([]byte(manifests[0]), &roleManifest)
+	err = yaml.Unmarshal([]byte(manifests[0]), &roleManifest)
 	require.NoError(t, err)
 	assert.Equal(t, "rbac.authorization.k8s.io/v1", roleManifest["apiVersion"])
 	assert.Equal(t, "Role", roleManifest["kind"])
@@ -85,19 +86,20 @@ func TestGenerateRole(t *testing.T) {
 		},
 	}
 
-	yaml := generateRole(role)
+	yamlStr, err := generateRole(role)
+	require.NoError(t, err)
 
 	// Verify structure
-	assert.Contains(t, yaml, "apiVersion: rbac.authorization.k8s.io/v1")
-	assert.Contains(t, yaml, "kind: Role")
-	assert.Contains(t, yaml, "name: pod-reader")
-	assert.Contains(t, yaml, "namespace: default")
-	assert.Contains(t, yaml, "rules:")
-	assert.Contains(t, yaml, "pods")
-	assert.Contains(t, yaml, "deployments")
-	assert.Contains(t, yaml, "get")
-	assert.Contains(t, yaml, "list")
-	assert.Contains(t, yaml, "watch")
+	assert.Contains(t, yamlStr, "apiVersion: rbac.authorization.k8s.io/v1")
+	assert.Contains(t, yamlStr, "kind: Role")
+	assert.Contains(t, yamlStr, "name: pod-reader")
+	assert.Contains(t, yamlStr, "namespace: default")
+	assert.Contains(t, yamlStr, "rules:")
+	assert.Contains(t, yamlStr, "pods")
+	assert.Contains(t, yamlStr, "deployments")
+	assert.Contains(t, yamlStr, "get")
+	assert.Contains(t, yamlStr, "list")
+	assert.Contains(t, yamlStr, "watch")
 }
 
 func TestGenerateClusterRole(t *testing.T) {
@@ -112,19 +114,20 @@ func TestGenerateClusterRole(t *testing.T) {
 		},
 	}
 
-	yaml := generateClusterRole(role)
+	yamlStr, err := generateClusterRole(role)
+	require.NoError(t, err)
 
 	// Verify structure
-	assert.Contains(t, yaml, "apiVersion: rbac.authorization.k8s.io/v1")
-	assert.Contains(t, yaml, "kind: ClusterRole")
-	assert.Contains(t, yaml, "name: node-reader")
-	assert.Contains(t, yaml, "rules:")
-	assert.Contains(t, yaml, "nodes")
-	assert.Contains(t, yaml, "get")
-	assert.Contains(t, yaml, "list")
+	assert.Contains(t, yamlStr, "apiVersion: rbac.authorization.k8s.io/v1")
+	assert.Contains(t, yamlStr, "kind: ClusterRole")
+	assert.Contains(t, yamlStr, "name: node-reader")
+	assert.Contains(t, yamlStr, "rules:")
+	assert.Contains(t, yamlStr, "nodes")
+	assert.Contains(t, yamlStr, "get")
+	assert.Contains(t, yamlStr, "list")
 
 	// ClusterRole should not have namespace
-	assert.NotContains(t, yaml, "namespace:")
+	assert.NotContains(t, yamlStr, "namespace:")
 }
 
 func TestBuildRules(t *testing.T) {
@@ -163,7 +166,8 @@ func TestGenerateRBACManifestsEmpty(t *testing.T) {
 		ClusterRoles: []config.ClusterRoleConfig{},
 	}
 
-	manifests := generateRBACManifests(rbac)
+	manifests, err := generateRBACManifests(rbac)
+	require.NoError(t, err)
 
 	assert.Len(t, manifests, 0)
 }
@@ -226,7 +230,8 @@ func TestGenerateRBACManifestsCombination(t *testing.T) {
 				})
 			}
 
-			manifests := generateRBACManifests(rbac)
+			manifests, err := generateRBACManifests(rbac)
+			require.NoError(t, err)
 			expectedCount := tt.roleCount + tt.clusterCount
 			assert.Len(t, manifests, expectedCount)
 

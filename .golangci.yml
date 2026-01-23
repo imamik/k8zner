@@ -18,7 +18,8 @@ linters:
     - unconvert      # Unnecessary type conversions
     - whitespace     # Whitespace issues
 
-    # Import management
+formatters:
+  enable:
     - goimports      # Import formatting and grouping
 
 linters-settings:

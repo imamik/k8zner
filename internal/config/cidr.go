@@ -55,7 +55,7 @@ func CIDRSubnet(prefix string, newbits int, netnum int) (string, error) {
 
 	// Add offset to IP
 	// #nosec G115
-	ipInt = ipInt + uint64(offset)
+	ipInt += uint64(offset)
 
 	// Convert back to IP
 	newIP := ipFromBigInt(ipInt)
@@ -108,7 +108,7 @@ func CIDRHost(prefix string, hostnum int) (string, error) {
 		ip = ip.To4()
 	}
 	ipInt := bigIntFromIP(ip)
-	ipInt = ipInt + offset
+	ipInt += offset
 
 	newIP := ipFromBigInt(ipInt)
 	return newIP.String(), nil
