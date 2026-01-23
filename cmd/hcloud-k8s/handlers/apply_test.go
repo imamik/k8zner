@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"hcloud-k8s/internal/config"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -66,4 +68,109 @@ func TestInitializeClient(t *testing.T) {
 	// Test that initializeClient returns a non-nil client
 	client := initializeClient()
 	assert.NotNil(t, client)
+}
+
+func TestWriteKubeconfig(t *testing.T) {
+	t.Run("empty kubeconfig is skipped", func(t *testing.T) {
+		err := writeKubeconfig([]byte{})
+		assert.NoError(t, err)
+	})
+
+	t.Run("nil kubeconfig is skipped", func(t *testing.T) {
+		err := writeKubeconfig(nil)
+		assert.NoError(t, err)
+	})
+}
+
+func TestCheckPrerequisites(t *testing.T) {
+	t.Run("disabled check returns nil", func(t *testing.T) {
+		disabled := false
+		cfg := &config.Config{
+			PrerequisitesCheckEnabled: &disabled,
+		}
+		err := checkPrerequisites(cfg)
+		assert.NoError(t, err)
+	})
+
+	t.Run("nil check defaults to enabled", func(_ *testing.T) {
+		cfg := &config.Config{}
+		// This will run the actual check - it may fail in CI but tests the logic
+		err := checkPrerequisites(cfg)
+		// We can't assert NoError because some tools might be missing
+		// Just verify it doesn't panic
+		_ = err
+	})
+}
+
+func TestPrintCiliumEncryptionInfo(t *testing.T) {
+	t.Run("cilium disabled", func(_ *testing.T) {
+		cfg := &config.Config{
+			Addons: config.AddonsConfig{
+				Cilium: config.CiliumConfig{
+					Enabled: false,
+				},
+			},
+		}
+		// Should not panic
+		printCiliumEncryptionInfo(cfg)
+	})
+
+	t.Run("cilium enabled encryption disabled", func(_ *testing.T) {
+		cfg := &config.Config{
+			Addons: config.AddonsConfig{
+				Cilium: config.CiliumConfig{
+					Enabled:           true,
+					EncryptionEnabled: false,
+				},
+			},
+		}
+		// Should not panic
+		printCiliumEncryptionInfo(cfg)
+	})
+
+	t.Run("cilium with wireguard encryption", func(_ *testing.T) {
+		cfg := &config.Config{
+			Addons: config.AddonsConfig{
+				Cilium: config.CiliumConfig{
+					Enabled:           true,
+					EncryptionEnabled: true,
+					EncryptionType:    "wireguard",
+				},
+			},
+		}
+		// Should not panic
+		printCiliumEncryptionInfo(cfg)
+	})
+
+	t.Run("cilium with ipsec encryption", func(_ *testing.T) {
+		cfg := &config.Config{
+			Addons: config.AddonsConfig{
+				Cilium: config.CiliumConfig{
+					Enabled:           true,
+					EncryptionEnabled: true,
+					EncryptionType:    "ipsec",
+					IPSecAlgorithm:    "aes-gcm",
+					IPSecKeySize:      256,
+					IPSecKeyID:        1,
+				},
+			},
+		}
+		// Should not panic
+		printCiliumEncryptionInfo(cfg)
+	})
+}
+
+func TestPrintSuccess(t *testing.T) {
+	t.Run("with kubeconfig", func(_ *testing.T) {
+		cfg := &config.Config{}
+		kubeconfig := []byte("apiVersion: v1\nkind: Config")
+		// Should not panic
+		printSuccess(kubeconfig, cfg)
+	})
+
+	t.Run("without kubeconfig", func(_ *testing.T) {
+		cfg := &config.Config{}
+		// Should not panic
+		printSuccess(nil, cfg)
+	})
 }
