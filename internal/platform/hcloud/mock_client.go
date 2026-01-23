@@ -40,6 +40,7 @@ type MockClient struct {
 	EnsureLoadBalancerFunc func(ctx context.Context, name, location, lbType string, algorithm hcloud.LoadBalancerAlgorithmType, labels map[string]string) (*hcloud.LoadBalancer, error)
 	ConfigureServiceFunc   func(ctx context.Context, lb *hcloud.LoadBalancer, service hcloud.LoadBalancerAddServiceOpts) error
 	AttachToNetworkFunc    func(ctx context.Context, lb *hcloud.LoadBalancer, network *hcloud.Network, ip net.IP) error
+	AddTargetFunc          func(ctx context.Context, lb *hcloud.LoadBalancer, targetType hcloud.LoadBalancerTargetType, labelSelector string) error
 	DeleteLoadBalancerFunc func(ctx context.Context, name string) error
 	GetLoadBalancerFunc    func(ctx context.Context, name string) (*hcloud.LoadBalancer, error)
 
@@ -249,7 +250,10 @@ func (m *MockClient) ConfigureService(ctx context.Context, lb *hcloud.LoadBalanc
 }
 
 // AddTarget mocks adding a target to the load balancer.
-func (m *MockClient) AddTarget(_ context.Context, _ *hcloud.LoadBalancer, _ hcloud.LoadBalancerTargetType, _ string) error {
+func (m *MockClient) AddTarget(ctx context.Context, lb *hcloud.LoadBalancer, targetType hcloud.LoadBalancerTargetType, labelSelector string) error {
+	if m.AddTargetFunc != nil {
+		return m.AddTargetFunc(ctx, lb, targetType, labelSelector)
+	}
 	return nil
 }
 

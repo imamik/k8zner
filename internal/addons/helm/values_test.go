@@ -249,6 +249,127 @@ func TestDeepMerge_RealWorldCSICase(t *testing.T) {
 	assert.Equal(t, "token", existingSecret["key"])
 }
 
+func TestToMap(t *testing.T) {
+	t.Run("simple values", func(t *testing.T) {
+		v := Values{
+			"string": "value",
+			"int":    42,
+			"bool":   true,
+		}
+		result := v.ToMap()
+		assert.Equal(t, "value", result["string"])
+		assert.Equal(t, 42, result["int"])
+		assert.Equal(t, true, result["bool"])
+	})
+
+	t.Run("nested Values", func(t *testing.T) {
+		v := Values{
+			"outer": Values{
+				"inner": Values{
+					"value": "deep",
+				},
+			},
+		}
+		result := v.ToMap()
+
+		outer, ok := result["outer"].(map[string]interface{})
+		require.True(t, ok, "outer should be map[string]interface{}")
+
+		inner, ok := outer["inner"].(map[string]interface{})
+		require.True(t, ok, "inner should be map[string]interface{}")
+
+		assert.Equal(t, "deep", inner["value"])
+	})
+
+	t.Run("nested map[string]any", func(t *testing.T) {
+		v := Values{
+			"outer": map[string]any{
+				"inner": map[string]any{
+					"value": "deep",
+				},
+			},
+		}
+		result := v.ToMap()
+
+		outer, ok := result["outer"].(map[string]interface{})
+		require.True(t, ok, "outer should be map[string]interface{}")
+
+		inner, ok := outer["inner"].(map[string]interface{})
+		require.True(t, ok, "inner should be map[string]interface{}")
+
+		assert.Equal(t, "deep", inner["value"])
+	})
+
+	t.Run("arrays with nested maps", func(t *testing.T) {
+		v := Values{
+			"items": []any{
+				Values{"name": "item1"},
+				map[string]any{"name": "item2"},
+				"plain string",
+			},
+		}
+		result := v.ToMap()
+
+		items, ok := result["items"].([]any)
+		require.True(t, ok, "items should be []any")
+		require.Len(t, items, 3)
+
+		item1, ok := items[0].(map[string]interface{})
+		require.True(t, ok, "item1 should be map[string]interface{}")
+		assert.Equal(t, "item1", item1["name"])
+
+		item2, ok := items[1].(map[string]interface{})
+		require.True(t, ok, "item2 should be map[string]interface{}")
+		assert.Equal(t, "item2", item2["name"])
+
+		assert.Equal(t, "plain string", items[2])
+	})
+
+	t.Run("empty values", func(t *testing.T) {
+		v := Values{}
+		result := v.ToMap()
+		assert.Empty(t, result)
+	})
+}
+
+func TestToValuesMap(t *testing.T) {
+	t.Run("Values type", func(t *testing.T) {
+		v := Values{"key": "value"}
+		result := toValuesMap(v)
+		assert.Equal(t, Values{"key": "value"}, result)
+	})
+
+	t.Run("map[string]any type", func(t *testing.T) {
+		m := map[string]any{"key": "value"}
+		result := toValuesMap(m)
+		assert.Equal(t, Values{"key": "value"}, result)
+	})
+
+	t.Run("non-map type returns nil", func(t *testing.T) {
+		assert.Nil(t, toValuesMap("string"))
+		assert.Nil(t, toValuesMap(42))
+		assert.Nil(t, toValuesMap([]string{"a", "b"}))
+		assert.Nil(t, toValuesMap(nil))
+	})
+}
+
+func TestFromYAML_Errors(t *testing.T) {
+	t.Run("invalid yaml - tabs in content", func(t *testing.T) {
+		// YAML doesn't allow tabs for indentation - this should fail
+		invalidYAML := []byte("key:\n\t- invalid")
+		_, err := FromYAML(invalidYAML)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to parse YAML")
+	})
+
+	t.Run("invalid yaml - unclosed bracket", func(t *testing.T) {
+		invalidYAML := []byte("key: [unclosed")
+		_, err := FromYAML(invalidYAML)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to parse YAML")
+	})
+}
+
 func TestMergeCustomValues(t *testing.T) {
 	t.Run("nil custom values returns base unchanged", func(t *testing.T) {
 		base := Values{"replicas": 2, "image": "nginx"}
