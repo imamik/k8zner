@@ -103,3 +103,112 @@ func TestGetSubnetForRole(t *testing.T) {
 		t.Errorf("Worker 1 Subnet = %v, want 10.0.65.0/25", w1Subnet)
 	}
 }
+
+func TestCIDRHost(t *testing.T) {
+	tests := []struct {
+		name    string
+		prefix  string
+		hostnum int
+		want    string
+		wantErr bool
+	}{
+		{
+			name:    "first host in /24",
+			prefix:  "10.0.0.0/24",
+			hostnum: 1,
+			want:    "10.0.0.1",
+			wantErr: false,
+		},
+		{
+			name:    "host 10 in /24",
+			prefix:  "10.0.0.0/24",
+			hostnum: 10,
+			want:    "10.0.0.10",
+			wantErr: false,
+		},
+		{
+			name:    "last host in /24",
+			prefix:  "10.0.0.0/24",
+			hostnum: 255,
+			want:    "10.0.0.255",
+			wantErr: false,
+		},
+		{
+			name:    "negative hostnum counts from end",
+			prefix:  "10.0.0.0/24",
+			hostnum: -1,
+			want:    "10.0.0.255",
+			wantErr: false,
+		},
+		{
+			name:    "negative hostnum -2",
+			prefix:  "10.0.0.0/24",
+			hostnum: -2,
+			want:    "10.0.0.254",
+			wantErr: false,
+		},
+		{
+			name:    "host in /16 network",
+			prefix:  "192.168.0.0/16",
+			hostnum: 1000,
+			want:    "192.168.3.232",
+			wantErr: false,
+		},
+		{
+			name:    "host exceeds max",
+			prefix:  "10.0.0.0/24",
+			hostnum: 256,
+			want:    "",
+			wantErr: true,
+		},
+		{
+			name:    "negative host exceeds max",
+			prefix:  "10.0.0.0/24",
+			hostnum: -257,
+			want:    "",
+			wantErr: true,
+		},
+		{
+			name:    "invalid CIDR",
+			prefix:  "invalid",
+			hostnum: 1,
+			want:    "",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := CIDRHost(tt.prefix, tt.hostnum)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("CIDRHost() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("CIDRHost() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCIDRSubnet_IPv6Error(t *testing.T) {
+	_, err := CIDRSubnet("2001:db8::/32", 8, 0)
+	if err == nil {
+		t.Error("CIDRSubnet() expected error for IPv6, got nil")
+	}
+}
+
+func TestCIDRHost_IPv6Error(t *testing.T) {
+	_, err := CIDRHost("2001:db8::/32", 1)
+	if err == nil {
+		t.Error("CIDRHost() expected error for IPv6, got nil")
+	}
+}
+
+func TestCIDRSubnet_InvalidNewbits(t *testing.T) {
+	// Test when newbits would exceed 32 bits total
+	_, err := CIDRSubnet("10.0.0.0/24", 16, 0)
+	if err == nil {
+		t.Error("CIDRSubnet() expected error for newbits exceeding 32, got nil")
+	}
+}
