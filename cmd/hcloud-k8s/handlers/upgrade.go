@@ -64,7 +64,7 @@ func Upgrade(ctx context.Context, opts UpgradeOptions) error {
 		return fmt.Errorf("failed to load Talos secrets from %s: %w (secrets must exist for upgrade)", secretsFile, err)
 	}
 
-	endpoint := fmt.Sprintf("https://%s-kube-api:6443", cfg.ClusterName)
+	endpoint := fmt.Sprintf("https://%s-kube-api:%d", cfg.ClusterName, config.KubeAPIPort)
 	talosGen := talos.NewGenerator(
 		cfg.ClusterName,
 		cfg.Kubernetes.Version,

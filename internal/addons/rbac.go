@@ -18,7 +18,10 @@ func applyRBAC(ctx context.Context, kubeconfigPath string, cfg *config.Config) e
 	}
 
 	// Generate manifests
-	manifests := generateRBACManifests(cfg.Addons.RBAC)
+	manifests, err := generateRBACManifests(cfg.Addons.RBAC)
+	if err != nil {
+		return fmt.Errorf("failed to generate RBAC manifests: %w", err)
+	}
 
 	// Combine with --- separator
 	combined := strings.Join(manifests, "\n---\n")
@@ -33,25 +36,33 @@ func applyRBAC(ctx context.Context, kubeconfigPath string, cfg *config.Config) e
 
 // generateRBACManifests creates YAML manifests for roles and cluster roles.
 // See: terraform/rbac.tf lines 3-31
-func generateRBACManifests(rbac config.RBACConfig) []string {
+func generateRBACManifests(rbac config.RBACConfig) ([]string, error) {
 	var manifests []string
 
 	// Generate Role manifests
 	for _, role := range rbac.Roles {
-		manifests = append(manifests, generateRole(role))
+		manifest, err := generateRole(role)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate Role %s: %w", role.Name, err)
+		}
+		manifests = append(manifests, manifest)
 	}
 
 	// Generate ClusterRole manifests
 	for _, role := range rbac.ClusterRoles {
-		manifests = append(manifests, generateClusterRole(role))
+		manifest, err := generateClusterRole(role)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate ClusterRole %s: %w", role.Name, err)
+		}
+		manifests = append(manifests, manifest)
 	}
 
-	return manifests
+	return manifests, nil
 }
 
 // generateRole creates a YAML manifest for a namespaced Role.
 // See: terraform/rbac.tf lines 5-17
-func generateRole(role config.RoleConfig) string {
+func generateRole(role config.RoleConfig) (string, error) {
 	r := map[string]any{
 		"apiVersion": "rbac.authorization.k8s.io/v1",
 		"kind":       "Role",
@@ -64,14 +75,14 @@ func generateRole(role config.RoleConfig) string {
 
 	yamlBytes, err := yaml.Marshal(r)
 	if err != nil {
-		panic(fmt.Sprintf("failed to marshal Role YAML: %v", err))
+		return "", fmt.Errorf("failed to marshal Role YAML: %w", err)
 	}
-	return string(yamlBytes)
+	return string(yamlBytes), nil
 }
 
 // generateClusterRole creates a YAML manifest for a ClusterRole.
 // See: terraform/rbac.tf lines 19-30
-func generateClusterRole(role config.ClusterRoleConfig) string {
+func generateClusterRole(role config.ClusterRoleConfig) (string, error) {
 	r := map[string]any{
 		"apiVersion": "rbac.authorization.k8s.io/v1",
 		"kind":       "ClusterRole",
@@ -83,9 +94,9 @@ func generateClusterRole(role config.ClusterRoleConfig) string {
 
 	yamlBytes, err := yaml.Marshal(r)
 	if err != nil {
-		panic(fmt.Sprintf("failed to marshal ClusterRole YAML: %v", err))
+		return "", fmt.Errorf("failed to marshal ClusterRole YAML: %w", err)
 	}
-	return string(yamlBytes)
+	return string(yamlBytes), nil
 }
 
 // buildRules converts config rules to RBAC rule format.
