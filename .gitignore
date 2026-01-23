@@ -12,6 +12,10 @@ logs/
 *.log
 test_output.txt
 
+# Coverage reports
+coverage.out
+coverage.html
+
 # E2E test artifacts
 e2e.test
 *.test
