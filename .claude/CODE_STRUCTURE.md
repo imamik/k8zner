@@ -68,7 +68,7 @@ This document defines the structural patterns and quality standards for the hclo
 ## 7. Naming Conventions
 
 ### Files
-- **camelCase** for file names: `apply.go`, `applyHandler.go`
+- **snake_case** for file names: `apply.go`, `load_balancer.go`, `cert_manager.go`
 - Match primary type/function name when applicable: `reconciler.go` contains `Reconciler`
 
 ### Functions & Methods
