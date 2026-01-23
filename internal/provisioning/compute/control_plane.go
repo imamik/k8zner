@@ -9,6 +9,7 @@ import (
 	"hcloud-k8s/internal/provisioning"
 	"hcloud-k8s/internal/util/labels"
 	"hcloud-k8s/internal/util/naming"
+	"hcloud-k8s/internal/util/rdns"
 )
 
 const phase = "compute"
@@ -61,8 +62,8 @@ func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
 		}
 
 		// Resolve RDNS templates with fallback to cluster defaults
-		rdnsIPv4 := resolveRDNSTemplate(pool.RDNSIPv4, ctx.Config.RDNS.ClusterRDNSIPv4, ctx.Config.RDNS.ClusterRDNS)
-		rdnsIPv6 := resolveRDNSTemplate(pool.RDNSIPv6, ctx.Config.RDNS.ClusterRDNSIPv6, ctx.Config.RDNS.ClusterRDNS)
+		rdnsIPv4 := rdns.ResolveTemplate(pool.RDNSIPv4, ctx.Config.RDNS.ClusterRDNSIPv4, ctx.Config.RDNS.ClusterRDNS)
+		rdnsIPv6 := rdns.ResolveTemplate(pool.RDNSIPv6, ctx.Config.RDNS.ClusterRDNSIPv6, ctx.Config.RDNS.ClusterRDNS)
 
 		poolIPs, err := p.reconcileNodePool(ctx, NodePoolSpec{
 			Name:             pool.Name,

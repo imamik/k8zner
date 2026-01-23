@@ -95,7 +95,7 @@ func TestWriteKubeconfig(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify the file was written correctly
-		data, err := os.ReadFile(testPath)
+		data, err := os.ReadFile(testPath) //nolint:gosec // G304: test file path is safe
 		require.NoError(t, err)
 		assert.Equal(t, kubeconfig, data)
 

@@ -295,7 +295,7 @@ func TestApplyConfigPatch(t *testing.T) {
 		patch := map[string]any{
 			"machine": map[string]any{
 				"network": map[string]any{
-					"hostname": "patched",
+					"hostname":    "patched",
 					"nameservers": []string{"8.8.8.8"},
 				},
 			},

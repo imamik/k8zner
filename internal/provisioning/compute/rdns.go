@@ -69,13 +69,3 @@ func (p *Provisioner) applyServerRDNSSimple(ctx *provisioning.Context, serverID 
 
 	return nil
 }
-
-// resolveRDNSTemplate returns the first non-empty template from the provided fallbacks.
-func resolveRDNSTemplate(templates ...string) string {
-	for _, t := range templates {
-		if t != "" {
-			return t
-		}
-	}
-	return ""
-}

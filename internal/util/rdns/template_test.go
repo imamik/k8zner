@@ -441,3 +441,54 @@ func parseIP(t *testing.T, s string) net.IP {
 	require.NotNil(t, ip, "invalid IP: %s", s)
 	return ip
 }
+
+func TestResolveTemplate(t *testing.T) {
+	tests := []struct {
+		name      string
+		templates []string
+		want      string
+	}{
+		{
+			name:      "first non-empty",
+			templates: []string{"first", "second", "third"},
+			want:      "first",
+		},
+		{
+			name:      "skip empty first",
+			templates: []string{"", "second", "third"},
+			want:      "second",
+		},
+		{
+			name:      "skip multiple empties",
+			templates: []string{"", "", "third"},
+			want:      "third",
+		},
+		{
+			name:      "all empty",
+			templates: []string{"", "", ""},
+			want:      "",
+		},
+		{
+			name:      "no templates",
+			templates: []string{},
+			want:      "",
+		},
+		{
+			name:      "single non-empty",
+			templates: []string{"only"},
+			want:      "only",
+		},
+		{
+			name:      "single empty",
+			templates: []string{""},
+			want:      "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ResolveTemplate(tt.templates...)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

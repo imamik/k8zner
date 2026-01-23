@@ -7,6 +7,7 @@ import (
 
 	"hcloud-k8s/internal/provisioning"
 	"hcloud-k8s/internal/util/async"
+	"hcloud-k8s/internal/util/rdns"
 )
 
 // ProvisionWorkers provisions worker node pools.
@@ -32,8 +33,8 @@ func (p *Provisioner) ProvisionWorkers(ctx *provisioning.Context) error {
 			Name: fmt.Sprintf("worker-pool-%s", pool.Name),
 			Func: func(_ context.Context) error {
 				// Resolve RDNS templates with fallback to cluster defaults
-				rdnsIPv4 := resolveRDNSTemplate(pool.RDNSIPv4, ctx.Config.RDNS.ClusterRDNSIPv4, ctx.Config.RDNS.ClusterRDNS)
-				rdnsIPv6 := resolveRDNSTemplate(pool.RDNSIPv6, ctx.Config.RDNS.ClusterRDNSIPv6, ctx.Config.RDNS.ClusterRDNS)
+				rdnsIPv4 := rdns.ResolveTemplate(pool.RDNSIPv4, ctx.Config.RDNS.ClusterRDNSIPv4, ctx.Config.RDNS.ClusterRDNS)
+				rdnsIPv6 := rdns.ResolveTemplate(pool.RDNSIPv6, ctx.Config.RDNS.ClusterRDNSIPv6, ctx.Config.RDNS.ClusterRDNS)
 
 				// We use the outer ctx (*provisioning.Context)
 				ips, err := p.reconcileNodePool(ctx, NodePoolSpec{

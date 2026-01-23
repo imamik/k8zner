@@ -15,12 +15,12 @@ func (p *Provisioner) applyLoadBalancerRDNS(ctx *provisioning.Context, lbID int6
 	switch role {
 	case "kube-api":
 		// Kube API load balancer uses cluster-wide defaults
-		rdnsIPv4 = resolveRDNSTemplate(ctx.Config.RDNS.ClusterRDNSIPv4, ctx.Config.RDNS.ClusterRDNS, "")
-		rdnsIPv6 = resolveRDNSTemplate(ctx.Config.RDNS.ClusterRDNSIPv6, ctx.Config.RDNS.ClusterRDNS, "")
+		rdnsIPv4 = rdns.ResolveTemplate(ctx.Config.RDNS.ClusterRDNSIPv4, ctx.Config.RDNS.ClusterRDNS, "")
+		rdnsIPv6 = rdns.ResolveTemplate(ctx.Config.RDNS.ClusterRDNSIPv6, ctx.Config.RDNS.ClusterRDNS, "")
 	case "ingress":
 		// Ingress load balancer uses ingress-specific config with fallback
-		rdnsIPv4 = resolveRDNSTemplate(ctx.Config.Ingress.RDNSIPv4, ctx.Config.RDNS.IngressRDNSIPv4, ctx.Config.RDNS.ClusterRDNSIPv4, ctx.Config.RDNS.ClusterRDNS)
-		rdnsIPv6 = resolveRDNSTemplate(ctx.Config.Ingress.RDNSIPv6, ctx.Config.RDNS.IngressRDNSIPv6, ctx.Config.RDNS.ClusterRDNSIPv6, ctx.Config.RDNS.ClusterRDNS)
+		rdnsIPv4 = rdns.ResolveTemplate(ctx.Config.Ingress.RDNSIPv4, ctx.Config.RDNS.IngressRDNSIPv4, ctx.Config.RDNS.ClusterRDNSIPv4, ctx.Config.RDNS.ClusterRDNS)
+		rdnsIPv6 = rdns.ResolveTemplate(ctx.Config.Ingress.RDNSIPv6, ctx.Config.RDNS.IngressRDNSIPv6, ctx.Config.RDNS.ClusterRDNSIPv6, ctx.Config.RDNS.ClusterRDNS)
 	}
 
 	// Apply IPv4 RDNS if configured
@@ -68,14 +68,4 @@ func (p *Provisioner) applyLoadBalancerRDNS(ctx *provisioning.Context, lbID int6
 	}
 
 	return nil
-}
-
-// resolveRDNSTemplate returns the first non-empty template from the provided fallbacks.
-func resolveRDNSTemplate(templates ...string) string {
-	for _, t := range templates {
-		if t != "" {
-			return t
-		}
-	}
-	return ""
 }
