@@ -81,7 +81,7 @@ jobs:
         run: go build -v -o bin/hcloud-k8s-${{ matrix.os }}-${{ matrix.arch }} ./cmd/hcloud-k8s
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: hcloud-k8s-${{ matrix.os }}-${{ matrix.arch }}
           path: bin/hcloud-k8s-${{ matrix.os }}-${{ matrix.arch }}*
