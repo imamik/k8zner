@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"hcloud-k8s/internal/platform/hcloud"
 	"hcloud-k8s/internal/provisioning"
 )
 
@@ -340,8 +341,8 @@ func (p *Provisioner) getControlPlaneIPs(ctx *provisioning.Context) ([]string, e
 	var ips []string
 	for _, server := range servers {
 		// Use public IP for Talos API access (accessible on port 50000)
-		if server.PublicNet.IPv4.IP != nil {
-			ips = append(ips, server.PublicNet.IPv4.IP.String())
+		if ip := hcloud.ServerIPv4(server); ip != "" {
+			ips = append(ips, ip)
 		}
 	}
 	return ips, nil
@@ -359,8 +360,8 @@ func (p *Provisioner) getWorkerIPs(ctx *provisioning.Context) ([]string, error) 
 	var ips []string
 	for _, server := range servers {
 		// Use public IP for Talos API access (accessible on port 50000)
-		if server.PublicNet.IPv4.IP != nil {
-			ips = append(ips, server.PublicNet.IPv4.IP.String())
+		if ip := hcloud.ServerIPv4(server); ip != "" {
+			ips = append(ips, ip)
 		}
 	}
 	return ips, nil

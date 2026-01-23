@@ -50,6 +50,15 @@ func (lb *LabelBuilder) WithTestID(testID string) *LabelBuilder {
 	return lb
 }
 
+// WithTestIDIfSet adds a test-id label only if testID is non-empty.
+// This simplifies conditional test ID patterns throughout the codebase.
+func (lb *LabelBuilder) WithTestIDIfSet(testID string) *LabelBuilder {
+	if testID != "" {
+		lb.labels["test-id"] = testID
+	}
+	return lb
+}
+
 // WithCustom adds a custom key-value label.
 func (lb *LabelBuilder) WithCustom(key, value string) *LabelBuilder {
 	lb.labels[key] = value

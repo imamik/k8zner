@@ -6,11 +6,12 @@ import (
 	"time"
 
 	"hcloud-k8s/internal/config"
+	hcloud "hcloud-k8s/internal/platform/hcloud"
 	"hcloud-k8s/internal/provisioning"
 	"hcloud-k8s/internal/util/labels"
 	"hcloud-k8s/internal/util/naming"
 
-	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	hcloudgo "github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
 // ProvisionLoadBalancers provisions API and Ingress load balancers.
@@ -28,34 +29,32 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 		lbName := naming.KubeAPILoadBalancer(ctx.Config.ClusterName)
 		ctx.Logger.Printf("[%s] Reconciling load balancer %s...", phase, lbName)
 
-		lb := labels.NewLabelBuilder(ctx.Config.ClusterName).
-			WithRole("kube-api")
-		if ctx.Config.TestID != "" {
-			lb = lb.WithTestID(ctx.Config.TestID)
-		}
-		apiLBLabels := lb.Build()
+		apiLBLabels := labels.NewLabelBuilder(ctx.Config.ClusterName).
+			WithRole("kube-api").
+			WithTestIDIfSet(ctx.Config.TestID).
+			Build()
 
 		// Algorithm: round_robin
-		apiLB, err := ctx.Infra.EnsureLoadBalancer(ctx, lbName, ctx.Config.Location, "lb11", hcloud.LoadBalancerAlgorithmTypeRoundRobin, apiLBLabels)
+		apiLB, err := ctx.Infra.EnsureLoadBalancer(ctx, lbName, ctx.Config.Location, "lb11", hcloudgo.LoadBalancerAlgorithmTypeRoundRobin, apiLBLabels)
 		if err != nil {
 			return fmt.Errorf("failed to ensure API load balancer: %w", err)
 		}
 
 		// Service: 6443
-		service := hcloud.LoadBalancerAddServiceOpts{
-			Protocol:        hcloud.LoadBalancerServiceProtocolTCP,
-			ListenPort:      hcloud.Ptr(6443),
-			DestinationPort: hcloud.Ptr(6443),
-			HealthCheck: &hcloud.LoadBalancerAddServiceOptsHealthCheck{
-				Protocol: hcloud.LoadBalancerServiceProtocolHTTP,
-				Port:     hcloud.Ptr(6443),
-				Interval: hcloud.Ptr(time.Second * 3), // Terraform default: 3
-				Timeout:  hcloud.Ptr(time.Second * 2), // Terraform default: 2
-				Retries:  hcloud.Ptr(2),               // Terraform default: 2
-				HTTP: &hcloud.LoadBalancerAddServiceOptsHealthCheckHTTP{
-					Path:        hcloud.Ptr("/version"),
+		service := hcloudgo.LoadBalancerAddServiceOpts{
+			Protocol:        hcloudgo.LoadBalancerServiceProtocolTCP,
+			ListenPort:      hcloudgo.Ptr(6443),
+			DestinationPort: hcloudgo.Ptr(6443),
+			HealthCheck: &hcloudgo.LoadBalancerAddServiceOptsHealthCheck{
+				Protocol: hcloudgo.LoadBalancerServiceProtocolHTTP,
+				Port:     hcloudgo.Ptr(6443),
+				Interval: hcloudgo.Ptr(time.Second * 3), // Terraform default: 3
+				Timeout:  hcloudgo.Ptr(time.Second * 2), // Terraform default: 2
+				Retries:  hcloudgo.Ptr(2),               // Terraform default: 2
+				HTTP: &hcloudgo.LoadBalancerAddServiceOptsHealthCheckHTTP{
+					Path:        hcloudgo.Ptr("/version"),
 					StatusCodes: []string{"401"},
-					TLS:         hcloud.Ptr(true),
+					TLS:         hcloudgo.Ptr(true),
 				},
 			},
 		}
@@ -84,20 +83,14 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 		// Add Targets
 		// Label Selector: "cluster=<cluster_name>,role=control-plane"
 		targetSelector := fmt.Sprintf("cluster=%s,role=control-plane", ctx.Config.ClusterName)
-		err = ctx.Infra.AddTarget(ctx, apiLB, hcloud.LoadBalancerTargetTypeLabelSelector, targetSelector)
+		err = ctx.Infra.AddTarget(ctx, apiLB, hcloudgo.LoadBalancerTargetTypeLabelSelector, targetSelector)
 		if err != nil {
 			return fmt.Errorf("failed to add target to LB: %w", err)
 		}
 
 		// Apply RDNS if configured
-		ipv4 := ""
-		if apiLB.PublicNet.IPv4.IP != nil {
-			ipv4 = apiLB.PublicNet.IPv4.IP.String()
-		}
-		ipv6 := ""
-		if apiLB.PublicNet.IPv6.IP != nil {
-			ipv6 = apiLB.PublicNet.IPv6.IP.String()
-		}
+		ipv4 := hcloud.LoadBalancerIPv4(apiLB)
+		ipv6 := hcloud.LoadBalancerIPv6(apiLB)
 
 		if err := p.applyLoadBalancerRDNS(ctx, apiLB.ID, lbName, ipv4, ipv6, "kube-api"); err != nil {
 			ctx.Logger.Printf("[%s] Warning: Failed to set RDNS for %s: %v", phase, lbName, err)
@@ -110,20 +103,18 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 		lbName := naming.IngressLoadBalancer(ctx.Config.ClusterName)
 		ctx.Logger.Printf("[%s] Reconciling ingress load balancer %s...", phase, lbName)
 
-		lb := labels.NewLabelBuilder(ctx.Config.ClusterName).
-			WithRole("ingress")
-		if ctx.Config.TestID != "" {
-			lb = lb.WithTestID(ctx.Config.TestID)
-		}
-		ingressLBLabels := lb.Build()
+		ingressLBLabels := labels.NewLabelBuilder(ctx.Config.ClusterName).
+			WithRole("ingress").
+			WithTestIDIfSet(ctx.Config.TestID).
+			Build()
 
 		lbType := ctx.Config.Ingress.LoadBalancerType
 		if lbType == "" {
 			lbType = "lb11"
 		}
-		algorithm := hcloud.LoadBalancerAlgorithmTypeRoundRobin
+		algorithm := hcloudgo.LoadBalancerAlgorithmTypeRoundRobin
 		if ctx.Config.Ingress.Algorithm == "least_connections" {
-			algorithm = hcloud.LoadBalancerAlgorithmTypeLeastConnections
+			algorithm = hcloudgo.LoadBalancerAlgorithmTypeLeastConnections
 		}
 
 		ingressLB, err := ctx.Infra.EnsureLoadBalancer(ctx, lbName, ctx.Config.Location, lbType, algorithm, ingressLBLabels)
@@ -161,20 +152,14 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 		// "cluster=<name>,role=worker"
 		// TF also includes CP if scheduling enabled, but let's stick to workers for now.
 		targetSelector := fmt.Sprintf("cluster=%s,role=worker", ctx.Config.ClusterName)
-		err = ctx.Infra.AddTarget(ctx, ingressLB, hcloud.LoadBalancerTargetTypeLabelSelector, targetSelector)
+		err = ctx.Infra.AddTarget(ctx, ingressLB, hcloudgo.LoadBalancerTargetTypeLabelSelector, targetSelector)
 		if err != nil {
 			return fmt.Errorf("failed to add target to Ingress LB: %w", err)
 		}
 
 		// Apply RDNS if configured
-		ipv4 := ""
-		if ingressLB.PublicNet.IPv4.IP != nil {
-			ipv4 = ingressLB.PublicNet.IPv4.IP.String()
-		}
-		ipv6 := ""
-		if ingressLB.PublicNet.IPv6.IP != nil {
-			ipv6 = ingressLB.PublicNet.IPv6.IP.String()
-		}
+		ipv4 := hcloud.LoadBalancerIPv4(ingressLB)
+		ipv6 := hcloud.LoadBalancerIPv6(ingressLB)
 
 		if err := p.applyLoadBalancerRDNS(ctx, ingressLB.ID, lbName, ipv4, ipv6, "ingress"); err != nil {
 			ctx.Logger.Printf("[%s] Warning: Failed to set RDNS for %s: %v", phase, lbName, err)
@@ -185,7 +170,7 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 }
 
 // newIngressService creates a load balancer service for the given port with health check defaults.
-func newIngressService(port int, cfg config.IngressConfig) hcloud.LoadBalancerAddServiceOpts {
+func newIngressService(port int, cfg config.IngressConfig) hcloudgo.LoadBalancerAddServiceOpts {
 	// Apply defaults for health check values
 	interval := time.Second * time.Duration(cfg.HealthCheckInt)
 	if interval == 0 {
@@ -200,17 +185,17 @@ func newIngressService(port int, cfg config.IngressConfig) hcloud.LoadBalancerAd
 		retries = 3
 	}
 
-	return hcloud.LoadBalancerAddServiceOpts{
-		Protocol:        hcloud.LoadBalancerServiceProtocolTCP,
-		ListenPort:      hcloud.Ptr(port),
-		DestinationPort: hcloud.Ptr(port),
-		Proxyprotocol:   hcloud.Ptr(true),
-		HealthCheck: &hcloud.LoadBalancerAddServiceOptsHealthCheck{
-			Protocol: hcloud.LoadBalancerServiceProtocolTCP,
-			Port:     hcloud.Ptr(port),
-			Interval: hcloud.Ptr(interval),
-			Timeout:  hcloud.Ptr(timeout),
-			Retries:  hcloud.Ptr(retries),
+	return hcloudgo.LoadBalancerAddServiceOpts{
+		Protocol:        hcloudgo.LoadBalancerServiceProtocolTCP,
+		ListenPort:      hcloudgo.Ptr(port),
+		DestinationPort: hcloudgo.Ptr(port),
+		Proxyprotocol:   hcloudgo.Ptr(true),
+		HealthCheck: &hcloudgo.LoadBalancerAddServiceOptsHealthCheck{
+			Protocol: hcloudgo.LoadBalancerServiceProtocolTCP,
+			Port:     hcloudgo.Ptr(port),
+			Interval: hcloudgo.Ptr(interval),
+			Timeout:  hcloudgo.Ptr(timeout),
+			Retries:  hcloudgo.Ptr(retries),
 		},
 	}
 }

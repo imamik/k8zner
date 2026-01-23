@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"hcloud-k8s/internal/config"
+	"hcloud-k8s/internal/platform/hcloud"
 	"hcloud-k8s/internal/provisioning"
 	"hcloud-k8s/internal/util/labels"
 	"hcloud-k8s/internal/util/naming"
@@ -29,8 +30,7 @@ func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
 	}
 	if lb != nil {
 		// Use LB Public IP as endpoint
-		if lb.PublicNet.IPv4.IP != nil {
-			lbIP := lb.PublicNet.IPv4.IP.String()
+		if lbIP := hcloud.LoadBalancerIPv4(lb); lbIP != "" {
 			sans = append(sans, lbIP)
 
 			// UPDATE TALOS ENDPOINT
@@ -49,12 +49,10 @@ func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
 	// Provision Servers (configs will be generated per-node in reconciler)
 	for i, pool := range ctx.Config.ControlPlane.NodePools {
 		// Placement Group for Control Plane
-		lb := labels.NewLabelBuilder(ctx.Config.ClusterName).
-			WithPool(pool.Name)
-		if ctx.Config.TestID != "" {
-			lb = lb.WithTestID(ctx.Config.TestID)
-		}
-		pgLabels := lb.Build()
+		pgLabels := labels.NewLabelBuilder(ctx.Config.ClusterName).
+			WithPool(pool.Name).
+			WithTestIDIfSet(ctx.Config.TestID).
+			Build()
 
 		pg, err := ctx.Infra.EnsurePlacementGroup(ctx, naming.PlacementGroup(ctx.Config.ClusterName, pool.Name), "spread", pgLabels)
 		if err != nil {
