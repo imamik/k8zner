@@ -1,0 +1,27 @@
+# Minimal Cluster Configuration for hcloud-k8s
+# This is the simplest working configuration for a single-node cluster.
+# For production use, see cluster-config-full.yaml.
+
+cluster_name: "my-cluster"
+location: "nbg1"
+
+ssh_keys:
+  - "my-ssh-key"  # Must exist in your Hetzner Cloud project
+
+control_plane:
+  nodepools:
+    - name: "control-plane"
+      count: 1
+      type: "cpx21"
+
+talos:
+  version: "v1.9.0"
+  k8s_version: "1.32.0"
+
+addons:
+  ccm:
+    enabled: true
+  csi:
+    enabled: true
+  cilium:
+    enabled: true

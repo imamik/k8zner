@@ -104,7 +104,10 @@ kubectl get nodes
 
 ## Configuration Reference
 
-See [`examples/cluster-config.yaml`](examples/cluster-config.yaml) for a complete configuration example with all available options.
+See the [`examples/`](examples/) directory for configuration examples:
+- [`cluster-config-minimal.yaml`](examples/cluster-config-minimal.yaml) — Simplest working configuration
+- [`cluster-config.yaml`](examples/cluster-config.yaml) — Common options with explanations
+- [`cluster-config-full.yaml`](examples/cluster-config-full.yaml) — All available options
 
 ### Core Settings
 
