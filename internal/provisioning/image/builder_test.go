@@ -8,7 +8,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	hcloudgo "github.com/hetznercloud/hcloud-go/v2/hcloud"
+
+	"hcloud-k8s/internal/config"
 	"hcloud-k8s/internal/platform/hcloud"
+	"hcloud-k8s/internal/provisioning"
 )
 
 func TestNewBuilder(t *testing.T) {
@@ -203,6 +207,68 @@ func TestBuild_CustomLabels(t *testing.T) {
 	assert.Equal(t, "platform", capturedLabels["team"])
 	// And type label is added
 	assert.Equal(t, "build-ssh-key", capturedLabels["type"])
+}
+
+func TestGetKeys(t *testing.T) {
+	t.Run("empty map", func(t *testing.T) {
+		result := getKeys(map[string]bool{})
+		assert.Empty(t, result)
+	})
+
+	t.Run("single key", func(t *testing.T) {
+		result := getKeys(map[string]bool{"amd64": true})
+		assert.Len(t, result, 1)
+		assert.Contains(t, result, "amd64")
+	})
+
+	t.Run("multiple keys", func(t *testing.T) {
+		result := getKeys(map[string]bool{"amd64": true, "arm64": true})
+		assert.Len(t, result, 2)
+		assert.Contains(t, result, "amd64")
+		assert.Contains(t, result, "arm64")
+	})
+}
+
+func TestEnsureImageForArch(t *testing.T) {
+	p := NewProvisioner()
+
+	t.Run("skips build when snapshot exists", func(t *testing.T) {
+		mockClient := &hcloud.MockClient{
+			GetSnapshotByLabelsFunc: func(_ context.Context, _ map[string]string) (*hcloudgo.Image, error) {
+				return &hcloudgo.Image{ID: 123, Description: "existing-snapshot"}, nil
+			},
+		}
+		ctx := createTestContext(t, mockClient, &config.Config{})
+
+		err := p.ensureImageForArch(ctx, "amd64", "v1.8.0", "v1.30.0", "", "nbg1")
+		assert.NoError(t, err)
+	})
+
+	t.Run("returns error when snapshot check fails", func(t *testing.T) {
+		mockClient := &hcloud.MockClient{
+			GetSnapshotByLabelsFunc: func(_ context.Context, _ map[string]string) (*hcloudgo.Image, error) {
+				return nil, errors.New("API error")
+			},
+		}
+		ctx := createTestContext(t, mockClient, &config.Config{})
+
+		err := p.ensureImageForArch(ctx, "amd64", "v1.8.0", "v1.30.0", "", "nbg1")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to check for existing snapshot")
+	})
+}
+
+func createTestContext(t *testing.T, mockInfra *hcloud.MockClient, cfg *config.Config) *provisioning.Context {
+	t.Helper()
+	if cfg == nil {
+		cfg = &config.Config{}
+	}
+	return provisioning.NewContext(
+		context.Background(),
+		cfg,
+		mockInfra,
+		nil,
+	)
 }
 
 // TestBuild verifies the basic builder orchestration logic.

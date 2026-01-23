@@ -121,3 +121,52 @@ func TestGetPublicIP_Integration(t *testing.T) {
 	}
 	t.Logf("Got public IP: %s", ip)
 }
+
+func TestResolvePlacementGroup(t *testing.T) {
+	t.Run("nil placement group ID", func(t *testing.T) {
+		result := resolvePlacementGroup(nil)
+		if result != nil {
+			t.Error("expected nil for nil placement group ID")
+		}
+	})
+
+	t.Run("valid placement group ID", func(t *testing.T) {
+		id := int64(123)
+		result := resolvePlacementGroup(&id)
+		if result == nil {
+			t.Fatal("expected non-nil placement group")
+		}
+		if result.ID != 123 {
+			t.Errorf("expected ID 123, got %d", result.ID)
+		}
+	})
+
+	t.Run("zero placement group ID", func(t *testing.T) {
+		id := int64(0)
+		result := resolvePlacementGroup(&id)
+		if result == nil {
+			t.Fatal("expected non-nil placement group")
+		}
+		if result.ID != 0 {
+			t.Errorf("expected ID 0, got %d", result.ID)
+		}
+	})
+}
+
+func TestLoadedTimeouts(t *testing.T) {
+	// Test that the client initializes with valid timeouts from config
+	client := NewRealClient("test-token")
+
+	if client.timeouts == nil {
+		t.Fatal("expected timeouts to be initialized")
+	}
+	if client.timeouts.ServerIP == 0 {
+		t.Error("expected non-zero ServerIP timeout")
+	}
+	if client.timeouts.RetryMaxAttempts == 0 {
+		t.Error("expected non-zero RetryMaxAttempts")
+	}
+	if client.timeouts.RetryInitialDelay == 0 {
+		t.Error("expected non-zero RetryInitialDelay")
+	}
+}

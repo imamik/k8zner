@@ -205,3 +205,146 @@ func TestBootstrap_StateMarkerPresent(t *testing.T) {
 	err := p.BootstrapCluster(pCtx)
 	assert.NoError(t, err)
 }
+
+func TestProvision(t *testing.T) {
+	// Test that Provision() delegates to BootstrapCluster()
+	p := NewProvisioner()
+	mockInfra := &hcloud_internal.MockClient{
+		GetCertificateFunc: func(_ context.Context, name string) (*hcloud.Certificate, error) {
+			if name == "test-cluster-state" {
+				return &hcloud.Certificate{ID: 123}, nil // Already bootstrapped
+			}
+			return nil, nil
+		},
+	}
+
+	observer := provisioning.NewConsoleObserver()
+	pCtx := &provisioning.Context{
+		Context:  context.Background(),
+		Config:   &config.Config{ClusterName: "test-cluster"},
+		State:    provisioning.NewState(),
+		Infra:    mockInfra,
+		Observer: observer,
+		Logger:   observer,
+	}
+	pCtx.State.TalosConfig = []byte("talos-config")
+	pCtx.State.ControlPlaneIPs = map[string]string{"node1": "1.2.3.4"}
+
+	err := p.Provision(pCtx)
+	assert.NoError(t, err)
+}
+
+func TestApplyWorkerConfigs_NoWorkers(t *testing.T) {
+	p := NewProvisioner()
+
+	observer := provisioning.NewConsoleObserver()
+	pCtx := &provisioning.Context{
+		Context:  context.Background(),
+		Config:   &config.Config{ClusterName: "test-cluster"},
+		State:    provisioning.NewState(),
+		Observer: observer,
+		Logger:   observer,
+	}
+	// No workers in state
+	pCtx.State.WorkerIPs = map[string]string{}
+
+	err := p.ApplyWorkerConfigs(pCtx)
+	assert.NoError(t, err)
+}
+
+func TestCreateStateMarker(t *testing.T) {
+	p := NewProvisioner()
+
+	t.Run("success", func(t *testing.T) {
+		var capturedLabels map[string]string
+		var capturedName string
+
+		mockInfra := &hcloud_internal.MockClient{
+			EnsureCertificateFunc: func(_ context.Context, name, _, _ string, labels map[string]string) (*hcloud.Certificate, error) {
+				capturedName = name
+				capturedLabels = labels
+				return &hcloud.Certificate{ID: 456}, nil
+			},
+		}
+
+		observer := provisioning.NewConsoleObserver()
+		pCtx := &provisioning.Context{
+			Context:  context.Background(),
+			Config:   &config.Config{ClusterName: "my-cluster"},
+			State:    provisioning.NewState(),
+			Infra:    mockInfra,
+			Observer: observer,
+			Logger:   observer,
+		}
+
+		err := p.createStateMarker(pCtx)
+		assert.NoError(t, err)
+		assert.Equal(t, "my-cluster-state", capturedName)
+		assert.Equal(t, "my-cluster", capturedLabels["cluster"])
+		assert.Equal(t, "initialized", capturedLabels["state"])
+	})
+
+	t.Run("failure", func(t *testing.T) {
+		mockInfra := &hcloud_internal.MockClient{
+			EnsureCertificateFunc: func(_ context.Context, _, _, _ string, _ map[string]string) (*hcloud.Certificate, error) {
+				return nil, context.DeadlineExceeded
+			},
+		}
+
+		observer := provisioning.NewConsoleObserver()
+		pCtx := &provisioning.Context{
+			Context:  context.Background(),
+			Config:   &config.Config{ClusterName: "my-cluster"},
+			State:    provisioning.NewState(),
+			Infra:    mockInfra,
+			Observer: observer,
+			Logger:   observer,
+		}
+
+		err := p.createStateMarker(pCtx)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to create state marker")
+	})
+}
+
+func TestTryRetrieveExistingKubeconfig(t *testing.T) {
+	p := NewProvisioner()
+
+	// This tests the error path - when kubeconfig cannot be retrieved
+	// it should log and return nil (not an error)
+	observer := provisioning.NewConsoleObserver()
+	pCtx := &provisioning.Context{
+		Context:  context.Background(),
+		Config:   &config.Config{ClusterName: "test-cluster"},
+		State:    provisioning.NewState(),
+		Observer: observer,
+		Logger:   observer,
+	}
+	pCtx.State.ControlPlaneIPs = map[string]string{"node1": "127.0.0.1"}
+	pCtx.State.TalosConfig = []byte("invalid-talos-config") // Will fail to parse
+
+	err := p.tryRetrieveExistingKubeconfig(pCtx)
+	// Should NOT return error even when kubeconfig retrieval fails
+	assert.NoError(t, err)
+	// Kubeconfig should remain empty
+	assert.Empty(t, pCtx.State.Kubeconfig)
+}
+
+func TestRetrieveAndStoreKubeconfig_Error(t *testing.T) {
+	p := NewProvisioner()
+
+	observer := provisioning.NewConsoleObserver()
+	pCtx := &provisioning.Context{
+		Context:  context.Background(),
+		Config:   &config.Config{ClusterName: "test-cluster"},
+		State:    provisioning.NewState(),
+		Observer: observer,
+		Logger:   observer,
+	}
+	pCtx.State.ControlPlaneIPs = map[string]string{"node1": "127.0.0.1"}
+	pCtx.State.TalosConfig = []byte("invalid-config") // Will fail to parse
+
+	err := p.retrieveAndStoreKubeconfig(pCtx)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to retrieve kubeconfig")
+}
