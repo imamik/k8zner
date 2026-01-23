@@ -1,0 +1,185 @@
+# Full Example Cluster Configuration for hcloud-k8s
+# This shows all available configuration options with their defaults commented out.
+# Copy this file and uncomment/modify the options you need.
+
+# Required: Cluster name (used for resource tagging and naming)
+cluster_name: "production-cluster"
+
+# Hetzner Cloud API Token (recommended: use HCLOUD_TOKEN env var instead)
+# hcloud_token: "your-token-here"
+
+# Default location for resources
+# Available: nbg1 (Nuremberg), fsn1 (Falkenstein), hel1 (Helsinki), ash (Ashburn)
+location: "fsn1"
+
+# SSH keys to inject into servers (must exist in Hetzner Cloud project)
+ssh_keys:
+  - "admin-key"
+  - "deploy-key"
+
+# Cluster access mode: "public" (default) or "private"
+# cluster_access: "public"
+
+# Enable graceful node drain before deletion
+# graceful_destroy: false
+
+# Enable cluster health checks
+# healthcheck_enabled: true
+
+# Enable preflight check for required tools (kubectl, etc.)
+# prerequisites_check_enabled: true
+
+# Prevent accidental cluster deletion
+# delete_protection: false
+
+# Custom paths for generated config files
+# kubeconfig_path: "./secrets/kubeconfig"
+# talosconfig_path: "./secrets/talosconfig"
+
+# Network Configuration
+network:
+  # ipv4_cidr: "10.0.0.0/16"
+  # node_ipv4_cidr: "10.0.0.0/16"
+  # service_ipv4_cidr: "10.96.0.0/12"
+  # pod_ipv4_cidr: "10.244.0.0/16"
+  zone: "eu-central"
+
+# Firewall Configuration
+firewall:
+  # Automatically add current public IP to allowed sources
+  use_current_ipv4: true
+  # use_current_ipv6: false
+
+  # Additional allowed source IPs for Kubernetes API
+  # kube_api_source:
+  #   - "203.0.113.0/24"
+
+  # Additional allowed source IPs for Talos API
+  # talos_api_source:
+  #   - "203.0.113.0/24"
+
+  # Extra firewall rules
+  # extra_rules:
+  #   - description: "Allow custom service"
+  #     direction: "in"
+  #     source_ips: ["0.0.0.0/0"]
+  #     protocol: "tcp"
+  #     port: "8080"
+
+# Control Plane Configuration
+control_plane:
+  nodepools:
+    - name: "control-plane"
+      count: 3
+      type: "cpx21"
+      location: "fsn1"
+      # labels:
+      #   node.kubernetes.io/role: "control-plane"
+      # Enable Hetzner server backups
+      # backups: true
+
+  # Enable public floating IP for HA
+  # public_vip_ipv4_enabled: true
+
+# Worker Node Pools
+workers:
+  - name: "general"
+    count: 3
+    type: "cpx31"
+    location: "fsn1"
+    labels:
+      workload: "general"
+    # taints:
+    #   - "workload=general:NoSchedule"
+
+  - name: "compute"
+    count: 2
+    type: "cpx51"
+    location: "fsn1"
+    labels:
+      workload: "compute"
+      node.kubernetes.io/instance-type: "cpx51"
+    taints:
+      - "workload=compute:NoSchedule"
+
+# Cluster Autoscaler Configuration
+# autoscaler:
+#   enabled: true
+#   min: 1
+#   max: 10
+
+# Ingress Load Balancer
+ingress:
+  enabled: true
+  type: "lb11"
+  location: "fsn1"
+  # algorithm: "round_robin"
+  # disable_public_network: false
+
+# Talos Configuration
+talos:
+  version: "v1.9.0"
+  k8s_version: "1.32.0"
+
+  # Talos machine configuration patches
+  # machine_config:
+  #   kubelet_extra_config:
+  #     maxPods: 250
+
+# Kubernetes Configuration
+# kubernetes:
+#   pod_security_standards:
+#     enabled: true
+#     default_profile: "baseline"
+#     exempt_namespaces:
+#       - "kube-system"
+
+# Addons Configuration
+addons:
+  # Hetzner Cloud Controller Manager
+  ccm:
+    enabled: true
+    # version: "latest"
+
+  # Hetzner CSI Driver
+  csi:
+    enabled: true
+    default_storage_class: true
+    # encryption_passphrase: "auto-generated-if-not-set"
+
+  # Cilium CNI
+  cilium:
+    enabled: true
+    # version: "1.16.0"
+    # hubble:
+    #   enabled: true
+    #   ui: true
+    #   relay: true
+
+  # Ingress NGINX Controller
+  ingress_nginx:
+    enabled: true
+    # load_balancer_name: "production-cluster-ingress"
+
+  # cert-manager
+  cert_manager:
+    enabled: true
+    # version: "v1.14.0"
+
+  # Metrics Server
+  metrics_server:
+    enabled: true
+
+  # Cluster Autoscaler
+  cluster_autoscaler:
+    enabled: false
+    # version: "latest"
+
+  # Longhorn (distributed storage)
+  # longhorn:
+  #   enabled: false
+
+# Reverse DNS Configuration (optional)
+# rdns:
+#   enabled: true
+#   template: "{{ hostname }}.{{ cluster-domain }}"

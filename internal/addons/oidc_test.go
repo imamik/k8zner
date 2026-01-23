@@ -82,23 +82,24 @@ func TestGenerateClusterRoleBinding(t *testing.T) {
 		},
 	}
 
-	yaml := generateClusterRoleBinding("view", mappings, "oidc:")
+	yamlStr, err := generateClusterRoleBinding("view", mappings, "oidc:")
+	require.NoError(t, err)
 
 	// Verify structure
-	assert.Contains(t, yaml, "apiVersion: rbac.authorization.k8s.io/v1")
-	assert.Contains(t, yaml, "kind: ClusterRoleBinding")
-	assert.Contains(t, yaml, "name: oidc-view")
-	assert.Contains(t, yaml, "roleRef:")
-	assert.Contains(t, yaml, "kind: ClusterRole")
-	assert.Contains(t, yaml, "name: view")
+	assert.Contains(t, yamlStr, "apiVersion: rbac.authorization.k8s.io/v1")
+	assert.Contains(t, yamlStr, "kind: ClusterRoleBinding")
+	assert.Contains(t, yamlStr, "name: oidc-view")
+	assert.Contains(t, yamlStr, "roleRef:")
+	assert.Contains(t, yamlStr, "kind: ClusterRole")
+	assert.Contains(t, yamlStr, "name: view")
 
 	// Verify subjects include both groups with prefix
-	assert.Contains(t, yaml, "oidc:admins")
-	assert.Contains(t, yaml, "oidc:developers")
+	assert.Contains(t, yamlStr, "oidc:admins")
+	assert.Contains(t, yamlStr, "oidc:developers")
 
 	// Parse and verify structure
 	var binding map[string]any
-	err := yamlpkg.Unmarshal([]byte(yaml), &binding)
+	err = yamlpkg.Unmarshal([]byte(yamlStr), &binding)
 	require.NoError(t, err)
 
 	subjects := binding["subjects"].([]any)
@@ -113,15 +114,16 @@ func TestGenerateClusterRoleBindingSingleGroup(t *testing.T) {
 		},
 	}
 
-	yaml := generateClusterRoleBinding("cluster-admin", mappings, "")
+	yamlStr, err := generateClusterRoleBinding("cluster-admin", mappings, "")
+	require.NoError(t, err)
 
 	// Without prefix
-	assert.Contains(t, yaml, "name: admins")
-	assert.NotContains(t, yaml, "name: :admins")
+	assert.Contains(t, yamlStr, "name: admins")
+	assert.NotContains(t, yamlStr, "name: :admins")
 
 	// Parse and verify single subject
 	var binding map[string]any
-	err := yamlpkg.Unmarshal([]byte(yaml), &binding)
+	err = yamlpkg.Unmarshal([]byte(yamlStr), &binding)
 	require.NoError(t, err)
 
 	subjects := binding["subjects"].([]any)
@@ -149,24 +151,25 @@ func TestGenerateRoleBinding(t *testing.T) {
 		},
 	}
 
-	yaml := generateRoleBinding(role, mappings, "oidc:")
+	yamlStr, err := generateRoleBinding(role, mappings, "oidc:")
+	require.NoError(t, err)
 
 	// Verify structure
-	assert.Contains(t, yaml, "apiVersion: rbac.authorization.k8s.io/v1")
-	assert.Contains(t, yaml, "kind: RoleBinding")
-	assert.Contains(t, yaml, "name: oidc-developer")
-	assert.Contains(t, yaml, "namespace: team-a")
-	assert.Contains(t, yaml, "roleRef:")
-	assert.Contains(t, yaml, "kind: Role")
-	assert.Contains(t, yaml, "name: developer")
+	assert.Contains(t, yamlStr, "apiVersion: rbac.authorization.k8s.io/v1")
+	assert.Contains(t, yamlStr, "kind: RoleBinding")
+	assert.Contains(t, yamlStr, "name: oidc-developer")
+	assert.Contains(t, yamlStr, "namespace: team-a")
+	assert.Contains(t, yamlStr, "roleRef:")
+	assert.Contains(t, yamlStr, "kind: Role")
+	assert.Contains(t, yamlStr, "name: developer")
 
 	// Verify subjects include both groups with prefix
-	assert.Contains(t, yaml, "oidc:team-a-devs")
-	assert.Contains(t, yaml, "oidc:team-a-leads")
+	assert.Contains(t, yamlStr, "oidc:team-a-devs")
+	assert.Contains(t, yamlStr, "oidc:team-a-leads")
 
 	// Parse and verify structure
 	var binding map[string]any
-	err := yamlpkg.Unmarshal([]byte(yaml), &binding)
+	err = yamlpkg.Unmarshal([]byte(yamlStr), &binding)
 	require.NoError(t, err)
 
 	subjects := binding["subjects"].([]any)
@@ -191,14 +194,15 @@ func TestGenerateRoleBindingSingleGroup(t *testing.T) {
 		},
 	}
 
-	yaml := generateRoleBinding(role, mappings, "")
+	yamlStr, err := generateRoleBinding(role, mappings, "")
+	require.NoError(t, err)
 
 	// Without prefix
-	assert.Contains(t, yaml, "name: viewers")
+	assert.Contains(t, yamlStr, "name: viewers")
 
 	// Parse and verify single subject
 	var binding map[string]any
-	err := yamlpkg.Unmarshal([]byte(yaml), &binding)
+	err = yamlpkg.Unmarshal([]byte(yamlStr), &binding)
 	require.NoError(t, err)
 
 	subjects := binding["subjects"].([]any)
@@ -240,12 +244,14 @@ func TestOIDCFullFlow(t *testing.T) {
 	var manifests []string
 
 	for _, clusterRole := range clusterRoles {
-		binding := generateClusterRoleBinding(clusterRole, oidc.GroupMappings, oidc.GroupsPrefix)
+		binding, err := generateClusterRoleBinding(clusterRole, oidc.GroupMappings, oidc.GroupsPrefix)
+		require.NoError(t, err)
 		manifests = append(manifests, binding)
 	}
 
 	for _, role := range roles {
-		binding := generateRoleBinding(role, oidc.GroupMappings, oidc.GroupsPrefix)
+		binding, err := generateRoleBinding(role, oidc.GroupMappings, oidc.GroupsPrefix)
+		require.NoError(t, err)
 		manifests = append(manifests, binding)
 	}
 
@@ -307,8 +313,9 @@ func TestOIDCGroupsPrefix(t *testing.T) {
 				},
 			}
 
-			yaml := generateClusterRoleBinding("view", mappings, tt.prefix)
-			assert.Contains(t, yaml, "name: "+tt.want)
+			yamlStr, err := generateClusterRoleBinding("view", mappings, tt.prefix)
+			require.NoError(t, err)
+			assert.Contains(t, yamlStr, "name: "+tt.want)
 		})
 	}
 }

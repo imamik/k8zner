@@ -7,8 +7,9 @@ import (
 	"net"
 	"time"
 
-	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"hcloud-k8s/internal/util/retry"
+
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
 // resolveImage resolves and waits for an image to become available.

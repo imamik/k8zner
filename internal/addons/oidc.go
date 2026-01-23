@@ -25,21 +25,27 @@ func applyOIDC(ctx context.Context, kubeconfigPath string, cfg *config.Config) e
 
 	// Generate ClusterRoleBindings (one per unique cluster role)
 	for _, clusterRole := range clusterRoles {
-		binding := generateClusterRoleBinding(
+		binding, err := generateClusterRoleBinding(
 			clusterRole,
 			cfg.Addons.OIDCRBAC.GroupMappings,
 			cfg.Addons.OIDCRBAC.GroupsPrefix,
 		)
+		if err != nil {
+			return fmt.Errorf("failed to generate ClusterRoleBinding for %s: %w", clusterRole, err)
+		}
 		manifests = append(manifests, binding)
 	}
 
 	// Generate RoleBindings (one per unique role)
 	for _, role := range roles {
-		binding := generateRoleBinding(
+		binding, err := generateRoleBinding(
 			role,
 			cfg.Addons.OIDCRBAC.GroupMappings,
 			cfg.Addons.OIDCRBAC.GroupsPrefix,
 		)
+		if err != nil {
+			return fmt.Errorf("failed to generate RoleBinding for %s/%s: %w", role.Namespace, role.Name, err)
+		}
 		manifests = append(manifests, binding)
 	}
 
@@ -93,7 +99,7 @@ func collectUniqueRoles(mappings []config.OIDCRBACGroupMapping) []config.OIDCRBA
 
 // generateClusterRoleBinding creates a ClusterRoleBinding manifest.
 // See: terraform/oidc.tf lines 17-42
-func generateClusterRoleBinding(clusterRole string, mappings []config.OIDCRBACGroupMapping, groupsPrefix string) string {
+func generateClusterRoleBinding(clusterRole string, mappings []config.OIDCRBACGroupMapping, groupsPrefix string) (string, error) {
 	// Find all groups that have this cluster role
 	var subjects []map[string]any
 	for _, mapping := range mappings {
@@ -125,14 +131,14 @@ func generateClusterRoleBinding(clusterRole string, mappings []config.OIDCRBACGr
 
 	yamlBytes, err := yaml.Marshal(binding)
 	if err != nil {
-		panic(fmt.Sprintf("failed to marshal ClusterRoleBinding YAML: %v", err))
+		return "", fmt.Errorf("failed to marshal ClusterRoleBinding YAML: %w", err)
 	}
-	return string(yamlBytes)
+	return string(yamlBytes), nil
 }
 
 // generateRoleBinding creates a RoleBinding manifest.
 // See: terraform/oidc.tf lines 45-71
-func generateRoleBinding(role config.OIDCRBACRole, mappings []config.OIDCRBACGroupMapping, groupsPrefix string) string {
+func generateRoleBinding(role config.OIDCRBACRole, mappings []config.OIDCRBACGroupMapping, groupsPrefix string) (string, error) {
 	// Find all groups that have this role
 	var subjects []map[string]any
 	for _, mapping := range mappings {
@@ -165,7 +171,7 @@ func generateRoleBinding(role config.OIDCRBACRole, mappings []config.OIDCRBACGro
 
 	yamlBytes, err := yaml.Marshal(binding)
 	if err != nil {
-		panic(fmt.Sprintf("failed to marshal RoleBinding YAML: %v", err))
+		return "", fmt.Errorf("failed to marshal RoleBinding YAML: %w", err)
 	}
-	return string(yamlBytes)
+	return string(yamlBytes), nil
 }

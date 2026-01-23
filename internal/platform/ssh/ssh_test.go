@@ -38,7 +38,7 @@ func TestNewClient_Success(t *testing.T) {
 	}
 
 	// Verify defaults were applied
-	if client.config.Port != defaultPort {
+	if client.config.Port != defaultPort { //nolint:staticcheck // t.Fatal above ensures client is not nil
 		t.Errorf("expected port %d, got %d", defaultPort, client.config.Port)
 	}
 	if client.config.DialTimeout != defaultDialTimeout {

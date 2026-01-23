@@ -21,7 +21,15 @@ import (
 	"hcloud-k8s/cmd/hcloud-k8s/commands"
 )
 
+// Version information set by goreleaser at build time.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
+	commands.SetVersionInfo(version, commit, date)
 	if err := commands.Root().Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

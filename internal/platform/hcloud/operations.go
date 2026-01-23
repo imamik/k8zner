@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"hcloud-k8s/internal/util/retry"
+
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
 // CreateResult wraps the result of a resource creation operation.

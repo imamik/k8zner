@@ -2,10 +2,208 @@ package image
 
 import (
 	"context"
+	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"hcloud-k8s/internal/platform/hcloud"
 )
+
+func TestNewBuilder(t *testing.T) {
+	mockClient := &hcloud.MockClient{}
+	builder := NewBuilder(mockClient)
+	require.NotNil(t, builder)
+	assert.Equal(t, mockClient, builder.infra)
+}
+
+func TestNewBuilder_NilClient(t *testing.T) {
+	builder := NewBuilder(nil)
+	require.NotNil(t, builder)
+	assert.Nil(t, builder.infra)
+}
+
+func TestBuild_NilInfraClient(t *testing.T) {
+	builder := NewBuilder(nil)
+	_, err := builder.Build(context.Background(), "v1.8.0", "v1.30.0", "amd64", "", "nbg1", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "InfrastructureManager is required")
+}
+
+func TestBuild_CreateSSHKeyError(t *testing.T) {
+	expectedErr := errors.New("ssh key creation failed")
+	mockClient := &hcloud.MockClient{
+		CreateSSHKeyFunc: func(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
+			return "", expectedErr
+		},
+	}
+
+	builder := NewBuilder(mockClient)
+	_, err := builder.Build(context.Background(), "v1.8.0", "v1.30.0", "amd64", "", "nbg1", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to upload ssh key")
+}
+
+func TestBuild_CreateServerError(t *testing.T) {
+	expectedErr := errors.New("server creation failed")
+	mockClient := &hcloud.MockClient{
+		CreateSSHKeyFunc: func(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
+			return "key-123", nil
+		},
+		CreateServerFunc: func(_ context.Context, _ string, _ string, _ string, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string) (string, error) {
+			return "", expectedErr
+		},
+	}
+
+	builder := NewBuilder(mockClient)
+	_, err := builder.Build(context.Background(), "v1.8.0", "v1.30.0", "amd64", "", "nbg1", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create server")
+}
+
+func TestBuild_GetServerIPError(t *testing.T) {
+	expectedErr := errors.New("get IP failed")
+	mockClient := &hcloud.MockClient{
+		CreateSSHKeyFunc: func(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
+			return "key-123", nil
+		},
+		CreateServerFunc: func(_ context.Context, _ string, _ string, _ string, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string) (string, error) {
+			return "server-123", nil
+		},
+		GetServerIPFunc: func(_ context.Context, _ string) (string, error) {
+			return "", expectedErr
+		},
+	}
+
+	builder := NewBuilder(mockClient)
+	_, err := builder.Build(context.Background(), "v1.8.0", "v1.30.0", "amd64", "", "nbg1", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get server IP")
+}
+
+func TestBuild_EnableRescueError(t *testing.T) {
+	expectedErr := errors.New("enable rescue failed")
+	mockClient := &hcloud.MockClient{
+		CreateSSHKeyFunc: func(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
+			return "key-123", nil
+		},
+		CreateServerFunc: func(_ context.Context, _ string, _ string, _ string, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string) (string, error) {
+			return "server-123", nil
+		},
+		GetServerIPFunc: func(_ context.Context, _ string) (string, error) {
+			return "1.2.3.4", nil
+		},
+		EnableRescueFunc: func(_ context.Context, _ string, _ []string) (string, error) {
+			return "", expectedErr
+		},
+	}
+
+	builder := NewBuilder(mockClient)
+	_, err := builder.Build(context.Background(), "v1.8.0", "v1.30.0", "amd64", "", "nbg1", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to enable rescue")
+}
+
+func TestBuild_ResetServerError(t *testing.T) {
+	expectedErr := errors.New("reset server failed")
+	mockClient := &hcloud.MockClient{
+		CreateSSHKeyFunc: func(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
+			return "key-123", nil
+		},
+		CreateServerFunc: func(_ context.Context, _ string, _ string, _ string, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string) (string, error) {
+			return "server-123", nil
+		},
+		GetServerIPFunc: func(_ context.Context, _ string) (string, error) {
+			return "1.2.3.4", nil
+		},
+		EnableRescueFunc: func(_ context.Context, _ string, _ []string) (string, error) {
+			return "password", nil
+		},
+		ResetServerFunc: func(_ context.Context, _ string) error {
+			return expectedErr
+		},
+	}
+
+	builder := NewBuilder(mockClient)
+	_, err := builder.Build(context.Background(), "v1.8.0", "v1.30.0", "amd64", "", "nbg1", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to reset server")
+}
+
+func TestBuild_DefaultLocation(t *testing.T) {
+	// Test that empty location defaults to nbg1
+	var capturedLocation string
+	mockClient := &hcloud.MockClient{
+		CreateSSHKeyFunc: func(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
+			return "key-123", nil
+		},
+		CreateServerFunc: func(_ context.Context, _, _, _, location string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string) (string, error) {
+			capturedLocation = location
+			return "", errors.New("stop here") // Stop after capturing location
+		},
+	}
+
+	builder := NewBuilder(mockClient)
+	_, _ = builder.Build(context.Background(), "v1.8.0", "v1.30.0", "amd64", "", "", nil)
+
+	assert.Equal(t, "nbg1", capturedLocation)
+}
+
+func TestBuild_DefaultServerType(t *testing.T) {
+	tests := []struct {
+		name               string
+		arch               string
+		expectedServerType string
+	}{
+		{"amd64 default", "amd64", "cpx22"},
+		{"arm64 default", "arm64", "cax11"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var capturedServerType string
+			mockClient := &hcloud.MockClient{
+				CreateSSHKeyFunc: func(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
+					return "key-123", nil
+				},
+				CreateServerFunc: func(_ context.Context, _, _, serverType, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string) (string, error) {
+					capturedServerType = serverType
+					return "", errors.New("stop here")
+				},
+			}
+
+			builder := NewBuilder(mockClient)
+			_, _ = builder.Build(context.Background(), "v1.8.0", "v1.30.0", tt.arch, "", "nbg1", nil)
+
+			assert.Equal(t, tt.expectedServerType, capturedServerType)
+		})
+	}
+}
+
+func TestBuild_CustomLabels(t *testing.T) {
+	var capturedLabels map[string]string
+	mockClient := &hcloud.MockClient{
+		CreateSSHKeyFunc: func(_ context.Context, _ string, _ string, labels map[string]string) (string, error) {
+			capturedLabels = labels
+			return "", errors.New("stop here")
+		},
+	}
+
+	customLabels := map[string]string{
+		"env":  "test",
+		"team": "platform",
+	}
+
+	builder := NewBuilder(mockClient)
+	_, _ = builder.Build(context.Background(), "v1.8.0", "v1.30.0", "amd64", "", "nbg1", customLabels)
+
+	// Check that custom labels are passed through
+	assert.Equal(t, "test", capturedLabels["env"])
+	assert.Equal(t, "platform", capturedLabels["team"])
+	// And type label is added
+	assert.Equal(t, "build-ssh-key", capturedLabels["type"])
+}
 
 // TestBuild verifies the basic builder orchestration logic.
 // Note: This test uses mocks and cannot test actual SSH connectivity.

@@ -102,7 +102,7 @@ func initializeClient() *hcloud.RealClient {
 // initializeTalosGenerator creates a Talos configuration generator for the orchestration.
 // Generates machine configs, certificates, and client secrets for cluster access.
 func initializeTalosGenerator(cfg *config.Config) (*talos.Generator, error) {
-	endpoint := fmt.Sprintf("https://%s-kube-api:6443", cfg.ClusterName)
+	endpoint := fmt.Sprintf("https://%s-kube-api:%d", cfg.ClusterName, config.KubeAPIPort)
 
 	sb, err := talos.GetOrGenerateSecrets(secretsFile, cfg.Talos.Version)
 	if err != nil {

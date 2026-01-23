@@ -152,10 +152,8 @@ func TestHcloudS3URLRegex(t *testing.T) {
 				}
 				assert.Equal(t, tt.bucket, matches[1], "bucket mismatch")
 				assert.Equal(t, tt.region, matches[2], "region mismatch")
-			} else {
-				if len(matches) > 0 {
-					t.Errorf("expected no match, got %v", matches)
-				}
+			} else if len(matches) > 0 {
+				t.Errorf("expected no match, got %v", matches)
 			}
 		})
 	}

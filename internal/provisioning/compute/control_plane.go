@@ -5,6 +5,7 @@ package compute
 import (
 	"fmt"
 
+	"hcloud-k8s/internal/config"
 	"hcloud-k8s/internal/provisioning"
 	"hcloud-k8s/internal/util/labels"
 	"hcloud-k8s/internal/util/naming"
@@ -33,7 +34,7 @@ func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
 
 			// UPDATE TALOS ENDPOINT
 			// We use the LB IP as the control plane endpoint.
-			endpoint := fmt.Sprintf("https://%s:6443", lbIP)
+			endpoint := fmt.Sprintf("https://%s:%d", lbIP, config.KubeAPIPort)
 			ctx.Logger.Printf("[%s] Setting Talos endpoint to: %s", phase, endpoint)
 			ctx.Talos.SetEndpoint(endpoint)
 		}

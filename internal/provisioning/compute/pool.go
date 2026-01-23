@@ -93,7 +93,7 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 			}
 
 			if usePG {
-				pgIndex := int((j-1)/10) + 1
+				pgIndex := (j-1)/10 + 1
 				lb := labels.NewLabelBuilder(ctx.Config.ClusterName).
 					WithRole("worker").
 					WithPool(spec.Name).

@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"hcloud-k8s/internal/util/retry"
+
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
 // CreateSnapshot creates a snapshot of the server.

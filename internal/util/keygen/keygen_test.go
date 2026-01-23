@@ -30,7 +30,7 @@ func TestGenerateRSAKeyPair_ValidBits(t *testing.T) {
 				t.Fatal("expected non-nil KeyPair")
 			}
 
-			if len(keyPair.PrivateKey) == 0 {
+			if len(keyPair.PrivateKey) == 0 { //nolint:staticcheck // t.Fatal above ensures keyPair is not nil
 				t.Error("expected non-empty private key")
 			}
 
@@ -78,7 +78,7 @@ func TestKeyPair_PrivateKeyPEMFormat(t *testing.T) {
 		t.Error("unexpected data after PEM block")
 	}
 
-	if block.Type != "RSA PRIVATE KEY" {
+	if block.Type != "RSA PRIVATE KEY" { //nolint:staticcheck // t.Fatal above ensures block is not nil
 		t.Errorf("expected PEM type 'RSA PRIVATE KEY', got %q", block.Type)
 	}
 
@@ -146,7 +146,7 @@ func TestGenerateRSAKeyPair_KeyPairCorrespondence(t *testing.T) {
 		t.Fatal("failed to decode private key PEM")
 	}
 
-	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes) //nolint:staticcheck // t.Fatal above ensures block is not nil
 	if err != nil {
 		t.Fatalf("failed to parse private key: %v", err)
 	}
