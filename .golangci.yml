@@ -1,0 +1,87 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    # Default linters
+    - staticcheck    # Static analysis
+    - gosec          # Security issues
+    - revive         # Style and best practices
+    - errcheck       # Unchecked errors
+
+    # Code quality
+    - govet          # Go vet checks
+    - ineffassign    # Ineffective assignments
+    - unused         # Unused code
+    - gocritic       # Comprehensive linter
+    - misspell       # Spelling errors
+    - unconvert      # Unnecessary type conversions
+    - whitespace     # Whitespace issues
+
+  settings:
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - whyNoLint        # Allow //nolint without explanation
+        - hugeParam        # Allow large params (common with config structs)
+        - rangeValCopy     # Premature optimization concern
+        - paramTypeCombine # Style preference
+        - appendCombine    # Style preference
+        - httpNoBody       # Minor style preference
+        - emptyStringTest  # len(s) == 0 is fine
+        - octalLiteral     # 0600 is widely understood
+        - unnamedResult    # Named results not always clearer
+
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+          disabled: true  # Godoc not required for all exports
+        - name: increment-decrement
+        - name: var-naming
+        - name: package-comments
+          disabled: true  # Not all packages need doc.go
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+
+    gosec:
+      excludes:
+        - G104  # Unhandled errors (errcheck handles this)
+        - G304  # File path from variable (necessary for our use case)
+
+    misspell:
+      locale: US
+
+  exclusions:
+    # Test files can have longer functions and magic numbers
+    paths:
+      - _test\.go
+      - mock_
+    rules:
+      - linters:
+          - gocritic
+          - gosec
+        path: _test\.go
+      - linters:
+          - gocritic
+        path: mock_
+      - linters:
+          - gocritic
+        text: "singleCaseSwitch"
+
+formatters:
+  enable:
+    - goimports      # Import formatting and grouping

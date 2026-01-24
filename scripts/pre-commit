@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Pre-commit hook to detect secrets using gitleaks
+# This hook runs gitleaks on staged changes before each commit
+#
+# Installation:
+#   make setup-hooks
+#   # or manually:
+#   cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+set -e
+
+# Check if gitleaks is installed
+if ! command -v gitleaks &> /dev/null; then
+    echo "gitleaks not found. Install it with:"
+    echo "  go install github.com/zricethezav/gitleaks/v8@latest"
+    echo ""
+    echo "Skipping secret detection. To enforce, install gitleaks."
+    exit 0
+fi
+
+echo "Running gitleaks to detect secrets in staged changes..."
+
+# Run gitleaks on staged changes only
+if ! gitleaks protect --staged --redact -v; then
+    echo ""
+    echo "gitleaks detected potential secrets in your staged changes!"
+    echo ""
+    echo "Please review the findings above and either:"
+    echo "  1. Remove the secret from your changes"
+    echo "  2. Add a .gitleaksignore file to whitelist false positives"
+    echo ""
+    echo "To bypass this check (NOT RECOMMENDED), use: git commit --no-verify"
+    exit 1
+fi
+
+echo "No secrets detected"

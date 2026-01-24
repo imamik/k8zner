@@ -1,0 +1,31 @@
+bin/
+/k8zner
+
+# Open source release checklist (personal notes)
+OPEN_SOURCE_CHECKLIST.md
+
+.envrc
+.env
+
+# Git worktrees (isolated workspaces)
+.worktrees/
+
+# Logs
+logs/
+*.log
+test_output.txt
+
+# Coverage reports
+coverage.out
+coverage.html
+
+# E2E test artifacts
+e2e.test
+*.test
+run-e2e-test.sh
+tests/e2e/*.old
+
+# Downloaded tools (at root only)
+/hcloud
+/hcloud-*.tar.gz
+*.tar.gz.*

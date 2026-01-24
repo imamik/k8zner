@@ -1,0 +1,59 @@
+# Example Cluster Configuration for k8zner
+
+# The name of the cluster. Resources will be tagged with cluster=<name>.
+cluster_name: "talos-k8s-example"
+
+# Hetzner Cloud API Token (can also be provided via HCLOUD_TOKEN env var).
+# hcloud_token: "your-token-here"
+
+# Default location for resources if not specified elsewhere.
+# Available: nbg1 (Nuremberg), fsn1 (Falkenstein), hel1 (Helsinki), ash (Ashburn), etc.
+location: "nbg1"
+
+# List of SSH Key names to inject into servers.
+# These keys must already exist in your Hetzner Cloud project.
+# This is REQUIRED to prevent Hetzner from emailing you root passwords.
+ssh_keys:
+  - "my-admin-key"
+
+# Control Plane Configuration
+control_plane:
+  # Number of control plane nodes to provision.
+  count: 3
+
+  # Server Type (e.g., cpx22 for AMD64, cax11 for ARM).
+  server_type: "cpx22"
+
+  # Image snapshot name to use (created via `k8zner image build`).
+  # You can also use "debian-12" for testing, but Talos config injection requires a Talos image.
+  image: "talos-v1.9.0-amd64"
+
+  # The canonical control plane endpoint (Load Balancer IP or VIP).
+  # This is injected into the Talos configuration.
+  endpoint: "https://10.0.0.1:6443"
+
+# Talos Versioning
+talos:
+  # The version of Talos Linux to generate configuration for.
+  version: "v1.9.0"
+
+  # The Kubernetes version to run.
+  k8s_version: "1.32.0"
+
+# Addons Configuration
+addons:
+  # Hetzner Cloud Controller Manager (CCM)
+  # Provides cloud provider integration for Kubernetes on Hetzner Cloud.
+  # Enabled by default - set to false to disable.
+  ccm:
+    enabled: true
+
+  # Hetzner Cloud CSI Driver
+  # Provides persistent volume support using Hetzner Cloud Volumes.
+  # Requires CCM to be enabled for proper cloud provider integration.
+  csi:
+    enabled: true
+    # Whether to set hcloud-volumes as the default StorageClass
+    default_storage_class: true
+    # Optional: encryption passphrase for encrypted volumes (auto-generated if not set)
+    # encryption_passphrase: "your-secure-passphrase"
