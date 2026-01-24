@@ -32,7 +32,7 @@ type MockClient struct {
 	GetNetworkFunc    func(ctx context.Context, name string) (*hcloud.Network, error)
 
 	// Firewall
-	EnsureFirewallFunc func(ctx context.Context, name string, rules []hcloud.FirewallRule, labels map[string]string) (*hcloud.Firewall, error)
+	EnsureFirewallFunc func(ctx context.Context, name string, rules []hcloud.FirewallRule, labels map[string]string, applyToLabelSelector string) (*hcloud.Firewall, error)
 	DeleteFirewallFunc func(ctx context.Context, name string) error
 	GetFirewallFunc    func(ctx context.Context, name string) (*hcloud.Firewall, error)
 
@@ -210,9 +210,9 @@ func (m *MockClient) GetNetwork(ctx context.Context, name string) (*hcloud.Netwo
 }
 
 // EnsureFirewall mocks firewall creation.
-func (m *MockClient) EnsureFirewall(ctx context.Context, name string, rules []hcloud.FirewallRule, labels map[string]string) (*hcloud.Firewall, error) {
+func (m *MockClient) EnsureFirewall(ctx context.Context, name string, rules []hcloud.FirewallRule, labels map[string]string, applyToLabelSelector string) (*hcloud.Firewall, error) {
 	if m.EnsureFirewallFunc != nil {
-		return m.EnsureFirewallFunc(ctx, name, rules, labels)
+		return m.EnsureFirewallFunc(ctx, name, rules, labels, applyToLabelSelector)
 	}
 	return &hcloud.Firewall{ID: 1}, nil
 }

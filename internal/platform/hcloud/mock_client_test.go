@@ -239,7 +239,7 @@ func TestMockClient_EnsureFirewall_Default(t *testing.T) {
 	m := &MockClient{}
 	ctx := context.Background()
 
-	firewall, err := m.EnsureFirewall(ctx, "test-fw", nil, nil)
+	firewall, err := m.EnsureFirewall(ctx, "test-fw", nil, nil, "")
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}

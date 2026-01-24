@@ -46,7 +46,7 @@ type NetworkManager interface {
 
 // FirewallManager defines the interface for managing firewalls.
 type FirewallManager interface {
-	EnsureFirewall(ctx context.Context, name string, rules []hcloud.FirewallRule, labels map[string]string) (*hcloud.Firewall, error)
+	EnsureFirewall(ctx context.Context, name string, rules []hcloud.FirewallRule, labels map[string]string, applyToLabelSelector string) (*hcloud.Firewall, error)
 	DeleteFirewall(ctx context.Context, name string) error
 	GetFirewall(ctx context.Context, name string) (*hcloud.Firewall, error)
 }

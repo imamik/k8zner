@@ -88,8 +88,9 @@ func TestProvisionFirewall_Success(t *testing.T) {
 		return "1.2.3.4", nil
 	}
 
-	mockInfra.EnsureFirewallFunc = func(_ context.Context, name string, _ []hcloud.FirewallRule, _ map[string]string) (*hcloud.Firewall, error) {
+	mockInfra.EnsureFirewallFunc = func(_ context.Context, name string, _ []hcloud.FirewallRule, _ map[string]string, applyToLabelSelector string) (*hcloud.Firewall, error) {
 		assert.Contains(t, name, "test-cluster")
+		assert.Equal(t, "cluster=test-cluster", applyToLabelSelector)
 		// Rules may be empty if no control plane or workers configured
 		return &hcloud.Firewall{ID: 1, Name: name}, nil
 	}

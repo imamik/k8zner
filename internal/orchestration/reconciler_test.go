@@ -126,7 +126,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 	}
 
 	// Firewall
-	mockInfra.EnsureFirewallFunc = func(_ context.Context, _ string, _ []hcloud.FirewallRule, _ map[string]string) (*hcloud.Firewall, error) {
+	mockInfra.EnsureFirewallFunc = func(_ context.Context, _ string, _ []hcloud.FirewallRule, _ map[string]string, _ string) (*hcloud.Firewall, error) {
 		return &hcloud.Firewall{ID: 1}, nil
 	}
 
@@ -285,7 +285,7 @@ func TestReconciler_Reconcile_ServerCreationError(t *testing.T) {
 	mockInfra.GetPublicIPFunc = func(_ context.Context) (string, error) {
 		return "1.2.3.4", nil
 	}
-	mockInfra.EnsureFirewallFunc = func(_ context.Context, _ string, _ []hcloud.FirewallRule, _ map[string]string) (*hcloud.Firewall, error) {
+	mockInfra.EnsureFirewallFunc = func(_ context.Context, _ string, _ []hcloud.FirewallRule, _ map[string]string, _ string) (*hcloud.Firewall, error) {
 		return &hcloud.Firewall{}, nil
 	}
 	mockInfra.GetLoadBalancerFunc = func(_ context.Context, _ string) (*hcloud.LoadBalancer, error) {
@@ -396,7 +396,7 @@ func TestReconciler_Reconcile_FirewallError(t *testing.T) {
 
 	// Firewall error
 	expectedErr := errors.New("firewall creation failed")
-	mockInfra.EnsureFirewallFunc = func(_ context.Context, _ string, _ []hcloud.FirewallRule, _ map[string]string) (*hcloud.Firewall, error) {
+	mockInfra.EnsureFirewallFunc = func(_ context.Context, _ string, _ []hcloud.FirewallRule, _ map[string]string, _ string) (*hcloud.Firewall, error) {
 		return nil, expectedErr
 	}
 
@@ -480,7 +480,7 @@ func TestReconciler_Reconcile_LoadBalancerError(t *testing.T) {
 	mockInfra.GetPublicIPFunc = func(_ context.Context) (string, error) {
 		return "1.2.3.4", nil
 	}
-	mockInfra.EnsureFirewallFunc = func(_ context.Context, _ string, _ []hcloud.FirewallRule, _ map[string]string) (*hcloud.Firewall, error) {
+	mockInfra.EnsureFirewallFunc = func(_ context.Context, _ string, _ []hcloud.FirewallRule, _ map[string]string, _ string) (*hcloud.Firewall, error) {
 		return &hcloud.Firewall{ID: 1}, nil
 	}
 

@@ -106,6 +106,10 @@ func phaseCluster(t *testing.T, state *E2EState) {
 	verifyServerRDNS(ctx, t, state)
 	verifyLoadBalancerRDNS(ctx, t, state)
 
+	// Verify firewall is applied to servers
+	t.Log("Verifying firewall is applied to servers...")
+	verifyFirewallApplied(ctx, t, state)
+
 	t.Log("✓ Phase 2: Cluster (provisioned and ready)")
 }
 
@@ -249,4 +253,64 @@ func runClusterDiagnostics(ctx context.Context, t *testing.T, state *E2EState) {
 
 	diag := NewClusterDiagnostics(t, state.ControlPlaneIPs[0], state.LoadBalancerIP, state.TalosConfig)
 	diag.RunFullDiagnostics(ctx)
+}
+
+// verifyFirewallApplied verifies that the firewall is applied to all cluster servers.
+func verifyFirewallApplied(ctx context.Context, t *testing.T, state *E2EState) {
+	// Get the firewall
+	fw, err := state.Client.GetFirewall(ctx, state.ClusterName)
+	if err != nil {
+		t.Fatalf("Failed to get firewall: %v", err)
+	}
+	if fw == nil {
+		t.Fatal("Firewall not found")
+	}
+
+	t.Logf("Firewall %s (ID: %d) found", fw.Name, fw.ID)
+
+	// Check that the firewall has a label selector applied
+	expectedSelector := fmt.Sprintf("cluster=%s", state.ClusterName)
+	hasLabelSelector := false
+	for _, applied := range fw.AppliedTo {
+		if applied.Type == "label_selector" && applied.LabelSelector != nil {
+			t.Logf("  Applied to label selector: %s", applied.LabelSelector.Selector)
+			if applied.LabelSelector.Selector == expectedSelector {
+				hasLabelSelector = true
+			}
+		}
+		if applied.Type == "server" && applied.Server != nil {
+			t.Logf("  Applied to server ID: %d", applied.Server.ID)
+		}
+	}
+
+	if !hasLabelSelector {
+		t.Errorf("Firewall not applied to label selector %q", expectedSelector)
+	} else {
+		t.Logf("✓ Firewall applied to label selector: %s", expectedSelector)
+	}
+
+	// Verify servers have the firewall applied
+	servers, err := state.Client.GetServersByLabel(ctx, map[string]string{"cluster": state.ClusterName})
+	if err != nil {
+		t.Fatalf("Failed to get servers: %v", err)
+	}
+
+	if len(servers) == 0 {
+		t.Fatal("No servers found with cluster label")
+	}
+
+	for _, server := range servers {
+		serverHasFirewall := false
+		for _, serverFw := range server.PublicNet.Firewalls {
+			if serverFw.Firewall.ID == fw.ID {
+				serverHasFirewall = true
+				break
+			}
+		}
+		if !serverHasFirewall {
+			t.Errorf("Server %s (ID: %d) does not have firewall applied", server.Name, server.ID)
+		} else {
+			t.Logf("✓ Server %s has firewall applied", server.Name)
+		}
+	}
 }

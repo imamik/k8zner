@@ -39,7 +39,7 @@ func (f *InfraFixture) SuccessfulProvisioning() *hcloud_internal.MockClient {
 	f.mock.GetPublicIPFunc = func(_ context.Context) (string, error) {
 		return "1.2.3.4", nil
 	}
-	f.mock.EnsureFirewallFunc = func(_ context.Context, _ string, _ []hcloud.FirewallRule, _ map[string]string) (*hcloud.Firewall, error) {
+	f.mock.EnsureFirewallFunc = func(_ context.Context, _ string, _ []hcloud.FirewallRule, _ map[string]string, _ string) (*hcloud.Firewall, error) {
 		return &hcloud.Firewall{ID: 1}, nil
 	}
 	f.mock.EnsureLoadBalancerFunc = func(_ context.Context, _, _, _ string, _ hcloud.LoadBalancerAlgorithmType, _ map[string]string) (*hcloud.LoadBalancer, error) {
@@ -121,7 +121,7 @@ func (f *InfraFixture) WithNetworkError(err error) *hcloud_internal.MockClient {
 // WithServerError configures the mock to fail on server creation.
 func (f *InfraFixture) WithServerError(err error) *hcloud_internal.MockClient {
 	f.NetworkOnly()
-	f.mock.EnsureFirewallFunc = func(_ context.Context, _ string, _ []hcloud.FirewallRule, _ map[string]string) (*hcloud.Firewall, error) {
+	f.mock.EnsureFirewallFunc = func(_ context.Context, _ string, _ []hcloud.FirewallRule, _ map[string]string, _ string) (*hcloud.Firewall, error) {
 		return &hcloud.Firewall{}, nil
 	}
 	f.mock.GetLoadBalancerFunc = func(_ context.Context, _ string) (*hcloud.LoadBalancer, error) {

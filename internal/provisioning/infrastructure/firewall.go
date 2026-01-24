@@ -60,11 +60,15 @@ func (p *Provisioner) ProvisionFirewall(ctx *provisioning.Context) error {
 		WithTestIDIfSet(ctx.Config.TestID).
 		Build()
 
-	result, err := ctx.Infra.EnsureFirewall(ctx, ctx.Config.ClusterName, rules, firewallLabels)
+	// Apply firewall to all servers in this cluster using label selector
+	applyToLabelSelector := fmt.Sprintf("cluster=%s", ctx.Config.ClusterName)
+
+	result, err := ctx.Infra.EnsureFirewall(ctx, ctx.Config.ClusterName, rules, firewallLabels, applyToLabelSelector)
 	if err != nil {
 		return fmt.Errorf("failed to ensure firewall: %w", err)
 	}
 	ctx.State.Firewall = result
+	ctx.Logger.Printf("[%s] Firewall %s applied to servers with label selector: %s", phase, ctx.Config.ClusterName, applyToLabelSelector)
 	return nil
 }
 
