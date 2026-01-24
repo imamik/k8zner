@@ -69,7 +69,7 @@ func createScaledClusterConfig(state *E2EState) *config.Config {
 			Zone:     "eu-central",
 		},
 		Firewall: config.FirewallConfig{
-			UseCurrentIPv4: true,
+			UseCurrentIPv4: boolPtr(true),
 		},
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{

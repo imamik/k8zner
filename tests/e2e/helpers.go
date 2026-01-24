@@ -20,6 +20,11 @@ import (
 	"github.com/siderolabs/talos/pkg/machinery/client/config"
 )
 
+// boolPtr returns a pointer to the given bool value.
+func boolPtr(b bool) *bool {
+	return &b
+}
+
 // ResourceCleaner helps track and clean up resources.
 // Uses t.Cleanup() to ensure cleanup runs even on test timeout.
 type ResourceCleaner struct {

@@ -13,6 +13,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	"k8zner/internal/provisioning"
@@ -90,7 +91,13 @@ func (p *Provisioner) isAlreadyBootstrapped(ctx *provisioning.Context) bool {
 }
 
 // tryRetrieveExistingKubeconfig attempts to retrieve kubeconfig from an existing cluster.
+// It also handles scaling by configuring any new nodes that are still in maintenance mode.
 func (p *Provisioner) tryRetrieveExistingKubeconfig(ctx *provisioning.Context) error {
+	// Handle scaling: configure any new nodes that are in maintenance mode
+	if err := p.configureNewNodes(ctx); err != nil {
+		return fmt.Errorf("failed to configure new nodes during scale: %w", err)
+	}
+
 	kubeconfig, err := p.retrieveKubeconfig(ctx, ctx.State.ControlPlaneIPs, ctx.State.TalosConfig, ctx.Logger)
 	if err != nil {
 		ctx.Logger.Printf("[%s] Note: Could not retrieve kubeconfig from existing cluster: %v", phase, err)
@@ -98,6 +105,176 @@ func (p *Provisioner) tryRetrieveExistingKubeconfig(ctx *provisioning.Context) e
 	}
 	ctx.State.Kubeconfig = kubeconfig
 	return nil
+}
+
+// configureNewNodes detects and configures any new nodes that are still in maintenance mode.
+// This is called during scaling operations when the cluster is already bootstrapped.
+func (p *Provisioner) configureNewNodes(ctx *provisioning.Context) error {
+	ctx.Logger.Printf("[%s] Checking %d control plane IPs and %d worker IPs for new nodes...",
+		phase, len(ctx.State.ControlPlaneIPs), len(ctx.State.WorkerIPs))
+
+	// Find new control plane nodes in maintenance mode
+	newCPNodes := make(map[string]string)
+	for nodeName, nodeIP := range ctx.State.ControlPlaneIPs {
+		ctx.Logger.Printf("[%s] Checking control plane node %s (%s)...", phase, nodeName, nodeIP)
+		if p.isNodeInMaintenanceMode(ctx, nodeIP) {
+			ctx.Logger.Printf("[%s] Node %s is in maintenance mode (new node)", phase, nodeName)
+			newCPNodes[nodeName] = nodeIP
+		} else {
+			ctx.Logger.Printf("[%s] Node %s is already configured", phase, nodeName)
+		}
+	}
+
+	// Find new worker nodes in maintenance mode
+	newWorkerNodes := make(map[string]string)
+	for nodeName, nodeIP := range ctx.State.WorkerIPs {
+		ctx.Logger.Printf("[%s] Checking worker node %s (%s)...", phase, nodeName, nodeIP)
+		if p.isNodeInMaintenanceMode(ctx, nodeIP) {
+			ctx.Logger.Printf("[%s] Node %s is in maintenance mode (new node)", phase, nodeName)
+			newWorkerNodes[nodeName] = nodeIP
+		} else {
+			ctx.Logger.Printf("[%s] Node %s is already configured", phase, nodeName)
+		}
+	}
+
+	if len(newCPNodes) == 0 && len(newWorkerNodes) == 0 {
+		ctx.Logger.Printf("[%s] No new nodes detected, cluster is up to date", phase)
+		return nil
+	}
+
+	// Configure new control plane nodes
+	if len(newCPNodes) > 0 {
+		ctx.Logger.Printf("[%s] Found %d new control plane nodes to configure", phase, len(newCPNodes))
+		for nodeName, nodeIP := range newCPNodes {
+			machineConfig, err := ctx.Talos.GenerateControlPlaneConfig(ctx.State.SANs, nodeName)
+			if err != nil {
+				return fmt.Errorf("failed to generate machine config for new CP node %s: %w", nodeName, err)
+			}
+			ctx.Logger.Printf("[%s] Applying config to new control plane node %s (%s)...", phase, nodeName, nodeIP)
+			if err := p.applyMachineConfig(ctx, nodeIP, machineConfig); err != nil {
+				return fmt.Errorf("failed to apply config to new CP node %s: %w", nodeName, err)
+			}
+		}
+		// Wait for new control plane nodes to become ready
+		for nodeName, nodeIP := range newCPNodes {
+			ctx.Logger.Printf("[%s] Waiting for new control plane node %s (%s) to be ready...", phase, nodeName, nodeIP)
+			if err := p.waitForNodeReady(ctx, nodeIP, ctx.State.TalosConfig, ctx.Logger); err != nil {
+				return fmt.Errorf("new control plane node %s failed to become ready: %w", nodeName, err)
+			}
+			ctx.Logger.Printf("[%s] New control plane node %s is ready", phase, nodeName)
+		}
+	}
+
+	// Configure new worker nodes
+	if len(newWorkerNodes) > 0 {
+		ctx.Logger.Printf("[%s] Found %d new worker nodes to configure", phase, len(newWorkerNodes))
+		for nodeName, nodeIP := range newWorkerNodes {
+			nodeConfig, err := ctx.Talos.GenerateWorkerConfig(nodeName)
+			if err != nil {
+				return fmt.Errorf("failed to generate worker config for new node %s: %w", nodeName, err)
+			}
+			ctx.Logger.Printf("[%s] Applying config to new worker node %s (%s)...", phase, nodeName, nodeIP)
+			if err := p.applyMachineConfig(ctx, nodeIP, nodeConfig); err != nil {
+				return fmt.Errorf("failed to apply config to new worker node %s: %w", nodeName, err)
+			}
+		}
+		// Wait for new worker nodes to become ready
+		for nodeName, nodeIP := range newWorkerNodes {
+			ctx.Logger.Printf("[%s] Waiting for new worker node %s (%s) to be ready...", phase, nodeName, nodeIP)
+			if err := p.waitForNodeReady(ctx, nodeIP, ctx.State.TalosConfig, ctx.Logger); err != nil {
+				return fmt.Errorf("new worker node %s failed to become ready: %w", nodeName, err)
+			}
+			ctx.Logger.Printf("[%s] New worker node %s is ready", phase, nodeName)
+		}
+	}
+
+	ctx.Logger.Printf("[%s] Successfully configured %d new control plane nodes and %d new worker nodes",
+		phase, len(newCPNodes), len(newWorkerNodes))
+	return nil
+}
+
+// isNodeInMaintenanceMode checks if a node is in maintenance mode (unconfigured).
+// A node in maintenance mode will accept an insecure connection but won't respond
+// to authenticated requests with the cluster's Talos config.
+func (p *Provisioner) isNodeInMaintenanceMode(ctx *provisioning.Context, nodeIP string) bool {
+	// First check if the port is reachable - wait up to 2 minutes for new nodes to boot
+	// Talos boot from snapshot typically takes 30-60 seconds
+	ctx.Logger.Printf("[%s] Waiting for Talos API on %s:50000...", phase, nodeIP)
+	portCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	if err := waitForPort(portCtx, nodeIP, 50000, 2*time.Minute); err != nil {
+		// Port not reachable even after 2 minutes - node might be offline or failed
+		ctx.Logger.Printf("[%s] Node %s port 50000 not reachable after 2 minutes, skipping", phase, nodeIP)
+		return false
+	}
+	ctx.Logger.Printf("[%s] Node %s port 50000 is reachable", phase, nodeIP)
+
+	// Try authenticated connection first
+	if len(ctx.State.TalosConfig) == 0 {
+		ctx.Logger.Printf("[%s] Warning: TalosConfig is empty, cannot check auth", phase)
+		return false
+	}
+
+	cfg, err := config.FromString(string(ctx.State.TalosConfig))
+	if err != nil {
+		ctx.Logger.Printf("[%s] Warning: Failed to parse TalosConfig: %v", phase, err)
+		return false
+	}
+
+	checkCtx, checkCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer checkCancel()
+
+	authClient, err := client.New(checkCtx, client.WithConfig(cfg), client.WithEndpoints(nodeIP))
+	if err != nil {
+		ctx.Logger.Printf("[%s] Cannot create auth client for %s: %v - assuming maintenance mode", phase, nodeIP, err)
+		return true // Can't create auth client, assume maintenance mode
+	}
+	defer func() { _ = authClient.Close() }()
+
+	// Try to get version with authenticated client
+	_, err = authClient.Version(checkCtx)
+	if err == nil {
+		// Authenticated connection works, node is already configured
+		ctx.Logger.Printf("[%s] Node %s: authenticated connection succeeded - already configured", phase, nodeIP)
+		return false
+	}
+	ctx.Logger.Printf("[%s] Node %s: authenticated connection failed: %v - trying insecure", phase, nodeIP, err)
+
+	// Authenticated connection failed - could be maintenance mode or other issue
+	// Try insecure connection to confirm it's maintenance mode
+	insecureCtx, insecureCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer insecureCancel()
+
+	insecureClient, err := client.New(insecureCtx,
+		client.WithEndpoints(nodeIP),
+		//nolint:gosec // InsecureSkipVerify is required to detect Talos maintenance mode
+		client.WithTLSConfig(&tls.Config{InsecureSkipVerify: true}),
+	)
+	if err != nil {
+		ctx.Logger.Printf("[%s] Cannot create insecure client for %s: %v", phase, nodeIP, err)
+		return false
+	}
+	defer func() { _ = insecureClient.Close() }()
+
+	_, err = insecureClient.Version(insecureCtx)
+	if err == nil {
+		// Insecure connection works but authenticated doesn't = maintenance mode
+		ctx.Logger.Printf("[%s] Node %s is in maintenance mode (insecure works, auth fails)", phase, nodeIP)
+		return true
+	}
+
+	// Check if the error indicates maintenance mode
+	// In Talos maintenance mode, the Version API returns "API is not implemented in maintenance mode"
+	// This actually confirms the node IS in maintenance mode!
+	errStr := err.Error()
+	if strings.Contains(errStr, "not implemented in maintenance mode") ||
+		strings.Contains(errStr, "maintenance mode") {
+		ctx.Logger.Printf("[%s] Node %s is in maintenance mode (detected via error message)", phase, nodeIP)
+		return true
+	}
+
+	ctx.Logger.Printf("[%s] Node %s: both auth and insecure failed: %v", phase, nodeIP, err)
+	return false
 }
 
 // applyControlPlaneConfigs applies machine configs to all control plane nodes.
