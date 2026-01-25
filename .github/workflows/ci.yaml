@@ -108,7 +108,7 @@ jobs:
 
       - name: Run integration tests
         run: |
-          go test -v -short -coverprofile=coverage-integration.txt -covermode=atomic \
+          go test -v -coverprofile=coverage-integration.txt -covermode=atomic \
             ./internal/orchestration/... \
             ./internal/provisioning/cluster/... \
             ./internal/provisioning/upgrade/...
@@ -136,7 +136,7 @@ jobs:
 
       - name: Run race detection on critical packages
         run: |
-          go test -race -short \
+          go test -race \
             ./internal/util/async/... \
             ./internal/provisioning/compute/... \
             ./internal/provisioning/infrastructure/... \
