@@ -11,12 +11,15 @@ func TestBuildConfig(t *testing.T) {
 		ClusterName:       "my-cluster",
 		Location:          "nbg1",
 		SSHKeys:           []string{"my-key"},
+		Architecture:      ArchX86,
+		ServerCategory:    CategoryShared,
 		ControlPlaneType:  "cpx21",
 		ControlPlaneCount: 3,
 		AddWorkers:        true,
 		WorkerType:        "cpx21",
 		WorkerCount:       2,
-		EnabledAddons:     []string{"cilium", "ccm", "csi", "metrics_server"},
+		CNIChoice:         CNICilium,
+		EnabledAddons:     []string{"ccm", "csi", "metrics_server"},
 		TalosVersion:      "v1.9.0",
 		KubernetesVersion: "v1.32.0",
 	}
@@ -92,10 +95,13 @@ func TestBuildConfigWithAdvancedOptions(t *testing.T) {
 		ClusterName:       "advanced-cluster",
 		Location:          "fsn1",
 		SSHKeys:           []string{"key1", "key2"},
+		Architecture:      ArchX86,
+		ServerCategory:    CategoryShared,
 		ControlPlaneType:  "cpx31",
 		ControlPlaneCount: 5,
 		AddWorkers:        false,
-		EnabledAddons:     []string{"cilium"},
+		CNIChoice:         CNICilium,
+		EnabledAddons:     []string{},
 		TalosVersion:      "v1.8.3",
 		KubernetesVersion: "v1.31.0",
 		AdvancedOptions: &AdvancedOptions{
@@ -168,12 +174,15 @@ func TestBuildConfigWithWorkersDisablesSchedulingOnCP(t *testing.T) {
 		ClusterName:       "test-cluster",
 		Location:          "nbg1",
 		SSHKeys:           []string{"my-key"},
+		Architecture:      ArchX86,
+		ServerCategory:    CategoryShared,
 		ControlPlaneType:  "cpx21",
 		ControlPlaneCount: 3,
 		AddWorkers:        true,
 		WorkerType:        "cpx31",
 		WorkerCount:       2,
-		EnabledAddons:     []string{"cilium"},
+		CNIChoice:         CNICilium,
+		EnabledAddons:     []string{},
 		TalosVersion:      "v1.9.0",
 		KubernetesVersion: "v1.32.0",
 	}
@@ -191,12 +200,15 @@ func TestWriteConfig(t *testing.T) {
 		ClusterName:       "test-cluster",
 		Location:          "nbg1",
 		SSHKeys:           []string{"my-key"},
+		Architecture:      ArchX86,
+		ServerCategory:    CategoryShared,
 		ControlPlaneType:  "cpx21",
 		ControlPlaneCount: 3,
 		AddWorkers:        true,
 		WorkerType:        "cpx21",
 		WorkerCount:       2,
-		EnabledAddons:     []string{"cilium", "ccm", "csi", "metrics_server"},
+		CNIChoice:         CNICilium,
+		EnabledAddons:     []string{"ccm", "csi", "metrics_server"},
 		TalosVersion:      "v1.9.0",
 		KubernetesVersion: "v1.32.0",
 	}
@@ -211,7 +223,7 @@ func TestWriteConfig(t *testing.T) {
 	defer os.Remove(tmpFile.Name())
 	tmpFile.Close()
 
-	if err := WriteConfig(cfg, tmpFile.Name()); err != nil {
+	if err := WriteConfig(cfg, tmpFile.Name(), false); err != nil {
 		t.Fatalf("WriteConfig failed: %v", err)
 	}
 
@@ -396,12 +408,12 @@ func TestVersionsToOptions(t *testing.T) {
 }
 
 func TestBuildAddonsConfigAllTypes(t *testing.T) {
-	// Test all addon types
-	allAddons := []string{"cilium", "ccm", "csi", "metrics_server", "cert_manager", "ingress_nginx", "longhorn"}
-	addons := buildAddonsConfig(allAddons)
+	// Test all addon types with Cilium CNI
+	allAddons := []string{"ccm", "csi", "metrics_server", "cert_manager", "ingress_nginx", "longhorn"}
+	addons := buildAddonsConfig(allAddons, CNICilium)
 
 	if !addons.Cilium.Enabled {
-		t.Error("Cilium should be enabled")
+		t.Error("Cilium should be enabled when CNI is cilium")
 	}
 	if !addons.CCM.Enabled {
 		t.Error("CCM should be enabled")
@@ -422,15 +434,45 @@ func TestBuildAddonsConfigAllTypes(t *testing.T) {
 		t.Error("Longhorn should be enabled")
 	}
 
-	// Test with empty addons
-	emptyAddons := buildAddonsConfig([]string{})
+	// Test with empty addons and Talos native CNI
+	emptyAddons := buildAddonsConfig([]string{}, CNITalosNative)
 	if emptyAddons.Cilium.Enabled {
-		t.Error("Cilium should not be enabled with empty addons")
+		t.Error("Cilium should not be enabled with Talos native CNI")
 	}
 
 	// Test with unknown addon (should not panic)
-	unknownAddons := buildAddonsConfig([]string{"unknown_addon"})
+	unknownAddons := buildAddonsConfig([]string{"unknown_addon"}, CNINone)
 	if unknownAddons.Cilium.Enabled {
-		t.Error("Cilium should not be enabled with unknown addon")
+		t.Error("Cilium should not be enabled with CNI none")
+	}
+}
+
+func TestFilterServerTypes(t *testing.T) {
+	// Test filtering x86 shared
+	x86Shared := FilterServerTypes(ArchX86, CategoryShared)
+	if len(x86Shared) == 0 {
+		t.Error("Expected x86 shared server types")
+	}
+	for _, st := range x86Shared {
+		if st.Architecture != ArchX86 || st.Category != CategoryShared {
+			t.Errorf("Got server type with wrong arch/category: %s (%s/%s)", st.Value, st.Architecture, st.Category)
+		}
+	}
+
+	// Test filtering ARM shared
+	armShared := FilterServerTypes(ArchARM, CategoryShared)
+	if len(armShared) == 0 {
+		t.Error("Expected ARM shared server types")
+	}
+	for _, st := range armShared {
+		if st.Architecture != ArchARM || st.Category != CategoryShared {
+			t.Errorf("Got server type with wrong arch/category: %s (%s/%s)", st.Value, st.Architecture, st.Category)
+		}
+	}
+
+	// Test filtering x86 dedicated
+	x86Dedicated := FilterServerTypes(ArchX86, CategoryDedicated)
+	if len(x86Dedicated) == 0 {
+		t.Error("Expected x86 dedicated server types")
 	}
 }

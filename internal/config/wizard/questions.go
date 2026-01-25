@@ -31,23 +31,17 @@ func runClusterIdentityGroup(ctx context.Context, result *WizardResult) error {
 	).RunWithContext(ctx)
 }
 
-// runSSHAccessGroup prompts for SSH key names.
+// runSSHAccessGroup prompts for SSH key names (optional).
 func runSSHAccessGroup(ctx context.Context, result *WizardResult) error {
 	var sshKeysInput string
 
 	err := huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
-				Title("SSH Key Names").
-				Description("Comma-separated list of SSH key names from Hetzner Cloud").
-				Placeholder("my-key, another-key").
-				Value(&sshKeysInput).
-				Validate(func(s string) error {
-					if strings.TrimSpace(s) == "" {
-						return errSSHKeysRequired
-					}
-					return nil
-				}),
+				Title("SSH Key Names (Optional)").
+				Description("Comma-separated SSH key names from Hetzner Cloud. Leave empty to auto-generate.").
+				Placeholder("my-key, another-key (or leave empty)").
+				Value(&sshKeysInput),
 		).Title("SSH Access"),
 	).RunWithContext(ctx)
 
@@ -59,14 +53,66 @@ func runSSHAccessGroup(ctx context.Context, result *WizardResult) error {
 	return nil
 }
 
+// runArchitectureGroup prompts for server architecture selection.
+func runArchitectureGroup(ctx context.Context, result *WizardResult) error {
+	result.Architecture = ArchX86 // default
+
+	err := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Server Architecture").
+				Description("Choose the CPU architecture for your cluster nodes").
+				Options(ArchitectureOptions...).
+				Value(&result.Architecture),
+		).Title("Architecture"),
+	).RunWithContext(ctx)
+
+	if err != nil {
+		return err
+	}
+
+	// For x86, also ask about server category
+	if result.Architecture == ArchX86 {
+		result.ServerCategory = CategoryShared // default
+
+		return huh.NewForm(
+			huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("Server Category").
+					Description("Choose between shared, dedicated, or cost-optimized vCPUs").
+					Options(ServerCategoryOptions...).
+					Value(&result.ServerCategory),
+			).Title("Server Category"),
+		).RunWithContext(ctx)
+	}
+
+	// ARM only has shared category
+	result.ServerCategory = CategoryShared
+	return nil
+}
+
 // runControlPlaneGroup prompts for control plane configuration.
 func runControlPlaneGroup(ctx context.Context, result *WizardResult) error {
+	// Filter server types based on architecture and category
+	filteredTypes := FilterServerTypes(result.Architecture, result.ServerCategory)
+	if len(filteredTypes) == 0 {
+		// Fallback to shared if no types found
+		filteredTypes = FilterServerTypes(result.Architecture, CategoryShared)
+	}
+
+	// Set a sensible default based on available types
+	if len(filteredTypes) > 1 {
+		result.ControlPlaneType = filteredTypes[1].Value // Usually the second smallest
+	} else if len(filteredTypes) > 0 {
+		result.ControlPlaneType = filteredTypes[0].Value
+	}
+
 	return huh.NewForm(
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("Server Type").
 				Description("Choose the server type for control plane nodes").
-				Options(ServerTypesToOptions(ControlPlaneServerTypes)...).
+				Options(ServerTypesToOptions(filteredTypes)...).
 				Value(&result.ControlPlaneType),
 			huh.NewSelect[int]().
 				Title("Node Count").
@@ -93,12 +139,25 @@ func runWorkersGroup(ctx context.Context, result *WizardResult) error {
 	}
 
 	if result.AddWorkers {
+		// Filter server types based on architecture and category
+		filteredTypes := FilterServerTypes(result.Architecture, result.ServerCategory)
+		if len(filteredTypes) == 0 {
+			filteredTypes = FilterServerTypes(result.Architecture, CategoryShared)
+		}
+
+		// Set a sensible default
+		if len(filteredTypes) > 1 {
+			result.WorkerType = filteredTypes[1].Value
+		} else if len(filteredTypes) > 0 {
+			result.WorkerType = filteredTypes[0].Value
+		}
+
 		return huh.NewForm(
 			huh.NewGroup(
 				huh.NewSelect[string]().
 					Title("Server Type").
 					Description("Choose the server type for worker nodes").
-					Options(ServerTypesToOptions(WorkerServerTypes)...).
+					Options(ServerTypesToOptions(filteredTypes)...).
 					Value(&result.WorkerType),
 				huh.NewSelect[int]().
 					Title("Node Count").
@@ -110,6 +169,21 @@ func runWorkersGroup(ctx context.Context, result *WizardResult) error {
 	}
 
 	return nil
+}
+
+// runCNIGroup prompts for CNI selection.
+func runCNIGroup(ctx context.Context, result *WizardResult) error {
+	result.CNIChoice = CNICilium // default
+
+	return huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Container Network Interface (CNI)").
+				Description("Choose the networking solution for your cluster").
+				Options(CNIOptions...).
+				Value(&result.CNIChoice),
+		).Title("Networking"),
+	).RunWithContext(ctx)
 }
 
 // runAddonsGroup prompts for addon selection.
@@ -130,7 +204,7 @@ func runAddonsGroup(ctx context.Context, result *WizardResult) error {
 		huh.NewGroup(
 			huh.NewMultiSelect[string]().
 				Title("Cluster Addons").
-				Description("Select addons to install").
+				Description("Select additional addons to install (CNI selected separately)").
 				Options(options...).
 				Value(&result.EnabledAddons),
 		).Title("Addons"),
@@ -205,8 +279,8 @@ func runSecurityGroup(ctx context.Context, opts *AdvancedOptions) error {
 	).RunWithContext(ctx)
 }
 
-// runCiliumGroup prompts for Cilium configuration (advanced mode).
-func runCiliumGroup(ctx context.Context, opts *AdvancedOptions) error {
+// runCiliumAdvancedGroup prompts for Cilium configuration (advanced mode).
+func runCiliumAdvancedGroup(ctx context.Context, opts *AdvancedOptions) error {
 	err := huh.NewForm(
 		huh.NewGroup(
 			huh.NewConfirm().

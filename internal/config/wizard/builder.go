@@ -7,13 +7,17 @@ func BuildConfig(result *WizardResult) *config.Config {
 	cfg := &config.Config{
 		ClusterName: result.ClusterName,
 		Location:    result.Location,
-		SSHKeys:     result.SSHKeys,
 		Talos: config.TalosConfig{
 			Version: result.TalosVersion,
 		},
 		Kubernetes: config.KubernetesConfig{
 			Version: result.KubernetesVersion,
 		},
+	}
+
+	// Only set SSH keys if provided (optional field)
+	if len(result.SSHKeys) > 0 {
+		cfg.SSHKeys = result.SSHKeys
 	}
 
 	cfg.ControlPlane = config.ControlPlaneConfig{
@@ -39,7 +43,7 @@ func BuildConfig(result *WizardResult) *config.Config {
 		cfg.Kubernetes.AllowSchedulingOnCP = boolPtr(true)
 	}
 
-	cfg.Addons = buildAddonsConfig(result.EnabledAddons)
+	cfg.Addons = buildAddonsConfig(result.EnabledAddons, result.CNIChoice)
 
 	if result.AdvancedOptions != nil {
 		applyAdvancedOptions(cfg, result.AdvancedOptions)
@@ -48,14 +52,25 @@ func BuildConfig(result *WizardResult) *config.Config {
 	return cfg
 }
 
-// buildAddonsConfig creates the AddonsConfig from enabled addon keys.
-func buildAddonsConfig(enabledAddons []string) config.AddonsConfig {
+// buildAddonsConfig creates the AddonsConfig from enabled addon keys and CNI choice.
+func buildAddonsConfig(enabledAddons []string, cniChoice string) config.AddonsConfig {
 	addons := config.AddonsConfig{}
 
+	// Handle CNI selection
+	switch cniChoice {
+	case CNICilium:
+		addons.Cilium.Enabled = true
+	case CNITalosNative:
+		// Talos native CNI (Flannel) - Cilium stays disabled
+		addons.Cilium.Enabled = false
+	case CNINone:
+		// User will install their own CNI
+		addons.Cilium.Enabled = false
+	}
+
+	// Handle other addons
 	for _, addon := range enabledAddons {
 		switch addon {
-		case "cilium":
-			addons.Cilium.Enabled = true
 		case "ccm":
 			addons.CCM.Enabled = true
 		case "csi":

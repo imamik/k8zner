@@ -17,7 +17,10 @@ import (
 //
 // If advanced is true, additional configuration options are shown for network
 // settings, security options, and Cilium features.
-func Init(ctx context.Context, outputPath string, advanced bool) error {
+//
+// If fullOutput is true, the complete YAML with all options is written.
+// Otherwise, a minimal YAML with only essential values is generated.
+func Init(ctx context.Context, outputPath string, advanced bool, fullOutput bool) error {
 	// Check if file exists and prompt for confirmation
 	if wizard.FileExists(outputPath) {
 		confirm, err := wizard.ConfirmOverwrite(outputPath)
@@ -31,7 +34,7 @@ func Init(ctx context.Context, outputPath string, advanced bool) error {
 	}
 
 	// Print welcome message
-	printWelcome(advanced)
+	printWelcome(advanced, fullOutput)
 
 	// Run the interactive wizard
 	result, err := wizard.RunWizard(ctx, advanced)
@@ -43,46 +46,64 @@ func Init(ctx context.Context, outputPath string, advanced bool) error {
 	cfg := wizard.BuildConfig(result)
 
 	// Write config to file
-	if err := wizard.WriteConfig(cfg, outputPath); err != nil {
+	if err := wizard.WriteConfig(cfg, outputPath, fullOutput); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 
 	// Print success message
-	printInitSuccess(outputPath, result)
+	printInitSuccess(outputPath, result, fullOutput)
 
 	return nil
 }
 
 // printWelcome prints the welcome message.
-func printWelcome(advanced bool) {
+func printWelcome(advanced bool, fullOutput bool) {
 	fmt.Println()
 	fmt.Println("k8zner - Kubernetes on Hetzner Cloud with Talos Linux")
 	fmt.Println("======================================================")
 	fmt.Println()
 	if advanced {
 		fmt.Println("Running in advanced mode - additional options will be shown.")
-		fmt.Println()
 	}
+	if fullOutput {
+		fmt.Println("Full output mode - complete YAML with all options will be generated.")
+	} else {
+		fmt.Println("Minimal output mode - only essential values will be written.")
+	}
+	fmt.Println()
 	fmt.Println("This wizard will help you create a cluster configuration file.")
 	fmt.Println("Press Enter to accept defaults, or type your values.")
 	fmt.Println()
 }
 
 // printInitSuccess prints the success message and next steps.
-func printInitSuccess(outputPath string, result *wizard.WizardResult) {
+func printInitSuccess(outputPath string, result *wizard.WizardResult, fullOutput bool) {
 	fmt.Println()
 	fmt.Println("Configuration saved successfully!")
 	fmt.Println()
 	fmt.Printf("Output file: %s\n", outputPath)
+	if !fullOutput {
+		fmt.Println("(minimal output - use --full for all options)")
+	}
 	fmt.Println()
 	fmt.Println("Summary:")
 	fmt.Printf("  Cluster name:    %s\n", result.ClusterName)
 	fmt.Printf("  Location:        %s\n", result.Location)
+	fmt.Printf("  Architecture:    %s\n", result.Architecture)
+	if result.Architecture == wizard.ArchX86 {
+		fmt.Printf("  Server category: %s\n", result.ServerCategory)
+	}
 	fmt.Printf("  Control plane:   %d x %s\n", result.ControlPlaneCount, result.ControlPlaneType)
 	if result.AddWorkers {
 		fmt.Printf("  Workers:         %d x %s\n", result.WorkerCount, result.WorkerType)
 	} else {
 		fmt.Println("  Workers:         None (workloads will run on control plane)")
+	}
+	fmt.Printf("  CNI:             %s\n", formatCNIChoice(result.CNIChoice))
+	if len(result.SSHKeys) > 0 {
+		fmt.Printf("  SSH keys:        %v\n", result.SSHKeys)
+	} else {
+		fmt.Println("  SSH keys:        (will be auto-generated)")
 	}
 	fmt.Printf("  Talos version:   %s\n", result.TalosVersion)
 	fmt.Printf("  K8s version:     %s\n", result.KubernetesVersion)
@@ -96,4 +117,18 @@ func printInitSuccess(outputPath string, result *wizard.WizardResult) {
 	fmt.Println("  3. Apply the configuration:")
 	fmt.Printf("     k8zner apply -c %s\n", outputPath)
 	fmt.Println()
+}
+
+// formatCNIChoice returns a human-readable CNI choice.
+func formatCNIChoice(choice string) string {
+	switch choice {
+	case wizard.CNICilium:
+		return "Cilium"
+	case wizard.CNITalosNative:
+		return "Talos Default (Flannel)"
+	case wizard.CNINone:
+		return "None (user-managed)"
+	default:
+		return choice
+	}
 }
