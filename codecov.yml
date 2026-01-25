@@ -1,0 +1,43 @@
+# Codecov configuration
+# https://docs.codecov.io/docs/codecov-yaml
+
+coverage:
+  # Project-level coverage settings
+  status:
+    project:
+      default:
+        # Target 60% coverage for the project overall
+        target: 60%
+        # Allow 5% drop from base
+        threshold: 5%
+
+    # Patch coverage settings (for new code in PRs)
+    patch:
+      default:
+        # Target 50% for patches - allows for interactive TUI code
+        # which can't be unit tested without stdin mocking
+        target: 50%
+        # Allow some flexibility for hard-to-test code
+        threshold: 10%
+
+# Ignore certain paths from coverage
+ignore:
+  # Main entry points with minimal logic
+  - "cmd/k8zner/main.go"
+  - "cmd/cleanup/main.go"
+  # Test utilities
+  - "internal/testing/**/*"
+
+# Comment configuration
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: true
+
+# Flag management (for future use with different test types)
+flags:
+  unit:
+    paths:
+      - "internal/"
+      - "cmd/"
+    carryforward: true
