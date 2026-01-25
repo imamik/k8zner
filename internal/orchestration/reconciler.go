@@ -27,12 +27,19 @@ type Reconciler struct {
 	talosGenerator provisioning.TalosConfigProducer
 	config         *config.Config
 	state          *provisioning.State
+	timeouts       *config.Timeouts // Optional custom timeouts (for testing)
 
 	// Phases
 	infraProvisioner   *infrastructure.Provisioner
 	imageProvisioner   *image.Provisioner
 	computeProvisioner *compute.Provisioner
 	clusterProvisioner *cluster.Provisioner
+}
+
+// SetTimeouts sets custom timeouts for the reconciler.
+// This is primarily used for testing to avoid long waits.
+func (r *Reconciler) SetTimeouts(t *config.Timeouts) {
+	r.timeouts = t
 }
 
 // NewReconciler creates a new orchestration reconciler.
@@ -62,6 +69,11 @@ func (r *Reconciler) Reconcile(ctx context.Context) ([]byte, error) {
 
 	// 2. Setup Provisioning Context
 	pCtx := provisioning.NewContext(ctx, r.config, r.infra, r.talosGenerator)
+
+	// Override timeouts if custom ones are set (e.g., for testing)
+	if r.timeouts != nil {
+		pCtx.Timeouts = r.timeouts
+	}
 
 	// 3. Execute Provisioning Pipeline
 	pipeline := provisioning.NewPipeline(

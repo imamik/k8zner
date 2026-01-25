@@ -206,6 +206,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 	}
 
 	r := NewReconciler(mockInfra, mockTalos, cfg)
+	r.SetTimeouts(config.TestTimeouts())
 
 	// Run Reconcile
 	kubeconfig, err := r.Reconcile(ctx)
@@ -242,6 +243,7 @@ func TestReconciler_Reconcile_NetworkError(t *testing.T) {
 	}
 
 	r := NewReconciler(mockInfra, mockTalos, cfg)
+	r.SetTimeouts(config.TestTimeouts())
 
 	// Run Reconcile
 	_, err := r.Reconcile(ctx)
@@ -315,6 +317,7 @@ func TestReconciler_Reconcile_ServerCreationError(t *testing.T) {
 	}
 
 	r := NewReconciler(mockInfra, mockTalos, cfg)
+	r.SetTimeouts(config.TestTimeouts())
 
 	// Run Reconcile
 	_, err := r.Reconcile(ctx)
@@ -358,6 +361,7 @@ func TestReconciler_Reconcile_ValidationError(t *testing.T) {
 	ctx := context.Background()
 
 	r := NewReconciler(mockInfra, mockTalos, cfg)
+	r.SetTimeouts(config.TestTimeouts())
 
 	// Run Reconcile - should fail validation
 	_, err := r.Reconcile(ctx)
@@ -401,6 +405,7 @@ func TestReconciler_Reconcile_FirewallError(t *testing.T) {
 	}
 
 	r := NewReconciler(mockInfra, mockTalos, cfg)
+	r.SetTimeouts(config.TestTimeouts())
 
 	// Run Reconcile
 	_, err := r.Reconcile(ctx)
@@ -437,6 +442,7 @@ func TestReconciler_Reconcile_SubnetError(t *testing.T) {
 	}
 
 	r := NewReconciler(mockInfra, mockTalos, cfg)
+	r.SetTimeouts(config.TestTimeouts())
 
 	// Run Reconcile
 	_, err := r.Reconcile(ctx)
@@ -494,6 +500,7 @@ func TestReconciler_Reconcile_LoadBalancerError(t *testing.T) {
 	}
 
 	r := NewReconciler(mockInfra, mockTalos, cfg)
+	r.SetTimeouts(config.TestTimeouts())
 
 	// Run Reconcile
 	_, err := r.Reconcile(ctx)

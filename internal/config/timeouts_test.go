@@ -34,6 +34,29 @@ func TestLoadTimeouts_Defaults(t *testing.T) {
 	if timeouts.RetryInitialDelay != 1*time.Second {
 		t.Errorf("Expected RetryInitialDelay default 1s, got %v", timeouts.RetryInitialDelay)
 	}
+
+	// Verify cluster provisioning timeout defaults
+	if timeouts.PortWait != 2*time.Minute {
+		t.Errorf("Expected PortWait default 2m, got %v", timeouts.PortWait)
+	}
+	if timeouts.NodeReady != 10*time.Minute {
+		t.Errorf("Expected NodeReady default 10m, got %v", timeouts.NodeReady)
+	}
+	if timeouts.Kubeconfig != 15*time.Minute {
+		t.Errorf("Expected Kubeconfig default 15m, got %v", timeouts.Kubeconfig)
+	}
+	if timeouts.TalosAPI != 10*time.Minute {
+		t.Errorf("Expected TalosAPI default 10m, got %v", timeouts.TalosAPI)
+	}
+	if timeouts.PortPoll != 5*time.Second {
+		t.Errorf("Expected PortPoll default 5s, got %v", timeouts.PortPoll)
+	}
+	if timeouts.NodeReadyPoll != 10*time.Second {
+		t.Errorf("Expected NodeReadyPoll default 10s, got %v", timeouts.NodeReadyPoll)
+	}
+	if timeouts.DialTimeout != 2*time.Second {
+		t.Errorf("Expected DialTimeout default 2s, got %v", timeouts.DialTimeout)
+	}
 }
 
 func TestLoadTimeouts_EnvVars(t *testing.T) {
@@ -48,6 +71,15 @@ func TestLoadTimeouts_EnvVars(t *testing.T) {
 	t.Setenv("HCLOUD_TIMEOUT_IMAGE_WAIT", "7m")
 	t.Setenv("HCLOUD_RETRY_MAX_ATTEMPTS", "10")
 	t.Setenv("HCLOUD_RETRY_INITIAL_DELAY", "2s")
+
+	// Set cluster provisioning timeout custom values
+	t.Setenv("HCLOUD_TIMEOUT_PORT_WAIT", "3m")
+	t.Setenv("HCLOUD_TIMEOUT_NODE_READY", "15m")
+	t.Setenv("HCLOUD_TIMEOUT_KUBECONFIG", "20m")
+	t.Setenv("HCLOUD_TIMEOUT_TALOS_API", "12m")
+	t.Setenv("HCLOUD_TIMEOUT_PORT_POLL", "10s")
+	t.Setenv("HCLOUD_TIMEOUT_NODE_READY_POLL", "15s")
+	t.Setenv("HCLOUD_TIMEOUT_DIAL", "5s")
 
 	timeouts := LoadTimeouts()
 
@@ -72,6 +104,29 @@ func TestLoadTimeouts_EnvVars(t *testing.T) {
 	}
 	if timeouts.RetryInitialDelay != 2*time.Second {
 		t.Errorf("Expected RetryInitialDelay 2s, got %v", timeouts.RetryInitialDelay)
+	}
+
+	// Verify cluster provisioning timeout custom values
+	if timeouts.PortWait != 3*time.Minute {
+		t.Errorf("Expected PortWait 3m, got %v", timeouts.PortWait)
+	}
+	if timeouts.NodeReady != 15*time.Minute {
+		t.Errorf("Expected NodeReady 15m, got %v", timeouts.NodeReady)
+	}
+	if timeouts.Kubeconfig != 20*time.Minute {
+		t.Errorf("Expected Kubeconfig 20m, got %v", timeouts.Kubeconfig)
+	}
+	if timeouts.TalosAPI != 12*time.Minute {
+		t.Errorf("Expected TalosAPI 12m, got %v", timeouts.TalosAPI)
+	}
+	if timeouts.PortPoll != 10*time.Second {
+		t.Errorf("Expected PortPoll 10s, got %v", timeouts.PortPoll)
+	}
+	if timeouts.NodeReadyPoll != 15*time.Second {
+		t.Errorf("Expected NodeReadyPoll 15s, got %v", timeouts.NodeReadyPoll)
+	}
+	if timeouts.DialTimeout != 5*time.Second {
+		t.Errorf("Expected DialTimeout 5s, got %v", timeouts.DialTimeout)
 	}
 }
 
@@ -244,6 +299,56 @@ func TestParseInt(t *testing.T) {
 	}
 }
 
+func TestTestTimeouts(t *testing.T) {
+	timeouts := TestTimeouts()
+
+	// Verify TestTimeouts returns short values suitable for testing
+	if timeouts.ServerCreate != 100*time.Millisecond {
+		t.Errorf("Expected ServerCreate 100ms, got %v", timeouts.ServerCreate)
+	}
+	if timeouts.ServerIP != 100*time.Millisecond {
+		t.Errorf("Expected ServerIP 100ms, got %v", timeouts.ServerIP)
+	}
+	if timeouts.Delete != 100*time.Millisecond {
+		t.Errorf("Expected Delete 100ms, got %v", timeouts.Delete)
+	}
+	if timeouts.Bootstrap != 100*time.Millisecond {
+		t.Errorf("Expected Bootstrap 100ms, got %v", timeouts.Bootstrap)
+	}
+	if timeouts.ImageWait != 100*time.Millisecond {
+		t.Errorf("Expected ImageWait 100ms, got %v", timeouts.ImageWait)
+	}
+	if timeouts.RetryMaxAttempts != 2 {
+		t.Errorf("Expected RetryMaxAttempts 2, got %d", timeouts.RetryMaxAttempts)
+	}
+	if timeouts.RetryInitialDelay != 10*time.Millisecond {
+		t.Errorf("Expected RetryInitialDelay 10ms, got %v", timeouts.RetryInitialDelay)
+	}
+
+	// Verify cluster provisioning test timeouts
+	if timeouts.PortWait != 100*time.Millisecond {
+		t.Errorf("Expected PortWait 100ms, got %v", timeouts.PortWait)
+	}
+	if timeouts.NodeReady != 100*time.Millisecond {
+		t.Errorf("Expected NodeReady 100ms, got %v", timeouts.NodeReady)
+	}
+	if timeouts.Kubeconfig != 100*time.Millisecond {
+		t.Errorf("Expected Kubeconfig 100ms, got %v", timeouts.Kubeconfig)
+	}
+	if timeouts.TalosAPI != 100*time.Millisecond {
+		t.Errorf("Expected TalosAPI 100ms, got %v", timeouts.TalosAPI)
+	}
+	if timeouts.PortPoll != 10*time.Millisecond {
+		t.Errorf("Expected PortPoll 10ms, got %v", timeouts.PortPoll)
+	}
+	if timeouts.NodeReadyPoll != 10*time.Millisecond {
+		t.Errorf("Expected NodeReadyPoll 10ms, got %v", timeouts.NodeReadyPoll)
+	}
+	if timeouts.DialTimeout != 50*time.Millisecond {
+		t.Errorf("Expected DialTimeout 50ms, got %v", timeouts.DialTimeout)
+	}
+}
+
 // clearTimeoutEnvVars clears all timeout-related environment variables
 func clearTimeoutEnvVars() {
 	_ = os.Unsetenv("HCLOUD_TIMEOUT_SERVER_CREATE")
@@ -253,4 +358,13 @@ func clearTimeoutEnvVars() {
 	_ = os.Unsetenv("HCLOUD_TIMEOUT_IMAGE_WAIT")
 	_ = os.Unsetenv("HCLOUD_RETRY_MAX_ATTEMPTS")
 	_ = os.Unsetenv("HCLOUD_RETRY_INITIAL_DELAY")
+
+	// Cluster provisioning timeout env vars
+	_ = os.Unsetenv("HCLOUD_TIMEOUT_PORT_WAIT")
+	_ = os.Unsetenv("HCLOUD_TIMEOUT_NODE_READY")
+	_ = os.Unsetenv("HCLOUD_TIMEOUT_KUBECONFIG")
+	_ = os.Unsetenv("HCLOUD_TIMEOUT_TALOS_API")
+	_ = os.Unsetenv("HCLOUD_TIMEOUT_PORT_POLL")
+	_ = os.Unsetenv("HCLOUD_TIMEOUT_NODE_READY_POLL")
+	_ = os.Unsetenv("HCLOUD_TIMEOUT_DIAL")
 }

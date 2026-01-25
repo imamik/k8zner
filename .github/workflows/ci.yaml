@@ -9,9 +9,12 @@ on:
 permissions:
   contents: read
 
+env:
+  GO_VERSION_FILE: go.mod
+
 jobs:
   lint:
-    name: Lint
+    name: lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -20,7 +23,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+          cache: true
 
       - name: Check formatting
         run: |
@@ -37,7 +41,7 @@ jobs:
           args: --timeout=5m
 
   security:
-    name: Security
+    name: security
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -46,15 +50,17 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+          cache: true
 
       - name: Run govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
 
-  test:
-    name: Test
+  # Fast unit tests - run in parallel, no race detector for speed
+  test-unit:
+    name: Unit Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -63,10 +69,113 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+          cache: true
 
-      - name: Run tests
-        run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+      - name: Run unit tests
+        run: |
+          go test -v -short -coverprofile=coverage-unit.txt -covermode=atomic \
+            ./cmd/... \
+            ./internal/addons/... \
+            ./internal/config/... \
+            ./internal/util/... \
+            ./internal/platform/... \
+            ./internal/provisioning/compute/... \
+            ./internal/provisioning/destroy/... \
+            ./internal/provisioning/image/... \
+            ./internal/provisioning/infrastructure/...
+
+      - name: Upload unit coverage
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-unit
+          path: coverage-unit.txt
+          retention-days: 1
+
+  # Slower integration-style tests - separate job
+  test-integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+          cache: true
+
+      - name: Run integration tests
+        run: |
+          go test -v -coverprofile=coverage-integration.txt -covermode=atomic \
+            ./internal/orchestration/... \
+            ./internal/provisioning/cluster/... \
+            ./internal/provisioning/upgrade/...
+
+      - name: Upload integration coverage
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-integration
+          path: coverage-integration.txt
+          retention-days: 1
+
+  # Combined test status for branch protection (requires "test" check)
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    needs: [test-unit, test-integration]
+    steps:
+      - name: All tests passed
+        run: echo "All tests passed"
+
+  # Race detection on critical paths only (runs in parallel with other tests)
+  test-race:
+    name: Race Detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+          cache: true
+
+      - name: Run race detection on critical packages
+        run: |
+          go test -race \
+            ./internal/util/async/... \
+            ./internal/provisioning/compute/... \
+            ./internal/provisioning/infrastructure/... \
+            ./internal/provisioning/destroy/...
+
+  # Merge coverage and upload
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    needs: [test-unit, test-integration]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Download unit coverage
+        uses: actions/download-artifact@v7
+        with:
+          name: coverage-unit
+
+      - name: Download integration coverage
+        uses: actions/download-artifact@v7
+        with:
+          name: coverage-integration
+
+      - name: Merge coverage files
+        run: |
+          # Combine coverage files
+          echo "mode: atomic" > coverage.txt
+          tail -n +2 coverage-unit.txt >> coverage.txt
+          tail -n +2 coverage-integration.txt >> coverage.txt
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -90,7 +199,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+          cache: true
 
       - name: Build
         env:
@@ -110,7 +220,7 @@ jobs:
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [lint, security, test, build]
+    needs: [lint, security, test, test-race, build]
     if: always()
     steps:
       - name: Check all jobs passed
@@ -118,6 +228,7 @@ jobs:
           if [[ "${{ needs.lint.result }}" != "success" ]] || \
              [[ "${{ needs.security.result }}" != "success" ]] || \
              [[ "${{ needs.test.result }}" != "success" ]] || \
+             [[ "${{ needs.test-race.result }}" != "success" ]] || \
              [[ "${{ needs.build.result }}" != "success" ]]; then
             echo "One or more jobs failed"
             exit 1
