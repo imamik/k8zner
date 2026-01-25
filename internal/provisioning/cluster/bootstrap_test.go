@@ -174,6 +174,9 @@ func TestEnsureTalosConfigInState(t *testing.T) {
 }
 
 func TestBootstrap_StateMarkerPresent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping slow integration test in short mode")
+	}
 	mockInfra := new(hcloud_internal.MockClient)
 	p := NewProvisioner()
 
@@ -207,6 +210,9 @@ func TestBootstrap_StateMarkerPresent(t *testing.T) {
 }
 
 func TestProvision(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping slow integration test in short mode")
+	}
 	// Test that Provision() delegates to BootstrapCluster()
 	p := NewProvisioner()
 	mockInfra := &hcloud_internal.MockClient{
@@ -308,6 +314,9 @@ func TestCreateStateMarker(t *testing.T) {
 }
 
 func TestTryRetrieveExistingKubeconfig(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping slow integration test in short mode")
+	}
 	p := NewProvisioner()
 
 	// This tests the error path - when kubeconfig cannot be retrieved
@@ -331,6 +340,9 @@ func TestTryRetrieveExistingKubeconfig(t *testing.T) {
 }
 
 func TestRetrieveAndStoreKubeconfig_Error(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping slow integration test in short mode")
+	}
 	p := NewProvisioner()
 
 	observer := provisioning.NewConsoleObserver()

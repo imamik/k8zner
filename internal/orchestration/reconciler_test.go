@@ -78,6 +78,9 @@ func (m *MockTalosProducer) SetMachineConfigOptions(opts any) {
 }
 
 func TestReconciler_Reconcile(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping slow integration test in short mode")
+	}
 	// Setup Mocks
 	mockInfra := &hcloud_internal.MockClient{}
 	mockTalos := &MockTalosProducer{}
