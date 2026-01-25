@@ -30,6 +30,9 @@ type WizardResult struct {
 	// CNI Selection
 	CNIChoice string // "cilium", "talos", or "none"
 
+	// Ingress Controller Selection
+	IngressController string // "none", "nginx", or "traefik"
+
 	// Addons
 	EnabledAddons []string
 
@@ -89,6 +92,11 @@ func RunWizard(ctx context.Context, advanced bool) (*WizardResult, error) {
 	// CNI selection (separate from other addons)
 	if err := runCNIGroup(ctx, result); err != nil {
 		return nil, fmt.Errorf("cni: %w", err)
+	}
+
+	// Ingress controller selection (separate from other addons)
+	if err := runIngressControllerGroup(ctx, result); err != nil {
+		return nil, fmt.Errorf("ingress: %w", err)
 	}
 
 	if err := runAddonsGroup(ctx, result); err != nil {

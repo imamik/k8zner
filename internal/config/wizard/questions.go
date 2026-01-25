@@ -186,6 +186,21 @@ func runCNIGroup(ctx context.Context, result *WizardResult) error {
 	).RunWithContext(ctx)
 }
 
+// runIngressControllerGroup prompts for ingress controller selection.
+func runIngressControllerGroup(ctx context.Context, result *WizardResult) error {
+	result.IngressController = IngressTraefik // default
+
+	return huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Ingress Controller").
+				Description("Choose the ingress controller for HTTP/HTTPS traffic").
+				Options(IngressControllerOptions...).
+				Value(&result.IngressController),
+		).Title("Ingress"),
+	).RunWithContext(ctx)
+}
+
 // runAddonsGroup prompts for addon selection.
 func runAddonsGroup(ctx context.Context, result *WizardResult) error {
 	options := make([]huh.Option[string], len(BasicAddons))
@@ -204,7 +219,7 @@ func runAddonsGroup(ctx context.Context, result *WizardResult) error {
 		huh.NewGroup(
 			huh.NewMultiSelect[string]().
 				Title("Cluster Addons").
-				Description("Select additional addons to install (CNI selected separately)").
+				Description("Select additional addons to install (CNI and Ingress selected separately)").
 				Options(options...).
 				Value(&result.EnabledAddons),
 		).Title("Addons"),

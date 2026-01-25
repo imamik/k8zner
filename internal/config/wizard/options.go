@@ -190,13 +190,26 @@ var CNIOptions = []huh.Option[string]{
 	huh.NewOption("None - I'll install my own CNI", CNINone),
 }
 
-// BasicAddons contains addons shown in basic mode (excluding CNI which is now separate).
+// Ingress controller options.
+const (
+	IngressNone    = "none"
+	IngressNginx   = "nginx"
+	IngressTraefik = "traefik"
+)
+
+// IngressControllerOptions contains available ingress controller choices.
+var IngressControllerOptions = []huh.Option[string]{
+	huh.NewOption("Traefik Proxy (Recommended)", IngressTraefik),
+	huh.NewOption("Nginx Ingress Controller", IngressNginx),
+	huh.NewOption("None - I'll install my own", IngressNone),
+}
+
+// BasicAddons contains addons shown in basic mode (excluding CNI and Ingress which are now separate).
 var BasicAddons = []AddonOption{
 	{Key: "ccm", Label: "Hetzner CCM", Description: "Cloud Controller Manager for load balancers", Default: true},
 	{Key: "csi", Label: "Hetzner CSI", Description: "Container Storage Interface for volumes", Default: true},
 	{Key: "metrics_server", Label: "Metrics Server", Description: "Resource metrics for HPA/VPA", Default: true},
 	{Key: "cert_manager", Label: "Cert Manager", Description: "Automatic TLS certificate management", Default: false},
-	{Key: "ingress_nginx", Label: "Ingress NGINX", Description: "HTTP/HTTPS ingress controller", Default: false},
 	{Key: "longhorn", Label: "Longhorn", Description: "Distributed block storage", Default: false},
 }
 

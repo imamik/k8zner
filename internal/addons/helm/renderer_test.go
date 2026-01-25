@@ -16,6 +16,7 @@ func TestEmbedIncludesHelperFiles(t *testing.T) {
 		"cert-manager",
 		"ingress-nginx",
 		"longhorn",
+		"traefik",
 	}
 
 	for _, chartName := range charts {
@@ -140,6 +141,40 @@ func TestChartLoaderAcceptsFiles(t *testing.T) {
 	}
 	if !foundHelper {
 		t.Error("_helpers.tpl not found in chart templates")
+	}
+}
+
+// TestTraefikChartCanBeLoaded verifies the Traefik chart can be loaded by Helm.
+func TestTraefikChartCanBeLoaded(t *testing.T) {
+	files, err := loadChartFiles("templates/traefik")
+	if err != nil {
+		t.Fatalf("loadChartFiles failed for traefik: %v", err)
+	}
+
+	// Try to load the chart with Helm loader
+	chart, err := loader.LoadFiles(files)
+	if err != nil {
+		t.Fatalf("Helm loader.LoadFiles failed for traefik: %v", err)
+	}
+
+	// Verify chart loaded successfully
+	if chart.Name() != "traefik" {
+		t.Errorf("Expected chart name 'traefik', got '%s'", chart.Name())
+	}
+	if len(chart.Templates) == 0 {
+		t.Error("No templates found in loaded traefik chart")
+	}
+
+	// Verify _helpers.tpl is in the templates
+	var foundHelper bool
+	for _, tmpl := range chart.Templates {
+		if strings.Contains(tmpl.Name, "_helpers.tpl") {
+			foundHelper = true
+			break
+		}
+	}
+	if !foundHelper {
+		t.Error("_helpers.tpl not found in traefik chart templates")
 	}
 }
 

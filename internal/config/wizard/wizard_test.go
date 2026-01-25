@@ -408,9 +408,9 @@ func TestVersionsToOptions(t *testing.T) {
 }
 
 func TestBuildAddonsConfigAllTypes(t *testing.T) {
-	// Test all addon types with Cilium CNI
-	allAddons := []string{"ccm", "csi", "metrics_server", "cert_manager", "ingress_nginx", "longhorn"}
-	addons := buildAddonsConfig(allAddons, CNICilium)
+	// Test all addon types with Cilium CNI and Nginx ingress
+	allAddons := []string{"ccm", "csi", "metrics_server", "cert_manager", "longhorn"}
+	addons := buildAddonsConfig(allAddons, CNICilium, IngressNginx)
 
 	if !addons.Cilium.Enabled {
 		t.Error("Cilium should be enabled when CNI is cilium")
@@ -428,20 +428,41 @@ func TestBuildAddonsConfigAllTypes(t *testing.T) {
 		t.Error("CertManager should be enabled")
 	}
 	if !addons.IngressNginx.Enabled {
-		t.Error("IngressNginx should be enabled")
+		t.Error("IngressNginx should be enabled when IngressNginx is selected")
+	}
+	if addons.Traefik.Enabled {
+		t.Error("Traefik should not be enabled when IngressNginx is selected")
 	}
 	if !addons.Longhorn.Enabled {
 		t.Error("Longhorn should be enabled")
 	}
 
+	// Test with Traefik ingress controller
+	traefikAddons := buildAddonsConfig([]string{"ccm"}, CNICilium, IngressTraefik)
+	if !traefikAddons.Traefik.Enabled {
+		t.Error("Traefik should be enabled when IngressTraefik is selected")
+	}
+	if traefikAddons.IngressNginx.Enabled {
+		t.Error("IngressNginx should not be enabled when IngressTraefik is selected")
+	}
+
+	// Test with no ingress controller
+	noIngressAddons := buildAddonsConfig([]string{"ccm"}, CNICilium, IngressNone)
+	if noIngressAddons.IngressNginx.Enabled {
+		t.Error("IngressNginx should not be enabled when IngressNone is selected")
+	}
+	if noIngressAddons.Traefik.Enabled {
+		t.Error("Traefik should not be enabled when IngressNone is selected")
+	}
+
 	// Test with empty addons and Talos native CNI
-	emptyAddons := buildAddonsConfig([]string{}, CNITalosNative)
+	emptyAddons := buildAddonsConfig([]string{}, CNITalosNative, IngressNone)
 	if emptyAddons.Cilium.Enabled {
 		t.Error("Cilium should not be enabled with Talos native CNI")
 	}
 
 	// Test with unknown addon (should not panic)
-	unknownAddons := buildAddonsConfig([]string{"unknown_addon"}, CNINone)
+	unknownAddons := buildAddonsConfig([]string{"unknown_addon"}, CNINone, IngressNone)
 	if unknownAddons.Cilium.Enabled {
 		t.Error("Cilium should not be enabled with CNI none")
 	}
