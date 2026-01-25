@@ -43,15 +43,15 @@ func WriteConfig(cfg *config.Config, outputPath string, fullOutput bool) error {
 // MinimalConfig represents the minimal configuration for YAML output.
 // Only contains fields that are essential or explicitly set by the user.
 type MinimalConfig struct {
-	ClusterName  string                     `yaml:"cluster_name"`
-	Location     string                     `yaml:"location"`
-	SSHKeys      []string                   `yaml:"ssh_keys,omitempty"`
-	ControlPlane MinimalControlPlaneConfig  `yaml:"control_plane"`
-	Workers      []MinimalWorkerNodePool    `yaml:"workers,omitempty"`
-	Talos        MinimalTalosConfig         `yaml:"talos"`
-	Kubernetes   MinimalKubernetesConfig    `yaml:"kubernetes"`
-	Addons       MinimalAddonsConfig        `yaml:"addons,omitempty"`
-	Network      *MinimalNetworkConfig      `yaml:"network,omitempty"`
+	ClusterName   string                    `yaml:"cluster_name"`
+	Location      string                    `yaml:"location"`
+	SSHKeys       []string                  `yaml:"ssh_keys,omitempty"`
+	ControlPlane  MinimalControlPlaneConfig `yaml:"control_plane"`
+	Workers       []MinimalWorkerNodePool   `yaml:"workers,omitempty"`
+	Talos         MinimalTalosConfig        `yaml:"talos"`
+	Kubernetes    MinimalKubernetesConfig   `yaml:"kubernetes"`
+	Addons        MinimalAddonsConfig       `yaml:"addons,omitempty"`
+	Network       *MinimalNetworkConfig     `yaml:"network,omitempty"`
 	ClusterAccess string                    `yaml:"cluster_access,omitempty"`
 }
 
@@ -76,8 +76,8 @@ type MinimalWorkerNodePool struct {
 
 // MinimalTalosConfig contains essential Talos settings.
 type MinimalTalosConfig struct {
-	Version         string              `yaml:"version"`
-	MachineEncrypt  *MinimalEncryption  `yaml:"machine,omitempty"`
+	Version        string             `yaml:"version"`
+	MachineEncrypt *MinimalEncryption `yaml:"machine,omitempty"`
 }
 
 // MinimalEncryption contains encryption settings if enabled.
@@ -94,13 +94,13 @@ type MinimalKubernetesConfig struct {
 
 // MinimalAddonsConfig contains only enabled addons.
 type MinimalAddonsConfig struct {
-	Cilium       *MinimalCiliumConfig `yaml:"cilium,omitempty"`
-	CCM          *MinimalAddon        `yaml:"ccm,omitempty"`
-	CSI          *MinimalAddon        `yaml:"csi,omitempty"`
-	MetricsServer *MinimalAddon       `yaml:"metrics_server,omitempty"`
-	CertManager  *MinimalAddon        `yaml:"cert_manager,omitempty"`
-	IngressNginx *MinimalAddon        `yaml:"ingress_nginx,omitempty"`
-	Longhorn     *MinimalAddon        `yaml:"longhorn,omitempty"`
+	Cilium        *MinimalCiliumConfig `yaml:"cilium,omitempty"`
+	CCM           *MinimalAddon        `yaml:"ccm,omitempty"`
+	CSI           *MinimalAddon        `yaml:"csi,omitempty"`
+	MetricsServer *MinimalAddon        `yaml:"metrics_server,omitempty"`
+	CertManager   *MinimalAddon        `yaml:"cert_manager,omitempty"`
+	IngressNginx  *MinimalAddon        `yaml:"ingress_nginx,omitempty"`
+	Longhorn      *MinimalAddon        `yaml:"longhorn,omitempty"`
 }
 
 // MinimalAddon represents a simple enabled addon.
@@ -110,12 +110,12 @@ type MinimalAddon struct {
 
 // MinimalCiliumConfig contains Cilium settings when enabled.
 type MinimalCiliumConfig struct {
-	Enabled           bool   `yaml:"enabled"`
-	EncryptionEnabled bool   `yaml:"encryption_enabled,omitempty"`
-	EncryptionType    string `yaml:"encryption_type,omitempty"`
-	HubbleEnabled     bool   `yaml:"hubble_enabled,omitempty"`
-	HubbleRelayEnabled bool  `yaml:"hubble_relay_enabled,omitempty"`
-	GatewayAPIEnabled bool   `yaml:"gateway_api_enabled,omitempty"`
+	Enabled            bool   `yaml:"enabled"`
+	EncryptionEnabled  bool   `yaml:"encryption_enabled,omitempty"`
+	EncryptionType     string `yaml:"encryption_type,omitempty"`
+	HubbleEnabled      bool   `yaml:"hubble_enabled,omitempty"`
+	HubbleRelayEnabled bool   `yaml:"hubble_relay_enabled,omitempty"`
+	GatewayAPIEnabled  bool   `yaml:"gateway_api_enabled,omitempty"`
 }
 
 // MinimalNetworkConfig contains network settings if customized.
@@ -127,7 +127,7 @@ type MinimalNetworkConfig struct {
 
 // buildMinimalConfig creates a minimal config from the full config.
 func buildMinimalConfig(cfg *config.Config) *MinimalConfig {
-	min := &MinimalConfig{
+	minCfg := &MinimalConfig{
 		ClusterName: cfg.ClusterName,
 		Location:    cfg.Location,
 		SSHKeys:     cfg.SSHKeys,
@@ -142,7 +142,7 @@ func buildMinimalConfig(cfg *config.Config) *MinimalConfig {
 
 	// Control plane
 	for _, np := range cfg.ControlPlane.NodePools {
-		min.ControlPlane.NodePools = append(min.ControlPlane.NodePools, MinimalControlPlaneNodePool{
+		minCfg.ControlPlane.NodePools = append(minCfg.ControlPlane.NodePools, MinimalControlPlaneNodePool{
 			Name:       np.Name,
 			ServerType: np.ServerType,
 			Count:      np.Count,
@@ -151,7 +151,7 @@ func buildMinimalConfig(cfg *config.Config) *MinimalConfig {
 
 	// Workers
 	for _, wp := range cfg.Workers {
-		min.Workers = append(min.Workers, MinimalWorkerNodePool{
+		minCfg.Workers = append(minCfg.Workers, MinimalWorkerNodePool{
 			Name:       wp.Name,
 			ServerType: wp.ServerType,
 			Count:      wp.Count,
@@ -199,12 +199,12 @@ func buildMinimalConfig(cfg *config.Config) *MinimalConfig {
 	}
 
 	if hasAddons {
-		min.Addons = addons
+		minCfg.Addons = addons
 	}
 
 	// Network config - only if customized
 	if cfg.Network.IPv4CIDR != "" || cfg.Network.PodIPv4CIDR != "" || cfg.Network.ServiceIPv4CIDR != "" {
-		min.Network = &MinimalNetworkConfig{
+		minCfg.Network = &MinimalNetworkConfig{
 			IPv4CIDR:        cfg.Network.IPv4CIDR,
 			PodIPv4CIDR:     cfg.Network.PodIPv4CIDR,
 			ServiceIPv4CIDR: cfg.Network.ServiceIPv4CIDR,
@@ -213,7 +213,7 @@ func buildMinimalConfig(cfg *config.Config) *MinimalConfig {
 
 	// Encryption settings
 	if cfg.Talos.Machine.StateEncryption != nil || cfg.Talos.Machine.EphemeralEncryption != nil {
-		min.Talos.MachineEncrypt = &MinimalEncryption{
+		minCfg.Talos.MachineEncrypt = &MinimalEncryption{
 			StateEncryption:     cfg.Talos.Machine.StateEncryption,
 			EphemeralEncryption: cfg.Talos.Machine.EphemeralEncryption,
 		}
@@ -221,10 +221,10 @@ func buildMinimalConfig(cfg *config.Config) *MinimalConfig {
 
 	// Cluster access
 	if cfg.ClusterAccess != "" && cfg.ClusterAccess != "public" {
-		min.ClusterAccess = cfg.ClusterAccess
+		minCfg.ClusterAccess = cfg.ClusterAccess
 	}
 
-	return min
+	return minCfg
 }
 
 // generateHeader creates the YAML file header comment.

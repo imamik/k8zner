@@ -113,6 +113,7 @@ func FilterServerTypes(arch, category string) []ServerTypeOption {
 }
 
 // ControlPlaneServerTypes contains recommended server types for control plane nodes.
+//
 // Deprecated: Use FilterServerTypes with architecture and category instead.
 var ControlPlaneServerTypes = []ServerTypeOption{
 	{Value: "cpx21", Label: "cpx21", Description: "3 vCPU, 4GB RAM (AMD)", Architecture: ArchX86, Category: CategoryShared},
@@ -124,6 +125,7 @@ var ControlPlaneServerTypes = []ServerTypeOption{
 }
 
 // WorkerServerTypes contains recommended server types for worker nodes.
+//
 // Deprecated: Use FilterServerTypes with architecture and category instead.
 var WorkerServerTypes = []ServerTypeOption{
 	{Value: "cpx21", Label: "cpx21", Description: "3 vCPU, 4GB RAM (AMD)", Architecture: ArchX86, Category: CategoryShared},

@@ -323,18 +323,18 @@ func TestValidateCIDR(t *testing.T) {
 		{"0.0.0.0/0", false},
 
 		// Invalid CIDRs
-		{"", true},                    // empty
-		{"10.0.0.0", true},            // missing mask
-		{"invalid", true},             // invalid format
-		{"10.0.0.0/", true},           // missing mask number
-		{"999.999.999.999/24", true},  // invalid IP octets
-		{"10.0.0.0/33", true},         // mask too large
-		{"10.0.0.0/-1", true},         // negative mask
-		{"10.0.0.256/24", true},       // octet out of range
-		{"10.0.0/24", true},           // incomplete IP
-		{"10.0.0.0.0/24", true},       // too many octets
-		{"10.0.0.0/24/extra", true},   // extra slash
-		{"  10.0.0.0/16  ", true},     // whitespace
+		{"", true},                   // empty
+		{"10.0.0.0", true},           // missing mask
+		{"invalid", true},            // invalid format
+		{"10.0.0.0/", true},          // missing mask number
+		{"999.999.999.999/24", true}, // invalid IP octets
+		{"10.0.0.0/33", true},        // mask too large
+		{"10.0.0.0/-1", true},        // negative mask
+		{"10.0.0.256/24", true},      // octet out of range
+		{"10.0.0/24", true},          // incomplete IP
+		{"10.0.0.0.0/24", true},      // too many octets
+		{"10.0.0.0/24/extra", true},  // extra slash
+		{"  10.0.0.0/16  ", true},    // whitespace
 	}
 
 	for _, tt := range tests {
