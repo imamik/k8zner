@@ -16,7 +16,6 @@ func BuildConfig(result *WizardResult) *config.Config {
 		},
 	}
 
-	// Control plane configuration
 	cfg.ControlPlane = config.ControlPlaneConfig{
 		NodePools: []config.ControlPlaneNodePool{
 			{
@@ -27,7 +26,6 @@ func BuildConfig(result *WizardResult) *config.Config {
 		},
 	}
 
-	// Worker configuration
 	if result.AddWorkers {
 		cfg.Workers = []config.WorkerNodePool{
 			{
@@ -36,12 +34,13 @@ func BuildConfig(result *WizardResult) *config.Config {
 				Count:      result.WorkerCount,
 			},
 		}
+	} else {
+		// Enable scheduling on control plane when no workers are configured
+		cfg.Kubernetes.AllowSchedulingOnCP = boolPtr(true)
 	}
 
-	// Addons configuration
 	cfg.Addons = buildAddonsConfig(result.EnabledAddons)
 
-	// Apply advanced options if present
 	if result.AdvancedOptions != nil {
 		applyAdvancedOptions(cfg, result.AdvancedOptions)
 	}

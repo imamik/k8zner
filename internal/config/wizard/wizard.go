@@ -54,54 +54,47 @@ type AdvancedOptions struct {
 
 // RunWizard runs the interactive configuration wizard.
 // If advanced is true, additional configuration options are shown.
+// The context is used for cancellation support (e.g., Ctrl+C).
 func RunWizard(ctx context.Context, advanced bool) (*WizardResult, error) {
 	result := &WizardResult{}
 
-	// Group 1: Cluster Identity
-	if err := runClusterIdentityGroup(result); err != nil {
+	if err := runClusterIdentityGroup(ctx, result); err != nil {
 		return nil, fmt.Errorf("cluster identity: %w", err)
 	}
 
-	// Group 2: SSH Access
-	if err := runSSHAccessGroup(result); err != nil {
+	if err := runSSHAccessGroup(ctx, result); err != nil {
 		return nil, fmt.Errorf("ssh access: %w", err)
 	}
 
-	// Group 3: Control Plane
-	if err := runControlPlaneGroup(result); err != nil {
+	if err := runControlPlaneGroup(ctx, result); err != nil {
 		return nil, fmt.Errorf("control plane: %w", err)
 	}
 
-	// Group 4: Workers
-	if err := runWorkersGroup(result); err != nil {
+	if err := runWorkersGroup(ctx, result); err != nil {
 		return nil, fmt.Errorf("workers: %w", err)
 	}
 
-	// Group 5: Addons
-	if err := runAddonsGroup(result); err != nil {
+	if err := runAddonsGroup(ctx, result); err != nil {
 		return nil, fmt.Errorf("addons: %w", err)
 	}
 
-	// Group 6: Versions
-	if err := runVersionsGroup(result); err != nil {
+	if err := runVersionsGroup(ctx, result); err != nil {
 		return nil, fmt.Errorf("versions: %w", err)
 	}
 
-	// Advanced mode: additional configuration
 	if advanced {
 		advOpts := &AdvancedOptions{}
 
-		if err := runNetworkGroup(advOpts); err != nil {
+		if err := runNetworkGroup(ctx, advOpts); err != nil {
 			return nil, fmt.Errorf("network: %w", err)
 		}
 
-		if err := runSecurityGroup(advOpts); err != nil {
+		if err := runSecurityGroup(ctx, advOpts); err != nil {
 			return nil, fmt.Errorf("security: %w", err)
 		}
 
-		// Cilium options if Cilium is enabled
 		if containsAddon(result.EnabledAddons, "cilium") {
-			if err := runCiliumGroup(advOpts); err != nil {
+			if err := runCiliumGroup(ctx, advOpts); err != nil {
 				return nil, fmt.Errorf("cilium: %w", err)
 			}
 		}

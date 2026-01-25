@@ -1,6 +1,8 @@
 package wizard
 
 import (
+	"context"
+	"net"
 	"regexp"
 	"strings"
 
@@ -11,7 +13,7 @@ import (
 var clusterNameRegex = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$`)
 
 // runClusterIdentityGroup prompts for cluster name and location.
-func runClusterIdentityGroup(result *WizardResult) error {
+func runClusterIdentityGroup(ctx context.Context, result *WizardResult) error {
 	return huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
@@ -26,11 +28,11 @@ func runClusterIdentityGroup(result *WizardResult) error {
 				Options(LocationsToOptions()...).
 				Value(&result.Location),
 		).Title("Cluster Identity"),
-	).Run()
+	).RunWithContext(ctx)
 }
 
 // runSSHAccessGroup prompts for SSH key names.
-func runSSHAccessGroup(result *WizardResult) error {
+func runSSHAccessGroup(ctx context.Context, result *WizardResult) error {
 	var sshKeysInput string
 
 	err := huh.NewForm(
@@ -47,19 +49,18 @@ func runSSHAccessGroup(result *WizardResult) error {
 					return nil
 				}),
 		).Title("SSH Access"),
-	).Run()
+	).RunWithContext(ctx)
 
 	if err != nil {
 		return err
 	}
 
-	// Parse comma-separated SSH keys
 	result.SSHKeys = parseSSHKeys(sshKeysInput)
 	return nil
 }
 
 // runControlPlaneGroup prompts for control plane configuration.
-func runControlPlaneGroup(result *WizardResult) error {
+func runControlPlaneGroup(ctx context.Context, result *WizardResult) error {
 	return huh.NewForm(
 		huh.NewGroup(
 			huh.NewSelect[string]().
@@ -73,12 +74,11 @@ func runControlPlaneGroup(result *WizardResult) error {
 				Options(ControlPlaneCountOptions...).
 				Value(&result.ControlPlaneCount),
 		).Title("Control Plane"),
-	).Run()
+	).RunWithContext(ctx)
 }
 
 // runWorkersGroup prompts for worker node configuration.
-func runWorkersGroup(result *WizardResult) error {
-	// First ask if user wants workers
+func runWorkersGroup(ctx context.Context, result *WizardResult) error {
 	err := huh.NewForm(
 		huh.NewGroup(
 			huh.NewConfirm().
@@ -86,13 +86,12 @@ func runWorkersGroup(result *WizardResult) error {
 				Description("Worker nodes run your application workloads").
 				Value(&result.AddWorkers),
 		).Title("Workers"),
-	).Run()
+	).RunWithContext(ctx)
 
 	if err != nil {
 		return err
 	}
 
-	// If user wants workers, ask for configuration
 	if result.AddWorkers {
 		return huh.NewForm(
 			huh.NewGroup(
@@ -107,15 +106,14 @@ func runWorkersGroup(result *WizardResult) error {
 					Options(WorkerCountOptions...).
 					Value(&result.WorkerCount),
 			).Title("Worker Configuration"),
-		).Run()
+		).RunWithContext(ctx)
 	}
 
 	return nil
 }
 
 // runAddonsGroup prompts for addon selection.
-func runAddonsGroup(result *WizardResult) error {
-	// Build options with defaults selected
+func runAddonsGroup(ctx context.Context, result *WizardResult) error {
 	options := make([]huh.Option[string], len(BasicAddons))
 	defaultSelected := []string{}
 
@@ -126,7 +124,6 @@ func runAddonsGroup(result *WizardResult) error {
 		}
 	}
 
-	// Pre-select defaults
 	result.EnabledAddons = defaultSelected
 
 	return huh.NewForm(
@@ -137,12 +134,11 @@ func runAddonsGroup(result *WizardResult) error {
 				Options(options...).
 				Value(&result.EnabledAddons),
 		).Title("Addons"),
-	).Run()
+	).RunWithContext(ctx)
 }
 
 // runVersionsGroup prompts for Talos and Kubernetes versions.
-func runVersionsGroup(result *WizardResult) error {
-	// Set defaults
+func runVersionsGroup(ctx context.Context, result *WizardResult) error {
 	result.TalosVersion = TalosVersions[0].Value
 	result.KubernetesVersion = KubernetesVersions[0].Value
 
@@ -159,12 +155,11 @@ func runVersionsGroup(result *WizardResult) error {
 				Options(VersionsToOptions(KubernetesVersions)...).
 				Value(&result.KubernetesVersion),
 		).Title("Versions"),
-	).Run()
+	).RunWithContext(ctx)
 }
 
 // runNetworkGroup prompts for network configuration (advanced mode).
-func runNetworkGroup(opts *AdvancedOptions) error {
-	// Set defaults
+func runNetworkGroup(ctx context.Context, opts *AdvancedOptions) error {
 	opts.NetworkCIDR = "10.0.0.0/16"
 	opts.PodCIDR = "10.244.0.0/16"
 	opts.ServiceCIDR = "10.96.0.0/12"
@@ -187,12 +182,11 @@ func runNetworkGroup(opts *AdvancedOptions) error {
 				Value(&opts.ServiceCIDR).
 				Validate(validateCIDR),
 		).Title("Network Configuration"),
-	).Run()
+	).RunWithContext(ctx)
 }
 
 // runSecurityGroup prompts for security options (advanced mode).
-func runSecurityGroup(opts *AdvancedOptions) error {
-	// Set defaults
+func runSecurityGroup(ctx context.Context, opts *AdvancedOptions) error {
 	opts.DiskEncryption = true
 	opts.ClusterAccess = "public"
 
@@ -208,12 +202,11 @@ func runSecurityGroup(opts *AdvancedOptions) error {
 				Options(ClusterAccessModes...).
 				Value(&opts.ClusterAccess),
 		).Title("Security Options"),
-	).Run()
+	).RunWithContext(ctx)
 }
 
 // runCiliumGroup prompts for Cilium configuration (advanced mode).
-func runCiliumGroup(opts *AdvancedOptions) error {
-	// First ask about encryption
+func runCiliumGroup(ctx context.Context, opts *AdvancedOptions) error {
 	err := huh.NewForm(
 		huh.NewGroup(
 			huh.NewConfirm().
@@ -221,13 +214,12 @@ func runCiliumGroup(opts *AdvancedOptions) error {
 				Description("Encrypt pod-to-pod traffic").
 				Value(&opts.CiliumEncryption),
 		).Title("Cilium Options"),
-	).Run()
+	).RunWithContext(ctx)
 
 	if err != nil {
 		return err
 	}
 
-	// If encryption is enabled, ask for type
 	if opts.CiliumEncryption {
 		opts.CiliumEncryptionType = "wireguard"
 
@@ -239,14 +231,13 @@ func runCiliumGroup(opts *AdvancedOptions) error {
 					Options(CiliumEncryptionTypes...).
 					Value(&opts.CiliumEncryptionType),
 			).Title("Cilium Encryption"),
-		).Run()
+		).RunWithContext(ctx)
 
 		if err != nil {
 			return err
 		}
 	}
 
-	// Hubble and Gateway API
 	return huh.NewForm(
 		huh.NewGroup(
 			huh.NewConfirm().
@@ -258,7 +249,7 @@ func runCiliumGroup(opts *AdvancedOptions) error {
 				Description("Kubernetes Gateway API support").
 				Value(&opts.GatewayAPIEnabled),
 		).Title("Cilium Features"),
-	).Run()
+	).RunWithContext(ctx)
 }
 
 // validateClusterName validates the cluster name format.
@@ -272,14 +263,12 @@ func validateClusterName(s string) error {
 	return nil
 }
 
-// validateCIDR validates a CIDR notation string.
+// validateCIDR validates a CIDR notation string using net.ParseCIDR.
 func validateCIDR(s string) error {
 	if s == "" {
 		return errCIDRRequired
 	}
-	// Basic CIDR format validation
-	parts := strings.Split(s, "/")
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+	if _, _, err := net.ParseCIDR(s); err != nil {
 		return errCIDRInvalid
 	}
 	return nil

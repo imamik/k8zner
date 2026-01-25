@@ -2,6 +2,7 @@ package wizard
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -155,6 +156,34 @@ func TestBuildConfigWithAdvancedOptions(t *testing.T) {
 	if len(cfg.Workers) != 0 {
 		t.Errorf("Workers length = %d, want 0", len(cfg.Workers))
 	}
+
+	// Verify scheduling on control plane is enabled when no workers
+	if cfg.Kubernetes.AllowSchedulingOnCP == nil || !*cfg.Kubernetes.AllowSchedulingOnCP {
+		t.Error("AllowSchedulingOnCP should be true when no workers are configured")
+	}
+}
+
+func TestBuildConfigWithWorkersDisablesSchedulingOnCP(t *testing.T) {
+	result := &WizardResult{
+		ClusterName:       "test-cluster",
+		Location:          "nbg1",
+		SSHKeys:           []string{"my-key"},
+		ControlPlaneType:  "cpx21",
+		ControlPlaneCount: 3,
+		AddWorkers:        true,
+		WorkerType:        "cpx31",
+		WorkerCount:       2,
+		EnabledAddons:     []string{"cilium"},
+		TalosVersion:      "v1.9.0",
+		KubernetesVersion: "v1.32.0",
+	}
+
+	cfg := BuildConfig(result)
+
+	// AllowSchedulingOnCP should not be set when workers are present
+	if cfg.Kubernetes.AllowSchedulingOnCP != nil {
+		t.Error("AllowSchedulingOnCP should not be set when workers are configured")
+	}
 }
 
 func TestWriteConfig(t *testing.T) {
@@ -194,31 +223,25 @@ func TestWriteConfig(t *testing.T) {
 
 	// Check for expected content
 	s := string(content)
-	if !contains(s, "cluster_name: test-cluster") {
+	if !containsString(s, "cluster_name: test-cluster") {
 		t.Error("Missing cluster_name in output")
 	}
-	if !contains(s, "location: nbg1") {
+	if !containsString(s, "location: nbg1") {
 		t.Error("Missing location in output")
 	}
-	if !contains(s, "# k8zner cluster configuration") {
+	if !containsString(s, "# k8zner cluster configuration") {
 		t.Error("Missing header comment in output")
 	}
+	// Verify the header contains the actual output path, not hardcoded "cluster.yaml"
+	if !containsString(s, tmpFile.Name()) {
+		t.Errorf("Header should contain output path %q", tmpFile.Name())
+	}
 
-	// Log the output for visibility during verbose test runs
 	t.Logf("Generated config:\n%s", s)
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+func containsString(s, substr string) bool {
+	return strings.Contains(s, substr)
 }
 
 func TestParseSSHKeys(t *testing.T) {
@@ -279,13 +302,27 @@ func TestValidateCIDR(t *testing.T) {
 		cidr    string
 		wantErr bool
 	}{
+		// Valid CIDRs
 		{"10.0.0.0/16", false},
 		{"192.168.1.0/24", false},
 		{"10.244.0.0/16", false},
-		{"", true},          // empty
-		{"10.0.0.0", true},  // missing mask
-		{"invalid", true},   // invalid format
-		{"10.0.0.0/", true}, // missing mask number
+		{"10.96.0.0/12", false},
+		{"172.16.0.0/12", false},
+		{"0.0.0.0/0", false},
+
+		// Invalid CIDRs
+		{"", true},                    // empty
+		{"10.0.0.0", true},            // missing mask
+		{"invalid", true},             // invalid format
+		{"10.0.0.0/", true},           // missing mask number
+		{"999.999.999.999/24", true},  // invalid IP octets
+		{"10.0.0.0/33", true},         // mask too large
+		{"10.0.0.0/-1", true},         // negative mask
+		{"10.0.0.256/24", true},       // octet out of range
+		{"10.0.0/24", true},           // incomplete IP
+		{"10.0.0.0.0/24", true},       // too many octets
+		{"10.0.0.0/24/extra", true},   // extra slash
+		{"  10.0.0.0/16  ", true},     // whitespace
 	}
 
 	for _, tt := range tests {
