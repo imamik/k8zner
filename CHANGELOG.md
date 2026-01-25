@@ -7,7 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.0] - YYYY-MM-DD
+## [0.2.0] - 2025-01-25
+
+### Added
+
+- **Interactive Config Builder** (`k8zner init`) - New wizard for creating cluster configurations
+  - Hierarchical server selection: choose architecture (x86/ARM) first, then category (shared/dedicated/cost-optimized)
+  - Updated Hetzner instance types with current pricing data (CX, CPX, CCX, CAX families)
+  - CNI selection as dedicated choice: Cilium, Talos default (Flannel), or none
+  - Optional SSH keys - auto-generated if not provided
+  - Minimal YAML output by default (only essential values)
+  - `--full` flag for complete YAML with all configuration options
+  - `--advanced` flag for network, security, and Cilium customization
+- Configurable timeouts for cluster operations
+- CI pipeline optimization with parallel test jobs
+- Codecov integration for test coverage reporting
+
+### Changed
+
+- Cluster bootstrap now uses configurable timeouts instead of hardcoded values
+- Network configuration uses improved retry logic
+
+## [0.1.1] - 2025-01-20
+
+### Fixed
+
+- Minor bug fixes and stability improvements
+
+## [0.1.0] - 2025-01-15
 
 ### Added
 
@@ -43,5 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Secrets stored locally in `./secrets/` directory
 - No credentials stored in cluster state
 
-[Unreleased]: https://github.com/imamik/k8zner/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/imamik/k8zner/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/imamik/k8zner/compare/v0.1.1...v0.2.0
+[0.1.1]: https://github.com/imamik/k8zner/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/imamik/k8zner/releases/tag/v0.1.0
