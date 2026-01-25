@@ -21,8 +21,11 @@ func applyCertManager(ctx context.Context, client k8sclient.Client, cfg *config.
 	// Build values matching terraform configuration
 	values := buildCertManagerValues(cfg)
 
+	// Get chart spec with any config overrides
+	spec := helm.GetChartSpec("cert-manager", cfg.Addons.CertManager.Helm)
+
 	// Render helm chart
-	manifestBytes, err := helm.RenderChart("cert-manager", "cert-manager", values)
+	manifestBytes, err := helm.RenderFromSpec(ctx, spec, "cert-manager", values)
 	if err != nil {
 		return fmt.Errorf("failed to render cert-manager chart: %w", err)
 	}

@@ -22,8 +22,11 @@ func applyTraefik(ctx context.Context, client k8sclient.Client, cfg *config.Conf
 	// Build values matching the ingress-nginx configuration style
 	values := buildTraefikValues(cfg)
 
+	// Get chart spec with any config overrides
+	spec := helm.GetChartSpec("traefik", cfg.Addons.Traefik.Helm)
+
 	// Render helm chart
-	manifestBytes, err := helm.RenderChart("traefik", "traefik", values)
+	manifestBytes, err := helm.RenderFromSpec(ctx, spec, "traefik", values)
 	if err != nil {
 		return fmt.Errorf("failed to render traefik chart: %w", err)
 	}

@@ -1,4 +1,0 @@
-Chart: cilium
-Version: 1.18.5
-Repository: https://helm.cilium.io
-Downloaded: 2026-01-14

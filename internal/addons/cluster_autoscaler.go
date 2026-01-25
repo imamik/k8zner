@@ -41,8 +41,11 @@ func applyClusterAutoscaler(
 	// Build Helm values
 	values := buildClusterAutoscalerValues(cfg, networkID, sshKeyName, firewallID)
 
+	// Get chart spec with any config overrides
+	spec := helm.GetChartSpec("cluster-autoscaler", cfg.Addons.ClusterAutoscaler.Helm)
+
 	// Render Helm chart
-	manifestBytes, err := helm.RenderChart("cluster-autoscaler", "kube-system", values)
+	manifestBytes, err := helm.RenderFromSpec(ctx, spec, "kube-system", values)
 	if err != nil {
 		return fmt.Errorf("failed to render Cluster Autoscaler chart: %w", err)
 	}
