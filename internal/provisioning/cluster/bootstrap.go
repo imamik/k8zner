@@ -197,14 +197,15 @@ func (p *Provisioner) configureNewNodes(ctx *provisioning.Context) error {
 // A node in maintenance mode will accept an insecure connection but won't respond
 // to authenticated requests with the cluster's Talos config.
 func (p *Provisioner) isNodeInMaintenanceMode(ctx *provisioning.Context, nodeIP string) bool {
-	// First check if the port is reachable - wait up to 2 minutes for new nodes to boot
+	// First check if the port is reachable - wait for new nodes to boot
 	// Talos boot from snapshot typically takes 30-60 seconds
+	portWaitTimeout := ctx.Timeouts.PortWait
 	ctx.Logger.Printf("[%s] Waiting for Talos API on %s:50000...", phase, nodeIP)
-	portCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	portCtx, cancel := context.WithTimeout(ctx, portWaitTimeout)
 	defer cancel()
-	if err := waitForPort(portCtx, nodeIP, 50000, 2*time.Minute); err != nil {
-		// Port not reachable even after 2 minutes - node might be offline or failed
-		ctx.Logger.Printf("[%s] Node %s port 50000 not reachable after 2 minutes, skipping", phase, nodeIP)
+	if err := waitForPort(portCtx, nodeIP, 50000, portWaitTimeout, ctx.Timeouts.PortPoll, ctx.Timeouts.DialTimeout); err != nil {
+		// Port not reachable - node might be offline or failed
+		ctx.Logger.Printf("[%s] Node %s port 50000 not reachable, skipping", phase, nodeIP)
 		return false
 	}
 	ctx.Logger.Printf("[%s] Node %s port 50000 is reachable", phase, nodeIP)
@@ -370,9 +371,9 @@ func (p *Provisioner) getFirstControlPlaneIP(ctx *provisioning.Context) string {
 }
 
 // applyMachineConfig applies a machine configuration to a Talos node.
-func (p *Provisioner) applyMachineConfig(ctx context.Context, nodeIP string, machineConfig []byte) error {
+func (p *Provisioner) applyMachineConfig(ctx *provisioning.Context, nodeIP string, machineConfig []byte) error {
 	// Wait for Talos API to be available
-	if err := waitForPort(ctx, nodeIP, 50000, talosAPIWaitTimeout); err != nil {
+	if err := waitForPort(ctx, nodeIP, 50000, ctx.Timeouts.TalosAPI, ctx.Timeouts.PortPoll, ctx.Timeouts.DialTimeout); err != nil {
 		return fmt.Errorf("failed to wait for Talos API: %w", err)
 	}
 
@@ -407,7 +408,7 @@ func (p *Provisioner) applyMachineConfig(ctx context.Context, nodeIP string, mac
 }
 
 // waitForNodeReady waits for a node to reboot and become ready after applying configuration.
-func (p *Provisioner) waitForNodeReady(ctx context.Context, nodeIP string, clientConfigBytes []byte, logger provisioning.Logger) error {
+func (p *Provisioner) waitForNodeReady(ctx *provisioning.Context, nodeIP string, clientConfigBytes []byte, logger provisioning.Logger) error {
 	// Parse client config
 	cfg, err := config.FromString(string(clientConfigBytes))
 	if err != nil {
@@ -416,11 +417,11 @@ func (p *Provisioner) waitForNodeReady(ctx context.Context, nodeIP string, clien
 
 	// Wait for port to become unavailable (node rebooting)
 	logger.Printf("[%s] Waiting for node %s to begin reboot...", phase, nodeIP)
-	time.Sleep(rebootInitialWait)
+	time.Sleep(defaultRebootInitialWait)
 
 	// Wait for port to come back up
 	logger.Printf("[%s] Waiting for node %s to come back online...", phase, nodeIP)
-	if err := waitForPort(ctx, nodeIP, 50000, talosAPIWaitTimeout); err != nil {
+	if err := waitForPort(ctx, nodeIP, 50000, ctx.Timeouts.TalosAPI, ctx.Timeouts.PortPoll, ctx.Timeouts.DialTimeout); err != nil {
 		return fmt.Errorf("failed to wait for node to come back: %w", err)
 	}
 
@@ -436,10 +437,10 @@ func (p *Provisioner) waitForNodeReady(ctx context.Context, nodeIP string, clien
 	defer func() { _ = clientCtx.Close() }()
 
 	// Wait for node to report ready status
-	ticker := time.NewTicker(nodeReadyPollInterval)
+	ticker := time.NewTicker(ctx.Timeouts.NodeReadyPoll)
 	defer ticker.Stop()
 
-	timeout := time.After(nodeReadyTimeout)
+	timeout := time.After(ctx.Timeouts.NodeReady)
 
 	for {
 		select {
@@ -457,7 +458,7 @@ func (p *Provisioner) waitForNodeReady(ctx context.Context, nodeIP string, clien
 }
 
 // retrieveKubeconfig retrieves the kubeconfig from the cluster after bootstrap.
-func (p *Provisioner) retrieveKubeconfig(ctx context.Context, controlPlaneNodes map[string]string, clientConfigBytes []byte, logger provisioning.Logger) ([]byte, error) {
+func (p *Provisioner) retrieveKubeconfig(ctx *provisioning.Context, controlPlaneNodes map[string]string, clientConfigBytes []byte, logger provisioning.Logger) ([]byte, error) {
 	// Parse client config
 	cfg, err := config.FromString(string(clientConfigBytes))
 	if err != nil {
@@ -480,10 +481,10 @@ func (p *Provisioner) retrieveKubeconfig(ctx context.Context, controlPlaneNodes 
 
 	// Wait for Kubernetes API to be ready
 	logger.Printf("[%s] Waiting for Kubernetes API to become ready...", phase)
-	ticker := time.NewTicker(nodeReadyPollInterval)
+	ticker := time.NewTicker(ctx.Timeouts.NodeReadyPoll)
 	defer ticker.Stop()
 
-	timeout := time.After(kubeconfigTimeout)
+	timeout := time.After(ctx.Timeouts.Kubeconfig)
 
 	for {
 		select {

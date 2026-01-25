@@ -90,14 +90,16 @@ func TestWaitForPort_Success(t *testing.T) {
 
 	// Wait for port should succeed immediately
 	ctx := context.Background()
-	err = waitForPort(ctx, "127.0.0.1", addr.Port, 5*time.Second)
+	timeouts := config.TestTimeouts()
+	err = waitForPort(ctx, "127.0.0.1", addr.Port, 5*time.Second, timeouts.PortPoll, timeouts.DialTimeout)
 	assert.NoError(t, err)
 }
 
 func TestWaitForPort_Timeout(t *testing.T) {
 	// Use a port that's definitely not listening
 	ctx := context.Background()
-	err := waitForPort(ctx, "127.0.0.1", 59999, 100*time.Millisecond)
+	timeouts := config.TestTimeouts()
+	err := waitForPort(ctx, "127.0.0.1", 59999, 100*time.Millisecond, timeouts.PortPoll, timeouts.DialTimeout)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "timeout")
 }
@@ -106,7 +108,8 @@ func TestWaitForPort_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	err := waitForPort(ctx, "127.0.0.1", 59999, 5*time.Second)
+	timeouts := config.TestTimeouts()
+	err := waitForPort(ctx, "127.0.0.1", 59999, 5*time.Second, timeouts.PortPoll, timeouts.DialTimeout)
 	assert.Error(t, err)
 	assert.Equal(t, context.Canceled, err)
 }
@@ -196,6 +199,7 @@ func TestBootstrap_StateMarkerPresent(t *testing.T) {
 		Infra:    mockInfra,
 		Observer: observer,
 		Logger:   observer,
+		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{
 		"test-cluster-control-plane-1": "1.2.3.4",
@@ -226,6 +230,7 @@ func TestProvision(t *testing.T) {
 		Infra:    mockInfra,
 		Observer: observer,
 		Logger:   observer,
+		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.TalosConfig = []byte("talos-config")
 	pCtx.State.ControlPlaneIPs = map[string]string{"node1": "1.2.3.4"}
@@ -319,6 +324,7 @@ func TestTryRetrieveExistingKubeconfig(t *testing.T) {
 		State:    provisioning.NewState(),
 		Observer: observer,
 		Logger:   observer,
+		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{"node1": "127.0.0.1"}
 	pCtx.State.TalosConfig = []byte("invalid-talos-config") // Will fail to parse
@@ -340,6 +346,7 @@ func TestRetrieveAndStoreKubeconfig_Error(t *testing.T) {
 		State:    provisioning.NewState(),
 		Observer: observer,
 		Logger:   observer,
+		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{"node1": "127.0.0.1"}
 	pCtx.State.TalosConfig = []byte("invalid-config") // Will fail to parse
