@@ -58,6 +58,14 @@ func buildCertManagerValues(cfg *config.Config) helm.Values {
 		"topologySpreadConstraints": buildCertManagerTopologySpread("controller"),
 		"nodeSelector":              baseConfig["nodeSelector"],
 		"tolerations":               baseConfig["tolerations"],
+		// Enable ingress-shim to auto-create Certificate resources from Ingress annotations
+		// This watches for annotations like cert-manager.io/cluster-issuer on Ingress resources
+		// and automatically creates the corresponding Certificate resources.
+		// Note: ingressShim is a top-level Helm value, NOT part of the config section.
+		"ingressShim": helm.Values{
+			"defaultIssuerKind": "ClusterIssuer",
+			// defaultIssuerName left empty - users specify via annotation on each Ingress
+		},
 		"webhook": helm.Values{
 			"replicaCount":              baseConfig["replicaCount"],
 			"podDisruptionBudget":       baseConfig["podDisruptionBudget"],
@@ -130,13 +138,6 @@ func buildCertManagerConfig(cfg *config.Config) helm.Values {
 
 	return helm.Values{
 		"enableGatewayAPI": true,
-		// Enable ingress-shim to auto-create Certificate resources from Ingress annotations
-		// This watches for annotations like cert-manager.io/cluster-issuer on Ingress resources
-		// and automatically creates the corresponding Certificate resources.
-		"ingressShim": helm.Values{
-			"defaultIssuerKind": "ClusterIssuer",
-			// defaultIssuerName left empty - users specify via annotation on each Ingress
-		},
 		"featureGates": helm.Values{
 			// Workaround for ingress-nginx bug: https://github.com/kubernetes/ingress-nginx/issues/11176
 			// This also applies to Traefik when using standard Ingress resources
