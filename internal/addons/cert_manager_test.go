@@ -102,10 +102,10 @@ func TestBuildCertManagerValues(t *testing.T) {
 			require.True(t, ok)
 			assert.Equal(t, false, startupapicheck["enabled"])
 
-			// Check Gateway API enabled
+			// Check Gateway API disabled (requires Gateway API CRDs which may not be installed)
 			configSection, ok := values["config"].(helm.Values)
 			require.True(t, ok)
-			assert.Equal(t, true, configSection["enableGatewayAPI"])
+			assert.Equal(t, false, configSection["enableGatewayAPI"])
 
 			// Check ACME HTTP01 feature gate
 			featureGates, ok := configSection["featureGates"].(helm.Values)
