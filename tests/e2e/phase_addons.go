@@ -311,18 +311,24 @@ func testAddonArgoCD(t *testing.T, state *E2EState) {
 func testArgoCDAPI(t *testing.T, state *E2EState) {
 	t.Log("  Testing ArgoCD API availability...")
 
-	// Wait for the ArgoCD server service to be ready
+	// Wait for the ArgoCD server service to be ready using label selector
 	for i := 0; i < 12; i++ {
 		cmd := exec.CommandContext(context.Background(), "kubectl",
 			"--kubeconfig", state.KubeconfigPath,
-			"get", "svc", "-n", "argocd", "argocd-server",
-			"-o", "jsonpath={.spec.clusterIP}")
+			"get", "svc", "-n", "argocd", "-l", "app.kubernetes.io/name=argocd-server",
+			"-o", "jsonpath={.items[0].spec.clusterIP}")
 		output, err := cmd.CombinedOutput()
-		if err == nil && len(output) > 0 {
+		if err == nil && len(output) > 0 && string(output) != "" {
 			t.Log("  ✓ ArgoCD server service is ready")
 			break
 		}
 		if i == 11 {
+			// Debug: list all services in argocd namespace
+			listCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", state.KubeconfigPath,
+				"get", "svc", "-n", "argocd")
+			listOutput, _ := listCmd.CombinedOutput()
+			t.Logf("  Services in argocd namespace:\n%s", string(listOutput))
 			t.Fatal("ArgoCD server service not found")
 		}
 		time.Sleep(5 * time.Second)
