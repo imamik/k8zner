@@ -409,7 +409,7 @@ func TestVersionsToOptions(t *testing.T) {
 
 func TestBuildAddonsConfigAllTypes(t *testing.T) {
 	// Test all addon types with Cilium CNI and Nginx ingress
-	allAddons := []string{"ccm", "csi", "metrics_server", "cert_manager", "longhorn"}
+	allAddons := []string{"ccm", "csi", "metrics_server", "cert_manager", "longhorn", "argocd"}
 	addons := buildAddonsConfig(allAddons, CNICilium, IngressNginx)
 
 	if !addons.Cilium.Enabled {
@@ -435,6 +435,9 @@ func TestBuildAddonsConfigAllTypes(t *testing.T) {
 	}
 	if !addons.Longhorn.Enabled {
 		t.Error("Longhorn should be enabled")
+	}
+	if !addons.ArgoCD.Enabled {
+		t.Error("ArgoCD should be enabled")
 	}
 
 	// Test with Traefik ingress controller

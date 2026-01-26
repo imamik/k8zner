@@ -91,6 +91,8 @@ func buildAddonsConfig(enabledAddons []string, cniChoice, ingressController stri
 			addons.CertManager.Enabled = true
 		case "longhorn":
 			addons.Longhorn.Enabled = true
+		case "argocd":
+			addons.ArgoCD.Enabled = true
 		}
 	}
 

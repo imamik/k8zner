@@ -101,6 +101,7 @@ type MinimalAddonsConfig struct {
 	CertManager   *MinimalAddon        `yaml:"cert_manager,omitempty"`
 	IngressNginx  *MinimalAddon        `yaml:"ingress_nginx,omitempty"`
 	Longhorn      *MinimalAddon        `yaml:"longhorn,omitempty"`
+	ArgoCD        *MinimalAddon        `yaml:"argocd,omitempty"`
 }
 
 // MinimalAddon represents a simple enabled addon.
@@ -195,6 +196,10 @@ func buildMinimalConfig(cfg *config.Config) *MinimalConfig {
 	}
 	if cfg.Addons.Longhorn.Enabled {
 		addons.Longhorn = &MinimalAddon{Enabled: true}
+		hasAddons = true
+	}
+	if cfg.Addons.ArgoCD.Enabled {
+		addons.ArgoCD = &MinimalAddon{Enabled: true}
 		hasAddons = true
 	}
 

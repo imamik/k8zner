@@ -49,4 +49,9 @@ var DefaultChartSpecs = map[string]ChartSpec{
 		Name:       "longhorn",
 		Version:    "1.10.1",
 	},
+	"argo-cd": {
+		Repository: "https://argoproj.github.io/argo-helm",
+		Name:       "argo-cd",
+		Version:    "9.3.5",
+	},
 }
