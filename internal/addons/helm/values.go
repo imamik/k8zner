@@ -109,6 +109,8 @@ func (v Values) ToMap() map[string]interface{} {
 }
 
 // convertToInterface recursively converts Values types to map[string]interface{}.
+// This handles nested Values, maps, and various slice types to ensure
+// proper JSON schema validation by the Helm SDK.
 func convertToInterface(v any) any {
 	switch val := v.(type) {
 	case Values:
@@ -119,6 +121,31 @@ func convertToInterface(v any) any {
 		result := make([]any, len(val))
 		for i, item := range val {
 			result[i] = convertToInterface(item)
+		}
+		return result
+	case []Values:
+		result := make([]any, len(val))
+		for i, item := range val {
+			result[i] = item.ToMap()
+		}
+		return result
+	case []map[string]any:
+		result := make([]any, len(val))
+		for i, item := range val {
+			result[i] = Values(item).ToMap()
+		}
+		return result
+	case []string:
+		// Convert to []any for JSON schema compatibility
+		result := make([]any, len(val))
+		for i, item := range val {
+			result[i] = item
+		}
+		return result
+	case []int:
+		result := make([]any, len(val))
+		for i, item := range val {
+			result[i] = item
 		}
 		return result
 	default:

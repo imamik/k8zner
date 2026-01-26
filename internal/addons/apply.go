@@ -27,6 +27,7 @@ import (
 //   - Metrics Server
 //   - Cert Manager
 //   - Ingress NGINX
+//   - Traefik Proxy
 //   - Longhorn
 //   - Cluster Autoscaler
 //   - RBAC
@@ -39,6 +40,11 @@ import (
 func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID int64, sshKeyName string, firewallID int64, talosGen provisioning.TalosConfigProducer) error {
 	if len(kubeconfig) == 0 {
 		return fmt.Errorf("kubeconfig is required for addon installation")
+	}
+
+	// Validate that only one ingress controller is enabled
+	if cfg.Addons.IngressNginx.Enabled && cfg.Addons.Traefik.Enabled {
+		return fmt.Errorf("cannot enable both Nginx and Traefik ingress controllers; choose one or the other")
 	}
 
 	// Check if any addons are enabled
@@ -129,6 +135,12 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		}
 	}
 
+	if cfg.Addons.Traefik.Enabled {
+		if err := applyTraefik(ctx, client, cfg); err != nil {
+			return fmt.Errorf("failed to install Traefik: %w", err)
+		}
+	}
+
 	if cfg.Addons.RBAC.Enabled {
 		if err := applyRBAC(ctx, client, cfg); err != nil {
 			return fmt.Errorf("failed to install RBAC: %w", err)
@@ -173,6 +185,7 @@ func hasEnabledAddons(cfg *config.Config) bool {
 		addons.CertManager.Enabled ||
 		addons.Longhorn.Enabled ||
 		addons.IngressNginx.Enabled ||
+		addons.Traefik.Enabled ||
 		addons.RBAC.Enabled ||
 		addons.OIDCRBAC.Enabled ||
 		addons.TalosBackup.Enabled

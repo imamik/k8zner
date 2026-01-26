@@ -31,8 +31,11 @@ func applyCSI(ctx context.Context, client k8sclient.Client, cfg *config.Config) 
 	// Build CSI values matching terraform configuration
 	values := buildCSIValues(cfg)
 
+	// Get chart spec with any config overrides
+	spec := helm.GetChartSpec("hcloud-csi", cfg.Addons.CSI.Helm)
+
 	// Render helm chart with values
-	manifestBytes, err := helm.RenderChart("hcloud-csi", "kube-system", values)
+	manifestBytes, err := helm.RenderFromSpec(ctx, spec, "kube-system", values)
 	if err != nil {
 		return fmt.Errorf("failed to render CSI chart: %w", err)
 	}

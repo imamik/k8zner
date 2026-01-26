@@ -49,8 +49,11 @@ metadata:
 	// Build Cilium helm values
 	values := buildCiliumValues(cfg)
 
+	// Get chart spec with any config overrides
+	spec := helm.GetChartSpec("cilium", cfg.Addons.Cilium.Helm)
+
 	// Render helm chart
-	manifestBytes, err := helm.RenderChart("cilium", "kube-system", values)
+	manifestBytes, err := helm.RenderFromSpec(ctx, spec, "kube-system", values)
 	if err != nil {
 		return fmt.Errorf("failed to render Cilium chart: %w", err)
 	}

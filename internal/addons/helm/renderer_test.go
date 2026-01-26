@@ -1,182 +1,177 @@
 package helm
 
 import (
-	"io/fs"
-	"strings"
 	"testing"
 
-	"helm.sh/helm/v3/pkg/chart/loader"
+	"github.com/imamik/k8zner/internal/config"
 )
 
-// TestEmbedIncludesHelperFiles verifies that _helpers.tpl files are embedded.
-func TestEmbedIncludesHelperFiles(t *testing.T) {
-	charts := []string{
+// TestGetChartSpec verifies GetChartSpec returns correct defaults.
+func TestGetChartSpec(t *testing.T) {
+	tests := []struct {
+		name     string
+		addon    string
+		helmCfg  config.HelmChartConfig
+		wantRepo string
+		wantName string
+		wantVer  string
+	}{
+		{
+			name:     "hcloud-ccm defaults",
+			addon:    "hcloud-ccm",
+			helmCfg:  config.HelmChartConfig{},
+			wantRepo: "https://charts.hetzner.cloud",
+			wantName: "hcloud-cloud-controller-manager",
+			wantVer:  "1.29.0",
+		},
+		{
+			name:     "cilium defaults",
+			addon:    "cilium",
+			helmCfg:  config.HelmChartConfig{},
+			wantRepo: "https://helm.cilium.io",
+			wantName: "cilium",
+			wantVer:  "1.18.5",
+		},
+		{
+			name:     "traefik defaults",
+			addon:    "traefik",
+			helmCfg:  config.HelmChartConfig{},
+			wantRepo: "https://traefik.github.io/charts",
+			wantName: "traefik",
+			wantVer:  "39.0.0",
+		},
+		{
+			name:  "version override",
+			addon: "cilium",
+			helmCfg: config.HelmChartConfig{
+				Version: "1.16.0",
+			},
+			wantRepo: "https://helm.cilium.io",
+			wantName: "cilium",
+			wantVer:  "1.16.0",
+		},
+		{
+			name:  "repository override",
+			addon: "cilium",
+			helmCfg: config.HelmChartConfig{
+				Repository: "https://my-custom-repo.example.com",
+			},
+			wantRepo: "https://my-custom-repo.example.com",
+			wantName: "cilium",
+			wantVer:  "1.18.5",
+		},
+		{
+			name:  "chart name override",
+			addon: "cilium",
+			helmCfg: config.HelmChartConfig{
+				Chart: "custom-cilium",
+			},
+			wantRepo: "https://helm.cilium.io",
+			wantName: "custom-cilium",
+			wantVer:  "1.18.5",
+		},
+		{
+			name:  "all overrides",
+			addon: "cilium",
+			helmCfg: config.HelmChartConfig{
+				Repository: "https://custom.example.com",
+				Chart:      "my-cilium",
+				Version:    "2.0.0",
+			},
+			wantRepo: "https://custom.example.com",
+			wantName: "my-cilium",
+			wantVer:  "2.0.0",
+		},
+		{
+			name:     "unknown addon returns empty",
+			addon:    "unknown-addon",
+			helmCfg:  config.HelmChartConfig{},
+			wantRepo: "",
+			wantName: "",
+			wantVer:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			spec := GetChartSpec(tt.addon, tt.helmCfg)
+
+			if spec.Repository != tt.wantRepo {
+				t.Errorf("Repository = %q, want %q", spec.Repository, tt.wantRepo)
+			}
+			if spec.Name != tt.wantName {
+				t.Errorf("Name = %q, want %q", spec.Name, tt.wantName)
+			}
+			if spec.Version != tt.wantVer {
+				t.Errorf("Version = %q, want %q", spec.Version, tt.wantVer)
+			}
+		})
+	}
+}
+
+// TestDefaultChartSpecsComplete verifies all expected addons have specs defined.
+func TestDefaultChartSpecsComplete(t *testing.T) {
+	expectedAddons := []string{
 		"hcloud-ccm",
-		"metrics-server",
+		"hcloud-csi",
+		"cilium",
 		"cert-manager",
 		"ingress-nginx",
+		"traefik",
+		"metrics-server",
+		"cluster-autoscaler",
 		"longhorn",
 	}
 
-	for _, chartName := range charts {
-		t.Run(chartName, func(t *testing.T) {
-			helperPath := "templates/" + chartName + "/templates/_helpers.tpl"
-			content, err := templatesFS.ReadFile(helperPath)
-			if err != nil {
-				t.Fatalf("Failed to read %s: %v", helperPath, err)
+	for _, addon := range expectedAddons {
+		t.Run(addon, func(t *testing.T) {
+			spec, ok := DefaultChartSpecs[addon]
+			if !ok {
+				t.Fatalf("DefaultChartSpecs missing entry for %s", addon)
 			}
-			if len(content) == 0 {
-				t.Errorf("_helpers.tpl for %s is empty", chartName)
+			if spec.Repository == "" {
+				t.Errorf("Repository is empty for %s", addon)
 			}
-		})
-	}
-}
-
-// TestEmbedIncludesCSIHelperFiles verifies CSI helper files are embedded.
-func TestEmbedIncludesCSIHelperFiles(t *testing.T) {
-	helperFiles := []string{
-		"templates/hcloud-csi/templates/_common_images.tpl",
-		"templates/hcloud-csi/templates/_common_labels.tpl",
-		"templates/hcloud-csi/templates/_common_name.tpl",
-	}
-
-	for _, helperPath := range helperFiles {
-		t.Run(helperPath, func(t *testing.T) {
-			content, err := templatesFS.ReadFile(helperPath)
-			if err != nil {
-				t.Fatalf("Failed to read %s: %v", helperPath, err)
+			if spec.Name == "" {
+				t.Errorf("Name is empty for %s", addon)
 			}
-			if len(content) == 0 {
-				t.Errorf("Helper file %s is empty", helperPath)
+			if spec.Version == "" {
+				t.Errorf("Version is empty for %s", addon)
 			}
 		})
 	}
 }
 
-// TestLoadChartFilesIncludesHelpers verifies loadChartFiles loads helper templates.
-func TestLoadChartFilesIncludesHelpers(t *testing.T) {
-	files, err := loadChartFiles("templates/hcloud-ccm")
-	if err != nil {
-		t.Fatalf("loadChartFiles failed: %v", err)
+// TestGetCachePath verifies cache path is returned correctly.
+func TestGetCachePath(t *testing.T) {
+	cachePath := GetCachePath()
+
+	if cachePath == "" {
+		t.Error("GetCachePath returned empty string")
 	}
 
-	// Check that _helpers.tpl is included
-	var foundHelper bool
-	for _, f := range files {
-		if strings.Contains(f.Name, "_helpers.tpl") {
-			foundHelper = true
-			if len(f.Data) == 0 {
-				t.Error("_helpers.tpl file is empty")
-			}
-			break
-		}
-	}
-
-	if !foundHelper {
-		t.Error("_helpers.tpl not found in loaded chart files")
+	// Path should contain k8zner/charts
+	if !contains(cachePath, "k8zner") || !contains(cachePath, "charts") {
+		t.Errorf("GetCachePath = %q, should contain 'k8zner' and 'charts'", cachePath)
 	}
 }
 
-// TestLoadChartFilesLoadsAllTemplates verifies all template files are loaded.
-func TestLoadChartFilesLoadsAllTemplates(t *testing.T) {
-	chartPath := "templates/hcloud-ccm"
-	files, err := loadChartFiles(chartPath)
-	if err != nil {
-		t.Fatalf("loadChartFiles failed: %v", err)
-	}
-
-	// Verify Chart.yaml is loaded
-	var foundChart bool
-	for _, f := range files {
-		if f.Name == "Chart.yaml" {
-			foundChart = true
-			break
-		}
-	}
-	if !foundChart {
-		t.Error("Chart.yaml not found in loaded files")
-	}
-
-	// Verify at least some template files are loaded
-	templateCount := 0
-	for _, f := range files {
-		if strings.Contains(f.Name, "templates/") {
-			templateCount++
-		}
-	}
-	if templateCount == 0 {
-		t.Error("No template files found")
-	}
+// TestClearMemoryCache verifies memory cache can be cleared.
+func TestClearMemoryCache(t *testing.T) {
+	// This should not panic
+	ClearMemoryCache()
 }
 
-// TestChartLoaderAcceptsFiles verifies Helm loader accepts our file structure.
-func TestChartLoaderAcceptsFiles(t *testing.T) {
-	files, err := loadChartFiles("templates/hcloud-ccm")
-	if err != nil {
-		t.Fatalf("loadChartFiles failed: %v", err)
-	}
-
-	// Try to load the chart with Helm loader
-	chart, err := loader.LoadFiles(files)
-	if err != nil {
-		t.Fatalf("Helm loader.LoadFiles failed: %v", err)
-	}
-
-	// Verify chart loaded successfully
-	if chart.Name() == "" {
-		t.Error("Chart name is empty")
-	}
-	if len(chart.Templates) == 0 {
-		t.Error("No templates found in loaded chart")
-	}
-
-	// Verify _helpers.tpl is in the templates
-	var foundHelper bool
-	for _, tmpl := range chart.Templates {
-		if strings.Contains(tmpl.Name, "_helpers.tpl") {
-			foundHelper = true
-			break
-		}
-	}
-	if !foundHelper {
-		t.Error("_helpers.tpl not found in chart templates")
-	}
+// contains checks if substr is in s.
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
 }
 
-// TestWalkDirFindsAllFiles verifies fs.WalkDir finds all files including helpers.
-func TestWalkDirFindsAllFiles(t *testing.T) {
-	templatesPath := "templates/hcloud-ccm/templates"
-	var files []string
-
-	err := fs.WalkDir(templatesFS, templatesPath, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !d.IsDir() {
-			files = append(files, path)
-		}
-		return nil
-	})
-
-	if err != nil {
-		t.Fatalf("WalkDir failed: %v", err)
-	}
-
-	// Verify _helpers.tpl is found
-	var foundHelper bool
-	for _, path := range files {
-		if strings.Contains(path, "_helpers.tpl") {
-			foundHelper = true
-			break
+func containsHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
 		}
 	}
-
-	if !foundHelper {
-		t.Errorf("_helpers.tpl not found in WalkDir results. Found files: %v", files)
-	}
-
-	// Verify we found multiple template files
-	if len(files) < 3 {
-		t.Errorf("Expected multiple template files, found only %d", len(files))
-	}
+	return false
 }

@@ -43,7 +43,7 @@ func BuildConfig(result *WizardResult) *config.Config {
 		cfg.Kubernetes.AllowSchedulingOnCP = boolPtr(true)
 	}
 
-	cfg.Addons = buildAddonsConfig(result.EnabledAddons, result.CNIChoice)
+	cfg.Addons = buildAddonsConfig(result.EnabledAddons, result.CNIChoice, result.IngressController)
 
 	if result.AdvancedOptions != nil {
 		applyAdvancedOptions(cfg, result.AdvancedOptions)
@@ -52,8 +52,8 @@ func BuildConfig(result *WizardResult) *config.Config {
 	return cfg
 }
 
-// buildAddonsConfig creates the AddonsConfig from enabled addon keys and CNI choice.
-func buildAddonsConfig(enabledAddons []string, cniChoice string) config.AddonsConfig {
+// buildAddonsConfig creates the AddonsConfig from enabled addon keys, CNI choice, and ingress controller choice.
+func buildAddonsConfig(enabledAddons []string, cniChoice, ingressController string) config.AddonsConfig {
 	addons := config.AddonsConfig{}
 
 	// Handle CNI selection
@@ -68,6 +68,16 @@ func buildAddonsConfig(enabledAddons []string, cniChoice string) config.AddonsCo
 		addons.Cilium.Enabled = false
 	}
 
+	// Handle ingress controller selection
+	switch ingressController {
+	case IngressNginx:
+		addons.IngressNginx.Enabled = true
+	case IngressTraefik:
+		addons.Traefik.Enabled = true
+	case IngressNone:
+		// User will install their own ingress controller
+	}
+
 	// Handle other addons
 	for _, addon := range enabledAddons {
 		switch addon {
@@ -79,8 +89,6 @@ func buildAddonsConfig(enabledAddons []string, cniChoice string) config.AddonsCo
 			addons.MetricsServer.Enabled = true
 		case "cert_manager":
 			addons.CertManager.Enabled = true
-		case "ingress_nginx":
-			addons.IngressNginx.Enabled = true
 		case "longhorn":
 			addons.Longhorn.Enabled = true
 		}
