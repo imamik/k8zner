@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2025-01-26
+
+### Added
+
+- **ArgoCD GitOps Addon** - Continuous delivery for Kubernetes (CNCF Graduated project)
+  - Full ArgoCD server, application controller, and repo server deployment
+  - Configurable via `addons.argocd` in cluster config
+  - HA mode support with multiple replicas
+  - Optional Dex SSO integration
+  - ApplicationSet controller for multi-cluster deployments
+  - Notifications controller for alerts and webhooks
+  - Custom Helm values override support
+  - E2E tested with full lifecycle validation
+
 ## [0.3.0] - 2025-01-26
 
 ### Added
