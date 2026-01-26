@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chartutil"
@@ -102,15 +103,22 @@ func (r *Renderer) renderChart(ch *chart.Chart, values Values) ([]byte, error) {
 	// Combine all rendered manifests
 	var combined bytes.Buffer
 	for name, content := range rendered {
-		// Skip empty files and notes
-		if len(content) == 0 || filepath.Base(name) == "NOTES.txt" {
+		// Skip NOTES.txt
+		if filepath.Base(name) == "NOTES.txt" {
+			continue
+		}
+
+		// Skip empty or whitespace-only content
+		trimmed := strings.TrimSpace(content)
+		if trimmed == "" {
 			continue
 		}
 
 		if combined.Len() > 0 {
 			combined.WriteString("\n---\n")
 		}
-		combined.WriteString(content)
+		combined.WriteString(trimmed)
+		combined.WriteString("\n")
 	}
 
 	return combined.Bytes(), nil
