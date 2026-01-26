@@ -33,6 +33,7 @@ import (
 //   - RBAC
 //   - OIDC RBAC
 //   - Talos Backup
+//   - ArgoCD
 //
 // The kubeconfig must be valid and the cluster must be accessible.
 // Addon manifests are embedded in the binary and processed as templates
@@ -159,6 +160,12 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		}
 	}
 
+	if cfg.Addons.ArgoCD.Enabled {
+		if err := applyArgoCD(ctx, client, cfg); err != nil {
+			return fmt.Errorf("failed to install ArgoCD: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -188,5 +195,6 @@ func hasEnabledAddons(cfg *config.Config) bool {
 		addons.Traefik.Enabled ||
 		addons.RBAC.Enabled ||
 		addons.OIDCRBAC.Enabled ||
-		addons.TalosBackup.Enabled
+		addons.TalosBackup.Enabled ||
+		addons.ArgoCD.Enabled
 }

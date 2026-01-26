@@ -40,6 +40,7 @@ func phaseAddons(t *testing.T, state *E2EState) {
 	t.Run("Traefik", func(t *testing.T) { testAddonTraefik(t, state) })
 	t.Run("RBAC", func(t *testing.T) { testAddonRBAC(t, state) })
 	t.Run("Longhorn", func(t *testing.T) { testAddonLonghorn(t, state) })
+	t.Run("ArgoCD", func(t *testing.T) { testAddonArgoCD(t, state) })
 	t.Run("ClusterAutoscaler", func(t *testing.T) { testAddonClusterAutoscaler(t, state, token) })
 	t.Run("TalosBackup", func(t *testing.T) { testAddonTalosBackup(t, state) })
 
@@ -263,6 +264,91 @@ func testAddonLonghorn(t *testing.T, state *E2EState) {
 
 	state.AddonsInstalled["longhorn"] = true
 	t.Log("✓ Longhorn addon working")
+}
+
+// testAddonArgoCD installs and tests ArgoCD GitOps continuous delivery.
+func testAddonArgoCD(t *testing.T, state *E2EState) {
+	t.Log("Installing ArgoCD addon...")
+
+	cfg := &config.Config{
+		ClusterName: state.ClusterName,
+		Addons: config.AddonsConfig{
+			ArgoCD: config.ArgoCDConfig{
+				Enabled: true,
+			},
+		},
+	}
+
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
+		t.Fatalf("Failed to install ArgoCD: %v", err)
+	}
+
+	// Wait for ArgoCD server pod
+	t.Log("  Waiting for ArgoCD server...")
+	waitForPod(t, state.KubeconfigPath, "argocd", "app.kubernetes.io/name=argocd-server", 8*time.Minute)
+
+	// Wait for ArgoCD application controller
+	t.Log("  Waiting for ArgoCD application controller...")
+	waitForPod(t, state.KubeconfigPath, "argocd", "app.kubernetes.io/name=argocd-application-controller", 5*time.Minute)
+
+	// Wait for ArgoCD repo server
+	t.Log("  Waiting for ArgoCD repo server...")
+	waitForPod(t, state.KubeconfigPath, "argocd", "app.kubernetes.io/name=argocd-repo-server", 5*time.Minute)
+
+	// Verify ArgoCD CRDs exist
+	verifyCRDExists(t, state.KubeconfigPath, "applications.argoproj.io")
+	verifyCRDExists(t, state.KubeconfigPath, "applicationsets.argoproj.io")
+	verifyCRDExists(t, state.KubeconfigPath, "appprojects.argoproj.io")
+
+	// Test ArgoCD API availability
+	testArgoCDAPI(t, state)
+
+	state.AddonsInstalled["argocd"] = true
+	t.Log("✓ ArgoCD addon working")
+}
+
+// testArgoCDAPI verifies the ArgoCD server API is accessible.
+func testArgoCDAPI(t *testing.T, state *E2EState) {
+	t.Log("  Testing ArgoCD API availability...")
+
+	// Wait for the ArgoCD server service to be ready using label selector
+	for i := 0; i < 12; i++ {
+		cmd := exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", state.KubeconfigPath,
+			"get", "svc", "-n", "argocd", "-l", "app.kubernetes.io/name=argocd-server",
+			"-o", "jsonpath={.items[0].spec.clusterIP}")
+		output, err := cmd.CombinedOutput()
+		if err == nil && len(output) > 0 && string(output) != "" {
+			t.Log("  ✓ ArgoCD server service is ready")
+			break
+		}
+		if i == 11 {
+			// Debug: list all services in argocd namespace
+			listCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", state.KubeconfigPath,
+				"get", "svc", "-n", "argocd")
+			listOutput, _ := listCmd.CombinedOutput()
+			t.Logf("  Services in argocd namespace:\n%s", string(listOutput))
+			t.Fatal("ArgoCD server service not found")
+		}
+		time.Sleep(5 * time.Second)
+	}
+
+	// Verify default AppProject exists
+	for i := 0; i < 12; i++ {
+		cmd := exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", state.KubeconfigPath,
+			"get", "appproject", "-n", "argocd", "default")
+		if err := cmd.Run(); err == nil {
+			t.Log("  ✓ Default AppProject exists")
+			return
+		}
+		if i == 11 {
+			t.Log("  Warning: Default AppProject not found (may be created on first sync)")
+			return
+		}
+		time.Sleep(5 * time.Second)
+	}
 }
 
 // Addon test helper functions

@@ -193,6 +193,18 @@ addons:
   # longhorn:
   #   enabled: false
 
+  # ArgoCD (GitOps continuous delivery)
+  # argocd:
+  #   enabled: false
+  #   ha: false                          # Enable high availability mode
+  #   server_replicas: 2                 # Server replicas (when HA enabled)
+  #   controller_replicas: 1             # Controller replicas (when HA enabled)
+  #   repo_server_replicas: 2            # Repo server replicas (when HA enabled)
+  #   ingress_enabled: false             # Enable Ingress for ArgoCD UI
+  #   ingress_host: "argocd.example.com" # Hostname for Ingress
+  #   ingress_class_name: "nginx"        # Ingress class to use
+  #   ingress_tls: false                 # Enable TLS (requires cert-manager)
+
 # Reverse DNS Configuration (optional)
 # rdns:
 #   enabled: true
