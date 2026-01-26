@@ -1591,3 +1591,325 @@ func TestValidateTalosKubeletMounts_LonghornConflict(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "/var/lib/longhorn conflicts with Longhorn addon")
 }
+
+// Test Cloudflare DNS integration validation
+func TestValidateCloudflare_Disabled(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Addons: AddonsConfig{
+			Cloudflare: CloudflareConfig{Enabled: false},
+		},
+	}
+	err := cfg.Validate()
+	assert.NoError(t, err)
+}
+
+func TestValidateCloudflare_RequiresAPIToken(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Addons: AddonsConfig{
+			Cloudflare: CloudflareConfig{
+				Enabled:  true,
+				APIToken: "", // missing
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cloudflare.api_token is required")
+}
+
+func TestValidateCloudflare_ValidConfig(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Addons: AddonsConfig{
+			Cloudflare: CloudflareConfig{
+				Enabled:  true,
+				APIToken: "test-token",
+				Domain:   "example.com",
+			},
+		},
+	}
+	err := cfg.Validate()
+	assert.NoError(t, err)
+}
+
+func TestValidateCloudflare_ExternalDNSRequiresCloudflare(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Addons: AddonsConfig{
+			Cloudflare:  CloudflareConfig{Enabled: false},
+			ExternalDNS: ExternalDNSConfig{Enabled: true},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "external_dns requires cloudflare to be enabled")
+}
+
+func TestValidateCloudflare_CertManagerCloudflareRequiresCloudflare(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Addons: AddonsConfig{
+			Cloudflare: CloudflareConfig{Enabled: false},
+			CertManager: CertManagerConfig{
+				Enabled: true,
+				Cloudflare: CertManagerCloudflareConfig{
+					Enabled: true,
+					Email:   "test@example.com",
+				},
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cert_manager.cloudflare requires cloudflare to be enabled")
+}
+
+func TestValidateCloudflare_CertManagerCloudflareRequiresCertManager(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Addons: AddonsConfig{
+			Cloudflare: CloudflareConfig{
+				Enabled:  true,
+				APIToken: "test-token",
+			},
+			CertManager: CertManagerConfig{
+				Enabled: false,
+				Cloudflare: CertManagerCloudflareConfig{
+					Enabled: true,
+					Email:   "test@example.com",
+				},
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cert_manager must be enabled")
+}
+
+func TestValidateCloudflare_CertManagerCloudflareRequiresEmail(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Addons: AddonsConfig{
+			Cloudflare: CloudflareConfig{
+				Enabled:  true,
+				APIToken: "test-token",
+			},
+			CertManager: CertManagerConfig{
+				Enabled: true,
+				Cloudflare: CertManagerCloudflareConfig{
+					Enabled: true,
+					Email:   "", // missing
+				},
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "email is required")
+}
+
+func TestValidateCloudflare_CertManagerCloudflareInvalidEmail(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Addons: AddonsConfig{
+			Cloudflare: CloudflareConfig{
+				Enabled:  true,
+				APIToken: "test-token",
+			},
+			CertManager: CertManagerConfig{
+				Enabled: true,
+				Cloudflare: CertManagerCloudflareConfig{
+					Enabled: true,
+					Email:   "notanemail", // invalid - no @
+				},
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid email format")
+}
+
+func TestValidateCloudflare_ValidFullConfig(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Addons: AddonsConfig{
+			Cloudflare: CloudflareConfig{
+				Enabled:  true,
+				APIToken: "test-token",
+				Domain:   "example.com",
+			},
+			ExternalDNS: ExternalDNSConfig{
+				Enabled: true,
+				Policy:  "sync",
+				Sources: []string{"ingress"},
+			},
+			CertManager: CertManagerConfig{
+				Enabled: true,
+				Cloudflare: CertManagerCloudflareConfig{
+					Enabled:    true,
+					Email:      "admin@example.com",
+					Production: false,
+				},
+			},
+		},
+	}
+	err := cfg.Validate()
+	assert.NoError(t, err)
+}
+
+func TestValidateExternalDNS_ValidPolicies(t *testing.T) {
+	for policy := range ValidExternalDNSPolicies {
+		cfg := &Config{
+			ClusterName: "test",
+			HCloudToken: "token",
+			Location:    "nbg1",
+			Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+			ControlPlane: ControlPlaneConfig{
+				NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+			},
+			Addons: AddonsConfig{
+				Cloudflare: CloudflareConfig{
+					Enabled:  true,
+					APIToken: "test-token",
+				},
+				ExternalDNS: ExternalDNSConfig{
+					Enabled: true,
+					Policy:  policy,
+				},
+			},
+		}
+		err := cfg.Validate()
+		assert.NoError(t, err, "policy %q should be valid", policy)
+	}
+}
+
+func TestValidateExternalDNS_InvalidPolicy(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Addons: AddonsConfig{
+			Cloudflare: CloudflareConfig{
+				Enabled:  true,
+				APIToken: "test-token",
+			},
+			ExternalDNS: ExternalDNSConfig{
+				Enabled: true,
+				Policy:  "invalid-policy",
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid policy")
+}
+
+func TestValidateExternalDNS_ValidSources(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Addons: AddonsConfig{
+			Cloudflare: CloudflareConfig{
+				Enabled:  true,
+				APIToken: "test-token",
+			},
+			ExternalDNS: ExternalDNSConfig{
+				Enabled: true,
+				Sources: []string{"ingress", "service"},
+			},
+		},
+	}
+	err := cfg.Validate()
+	assert.NoError(t, err)
+}
+
+func TestValidateExternalDNS_InvalidSource(t *testing.T) {
+	cfg := &Config{
+		ClusterName: "test",
+		HCloudToken: "token",
+		Location:    "nbg1",
+		Network:     NetworkConfig{IPv4CIDR: "10.0.0.0/16", Zone: "eu-central"},
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{{Name: "cp", ServerType: "cpx22", Count: 1}},
+		},
+		Addons: AddonsConfig{
+			Cloudflare: CloudflareConfig{
+				Enabled:  true,
+				APIToken: "test-token",
+			},
+			ExternalDNS: ExternalDNSConfig{
+				Enabled: true,
+				Sources: []string{"invalid-source"},
+			},
+		},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid source")
+}

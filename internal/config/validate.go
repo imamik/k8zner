@@ -162,6 +162,11 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("talos_backup validation failed: %w", err)
 	}
 
+	// Cloudflare validation
+	if err := c.validateCloudflare(); err != nil {
+		return fmt.Errorf("cloudflare validation failed: %w", err)
+	}
+
 	return nil
 }
 
@@ -1075,4 +1080,118 @@ func (c *Config) validateIngressNginx() error {
 	}
 
 	return nil
+}
+
+// ValidExternalDNSPolicies contains valid external-dns sync policies.
+var ValidExternalDNSPolicies = map[string]bool{
+	"":            true, // Empty means default (sync)
+	"sync":        true, // Deletes records when resources are removed
+	"upsert-only": true, // Never deletes records
+}
+
+// ValidExternalDNSSources contains valid external-dns source types.
+var ValidExternalDNSSources = map[string]bool{
+	"ingress":              true,
+	"service":              true,
+	"gateway-httproute":    true,
+	"gateway-grpcroute":    true,
+	"gateway-tcproute":     true,
+	"gateway-udproute":     true,
+	"gateway-tlsroute":     true,
+	"istio-gateway":        true,
+	"istio-virtualservice": true,
+	"contour-httpproxy":    true,
+	"crd":                  true,
+}
+
+// validateCloudflare validates Cloudflare DNS integration configuration.
+func (c *Config) validateCloudflare() error {
+	cf := &c.Addons.Cloudflare
+	extDNS := &c.Addons.ExternalDNS
+	certCF := &c.Addons.CertManager.Cloudflare
+
+	// If Cloudflare is not enabled, check that dependent features are also disabled
+	if !cf.Enabled {
+		if extDNS.Enabled {
+			return fmt.Errorf("external_dns requires cloudflare to be enabled")
+		}
+		if certCF.Enabled {
+			return fmt.Errorf("cert_manager.cloudflare requires cloudflare to be enabled")
+		}
+		return nil // Nothing else to validate
+	}
+
+	// Cloudflare is enabled - validate required fields
+	if cf.APIToken == "" {
+		return fmt.Errorf("cloudflare.api_token is required when cloudflare is enabled (or set CF_API_TOKEN env var)")
+	}
+
+	// Validate external-dns configuration if enabled
+	if extDNS.Enabled {
+		if err := c.validateExternalDNS(); err != nil {
+			return fmt.Errorf("external_dns validation failed: %w", err)
+		}
+	}
+
+	// Validate cert-manager Cloudflare configuration if enabled
+	if certCF.Enabled {
+		if err := c.validateCertManagerCloudflare(); err != nil {
+			return fmt.Errorf("cert_manager.cloudflare validation failed: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// validateExternalDNS validates external-dns addon configuration.
+func (c *Config) validateExternalDNS() error {
+	extDNS := &c.Addons.ExternalDNS
+
+	// Validate policy if set
+	if !ValidExternalDNSPolicies[extDNS.Policy] {
+		return fmt.Errorf("invalid policy %q: must be one of %v",
+			extDNS.Policy, getMapKeys(ValidExternalDNSPolicies))
+	}
+
+	// Validate sources if set
+	for _, source := range extDNS.Sources {
+		if !ValidExternalDNSSources[source] {
+			return fmt.Errorf("invalid source %q: must be one of %v",
+				source, getMapKeys(ValidExternalDNSSources))
+		}
+	}
+
+	return nil
+}
+
+// validateCertManagerCloudflare validates cert-manager Cloudflare DNS01 configuration.
+func (c *Config) validateCertManagerCloudflare() error {
+	certCF := &c.Addons.CertManager.Cloudflare
+
+	// cert-manager must be enabled for Cloudflare DNS01 to work
+	if !c.Addons.CertManager.Enabled {
+		return fmt.Errorf("cert_manager must be enabled to use cloudflare DNS01 solver")
+	}
+
+	// Email is required for Let's Encrypt account
+	if certCF.Email == "" {
+		return fmt.Errorf("email is required for Let's Encrypt account registration")
+	}
+
+	// Basic email format validation (contains @)
+	if len(certCF.Email) < 3 || !contains(certCF.Email, "@") {
+		return fmt.Errorf("invalid email format %q", certCF.Email)
+	}
+
+	return nil
+}
+
+// contains checks if a string contains a substring.
+func contains(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

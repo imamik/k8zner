@@ -124,6 +124,27 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		}
 	}
 
+	// Create Cloudflare secrets if any Cloudflare feature is enabled
+	if cfg.Addons.Cloudflare.Enabled {
+		if err := createCloudflareSecrets(ctx, client, cfg); err != nil {
+			return fmt.Errorf("failed to create Cloudflare secrets: %w", err)
+		}
+	}
+
+	// Cert-manager Cloudflare ClusterIssuer (after cert-manager and Cloudflare secrets)
+	if cfg.Addons.CertManager.Enabled && cfg.Addons.CertManager.Cloudflare.Enabled {
+		if err := applyCertManagerCloudflare(ctx, client, cfg); err != nil {
+			return fmt.Errorf("failed to configure Cloudflare DNS01 issuer: %w", err)
+		}
+	}
+
+	// External-DNS (requires Cloudflare secrets)
+	if cfg.Addons.ExternalDNS.Enabled {
+		if err := applyExternalDNS(ctx, client, cfg); err != nil {
+			return fmt.Errorf("failed to install External DNS: %w", err)
+		}
+	}
+
 	if cfg.Addons.Longhorn.Enabled {
 		if err := applyLonghorn(ctx, client, cfg); err != nil {
 			return fmt.Errorf("failed to install Longhorn: %w", err)
@@ -196,5 +217,7 @@ func hasEnabledAddons(cfg *config.Config) bool {
 		addons.RBAC.Enabled ||
 		addons.OIDCRBAC.Enabled ||
 		addons.TalosBackup.Enabled ||
-		addons.ArgoCD.Enabled
+		addons.ArgoCD.Enabled ||
+		addons.Cloudflare.Enabled ||
+		addons.ExternalDNS.Enabled
 }

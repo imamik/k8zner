@@ -54,4 +54,9 @@ var DefaultChartSpecs = map[string]ChartSpec{
 		Name:       "argo-cd",
 		Version:    "9.3.5",
 	},
+	"external-dns": {
+		Repository: "https://kubernetes-sigs.github.io/external-dns",
+		Name:       "external-dns",
+		Version:    "1.15.0",
+	},
 }
