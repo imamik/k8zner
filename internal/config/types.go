@@ -500,6 +500,7 @@ type AddonsConfig struct {
 	MetricsServer          MetricsServerConfig          `mapstructure:"metrics_server" yaml:"metrics_server"`
 	CertManager            CertManagerConfig            `mapstructure:"cert_manager" yaml:"cert_manager"`
 	IngressNginx           IngressNginxConfig           `mapstructure:"ingress_nginx" yaml:"ingress_nginx"`
+	Traefik                TraefikConfig                `mapstructure:"traefik" yaml:"traefik"`
 	Longhorn               LonghornConfig               `mapstructure:"longhorn" yaml:"longhorn"`
 	ClusterAutoscaler      ClusterAutoscalerConfig      `mapstructure:"cluster_autoscaler" yaml:"cluster_autoscaler"`
 	RBAC                   RBACConfig                   `mapstructure:"rbac" yaml:"rbac"`
@@ -662,6 +663,49 @@ type IngressNginxConfig struct {
 	// Config provides global nginx configuration via ConfigMap.
 	// Reference: https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/configmap/
 	Config map[string]string `mapstructure:"config" yaml:"config"`
+}
+
+// TraefikConfig defines the Traefik Proxy ingress controller configuration.
+// Traefik is an alternative to ingress-nginx with built-in support for
+// modern protocols and automatic service discovery.
+type TraefikConfig struct {
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Helm allows customizing the Helm chart repository, version, and values.
+	Helm HelmChartConfig `mapstructure:"helm" yaml:"helm"`
+
+	// Kind specifies the Kubernetes controller type: "Deployment" or "DaemonSet".
+	// Default: "Deployment"
+	Kind string `mapstructure:"kind" yaml:"kind"`
+
+	// Replicas specifies the number of controller replicas.
+	// If nil, auto-calculated: 2 for <3 workers, 3 for >=3 workers.
+	// Must be nil when Kind is "DaemonSet".
+	Replicas *int `mapstructure:"replicas" yaml:"replicas"`
+
+	// ExternalTrafficPolicy controls how external traffic is routed.
+	// Valid values: "Cluster" (cluster-wide) or "Local" (node-local).
+	// Default: "Local"
+	ExternalTrafficPolicy string `mapstructure:"external_traffic_policy" yaml:"external_traffic_policy"`
+
+	// IngressClass specifies the IngressClass name for Traefik.
+	// Default: "traefik"
+	IngressClass string `mapstructure:"ingress_class" yaml:"ingress_class"`
+
+	// Dashboard configures the Traefik dashboard.
+	Dashboard TraefikDashboardConfig `mapstructure:"dashboard" yaml:"dashboard"`
+}
+
+// TraefikDashboardConfig defines the Traefik dashboard configuration.
+type TraefikDashboardConfig struct {
+	// Enabled enables the Traefik dashboard.
+	// Default: false
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// IngressRoute creates an IngressRoute to expose the dashboard.
+	// Only applicable when Enabled is true.
+	// Default: false
+	IngressRoute bool `mapstructure:"ingress_route" yaml:"ingress_route"`
 }
 
 // LonghornConfig defines the Longhorn storage configuration.

@@ -37,6 +37,7 @@ func phaseAddons(t *testing.T, state *E2EState) {
 	// Optional addons
 	t.Run("CertManager", func(t *testing.T) { testAddonCertManager(t, state) })
 	t.Run("IngressNginx", func(t *testing.T) { testAddonIngressNginx(t, state) })
+	t.Run("Traefik", func(t *testing.T) { testAddonTraefik(t, state) })
 	t.Run("RBAC", func(t *testing.T) { testAddonRBAC(t, state) })
 	t.Run("Longhorn", func(t *testing.T) { testAddonLonghorn(t, state) })
 	t.Run("ClusterAutoscaler", func(t *testing.T) { testAddonClusterAutoscaler(t, state, token) })
@@ -192,6 +193,37 @@ func testAddonIngressNginx(t *testing.T, state *E2EState) {
 	t.Log("✓ Ingress NGINX addon working")
 }
 
+// testAddonTraefik installs and tests Traefik Proxy.
+func testAddonTraefik(t *testing.T, state *E2EState) {
+	t.Log("Installing Traefik addon...")
+
+	// Skip if IngressNginx was installed (they are mutually exclusive)
+	if state.AddonsInstalled["ingress-nginx"] {
+		t.Log("Skipping Traefik test - Ingress NGINX already installed (mutually exclusive)")
+		return
+	}
+
+	cfg := &config.Config{
+		ClusterName: state.ClusterName,
+		Addons: config.AddonsConfig{
+			Traefik: config.TraefikConfig{Enabled: true},
+		},
+	}
+
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
+		t.Fatalf("Failed to install Traefik: %v", err)
+	}
+
+	// Wait for traefik controller pod (increased timeout for large image pull)
+	waitForPod(t, state.KubeconfigPath, "traefik", "app.kubernetes.io/name=traefik", 8*time.Minute)
+
+	// Verify IngressClass "traefik" exists
+	verifyIngressClassExists(t, state.KubeconfigPath, "traefik")
+
+	state.AddonsInstalled["traefik"] = true
+	t.Log("✓ Traefik addon working")
+}
+
 // testAddonRBAC installs and tests RBAC addon.
 func testAddonRBAC(t *testing.T, state *E2EState) {
 	t.Log("Installing RBAC addon...")
@@ -342,6 +374,16 @@ func verifyCRDExists(t *testing.T, kubeconfigPath, crdName string) {
 		t.Fatalf("CRD %s not found", crdName)
 	}
 	t.Logf("  ✓ CRD %s exists", crdName)
+}
+
+func verifyIngressClassExists(t *testing.T, kubeconfigPath, name string) {
+	cmd := exec.CommandContext(context.Background(), "kubectl",
+		"--kubeconfig", kubeconfigPath,
+		"get", "ingressclass", name)
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("IngressClass %s not found", name)
+	}
+	t.Logf("  ✓ IngressClass %s exists", name)
 }
 
 func testMetricsAPI(t *testing.T, kubeconfigPath string) {

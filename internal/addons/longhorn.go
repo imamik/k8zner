@@ -21,8 +21,11 @@ func applyLonghorn(ctx context.Context, client k8sclient.Client, cfg *config.Con
 	// Build values matching terraform configuration
 	values := buildLonghornValues(cfg)
 
+	// Get chart spec with any config overrides
+	spec := helm.GetChartSpec("longhorn", cfg.Addons.Longhorn.Helm)
+
 	// Render helm chart
-	manifestBytes, err := helm.RenderChart("longhorn", "longhorn-system", values)
+	manifestBytes, err := helm.RenderFromSpec(ctx, spec, "longhorn-system", values)
 	if err != nil {
 		return fmt.Errorf("failed to render longhorn chart: %w", err)
 	}

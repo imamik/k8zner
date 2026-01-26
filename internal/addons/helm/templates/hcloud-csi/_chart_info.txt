@@ -1,4 +1,0 @@
-Chart: hcloud-csi
-Version: 2.18.3
-Repository: https://charts.hetzner.cloud
-Downloaded: 2026-01-12 18:08:54 UTC

@@ -22,6 +22,27 @@ func TestApply_EmptyKubeconfig(t *testing.T) {
 	assert.Contains(t, err.Error(), "kubeconfig is required")
 }
 
+func TestApply_MutuallyExclusiveIngressControllers(t *testing.T) {
+	cfg := &config.Config{
+		ClusterName: "test-cluster",
+		Addons: config.AddonsConfig{
+			IngressNginx: config.IngressNginxConfig{Enabled: true},
+			Traefik:      config.TraefikConfig{Enabled: true},
+		},
+	}
+
+	kubeconfig := []byte(`apiVersion: v1
+kind: Config
+clusters: []
+contexts: []
+current-context: ""
+users: []`)
+
+	err := Apply(context.Background(), cfg, kubeconfig, 1, "", 0, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot enable both Nginx and Traefik")
+}
+
 func TestApply_NoCCMConfigured(t *testing.T) {
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
@@ -62,6 +83,56 @@ users: []`)
 
 	err := Apply(context.Background(), cfg, kubeconfig, 1, "", 0, nil)
 	assert.NoError(t, err)
+}
+
+func TestHasEnabledAddons_IncludesTraefik(t *testing.T) {
+	tests := []struct {
+		name     string
+		cfg      *config.Config
+		expected bool
+	}{
+		{
+			name: "no addons enabled",
+			cfg: &config.Config{
+				Addons: config.AddonsConfig{},
+			},
+			expected: false,
+		},
+		{
+			name: "traefik enabled",
+			cfg: &config.Config{
+				Addons: config.AddonsConfig{
+					Traefik: config.TraefikConfig{Enabled: true},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "ingress-nginx enabled",
+			cfg: &config.Config{
+				Addons: config.AddonsConfig{
+					IngressNginx: config.IngressNginxConfig{Enabled: true},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "cilium enabled",
+			cfg: &config.Config{
+				Addons: config.AddonsConfig{
+					Cilium: config.CiliumConfig{Enabled: true},
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := hasEnabledAddons(tt.cfg)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
 
 func TestGetControlPlaneCount(t *testing.T) {

@@ -159,7 +159,21 @@ addons:
   # Ingress NGINX Controller
   ingress_nginx:
     enabled: true
-    # load_balancer_name: "production-cluster-ingress"
+    # kind: "Deployment"  # or "DaemonSet"
+    # replicas: 2
+    # external_traffic_policy: "Local"
+    # topology_aware_routing: false
+
+  # Traefik Proxy (alternative to Ingress NGINX - choose one or the other)
+  traefik:
+    enabled: false
+    # kind: "Deployment"  # or "DaemonSet"
+    # replicas: 2
+    # external_traffic_policy: "Local"
+    # ingress_class: "traefik"
+    # dashboard:
+    #   enabled: false
+    #   ingress_route: false
 
   # cert-manager
   cert_manager:

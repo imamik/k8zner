@@ -1,4 +1,0 @@
-Chart: longhorn
-Version: 1.10.1
-Repository: https://charts.longhorn.io
-Downloaded: 2026-01-12 18:29:33 UTC

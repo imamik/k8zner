@@ -1,4 +1,0 @@
-Chart: ingress-nginx
-Version: 4.11.3
-Repository: https://kubernetes.github.io/ingress-nginx
-Downloaded: 2026-01-12 18:54:32 UTC

@@ -27,8 +27,11 @@ func applyIngressNginx(ctx context.Context, client k8sclient.Client, cfg *config
 	// Build values matching terraform configuration
 	values := buildIngressNginxValues(cfg)
 
+	// Get chart spec with any config overrides
+	spec := helm.GetChartSpec("ingress-nginx", cfg.Addons.IngressNginx.Helm)
+
 	// Render helm chart
-	manifestBytes, err := helm.RenderChart("ingress-nginx", "ingress-nginx", values)
+	manifestBytes, err := helm.RenderFromSpec(ctx, spec, "ingress-nginx", values)
 	if err != nil {
 		return fmt.Errorf("failed to render ingress-nginx chart: %w", err)
 	}

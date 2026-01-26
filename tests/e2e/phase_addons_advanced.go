@@ -49,6 +49,9 @@ func phaseAddonsAdvanced(t *testing.T, state *E2EState) {
 	// Advanced Ingress NGINX configuration
 	t.Run("IngressNginxAdvanced", func(t *testing.T) { testAddonIngressNginxAdvanced(t, state) })
 
+	// Advanced Traefik configuration
+	t.Run("TraefikAdvanced", func(t *testing.T) { testAddonTraefikAdvanced(t, state) })
+
 	// Advanced CCM configuration
 	t.Run("CCMAdvanced", func(t *testing.T) { testAddonCCMAdvanced(t, state) })
 
@@ -371,6 +374,86 @@ func testAddonIngressNginxAdvanced(t *testing.T, state *E2EState) {
 
 	state.AddonsInstalled["ingress-nginx-advanced"] = true
 	t.Log("✓ Ingress NGINX advanced configuration verified")
+}
+
+// testAddonTraefikAdvanced tests Traefik with advanced configuration.
+// Tests: Kind (DaemonSet), Replicas, ExternalTrafficPolicy, IngressClass, Dashboard.
+func testAddonTraefikAdvanced(t *testing.T, state *E2EState) {
+	t.Log("Testing Traefik advanced configuration...")
+
+	// Skip if IngressNginx was installed (they are mutually exclusive)
+	if state.AddonsInstalled["ingress-nginx"] || state.AddonsInstalled["ingress-nginx-advanced"] {
+		t.Log("Skipping Traefik advanced test - Ingress NGINX installed (mutually exclusive)")
+		return
+	}
+
+	// First, test with Deployment and custom replicas
+	t.Log("  Testing Deployment with 2 replicas...")
+	replicas := 2
+	cfg := &config.Config{
+		ClusterName: state.ClusterName,
+		Addons: config.AddonsConfig{
+			Traefik: config.TraefikConfig{
+				Enabled:               true,
+				Kind:                  "Deployment",
+				Replicas:              &replicas,
+				ExternalTrafficPolicy: "Local",
+				IngressClass:          "traefik",
+				Dashboard: config.TraefikDashboardConfig{
+					Enabled:      false,
+					IngressRoute: false,
+				},
+			},
+		},
+	}
+
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
+		t.Fatalf("Failed to install Traefik with Deployment: %v", err)
+	}
+
+	// Wait for controller
+	waitForPod(t, state.KubeconfigPath, "traefik", "app.kubernetes.io/name=traefik", 8*time.Minute)
+
+	// Verify deployment has correct replicas
+	verifyDeploymentReplicas(t, state.KubeconfigPath, "traefik", "traefik", 2)
+
+	// Verify IngressClass exists
+	verifyIngressClassExistsAdvanced(t, state.KubeconfigPath, "traefik")
+
+	// Now test with DaemonSet (replicas should not be set)
+	t.Log("  Testing DaemonSet configuration...")
+	cfgDaemonSet := &config.Config{
+		ClusterName: state.ClusterName,
+		Addons: config.AddonsConfig{
+			Traefik: config.TraefikConfig{
+				Enabled:               true,
+				Kind:                  "DaemonSet",
+				Replicas:              nil, // Must be nil for DaemonSet
+				ExternalTrafficPolicy: "Cluster",
+			},
+		},
+	}
+
+	if err := addons.Apply(context.Background(), cfgDaemonSet, state.Kubeconfig, 0, "", 0, nil); err != nil {
+		t.Fatalf("Failed to install Traefik as DaemonSet: %v", err)
+	}
+
+	// Verify DaemonSet exists
+	verifyDaemonSetExists(t, state.KubeconfigPath, "traefik", "traefik")
+
+	state.AddonsInstalled["traefik-advanced"] = true
+	t.Log("✓ Traefik advanced configuration verified")
+}
+
+// verifyIngressClassExistsAdvanced verifies an IngressClass exists (advanced test version).
+func verifyIngressClassExistsAdvanced(t *testing.T, kubeconfigPath, name string) {
+	cmd := exec.CommandContext(context.Background(), "kubectl",
+		"--kubeconfig", kubeconfigPath,
+		"get", "ingressclass", name)
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("IngressClass %s not found", name)
+	}
+	t.Logf("  ✓ IngressClass %s exists", name)
 }
 
 // testAddonCCMAdvanced tests CCM with advanced LoadBalancer configuration.

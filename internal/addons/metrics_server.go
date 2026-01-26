@@ -13,7 +13,10 @@ import (
 func applyMetricsServer(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	values := buildMetricsServerValues(cfg)
 
-	manifestBytes, err := helm.RenderChart("metrics-server", "kube-system", values)
+	// Get chart spec with any config overrides
+	spec := helm.GetChartSpec("metrics-server", cfg.Addons.MetricsServer.Helm)
+
+	manifestBytes, err := helm.RenderFromSpec(ctx, spec, "kube-system", values)
 	if err != nil {
 		return fmt.Errorf("failed to render metrics-server chart: %w", err)
 	}
