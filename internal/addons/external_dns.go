@@ -3,7 +3,6 @@ package addons
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	"github.com/imamik/k8zner/internal/addons/helm"
 	"github.com/imamik/k8zner/internal/addons/k8sclient"
@@ -64,8 +63,11 @@ func buildExternalDNSValues(cfg *config.Config) helm.Values {
 	}
 
 	// Build extra args for Cloudflare-specific settings
-	extraArgs := []string{
-		"--cloudflare-proxied=" + strconv.FormatBool(cfCfg.Proxied),
+	// Note: --cloudflare-proxied is a boolean flag that defaults to false.
+	// Only pass it when proxied=true (no =value needed, just the flag itself).
+	extraArgs := []string{}
+	if cfCfg.Proxied {
+		extraArgs = append(extraArgs, "--cloudflare-proxied")
 	}
 
 	// Add zone ID if specified (avoids API calls to list zones)
@@ -81,6 +83,7 @@ func buildExternalDNSValues(cfg *config.Config) helm.Values {
 		"policy":        policy,
 		"sources":       sources,
 		"domainFilters": domainFilters,
+		// Cloudflare API token - inject directly from secret
 		"env": []helm.Values{
 			{
 				"name": "CF_API_TOKEN",

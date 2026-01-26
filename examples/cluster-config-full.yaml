@@ -212,14 +212,28 @@ addons:
   #   ingress_tls: false                 # Enable TLS (requires cert-manager)
 
   # Cloudflare DNS integration (shared by external-dns and cert-manager)
-  # API token can be set via CF_API_TOKEN env var (recommended for security)
-  # Domain can be set via CF_DOMAIN env var
+  #
+  # API Token Setup:
+  #   1. Go to: https://dash.cloudflare.com/profile/api-tokens
+  #   2. Click "Create Token"
+  #   3. Use "Edit zone DNS" template or create custom token with permissions:
+  #      - Zone > Zone > Read    (required to find zone ID automatically)
+  #      - Zone > DNS > Edit     (required to manage DNS records)
+  #   4. Set Zone Resources to:
+  #      - "Include > Specific zone > your-domain.com" (recommended for security)
+  #      - Or "Include > All zones" for multiple domains
+  #   5. Copy the token and set as CF_API_TOKEN env var (recommended)
+  #      Or set api_token below (not recommended for version control)
+  #
+  # Environment variables (recommended for CI/CD):
+  #   export CF_API_TOKEN="your-cloudflare-api-token"
+  #   export CF_DOMAIN="example.com"
+  #
   # cloudflare:
   #   enabled: true
-  #   # api_token: "your-cloudflare-api-token"  # Or use CF_API_TOKEN env var
-  #   domain: "example.com"                     # Or use CF_DOMAIN env var
-  #   # zone_id: "optional-zone-id"             # Auto-detected if not set
-  #   proxied: false                            # Default: direct traffic (no orange cloud)
+  #   # api_token: "..."       # Or use CF_API_TOKEN env var (preferred)
+  #   domain: "example.com"    # Or use CF_DOMAIN env var
+  #   proxied: false           # Default: direct traffic (no orange cloud)
 
   # External-DNS (automatically creates DNS records from Ingress annotations)
   # Requires cloudflare to be enabled
