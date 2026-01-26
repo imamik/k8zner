@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2025-01-26
+
+### Added
+
+- **Traefik Ingress Controller** - Alternative ingress controller option
+  - Full Traefik v3 support with Helm chart integration
+  - Configurable via `addons.traefik` in cluster config
+  - Proxy protocol support for preserving client IPs
+  - Prometheus metrics integration
+  - Interactive wizard updated to offer Traefik as an ingress option
+
+- **Runtime Helm Chart Downloading** - Charts downloaded at runtime instead of embedded
+  - Removes ~4.9MB of embedded chart templates (464 files)
+  - Charts cached in `~/.cache/k8zner/charts/` for faster subsequent runs
+  - Users can override chart versions via `helm.version` in addon config
+  - Automatic chart updates without rebuilding the binary
+
+### Changed
+
+- Updated addon chart versions to latest stable releases:
+  - Cilium: 1.18.5
+  - cert-manager: v1.19.2
+  - cluster-autoscaler: 9.50.1
+  - hcloud-ccm: 1.29.0
+  - hcloud-csi: 2.18.3
+  - ingress-nginx: 4.11.3
+  - longhorn: 1.10.1
+  - metrics-server: 3.12.2
+  - traefik: 39.0.0
+
+### Fixed
+
+- JSON schema validation for Cilium chart with slice type values
+- YAML rendering now correctly skips whitespace-only template output
+
 ## [0.2.1] - 2025-01-25
 
 ### Added
@@ -83,7 +118,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Secrets stored locally in `./secrets/` directory
 - No credentials stored in cluster state
 
-[Unreleased]: https://github.com/imamik/k8zner/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/imamik/k8zner/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/imamik/k8zner/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/imamik/k8zner/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/imamik/k8zner/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/imamik/k8zner/compare/v0.1.0...v0.1.1
