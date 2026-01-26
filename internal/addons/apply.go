@@ -138,19 +138,14 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		}
 	}
 
-	// External-DNS (requires Cloudflare secrets)
-	if cfg.Addons.ExternalDNS.Enabled {
-		if err := applyExternalDNS(ctx, client, cfg); err != nil {
-			return fmt.Errorf("failed to install External DNS: %w", err)
-		}
-	}
-
 	if cfg.Addons.Longhorn.Enabled {
 		if err := applyLonghorn(ctx, client, cfg); err != nil {
 			return fmt.Errorf("failed to install Longhorn: %w", err)
 		}
 	}
 
+	// Install ingress controllers BEFORE external-DNS
+	// External-DNS reads from Ingress status which needs the controller running first
 	if cfg.Addons.IngressNginx.Enabled {
 		if err := applyIngressNginx(ctx, client, cfg); err != nil {
 			return fmt.Errorf("failed to install Ingress NGINX: %w", err)
@@ -160,6 +155,14 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 	if cfg.Addons.Traefik.Enabled {
 		if err := applyTraefik(ctx, client, cfg); err != nil {
 			return fmt.Errorf("failed to install Traefik: %w", err)
+		}
+	}
+
+	// External-DNS (requires Cloudflare secrets AND ingress controllers)
+	// Must be installed after ingress controllers so Ingress status has external IP
+	if cfg.Addons.ExternalDNS.Enabled {
+		if err := applyExternalDNS(ctx, client, cfg); err != nil {
+			return fmt.Errorf("failed to install External DNS: %w", err)
 		}
 	}
 
