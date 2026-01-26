@@ -502,6 +502,7 @@ type AddonsConfig struct {
 	IngressNginx           IngressNginxConfig           `mapstructure:"ingress_nginx" yaml:"ingress_nginx"`
 	Traefik                TraefikConfig                `mapstructure:"traefik" yaml:"traefik"`
 	Longhorn               LonghornConfig               `mapstructure:"longhorn" yaml:"longhorn"`
+	ArgoCD                 ArgoCDConfig                 `mapstructure:"argocd" yaml:"argocd"`
 	ClusterAutoscaler      ClusterAutoscalerConfig      `mapstructure:"cluster_autoscaler" yaml:"cluster_autoscaler"`
 	RBAC                   RBACConfig                   `mapstructure:"rbac" yaml:"rbac"`
 	OIDCRBAC               OIDCRBACConfig               `mapstructure:"oidc_rbac" yaml:"oidc_rbac"`
@@ -716,6 +717,49 @@ type LonghornConfig struct {
 	Helm HelmChartConfig `mapstructure:"helm" yaml:"helm"`
 
 	DefaultStorageClass bool `mapstructure:"default_storage_class" yaml:"default_storage_class"`
+}
+
+// ArgoCDConfig defines the ArgoCD GitOps configuration.
+// ArgoCD is a declarative, GitOps continuous delivery tool for Kubernetes.
+// See: https://argo-cd.readthedocs.io/
+type ArgoCDConfig struct {
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Helm allows customizing the Helm chart repository, version, and values.
+	Helm HelmChartConfig `mapstructure:"helm" yaml:"helm"`
+
+	// HA enables high availability mode with multiple replicas.
+	// When enabled, ArgoCD components run with multiple replicas for fault tolerance.
+	// Default: false
+	HA bool `mapstructure:"ha" yaml:"ha"`
+
+	// ServerReplicas sets the number of ArgoCD server replicas.
+	// Only used when HA is enabled. Default: 2
+	ServerReplicas *int `mapstructure:"server_replicas" yaml:"server_replicas"`
+
+	// ControllerReplicas sets the number of application controller replicas.
+	// Only used when HA is enabled. Default: 1
+	ControllerReplicas *int `mapstructure:"controller_replicas" yaml:"controller_replicas"`
+
+	// RepoServerReplicas sets the number of repo server replicas.
+	// Only used when HA is enabled. Default: 2
+	RepoServerReplicas *int `mapstructure:"repo_server_replicas" yaml:"repo_server_replicas"`
+
+	// IngressEnabled enables Ingress for the ArgoCD server.
+	// Requires an ingress controller (nginx or traefik) to be installed.
+	IngressEnabled bool `mapstructure:"ingress_enabled" yaml:"ingress_enabled"`
+
+	// IngressHost is the hostname for the ArgoCD server Ingress.
+	// Required when IngressEnabled is true.
+	IngressHost string `mapstructure:"ingress_host" yaml:"ingress_host"`
+
+	// IngressClassName specifies the IngressClass to use.
+	// Default: "nginx" or "traefik" depending on installed controller
+	IngressClassName string `mapstructure:"ingress_class_name" yaml:"ingress_class_name"`
+
+	// IngressTLS enables TLS for the Ingress.
+	// When enabled with cert-manager, certificates are automatically provisioned.
+	IngressTLS bool `mapstructure:"ingress_tls" yaml:"ingress_tls"`
 }
 
 // StorageClass defines a Kubernetes StorageClass for CSI.

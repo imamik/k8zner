@@ -211,6 +211,7 @@ var BasicAddons = []AddonOption{
 	{Key: "metrics_server", Label: "Metrics Server", Description: "Resource metrics for HPA/VPA", Default: true},
 	{Key: "cert_manager", Label: "Cert Manager", Description: "Automatic TLS certificate management", Default: false},
 	{Key: "longhorn", Label: "Longhorn", Description: "Distributed block storage", Default: false},
+	{Key: "argocd", Label: "ArgoCD", Description: "GitOps continuous delivery tool", Default: false},
 }
 
 // CiliumEncryptionTypes contains encryption type options.
