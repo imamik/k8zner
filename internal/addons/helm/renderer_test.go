@@ -22,7 +22,7 @@ func TestGetChartSpec(t *testing.T) {
 			helmCfg:  config.HelmChartConfig{},
 			wantRepo: "https://charts.hetzner.cloud",
 			wantName: "hcloud-cloud-controller-manager",
-			wantVer:  "1.22.0",
+			wantVer:  "1.29.0",
 		},
 		{
 			name:     "cilium defaults",
@@ -30,7 +30,7 @@ func TestGetChartSpec(t *testing.T) {
 			helmCfg:  config.HelmChartConfig{},
 			wantRepo: "https://helm.cilium.io",
 			wantName: "cilium",
-			wantVer:  "1.17.3",
+			wantVer:  "1.18.5",
 		},
 		{
 			name:     "traefik defaults",
@@ -58,7 +58,7 @@ func TestGetChartSpec(t *testing.T) {
 			},
 			wantRepo: "https://my-custom-repo.example.com",
 			wantName: "cilium",
-			wantVer:  "1.17.3",
+			wantVer:  "1.18.5",
 		},
 		{
 			name:  "chart name override",
@@ -68,7 +68,7 @@ func TestGetChartSpec(t *testing.T) {
 			},
 			wantRepo: "https://helm.cilium.io",
 			wantName: "custom-cilium",
-			wantVer:  "1.17.3",
+			wantVer:  "1.18.5",
 		},
 		{
 			name:  "all overrides",
