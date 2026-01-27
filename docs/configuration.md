@@ -244,11 +244,20 @@ k8zner integrates with Cloudflare for automatic DNS management and TLS certifica
    - **Zone > Zone > Read** (to find zone ID automatically)
    - **Zone > DNS > Edit** (to manage DNS records)
 
-To create a token:
-1. Go to [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens)
+**Creating an API Token:**
+
+For teams and CI/CD, use **Account Owned Tokens** (recommended):
+1. Go to Cloudflare Dashboard → **Manage Account** → **Account API Tokens**
 2. Click "Create Token"
-3. Use "Edit zone DNS" template or create custom token
-4. Set Zone Resources to your specific domain (recommended) or all zones
+3. These tokens persist when team members leave
+
+For personal use, use **User Tokens**:
+1. Go to [Profile API Tokens](https://dash.cloudflare.com/profile/api-tokens)
+2. Click "Create Token"
+
+Token configuration:
+1. Use "Edit zone DNS" template or create custom token
+2. Set Zone Resources to your specific domain (recommended) or all zones
 
 ### Environment Variables
 
