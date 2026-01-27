@@ -139,3 +139,44 @@ func TestPrintInitSuccess_OutputPath(t *testing.T) {
 	assert.True(t, strings.Count(output, customPath) >= 2,
 		"Output path should appear at least twice (file location and apply command)")
 }
+
+func TestFormatCNIChoice(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "cilium",
+			input:    wizard.CNICilium,
+			expected: "Cilium",
+		},
+		{
+			name:     "talos native",
+			input:    wizard.CNITalosNative,
+			expected: "Talos Default (Flannel)",
+		},
+		{
+			name:     "none",
+			input:    wizard.CNINone,
+			expected: "None (user-managed)",
+		},
+		{
+			name:     "unknown returns as-is",
+			input:    "custom-cni",
+			expected: "custom-cni",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatCNIChoice(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

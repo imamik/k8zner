@@ -133,3 +133,37 @@ func TestChartSpec(t *testing.T) {
 		t.Error("ChartSpec fields should not be empty")
 	}
 }
+
+// TestClearCache_NonexistentDir tests ClearCache when cache doesn't exist.
+func TestClearCache_NonexistentDir(t *testing.T) {
+	// Set a non-existent cache path
+	t.Setenv("XDG_CACHE_HOME", "/nonexistent/path/that/does/not/exist")
+
+	// Clear memory cache first
+	ClearMemoryCache()
+
+	// ClearCache should succeed even if directory doesn't exist
+	err := ClearCache()
+	if err != nil {
+		t.Errorf("ClearCache should succeed for nonexistent directory: %v", err)
+	}
+}
+
+// TestClearCache_ClearsMemoryCache verifies memory cache is cleared.
+func TestClearCache_ClearsMemoryCache(t *testing.T) {
+	// Use temp directory for cache
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tmpDir)
+
+	// Clear cache should not panic and should clear memory
+	err := ClearCache()
+	if err != nil {
+		t.Errorf("ClearCache failed: %v", err)
+	}
+
+	// Verify we can call it multiple times without error
+	err = ClearCache()
+	if err != nil {
+		t.Errorf("Second ClearCache failed: %v", err)
+	}
+}

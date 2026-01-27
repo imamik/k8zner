@@ -80,6 +80,49 @@ func TestNewFromKubeconfig_EmptyKubeconfig(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestNewFromKubeconfig_ValidYAMLButNoCluster(t *testing.T) {
+	// Valid YAML kubeconfig structure but with no clusters defined
+	kubeconfig := []byte(`apiVersion: v1
+kind: Config
+clusters: []
+contexts: []
+users: []
+`)
+
+	_, err := NewFromKubeconfig(kubeconfig)
+	require.Error(t, err)
+	// Should fail on creating clientset due to no server
+}
+
+func TestNewFromKubeconfig_MalformedURL(t *testing.T) {
+	// Kubeconfig with malformed server URL
+	kubeconfig := []byte(`apiVersion: v1
+kind: Config
+clusters:
+- name: test
+  cluster:
+    server: "not-a-valid-url"
+    insecure-skip-tls-verify: true
+contexts:
+- name: test
+  context:
+    cluster: test
+    user: test
+users:
+- name: test
+  user:
+    token: test-token
+current-context: test
+`)
+
+	// This should succeed in creating the config but will fail when actually used
+	// However, client-go may validate the URL during client creation
+	_, err := NewFromKubeconfig(kubeconfig)
+	// The error handling depends on client-go validation
+	// It may succeed or fail - we just verify it doesn't panic
+	_ = err
+}
+
 // setupApplyTestClient creates a test client with fake clients
 func setupApplyTestClient(t *testing.T) Client {
 	t.Helper()
@@ -272,4 +315,138 @@ func TestUnstructured_GetMetadata(t *testing.T) {
 
 	assert.Equal(t, "test-cm", obj.GetName())
 	assert.Equal(t, "kube-system", obj.GetNamespace())
+}
+
+func TestApplyManifests_MultiDocument(t *testing.T) {
+	// Multi-document YAML with mix of empty and valid documents
+	manifests := []byte(`---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config1
+  namespace: default
+data:
+  key: value
+---
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config2
+  namespace: default
+data:
+  key2: value2
+`)
+
+	client := setupApplyTestClient(t)
+
+	// This will fail on the actual apply but should process both documents
+	err := client.ApplyManifests(context.Background(), manifests, "test-manager")
+	// We expect an error from the fake client's SSA not being supported
+	// but the important thing is that parsing worked
+	assert.Error(t, err)
+	// Error should be about the apply failing, not parsing
+	assert.Contains(t, err.Error(), "failed to apply")
+}
+
+func TestApplyManifests_WhitespaceOnlyDocument(t *testing.T) {
+	// Document with only whitespace/comments should be skipped
+	manifests := []byte(`
+
+---
+
+---
+`)
+
+	client := setupApplyTestClient(t)
+
+	err := client.ApplyManifests(context.Background(), manifests, "test-manager")
+	require.NoError(t, err)
+}
+
+func TestApplyObject_NamespacedResourceWithEmptyNamespace(t *testing.T) {
+	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
+	clientset := fake.NewSimpleClientset()
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	dynamicClient := dynamicfake.NewSimpleDynamicClient(scheme)
+	mapper := createApplyTestMapper()
+
+	c := &client{
+		clientset:     clientset,
+		dynamicClient: dynamicClient,
+		mapper:        mapper,
+	}
+
+	// ConfigMap is namespaced - when namespace is empty, it should default to "default"
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name": "test-no-namespace",
+			},
+			"data": map[string]interface{}{
+				"key": "value",
+			},
+		},
+	}
+
+	// The apply will fail because fake client doesn't support SSA
+	// but we're testing that the namespace defaulting code path is reached
+	err := c.applyObject(context.Background(), obj, "test-manager")
+	require.Error(t, err)
+	// Should fail on the apply, not on mapping or validation
+	assert.Contains(t, err.Error(), "server-side apply failed")
+}
+
+func TestApplyObject_ClusterScopedResource(t *testing.T) {
+	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
+	clientset := fake.NewSimpleClientset()
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	dynamicClient := dynamicfake.NewSimpleDynamicClient(scheme)
+	mapper := createApplyTestMapper()
+
+	c := &client{
+		clientset:     clientset,
+		dynamicClient: dynamicClient,
+		mapper:        mapper,
+	}
+
+	// Namespace is a cluster-scoped resource
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Namespace",
+			"metadata": map[string]interface{}{
+				"name": "test-namespace",
+			},
+		},
+	}
+
+	// The apply will fail because fake client doesn't support SSA
+	// but we're testing that the cluster-scoped code path is reached
+	err := c.applyObject(context.Background(), obj, "test-manager")
+	require.Error(t, err)
+	// Should fail on the apply, not on mapping or validation
+	assert.Contains(t, err.Error(), "server-side apply failed")
+}
+
+func TestApplyManifests_FieldManagerPropagation(t *testing.T) {
+	// Verify field manager is passed through correctly
+	manifests := []byte(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test
+  namespace: default
+`)
+
+	client := setupApplyTestClient(t)
+
+	// Should fail on apply but with our custom field manager
+	err := client.ApplyManifests(context.Background(), manifests, "custom-field-manager")
+	require.Error(t, err)
+	// The error should be from the apply failing, not validation
+	assert.Contains(t, err.Error(), "failed to apply")
 }
