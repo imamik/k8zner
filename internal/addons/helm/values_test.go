@@ -370,6 +370,73 @@ func TestFromYAML_Errors(t *testing.T) {
 	})
 }
 
+func TestConvertToInterface_SliceTypes(t *testing.T) {
+	t.Run("[]Values slice", func(t *testing.T) {
+		input := []Values{
+			{"name": "item1", "value": 1},
+			{"name": "item2", "value": 2},
+		}
+		result := convertToInterface(input)
+
+		arr, ok := result.([]any)
+		require.True(t, ok, "result should be []any")
+		require.Len(t, arr, 2)
+
+		item1, ok := arr[0].(map[string]interface{})
+		require.True(t, ok, "item should be map[string]interface{}")
+		assert.Equal(t, "item1", item1["name"])
+		assert.Equal(t, 1, item1["value"])
+	})
+
+	t.Run("[]map[string]any slice", func(t *testing.T) {
+		input := []map[string]any{
+			{"name": "item1", "value": 1},
+			{"name": "item2", "value": 2},
+		}
+		result := convertToInterface(input)
+
+		arr, ok := result.([]any)
+		require.True(t, ok, "result should be []any")
+		require.Len(t, arr, 2)
+
+		item1, ok := arr[0].(map[string]interface{})
+		require.True(t, ok, "item should be map[string]interface{}")
+		assert.Equal(t, "item1", item1["name"])
+	})
+
+	t.Run("[]string slice", func(t *testing.T) {
+		input := []string{"a", "b", "c"}
+		result := convertToInterface(input)
+
+		arr, ok := result.([]any)
+		require.True(t, ok, "result should be []any")
+		require.Len(t, arr, 3)
+		assert.Equal(t, "a", arr[0])
+		assert.Equal(t, "b", arr[1])
+		assert.Equal(t, "c", arr[2])
+	})
+
+	t.Run("[]int slice", func(t *testing.T) {
+		input := []int{1, 2, 3}
+		result := convertToInterface(input)
+
+		arr, ok := result.([]any)
+		require.True(t, ok, "result should be []any")
+		require.Len(t, arr, 3)
+		assert.Equal(t, 1, arr[0])
+		assert.Equal(t, 2, arr[1])
+		assert.Equal(t, 3, arr[2])
+	})
+
+	t.Run("default case - primitives pass through", func(t *testing.T) {
+		assert.Equal(t, "string", convertToInterface("string"))
+		assert.Equal(t, 42, convertToInterface(42))
+		assert.Equal(t, true, convertToInterface(true))
+		assert.Equal(t, 3.14, convertToInterface(3.14))
+		assert.Nil(t, convertToInterface(nil))
+	})
+}
+
 func TestMergeCustomValues(t *testing.T) {
 	t.Run("nil custom values returns base unchanged", func(t *testing.T) {
 		base := Values{"replicas": 2, "image": "nginx"}
