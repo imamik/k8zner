@@ -6,10 +6,19 @@ import (
 	"log"
 
 	"github.com/imamik/k8zner/internal/config"
-	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/platform/talos"
-	"github.com/imamik/k8zner/internal/provisioning"
 	"github.com/imamik/k8zner/internal/provisioning/upgrade"
+)
+
+// Factory function variables for upgrade - can be replaced in tests.
+var (
+	// loadSecrets loads Talos secrets from file.
+	loadSecrets = talos.LoadSecrets
+
+	// newUpgradeProvisioner creates a new upgrade provisioner.
+	newUpgradeProvisioner = func(opts upgrade.ProvisionerOptions) Provisioner {
+		return upgrade.NewProvisioner(opts)
+	}
 )
 
 // UpgradeOptions contains options for the upgrade command.
@@ -31,7 +40,7 @@ type UpgradeOptions struct {
 // 5. Health check after completion
 func Upgrade(ctx context.Context, opts UpgradeOptions) error {
 	// Load and validate configuration
-	cfg, err := config.LoadFile(opts.ConfigPath)
+	cfg, err := loadConfigFile(opts.ConfigPath)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
@@ -54,17 +63,17 @@ func Upgrade(ctx context.Context, opts UpgradeOptions) error {
 	}
 
 	// Initialize Hetzner Cloud client
-	infraClient := hcloud.NewRealClient(cfg.HCloudToken)
+	infraClient := newInfraClient(cfg.HCloudToken)
 
 	// Initialize Talos generator
 	// For upgrade, we need to load existing secrets from disk
-	sb, err := talos.LoadSecrets(secretsFile)
+	sb, err := loadSecrets(secretsFile)
 	if err != nil {
 		return fmt.Errorf("failed to load Talos secrets from %s: %w (secrets must exist for upgrade)", secretsFile, err)
 	}
 
 	endpoint := fmt.Sprintf("https://%s-kube-api:%d", cfg.ClusterName, config.KubeAPIPort)
-	talosGen := talos.NewGenerator(
+	talosGen := newTalosGenerator(
 		cfg.ClusterName,
 		cfg.Kubernetes.Version,
 		cfg.Talos.Version,
@@ -73,10 +82,10 @@ func Upgrade(ctx context.Context, opts UpgradeOptions) error {
 	)
 
 	// Create provisioning context
-	pCtx := provisioning.NewContext(ctx, cfg, infraClient, talosGen)
+	pCtx := newProvisioningContext(ctx, cfg, infraClient, talosGen)
 
 	// Create upgrade provisioner
-	upgrader := upgrade.NewProvisioner(upgrade.ProvisionerOptions{
+	upgrader := newUpgradeProvisioner(upgrade.ProvisionerOptions{
 		DryRun:          opts.DryRun,
 		SkipHealthCheck: opts.SkipHealthCheck,
 	})

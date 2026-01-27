@@ -13,9 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/imamik/k8zner/internal/config"
-	"github.com/imamik/k8zner/internal/orchestration"
 	"github.com/imamik/k8zner/internal/platform/hcloud"
-	"github.com/imamik/k8zner/internal/platform/talos"
 	"github.com/imamik/k8zner/internal/provisioning"
 	"github.com/imamik/k8zner/internal/util/prerequisites"
 )
@@ -220,6 +218,11 @@ func saveAndRestoreFactories(t *testing.T) {
 	origNewReconciler := newReconciler
 	origCheckDefaultPrereqs := checkDefaultPrereqs
 	origWriteFile := writeFile
+	origLoadConfigFile := loadConfigFile
+	origNewDestroyProvisioner := newDestroyProvisioner
+	origNewProvisioningContext := newProvisioningContext
+	origLoadSecrets := loadSecrets
+	origNewUpgradeProvisioner := newUpgradeProvisioner
 
 	t.Cleanup(func() {
 		newInfraClient = origNewInfraClient
@@ -228,6 +231,11 @@ func saveAndRestoreFactories(t *testing.T) {
 		newReconciler = origNewReconciler
 		checkDefaultPrereqs = origCheckDefaultPrereqs
 		writeFile = origWriteFile
+		loadConfigFile = origLoadConfigFile
+		newDestroyProvisioner = origNewDestroyProvisioner
+		newProvisioningContext = origNewProvisioningContext
+		loadSecrets = origLoadSecrets
+		newUpgradeProvisioner = origNewUpgradeProvisioner
 	})
 }
 
@@ -269,8 +277,8 @@ func TestInitializeTalosGenerator(t *testing.T) {
 		getOrGenerateSecrets = func(_, _ string) (*secrets.Bundle, error) {
 			return &secrets.Bundle{}, nil
 		}
-		newTalosGenerator = func(_, _, _, _ string, _ *secrets.Bundle) *talos.Generator {
-			return &talos.Generator{}
+		newTalosGenerator = func(_, _, _, _ string, _ *secrets.Bundle) provisioning.TalosConfigProducer {
+			return &mockTalosProducer{clientConfig: []byte("talos-config")}
 		}
 
 		cfg := &config.Config{
@@ -437,20 +445,150 @@ func TestInitializeClient_WithInjection(t *testing.T) {
 	})
 }
 
+// mockReconciler implements the Reconciler interface for testing.
+type mockReconciler struct {
+	kubeconfig []byte
+	err        error
+}
+
+func (m *mockReconciler) Reconcile(_ context.Context) ([]byte, error) {
+	return m.kubeconfig, m.err
+}
+
 func TestReconcileInfrastructure_WithInjection(t *testing.T) {
 	saveAndRestoreFactories(t)
 
 	t.Run("success returns kubeconfig", func(t *testing.T) {
 		expectedKubeconfig := []byte("kubeconfig-data")
 
-		newReconciler = func(_ hcloud.InfrastructureManager, _ provisioning.TalosConfigProducer, _ *config.Config) *orchestration.Reconciler {
-			// Return a reconciler that we can mock
-			// For this test, we use the real type but it won't be called
+		newReconciler = func(_ hcloud.InfrastructureManager, _ provisioning.TalosConfigProducer, _ *config.Config) Reconciler {
+			return &mockReconciler{kubeconfig: expectedKubeconfig}
+		}
+
+		kubeconfig, err := reconcileInfrastructure(
+			context.Background(),
+			&hcloud.MockClient{},
+			&mockTalosProducer{},
+			&config.Config{},
+		)
+
+		require.NoError(t, err)
+		assert.Equal(t, expectedKubeconfig, kubeconfig)
+	})
+
+	t.Run("reconciler error", func(t *testing.T) {
+		newReconciler = func(_ hcloud.InfrastructureManager, _ provisioning.TalosConfigProducer, _ *config.Config) Reconciler {
+			return &mockReconciler{err: errors.New("reconciliation failed")}
+		}
+
+		_, err := reconcileInfrastructure(
+			context.Background(),
+			&hcloud.MockClient{},
+			&mockTalosProducer{},
+			&config.Config{},
+		)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "reconciliation failed")
+	})
+}
+
+func TestApply_WithInjection(t *testing.T) {
+	saveAndRestoreFactories(t)
+
+	t.Run("success flow", func(t *testing.T) {
+		// Mock all dependencies
+		loadConfigFile = func(_ string) (*config.Config, error) {
+			return &config.Config{
+				ClusterName: "test-cluster",
+				HCloudToken: "test-token",
+				Talos:       config.TalosConfig{Version: "v1.9.0"},
+				Kubernetes:  config.KubernetesConfig{Version: "v1.32.0"},
+			}, nil
+		}
+
+		checkDefaultPrereqs = func() *prerequisites.CheckResults {
+			return &prerequisites.CheckResults{
+				Results: []prerequisites.CheckResult{
+					{Tool: prerequisites.Tool{Name: "kubectl", Required: true}, Found: true},
+				},
+			}
+		}
+
+		newInfraClient = func(_ string) hcloud.InfrastructureManager {
+			return &hcloud.MockClient{}
+		}
+
+		getOrGenerateSecrets = func(_, _ string) (*secrets.Bundle, error) {
+			return &secrets.Bundle{}, nil
+		}
+
+		newTalosGenerator = func(_, _, _, _ string, _ *secrets.Bundle) provisioning.TalosConfigProducer {
+			return &mockTalosProducer{clientConfig: []byte("talos-config")}
+		}
+
+		writeTalosFilesCalled := false
+		writeFile = func(_ string, _ []byte, _ os.FileMode) error {
+			writeTalosFilesCalled = true
 			return nil
 		}
 
-		// We can't fully test this without a more sophisticated mock
-		// but we verify the function signature and injection work
-		_ = expectedKubeconfig
+		newReconciler = func(_ hcloud.InfrastructureManager, _ provisioning.TalosConfigProducer, _ *config.Config) Reconciler {
+			return &mockReconciler{kubeconfig: []byte("kubeconfig-data")}
+		}
+
+		err := Apply(context.Background(), "config.yaml")
+		require.NoError(t, err)
+		assert.True(t, writeTalosFilesCalled)
+	})
+
+	t.Run("config load error", func(t *testing.T) {
+		loadConfigFile = func(_ string) (*config.Config, error) {
+			return nil, errors.New("file not found")
+		}
+
+		err := Apply(context.Background(), "missing.yaml")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to load config")
+	})
+
+	t.Run("prerequisites check fails", func(t *testing.T) {
+		loadConfigFile = func(_ string) (*config.Config, error) {
+			enabled := true
+			return &config.Config{
+				ClusterName:               "test",
+				PrerequisitesCheckEnabled: &enabled,
+			}, nil
+		}
+
+		missingTool := prerequisites.Tool{Name: "kubectl", Required: true, InstallURL: "https://..."}
+		checkDefaultPrereqs = func() *prerequisites.CheckResults {
+			return &prerequisites.CheckResults{
+				Results: []prerequisites.CheckResult{{Tool: missingTool, Found: false}},
+				Missing: []prerequisites.Tool{missingTool},
+			}
+		}
+
+		err := Apply(context.Background(), "config.yaml")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "prerequisites check failed")
+	})
+
+	t.Run("talos generator init error", func(t *testing.T) {
+		loadConfigFile = func(_ string) (*config.Config, error) {
+			disabled := false
+			return &config.Config{
+				ClusterName:               "test",
+				PrerequisitesCheckEnabled: &disabled,
+			}, nil
+		}
+
+		getOrGenerateSecrets = func(_, _ string) (*secrets.Bundle, error) {
+			return nil, errors.New("secrets generation failed")
+		}
+
+		err := Apply(context.Background(), "config.yaml")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to initialize secrets")
 	})
 }

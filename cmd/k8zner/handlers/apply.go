@@ -11,6 +11,8 @@ import (
 	"log"
 	"os"
 
+	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
+
 	"github.com/imamik/k8zner/internal/config"
 	"github.com/imamik/k8zner/internal/orchestration"
 	"github.com/imamik/k8zner/internal/platform/hcloud"
@@ -25,6 +27,11 @@ const (
 	kubeconfigPath  = "kubeconfig"
 )
 
+// Reconciler interface for testing - matches orchestration.Reconciler.
+type Reconciler interface {
+	Reconcile(ctx context.Context) ([]byte, error)
+}
+
 // Factory function variables - can be replaced in tests for dependency injection.
 var (
 	// newInfraClient creates a new infrastructure client.
@@ -36,16 +43,23 @@ var (
 	getOrGenerateSecrets = talos.GetOrGenerateSecrets
 
 	// newTalosGenerator creates a new Talos configuration generator.
-	newTalosGenerator = talos.NewGenerator
+	newTalosGenerator = func(clusterName, kubernetesVersion, talosVersion, endpoint string, sb *secrets.Bundle) provisioning.TalosConfigProducer {
+		return talos.NewGenerator(clusterName, kubernetesVersion, talosVersion, endpoint, sb)
+	}
 
 	// newReconciler creates a new infrastructure reconciler.
-	newReconciler = orchestration.NewReconciler
+	newReconciler = func(infra hcloud.InfrastructureManager, talosGen provisioning.TalosConfigProducer, cfg *config.Config) Reconciler {
+		return orchestration.NewReconciler(infra, talosGen, cfg)
+	}
 
 	// checkDefaultPrereqs runs prerequisite checks.
 	checkDefaultPrereqs = prerequisites.CheckDefault
 
 	// writeFile writes data to a file (for testing injection).
 	writeFile = os.WriteFile
+
+	// loadConfigFile loads config from file (for testing injection).
+	loadConfigFile = config.LoadFile
 )
 
 // Apply provisions a Kubernetes cluster on Hetzner Cloud using Talos Linux.
@@ -89,7 +103,7 @@ func Apply(ctx context.Context, configPath string) error {
 		return err
 	}
 
-	_, kubeconfig, err := reconcileInfrastructure(ctx, client, talosGen, cfg)
+	kubeconfig, err := reconcileInfrastructure(ctx, client, talosGen, cfg)
 	if err != nil {
 		return err
 	}
@@ -108,7 +122,7 @@ func loadConfig(configPath string) (*config.Config, error) {
 		return nil, fmt.Errorf("config file is required (use --config)")
 	}
 
-	cfg, err := config.LoadFile(configPath)
+	cfg, err := loadConfigFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
@@ -143,19 +157,19 @@ func initializeTalosGenerator(cfg *config.Config) (provisioning.TalosConfigProdu
 }
 
 // reconcileInfrastructure provisions infrastructure and bootstraps the Kubernetes orchestration.
-// Returns the reconciler instance and kubeconfig bytes if bootstrap completed.
+// Returns kubeconfig bytes if bootstrap completed.
 // Kubeconfig will be empty if cluster was already bootstrapped.
-func reconcileInfrastructure(ctx context.Context, client hcloud.InfrastructureManager, talosGen provisioning.TalosConfigProducer, cfg *config.Config) (*orchestration.Reconciler, []byte, error) {
+func reconcileInfrastructure(ctx context.Context, client hcloud.InfrastructureManager, talosGen provisioning.TalosConfigProducer, cfg *config.Config) ([]byte, error) {
 	log.Println("Starting infrastructure reconciliation...")
 
 	reconciler := newReconciler(client, talosGen, cfg)
 	kubeconfig, err := reconciler.Reconcile(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("reconciliation failed: %w", err)
+		return nil, fmt.Errorf("reconciliation failed: %w", err)
 	}
 
 	log.Println("Infrastructure reconciliation completed")
-	return reconciler, kubeconfig, nil
+	return kubeconfig, nil
 }
 
 // writeTalosFiles persists Talos secrets and client config to disk.
