@@ -106,12 +106,33 @@ func LoadFile(path string) (*Config, error) {
 	// Apply auto-calculated defaults (matches Terraform behavior)
 	applyAutoCalculatedDefaults(&cfg)
 
+	// Apply Cloudflare environment variable overrides (following HCLOUD_TOKEN pattern)
+	applyCloudflareEnvVars(&cfg)
+
 	// Validate configuration
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
 	}
 
 	return &cfg, nil
+}
+
+// applyCloudflareEnvVars applies Cloudflare configuration from environment variables.
+// This follows the same pattern as HCLOUD_TOKEN for consistency.
+func applyCloudflareEnvVars(cfg *Config) {
+	// CF_API_TOKEN takes precedence if config value is empty
+	if cfg.Addons.Cloudflare.APIToken == "" {
+		if token := os.Getenv("CF_API_TOKEN"); token != "" {
+			cfg.Addons.Cloudflare.APIToken = token
+		}
+	}
+
+	// CF_DOMAIN takes precedence if config value is empty
+	if cfg.Addons.Cloudflare.Domain == "" {
+		if domain := os.Getenv("CF_DOMAIN"); domain != "" {
+			cfg.Addons.Cloudflare.Domain = domain
+		}
+	}
 }
 
 // shouldEnableCCMByDefault determines if CCM should be enabled when not explicitly configured.

@@ -110,23 +110,30 @@ func TestBuildTraefikValues(t *testing.T) {
 			// Check service configuration
 			service, ok := values["service"].(helm.Values)
 			require.True(t, ok)
-			assert.Equal(t, "NodePort", service["type"])
+			assert.Equal(t, "LoadBalancer", service["type"])
 
 			spec, ok := service["spec"].(helm.Values)
 			require.True(t, ok)
 			assert.Equal(t, "Local", spec["externalTrafficPolicy"])
 
-			// Check ports configuration
+			// Check Hetzner LB annotations
+			annotations, ok := service["annotations"].(helm.Values)
+			require.True(t, ok)
+			assert.Equal(t, "ingress", annotations["load-balancer.hetzner.cloud/name"])
+			assert.Equal(t, "true", annotations["load-balancer.hetzner.cloud/use-private-ip"])
+			assert.Equal(t, "true", annotations["load-balancer.hetzner.cloud/uses-proxyprotocol"])
+
+			// Check ports configuration (no longer uses nodePort)
 			ports, ok := values["ports"].(helm.Values)
 			require.True(t, ok)
 
 			web, ok := ports["web"].(helm.Values)
 			require.True(t, ok)
-			assert.Equal(t, 30000, web["nodePort"])
+			assert.Equal(t, 80, web["exposedPort"])
 
 			websecure, ok := ports["websecure"].(helm.Values)
 			require.True(t, ok)
-			assert.Equal(t, 30001, websecure["nodePort"])
+			assert.Equal(t, 443, websecure["exposedPort"])
 
 			// Check tolerations for CCM uninitialized taint
 			tolerations, ok := values["tolerations"].([]helm.Values)

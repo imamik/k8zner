@@ -179,6 +179,12 @@ addons:
   cert_manager:
     enabled: true
     # version: "v1.14.0"
+    # Cloudflare DNS01 solver for wildcard and DNS-validated certificates
+    # Requires cloudflare to be enabled
+    # cloudflare:
+    #   enabled: true
+    #   email: "admin@example.com"  # Required for Let's Encrypt account
+    #   production: false           # Use staging first to test (avoids rate limits)
 
   # Metrics Server
   metrics_server:
@@ -204,6 +210,40 @@ addons:
   #   ingress_host: "argocd.example.com" # Hostname for Ingress
   #   ingress_class_name: "nginx"        # Ingress class to use
   #   ingress_tls: false                 # Enable TLS (requires cert-manager)
+
+  # Cloudflare DNS integration (shared by external-dns and cert-manager)
+  #
+  # API Token Setup:
+  #   1. Go to: https://dash.cloudflare.com/profile/api-tokens
+  #   2. Click "Create Token"
+  #   3. Use "Edit zone DNS" template or create custom token with permissions:
+  #      - Zone > Zone > Read    (required to find zone ID automatically)
+  #      - Zone > DNS > Edit     (required to manage DNS records)
+  #   4. Set Zone Resources to:
+  #      - "Include > Specific zone > your-domain.com" (recommended for security)
+  #      - Or "Include > All zones" for multiple domains
+  #   5. Copy the token and set as CF_API_TOKEN env var (recommended)
+  #      Or set api_token below (not recommended for version control)
+  #
+  # Environment variables (recommended for CI/CD):
+  #   export CF_API_TOKEN="your-cloudflare-api-token"
+  #   export CF_DOMAIN="example.com"
+  #
+  # cloudflare:
+  #   enabled: true
+  #   # api_token: "..."       # Or use CF_API_TOKEN env var (preferred)
+  #   domain: "example.com"    # Or use CF_DOMAIN env var
+  #   proxied: false           # Default: direct traffic (no orange cloud)
+
+  # External-DNS (automatically creates DNS records from Ingress annotations)
+  # Requires cloudflare to be enabled
+  # external_dns:
+  #   enabled: true
+  #   # txt_owner_id: "my-cluster"  # Default: cluster_name
+  #   policy: "sync"                # sync (deletes), upsert-only (never deletes)
+  #   sources:
+  #     - ingress
+  #     # - service  # For LoadBalancer services
 
 # Reverse DNS Configuration (optional)
 # rdns:

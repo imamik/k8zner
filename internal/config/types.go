@@ -510,6 +510,8 @@ type AddonsConfig struct {
 	GatewayAPICRDs         GatewayAPICRDsConfig         `mapstructure:"gateway_api_crds" yaml:"gateway_api_crds"`
 	PrometheusOperatorCRDs PrometheusOperatorCRDsConfig `mapstructure:"prometheus_operator_crds" yaml:"prometheus_operator_crds"`
 	TalosCCM               TalosCCMConfig               `mapstructure:"talos_ccm" yaml:"talos_ccm"`
+	Cloudflare             CloudflareConfig             `mapstructure:"cloudflare" yaml:"cloudflare"`
+	ExternalDNS            ExternalDNSConfig            `mapstructure:"external_dns" yaml:"external_dns"`
 }
 
 // CCMConfig defines the Hetzner Cloud Controller Manager configuration.
@@ -632,6 +634,22 @@ type CertManagerConfig struct {
 
 	// Helm allows customizing the Helm chart repository, version, and values.
 	Helm HelmChartConfig `mapstructure:"helm" yaml:"helm"`
+
+	// Cloudflare configures Cloudflare DNS01 solver for cert-manager.
+	Cloudflare CertManagerCloudflareConfig `mapstructure:"cloudflare" yaml:"cloudflare"`
+}
+
+// CertManagerCloudflareConfig extends cert-manager with Cloudflare DNS01 solver.
+type CertManagerCloudflareConfig struct {
+	// Enabled creates ClusterIssuers using Cloudflare DNS01 solver.
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Email for Let's Encrypt account registration.
+	Email string `mapstructure:"email" yaml:"email"`
+
+	// Production uses Let's Encrypt production server (default: false = staging).
+	// Set to true only after testing with staging to avoid rate limits.
+	Production bool `mapstructure:"production" yaml:"production"`
 }
 
 // IngressNginxConfig defines the ingress-nginx configuration.
@@ -973,4 +991,51 @@ type TalosCCMConfig struct {
 	// Version specifies the Talos CCM version.
 	// Default: "v1.11.0"
 	Version string `mapstructure:"version" yaml:"version"`
+}
+
+// CloudflareConfig defines Cloudflare DNS integration settings.
+// This is shared by external-dns and cert-manager for DNS management.
+type CloudflareConfig struct {
+	// Enabled enables Cloudflare DNS integration.
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// APIToken is the Cloudflare API token.
+	// Can also be set via CF_API_TOKEN env var (recommended for security).
+	// Required permissions: Zone:Zone:Read, Zone:DNS:Edit
+	APIToken string `mapstructure:"api_token" yaml:"api_token"`
+
+	// Domain is the base domain for DNS records (e.g., k8zner.org).
+	// Can also be set via CF_DOMAIN env var.
+	Domain string `mapstructure:"domain" yaml:"domain"`
+
+	// ZoneID is optional - if not set, external-dns will auto-detect from domain.
+	ZoneID string `mapstructure:"zone_id" yaml:"zone_id"`
+
+	// Proxied enables Cloudflare proxy (orange cloud) by default for DNS records.
+	// Default: false (DNS only, no proxy)
+	Proxied bool `mapstructure:"proxied" yaml:"proxied"`
+}
+
+// ExternalDNSConfig defines the external-dns addon configuration.
+// External-dns automatically creates DNS records from Ingress annotations.
+type ExternalDNSConfig struct {
+	// Enabled enables the external-dns addon.
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Helm allows customizing the Helm chart repository, version, and values.
+	Helm HelmChartConfig `mapstructure:"helm" yaml:"helm"`
+
+	// TXTOwnerID identifies this cluster's DNS records for conflict prevention.
+	// Default: cluster_name
+	TXTOwnerID string `mapstructure:"txt_owner_id" yaml:"txt_owner_id"`
+
+	// Policy controls DNS record deletion behavior.
+	// "sync" - deletes records when resources are removed (default)
+	// "upsert-only" - never deletes records, only creates/updates
+	Policy string `mapstructure:"policy" yaml:"policy"`
+
+	// Sources specifies which Kubernetes resources to watch for DNS records.
+	// Default: ["ingress"]
+	// Options: ingress, service, gateway-httproute, etc.
+	Sources []string `mapstructure:"sources" yaml:"sources"`
 }

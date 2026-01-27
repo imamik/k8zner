@@ -64,7 +64,13 @@ func buildIngressNginxValues(cfg *config.Config) helm.Values {
 		kind = "Deployment"
 	}
 
-	controller := buildIngressNginxController(nginxCfg, workerCount, replicas, kind)
+	// Determine location for load balancer
+	location := cfg.Location
+	if location == "" {
+		location = "nbg1"
+	}
+
+	controller := buildIngressNginxController(nginxCfg, workerCount, replicas, kind, location)
 
 	values := helm.Values{
 		"controller": controller,
@@ -75,7 +81,7 @@ func buildIngressNginxValues(cfg *config.Config) helm.Values {
 }
 
 // buildIngressNginxController creates the controller configuration.
-func buildIngressNginxController(nginxCfg config.IngressNginxConfig, workerCount, replicas int, kind string) helm.Values {
+func buildIngressNginxController(nginxCfg config.IngressNginxConfig, workerCount, replicas int, kind, location string) helm.Values {
 	// External traffic policy - default to "Local" (preserves client IP)
 	externalTrafficPolicy := nginxCfg.ExternalTrafficPolicy
 	if externalTrafficPolicy == "" {
@@ -113,11 +119,17 @@ func buildIngressNginxController(nginxCfg config.IngressNginxConfig, workerCount
 		},
 		"extraArgs": helm.Values{},
 		"service": helm.Values{
-			"type":                  "NodePort",
+			// Use LoadBalancer type to get external IP via CCM (Hetzner Cloud Controller Manager)
+			// This creates a Kubernetes-native load balancer with external IP visible in Service status,
+			// which allows external-dns to auto-discover the IP for DNS records.
+			"type":                  "LoadBalancer",
 			"externalTrafficPolicy": externalTrafficPolicy,
-			"nodePorts": helm.Values{
-				"http":  30000,
-				"https": 30001,
+			// Hetzner LB annotations for proxy protocol support
+			"annotations": helm.Values{
+				"load-balancer.hetzner.cloud/name":               "ingress",
+				"load-balancer.hetzner.cloud/use-private-ip":     "true",
+				"load-balancer.hetzner.cloud/uses-proxyprotocol": "true",
+				"load-balancer.hetzner.cloud/location":           location,
 			},
 		},
 		"config": configMap,

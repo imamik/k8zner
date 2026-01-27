@@ -118,13 +118,15 @@ func TestBuildIngressNginxValues(t *testing.T) {
 			// Check service configuration
 			service, ok := controller["service"].(helm.Values)
 			require.True(t, ok)
-			assert.Equal(t, "NodePort", service["type"])
+			assert.Equal(t, "LoadBalancer", service["type"])
 			assert.Equal(t, "Local", service["externalTrafficPolicy"])
 
-			nodePorts, ok := service["nodePorts"].(helm.Values)
+			// Check Hetzner LB annotations
+			annotations, ok := service["annotations"].(helm.Values)
 			require.True(t, ok)
-			assert.Equal(t, 30000, nodePorts["http"])
-			assert.Equal(t, 30001, nodePorts["https"])
+			assert.Equal(t, "ingress", annotations["load-balancer.hetzner.cloud/name"])
+			assert.Equal(t, "true", annotations["load-balancer.hetzner.cloud/use-private-ip"])
+			assert.Equal(t, "true", annotations["load-balancer.hetzner.cloud/uses-proxyprotocol"])
 
 			// Check proxy config
 			proxyConfig, ok := controller["config"].(helm.Values)
