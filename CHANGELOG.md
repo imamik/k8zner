@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2025-01-27
+
+### Added
+
+- **Cloudflare DNS Integration** - Automatic DNS record management and TLS certificates
+  - **external-dns addon** - Automatically creates DNS records from Ingress annotations
+    - Cloudflare provider with API token authentication
+    - Configurable sync policy (sync or upsert-only)
+    - TXT record ownership for safe multi-cluster deployments
+    - Support for Ingress and Service sources
+  - **cert-manager Cloudflare DNS01 solver** - Wildcard and DNS-validated certificates
+    - Let's Encrypt staging and production support
+    - ClusterIssuer automatically created: `letsencrypt-cloudflare-staging` / `letsencrypt-cloudflare-production`
+    - Works with Cloudflare proxied and non-proxied records
+  - Environment variable support: `CF_API_TOKEN` and `CF_DOMAIN`
+  - Full E2E test coverage with real DNS validation
+
+### Changed
+
+- **Ingress controllers now use LoadBalancer by default** for proper external IP allocation
+  - ingress-nginx: Changed from NodePort to LoadBalancer service type
+  - Traefik: Enabled LoadBalancer service for web entrypoint
+- cert-manager ingress-shim enabled for automatic Certificate creation from Ingress annotations
+- Improved E2E cleanup to wait for server deletion before removing firewalls
+
+### Fixed
+
+- cert-manager Gateway API disabled by default (requires Gateway API CRDs to be installed)
+- Firewall deletion now retries when resources are still in use
+
 ## [0.4.0] - 2025-01-26
 
 ### Added
@@ -132,7 +162,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Secrets stored locally in `./secrets/` directory
 - No credentials stored in cluster state
 
-[Unreleased]: https://github.com/imamik/k8zner/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/imamik/k8zner/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/imamik/k8zner/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/imamik/k8zner/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/imamik/k8zner/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/imamik/k8zner/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/imamik/k8zner/compare/v0.1.1...v0.2.0
