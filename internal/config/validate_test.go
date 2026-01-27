@@ -1913,3 +1913,309 @@ func TestValidateExternalDNS_InvalidSource(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid source")
 }
+
+// ApplyDefaults tests
+
+func TestApplyDefaults_TalosVersion(t *testing.T) {
+	cfg := &Config{}
+	err := cfg.ApplyDefaults()
+	require.NoError(t, err)
+	assert.Equal(t, "v1.8.3", cfg.Talos.Version)
+}
+
+func TestApplyDefaults_TalosVersionPreserved(t *testing.T) {
+	cfg := &Config{
+		Talos: TalosConfig{Version: "v1.9.0"},
+	}
+	err := cfg.ApplyDefaults()
+	require.NoError(t, err)
+	assert.Equal(t, "v1.9.0", cfg.Talos.Version)
+}
+
+func TestApplyDefaults_KubernetesVersion(t *testing.T) {
+	cfg := &Config{}
+	err := cfg.ApplyDefaults()
+	require.NoError(t, err)
+	assert.Equal(t, "v1.31.0", cfg.Kubernetes.Version)
+}
+
+func TestApplyDefaults_KubernetesVersionPreserved(t *testing.T) {
+	cfg := &Config{
+		Kubernetes: KubernetesConfig{Version: "v1.32.0"},
+	}
+	err := cfg.ApplyDefaults()
+	require.NoError(t, err)
+	assert.Equal(t, "v1.32.0", cfg.Kubernetes.Version)
+}
+
+func TestApplyDefaults_NetworkZone(t *testing.T) {
+	cfg := &Config{}
+	err := cfg.ApplyDefaults()
+	require.NoError(t, err)
+	assert.Equal(t, "eu-central", cfg.Network.Zone)
+}
+
+func TestApplyDefaults_NetworkZonePreserved(t *testing.T) {
+	cfg := &Config{
+		Network: NetworkConfig{Zone: "us-east"},
+	}
+	err := cfg.ApplyDefaults()
+	require.NoError(t, err)
+	assert.Equal(t, "us-east", cfg.Network.Zone)
+}
+
+func TestApplyDefaults_NodeSubnetMask(t *testing.T) {
+	cfg := &Config{}
+	err := cfg.ApplyDefaults()
+	require.NoError(t, err)
+	assert.Equal(t, 25, cfg.Network.NodeIPv4SubnetMask)
+}
+
+func TestApplyDefaults_NodeSubnetMaskPreserved(t *testing.T) {
+	cfg := &Config{
+		Network: NetworkConfig{NodeIPv4SubnetMask: 24},
+	}
+	err := cfg.ApplyDefaults()
+	require.NoError(t, err)
+	assert.Equal(t, 24, cfg.Network.NodeIPv4SubnetMask)
+}
+
+func TestApplyDefaults_ControlPlaneLocation(t *testing.T) {
+	cfg := &Config{
+		Location: "nbg1",
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{
+				{Name: "cp", ServerType: "cpx22", Count: 1},
+			},
+		},
+	}
+	err := cfg.ApplyDefaults()
+	require.NoError(t, err)
+	assert.Equal(t, "nbg1", cfg.ControlPlane.NodePools[0].Location)
+}
+
+func TestApplyDefaults_ControlPlaneLocationPreserved(t *testing.T) {
+	cfg := &Config{
+		Location: "nbg1",
+		ControlPlane: ControlPlaneConfig{
+			NodePools: []ControlPlaneNodePool{
+				{Name: "cp", ServerType: "cpx22", Count: 1, Location: "fsn1"},
+			},
+		},
+	}
+	err := cfg.ApplyDefaults()
+	require.NoError(t, err)
+	assert.Equal(t, "fsn1", cfg.ControlPlane.NodePools[0].Location)
+}
+
+func TestApplyDefaults_WorkerLocation(t *testing.T) {
+	cfg := &Config{
+		Location: "nbg1",
+		Workers: []WorkerNodePool{
+			{Name: "worker", ServerType: "cpx31", Count: 3},
+		},
+	}
+	err := cfg.ApplyDefaults()
+	require.NoError(t, err)
+	assert.Equal(t, "nbg1", cfg.Workers[0].Location)
+}
+
+func TestApplyDefaults_WorkerLocationPreserved(t *testing.T) {
+	cfg := &Config{
+		Location: "nbg1",
+		Workers: []WorkerNodePool{
+			{Name: "worker", ServerType: "cpx31", Count: 3, Location: "hel1"},
+		},
+	}
+	err := cfg.ApplyDefaults()
+	require.NoError(t, err)
+	assert.Equal(t, "hel1", cfg.Workers[0].Location)
+}
+
+func TestApplyDefaults_TalosMachineDefaults(t *testing.T) {
+	cfg := &Config{}
+	err := cfg.ApplyDefaults()
+	require.NoError(t, err)
+
+	m := cfg.Talos.Machine
+	// Encryption defaults
+	assert.NotNil(t, m.StateEncryption)
+	assert.True(t, *m.StateEncryption)
+	assert.NotNil(t, m.EphemeralEncryption)
+	assert.True(t, *m.EphemeralEncryption)
+
+	// Network defaults
+	assert.NotNil(t, m.IPv6Enabled)
+	assert.True(t, *m.IPv6Enabled)
+	assert.NotNil(t, m.PublicIPv4Enabled)
+	assert.True(t, *m.PublicIPv4Enabled)
+	assert.NotNil(t, m.PublicIPv6Enabled)
+	assert.True(t, *m.PublicIPv6Enabled)
+
+	// DNS/NTP defaults
+	assert.NotEmpty(t, m.Nameservers)
+	assert.Contains(t, m.Nameservers, "185.12.64.1")
+	assert.NotEmpty(t, m.TimeServers)
+	assert.Contains(t, m.TimeServers, "ntp1.hetzner.de")
+
+	// CoreDNS default
+	assert.NotNil(t, m.CoreDNSEnabled)
+	assert.True(t, *m.CoreDNSEnabled)
+
+	// Discovery defaults
+	assert.NotNil(t, m.DiscoveryKubernetesEnabled)
+	assert.False(t, *m.DiscoveryKubernetesEnabled)
+	assert.NotNil(t, m.DiscoveryServiceEnabled)
+	assert.True(t, *m.DiscoveryServiceEnabled)
+
+	// Config apply mode
+	assert.Equal(t, "auto", m.ConfigApplyMode)
+}
+
+func TestApplyDefaults_TalosMachinePreserved(t *testing.T) {
+	falsePtr := false
+	cfg := &Config{
+		Talos: TalosConfig{
+			Machine: TalosMachineConfig{
+				StateEncryption:     &falsePtr,
+				EphemeralEncryption: &falsePtr,
+				IPv6Enabled:         &falsePtr,
+				Nameservers:         []string{"8.8.8.8"},
+				TimeServers:         []string{"time.google.com"},
+				ConfigApplyMode:     "no-reboot",
+			},
+		},
+	}
+	err := cfg.ApplyDefaults()
+	require.NoError(t, err)
+
+	m := cfg.Talos.Machine
+	assert.False(t, *m.StateEncryption)
+	assert.False(t, *m.EphemeralEncryption)
+	assert.False(t, *m.IPv6Enabled)
+	assert.Equal(t, []string{"8.8.8.8"}, m.Nameservers)
+	assert.Equal(t, []string{"time.google.com"}, m.TimeServers)
+	assert.Equal(t, "no-reboot", m.ConfigApplyMode)
+}
+
+func TestApplyDefaults_KubernetesDefaults(t *testing.T) {
+	cfg := &Config{}
+	err := cfg.ApplyDefaults()
+	require.NoError(t, err)
+
+	assert.Equal(t, "cluster.local", cfg.Kubernetes.Domain)
+	// With no workers, allow scheduling on control planes should be true
+	assert.NotNil(t, cfg.Kubernetes.AllowSchedulingOnCP)
+	assert.True(t, *cfg.Kubernetes.AllowSchedulingOnCP)
+}
+
+func TestApplyDefaults_KubernetesAllowSchedulingWithWorkers(t *testing.T) {
+	cfg := &Config{
+		Workers: []WorkerNodePool{
+			{Name: "worker", ServerType: "cpx31", Count: 3},
+		},
+	}
+	err := cfg.ApplyDefaults()
+	require.NoError(t, err)
+
+	// With workers, allow scheduling on control planes should be false
+	assert.NotNil(t, cfg.Kubernetes.AllowSchedulingOnCP)
+	assert.False(t, *cfg.Kubernetes.AllowSchedulingOnCP)
+}
+
+func TestApplyDefaults_KubernetesAllowSchedulingWithAutoscaler(t *testing.T) {
+	cfg := &Config{
+		Autoscaler: AutoscalerConfig{
+			NodePools: []AutoscalerNodePool{
+				{Name: "autoscale", Min: 0, Max: 5},
+			},
+		},
+	}
+	err := cfg.ApplyDefaults()
+	require.NoError(t, err)
+
+	// With autoscaler capacity, allow scheduling on control planes should be false
+	assert.NotNil(t, cfg.Kubernetes.AllowSchedulingOnCP)
+	assert.False(t, *cfg.Kubernetes.AllowSchedulingOnCP)
+}
+
+func TestApplyDefaults_KubernetesPreserved(t *testing.T) {
+	truePtr := true
+	cfg := &Config{
+		Kubernetes: KubernetesConfig{
+			Domain:              "custom.local",
+			AllowSchedulingOnCP: &truePtr,
+		},
+		Workers: []WorkerNodePool{
+			{Name: "worker", ServerType: "cpx31", Count: 3},
+		},
+	}
+	err := cfg.ApplyDefaults()
+	require.NoError(t, err)
+
+	assert.Equal(t, "custom.local", cfg.Kubernetes.Domain)
+	// Explicit setting should be preserved even with workers
+	assert.True(t, *cfg.Kubernetes.AllowSchedulingOnCP)
+}
+
+func TestApplyDefaults_CCMDefaults(t *testing.T) {
+	cfg := &Config{}
+	err := cfg.ApplyDefaults()
+	require.NoError(t, err)
+
+	ccm := cfg.Addons.CCM
+	lb := ccm.LoadBalancers
+
+	// Network routes enabled
+	assert.NotNil(t, ccm.NetworkRoutesEnabled)
+	assert.True(t, *ccm.NetworkRoutesEnabled)
+
+	// Load balancer defaults
+	assert.NotNil(t, lb.Enabled)
+	assert.True(t, *lb.Enabled)
+	assert.Equal(t, "lb11", lb.Type)
+	assert.Equal(t, "least_connections", lb.Algorithm)
+
+	// Network settings
+	assert.NotNil(t, lb.UsePrivateIP)
+	assert.True(t, *lb.UsePrivateIP)
+	assert.NotNil(t, lb.DisablePrivateIngress)
+	assert.True(t, *lb.DisablePrivateIngress)
+	assert.NotNil(t, lb.DisablePublicNetwork)
+	assert.False(t, *lb.DisablePublicNetwork)
+	assert.NotNil(t, lb.DisableIPv6)
+	assert.False(t, *lb.DisableIPv6)
+	assert.NotNil(t, lb.UsesProxyProtocol)
+	assert.False(t, *lb.UsesProxyProtocol)
+}
+
+func TestApplyDefaults_CCMPreserved(t *testing.T) {
+	falsePtr := false
+	truePtr := true
+	cfg := &Config{
+		Addons: AddonsConfig{
+			CCM: CCMConfig{
+				NetworkRoutesEnabled: &falsePtr,
+				LoadBalancers: CCMLoadBalancerConfig{
+					Enabled:           &falsePtr,
+					Type:              "lb21",
+					Algorithm:         "round_robin",
+					UsePrivateIP:      &falsePtr,
+					UsesProxyProtocol: &truePtr,
+				},
+			},
+		},
+	}
+	err := cfg.ApplyDefaults()
+	require.NoError(t, err)
+
+	ccm := cfg.Addons.CCM
+	lb := ccm.LoadBalancers
+
+	assert.False(t, *ccm.NetworkRoutesEnabled)
+	assert.False(t, *lb.Enabled)
+	assert.Equal(t, "lb21", lb.Type)
+	assert.Equal(t, "round_robin", lb.Algorithm)
+	assert.False(t, *lb.UsePrivateIP)
+	assert.True(t, *lb.UsesProxyProtocol)
+}
