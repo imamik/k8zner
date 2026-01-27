@@ -553,4 +553,478 @@ func TestMockClient_CustomFuncs(t *testing.T) {
 			t.Errorf("expected server ID 100, got %d", servers[0].ID)
 		}
 	})
+
+	t.Run("GetServerIP custom func", func(t *testing.T) {
+		m := &MockClient{
+			GetServerIPFunc: func(_ context.Context, _ string) (string, error) {
+				return "10.0.0.1", nil
+			},
+		}
+		ip, err := m.GetServerIP(ctx, "test")
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if ip != "10.0.0.1" {
+			t.Errorf("expected '10.0.0.1', got %q", ip)
+		}
+	})
+
+	t.Run("GetServerID custom func", func(t *testing.T) {
+		m := &MockClient{
+			GetServerIDFunc: func(_ context.Context, _ string) (string, error) {
+				return "999", nil
+			},
+		}
+		id, err := m.GetServerID(ctx, "test")
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if id != "999" {
+			t.Errorf("expected '999', got %q", id)
+		}
+	})
+
+	t.Run("EnableRescue custom func", func(t *testing.T) {
+		m := &MockClient{
+			EnableRescueFunc: func(_ context.Context, _ string, _ []string) (string, error) {
+				return "custom-password", nil
+			},
+		}
+		pwd, err := m.EnableRescue(ctx, "123", nil)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if pwd != "custom-password" {
+			t.Errorf("expected 'custom-password', got %q", pwd)
+		}
+	})
+
+	t.Run("ResetServer custom func", func(t *testing.T) {
+		m := &MockClient{
+			ResetServerFunc: func(_ context.Context, _ string) error {
+				return customErr
+			},
+		}
+		err := m.ResetServer(ctx, "123")
+		if !errors.Is(err, customErr) {
+			t.Errorf("expected custom error, got %v", err)
+		}
+	})
+
+	t.Run("PoweroffServer custom func", func(t *testing.T) {
+		m := &MockClient{
+			PoweroffServerFunc: func(_ context.Context, _ string) error {
+				return customErr
+			},
+		}
+		err := m.PoweroffServer(ctx, "123")
+		if !errors.Is(err, customErr) {
+			t.Errorf("expected custom error, got %v", err)
+		}
+	})
+
+	t.Run("CreateSnapshot custom func", func(t *testing.T) {
+		m := &MockClient{
+			CreateSnapshotFunc: func(_ context.Context, _, _ string, _ map[string]string) (string, error) {
+				return "custom-snapshot", nil
+			},
+		}
+		id, err := m.CreateSnapshot(ctx, "123", "desc", nil)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if id != "custom-snapshot" {
+			t.Errorf("expected 'custom-snapshot', got %q", id)
+		}
+	})
+
+	t.Run("DeleteImage custom func", func(t *testing.T) {
+		m := &MockClient{
+			DeleteImageFunc: func(_ context.Context, _ string) error {
+				return customErr
+			},
+		}
+		err := m.DeleteImage(ctx, "123")
+		if !errors.Is(err, customErr) {
+			t.Errorf("expected custom error, got %v", err)
+		}
+	})
+
+	t.Run("GetSnapshotByLabels custom func", func(t *testing.T) {
+		m := &MockClient{
+			GetSnapshotByLabelsFunc: func(_ context.Context, _ map[string]string) (*hcloud.Image, error) {
+				return &hcloud.Image{ID: 42}, nil
+			},
+		}
+		img, err := m.GetSnapshotByLabels(ctx, nil)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if img.ID != 42 {
+			t.Errorf("expected ID 42, got %d", img.ID)
+		}
+	})
+
+	t.Run("CreateSSHKey custom func", func(t *testing.T) {
+		m := &MockClient{
+			CreateSSHKeyFunc: func(_ context.Context, _, _ string, _ map[string]string) (string, error) {
+				return "custom-key", nil
+			},
+		}
+		id, err := m.CreateSSHKey(ctx, "key", "pub", nil)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if id != "custom-key" {
+			t.Errorf("expected 'custom-key', got %q", id)
+		}
+	})
+
+	t.Run("DeleteSSHKey custom func", func(t *testing.T) {
+		m := &MockClient{
+			DeleteSSHKeyFunc: func(_ context.Context, _ string) error {
+				return customErr
+			},
+		}
+		err := m.DeleteSSHKey(ctx, "key")
+		if !errors.Is(err, customErr) {
+			t.Errorf("expected custom error, got %v", err)
+		}
+	})
+
+	t.Run("EnsureNetwork custom func", func(t *testing.T) {
+		m := &MockClient{
+			EnsureNetworkFunc: func(_ context.Context, _, _, _ string, _ map[string]string) (*hcloud.Network, error) {
+				return &hcloud.Network{ID: 42}, nil
+			},
+		}
+		net, err := m.EnsureNetwork(ctx, "net", "10.0.0.0/8", "eu-central", nil)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if net.ID != 42 {
+			t.Errorf("expected ID 42, got %d", net.ID)
+		}
+	})
+
+	t.Run("EnsureSubnet custom func", func(t *testing.T) {
+		m := &MockClient{
+			EnsureSubnetFunc: func(_ context.Context, _ *hcloud.Network, _, _ string, _ hcloud.NetworkSubnetType) error {
+				return customErr
+			},
+		}
+		err := m.EnsureSubnet(ctx, nil, "10.0.0.0/24", "eu-central", hcloud.NetworkSubnetTypeCloud)
+		if !errors.Is(err, customErr) {
+			t.Errorf("expected custom error, got %v", err)
+		}
+	})
+
+	t.Run("DeleteNetwork custom func", func(t *testing.T) {
+		m := &MockClient{
+			DeleteNetworkFunc: func(_ context.Context, _ string) error {
+				return customErr
+			},
+		}
+		err := m.DeleteNetwork(ctx, "net")
+		if !errors.Is(err, customErr) {
+			t.Errorf("expected custom error, got %v", err)
+		}
+	})
+
+	t.Run("EnsureFirewall custom func", func(t *testing.T) {
+		m := &MockClient{
+			EnsureFirewallFunc: func(_ context.Context, _ string, _ []hcloud.FirewallRule, _ map[string]string, _ string) (*hcloud.Firewall, error) {
+				return &hcloud.Firewall{ID: 42}, nil
+			},
+		}
+		fw, err := m.EnsureFirewall(ctx, "fw", nil, nil, "")
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if fw.ID != 42 {
+			t.Errorf("expected ID 42, got %d", fw.ID)
+		}
+	})
+
+	t.Run("DeleteFirewall custom func", func(t *testing.T) {
+		m := &MockClient{
+			DeleteFirewallFunc: func(_ context.Context, _ string) error {
+				return customErr
+			},
+		}
+		err := m.DeleteFirewall(ctx, "fw")
+		if !errors.Is(err, customErr) {
+			t.Errorf("expected custom error, got %v", err)
+		}
+	})
+
+	t.Run("GetFirewall custom func", func(t *testing.T) {
+		m := &MockClient{
+			GetFirewallFunc: func(_ context.Context, _ string) (*hcloud.Firewall, error) {
+				return &hcloud.Firewall{ID: 42}, nil
+			},
+		}
+		fw, err := m.GetFirewall(ctx, "fw")
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if fw.ID != 42 {
+			t.Errorf("expected ID 42, got %d", fw.ID)
+		}
+	})
+
+	t.Run("EnsureLoadBalancer custom func", func(t *testing.T) {
+		m := &MockClient{
+			EnsureLoadBalancerFunc: func(_ context.Context, _, _, _ string, _ hcloud.LoadBalancerAlgorithmType, _ map[string]string) (*hcloud.LoadBalancer, error) {
+				return &hcloud.LoadBalancer{ID: 42}, nil
+			},
+		}
+		lb, err := m.EnsureLoadBalancer(ctx, "lb", "fsn1", "lb11", hcloud.LoadBalancerAlgorithmTypeRoundRobin, nil)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if lb.ID != 42 {
+			t.Errorf("expected ID 42, got %d", lb.ID)
+		}
+	})
+
+	t.Run("ConfigureService custom func", func(t *testing.T) {
+		m := &MockClient{
+			ConfigureServiceFunc: func(_ context.Context, _ *hcloud.LoadBalancer, _ hcloud.LoadBalancerAddServiceOpts) error {
+				return customErr
+			},
+		}
+		err := m.ConfigureService(ctx, nil, hcloud.LoadBalancerAddServiceOpts{})
+		if !errors.Is(err, customErr) {
+			t.Errorf("expected custom error, got %v", err)
+		}
+	})
+
+	t.Run("AddTarget custom func", func(t *testing.T) {
+		m := &MockClient{
+			AddTargetFunc: func(_ context.Context, _ *hcloud.LoadBalancer, _ hcloud.LoadBalancerTargetType, _ string) error {
+				return customErr
+			},
+		}
+		err := m.AddTarget(ctx, nil, hcloud.LoadBalancerTargetTypeServer, "")
+		if !errors.Is(err, customErr) {
+			t.Errorf("expected custom error, got %v", err)
+		}
+	})
+
+	t.Run("AttachToNetwork custom func", func(t *testing.T) {
+		m := &MockClient{
+			AttachToNetworkFunc: func(_ context.Context, _ *hcloud.LoadBalancer, _ *hcloud.Network, _ net.IP) error {
+				return customErr
+			},
+		}
+		err := m.AttachToNetwork(ctx, nil, nil, nil)
+		if !errors.Is(err, customErr) {
+			t.Errorf("expected custom error, got %v", err)
+		}
+	})
+
+	t.Run("DeleteLoadBalancer custom func", func(t *testing.T) {
+		m := &MockClient{
+			DeleteLoadBalancerFunc: func(_ context.Context, _ string) error {
+				return customErr
+			},
+		}
+		err := m.DeleteLoadBalancer(ctx, "lb")
+		if !errors.Is(err, customErr) {
+			t.Errorf("expected custom error, got %v", err)
+		}
+	})
+
+	t.Run("GetLoadBalancer custom func", func(t *testing.T) {
+		m := &MockClient{
+			GetLoadBalancerFunc: func(_ context.Context, _ string) (*hcloud.LoadBalancer, error) {
+				return &hcloud.LoadBalancer{ID: 42}, nil
+			},
+		}
+		lb, err := m.GetLoadBalancer(ctx, "lb")
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if lb.ID != 42 {
+			t.Errorf("expected ID 42, got %d", lb.ID)
+		}
+	})
+
+	t.Run("EnsurePlacementGroup custom func", func(t *testing.T) {
+		m := &MockClient{
+			EnsurePlacementGroupFunc: func(_ context.Context, _, _ string, _ map[string]string) (*hcloud.PlacementGroup, error) {
+				return &hcloud.PlacementGroup{ID: 42}, nil
+			},
+		}
+		pg, err := m.EnsurePlacementGroup(ctx, "pg", "spread", nil)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if pg.ID != 42 {
+			t.Errorf("expected ID 42, got %d", pg.ID)
+		}
+	})
+
+	t.Run("DeletePlacementGroup custom func", func(t *testing.T) {
+		m := &MockClient{
+			DeletePlacementGroupFunc: func(_ context.Context, _ string) error {
+				return customErr
+			},
+		}
+		err := m.DeletePlacementGroup(ctx, "pg")
+		if !errors.Is(err, customErr) {
+			t.Errorf("expected custom error, got %v", err)
+		}
+	})
+
+	t.Run("GetPlacementGroup custom func", func(t *testing.T) {
+		m := &MockClient{
+			GetPlacementGroupFunc: func(_ context.Context, _ string) (*hcloud.PlacementGroup, error) {
+				return &hcloud.PlacementGroup{ID: 42}, nil
+			},
+		}
+		pg, err := m.GetPlacementGroup(ctx, "pg")
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if pg.ID != 42 {
+			t.Errorf("expected ID 42, got %d", pg.ID)
+		}
+	})
+
+	t.Run("EnsureFloatingIP custom func", func(t *testing.T) {
+		m := &MockClient{
+			EnsureFloatingIPFunc: func(_ context.Context, _, _, _ string, _ map[string]string) (*hcloud.FloatingIP, error) {
+				return &hcloud.FloatingIP{ID: 42}, nil
+			},
+		}
+		fip, err := m.EnsureFloatingIP(ctx, "fip", "fsn1", "ipv4", nil)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if fip.ID != 42 {
+			t.Errorf("expected ID 42, got %d", fip.ID)
+		}
+	})
+
+	t.Run("DeleteFloatingIP custom func", func(t *testing.T) {
+		m := &MockClient{
+			DeleteFloatingIPFunc: func(_ context.Context, _ string) error {
+				return customErr
+			},
+		}
+		err := m.DeleteFloatingIP(ctx, "fip")
+		if !errors.Is(err, customErr) {
+			t.Errorf("expected custom error, got %v", err)
+		}
+	})
+
+	t.Run("GetFloatingIP custom func", func(t *testing.T) {
+		m := &MockClient{
+			GetFloatingIPFunc: func(_ context.Context, _ string) (*hcloud.FloatingIP, error) {
+				return &hcloud.FloatingIP{ID: 42}, nil
+			},
+		}
+		fip, err := m.GetFloatingIP(ctx, "fip")
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if fip.ID != 42 {
+			t.Errorf("expected ID 42, got %d", fip.ID)
+		}
+	})
+
+	t.Run("EnsureCertificate custom func", func(t *testing.T) {
+		m := &MockClient{
+			EnsureCertificateFunc: func(_ context.Context, _, _, _ string, _ map[string]string) (*hcloud.Certificate, error) {
+				return &hcloud.Certificate{ID: 42}, nil
+			},
+		}
+		cert, err := m.EnsureCertificate(ctx, "cert", "data", "key", nil)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if cert.ID != 42 {
+			t.Errorf("expected ID 42, got %d", cert.ID)
+		}
+	})
+
+	t.Run("GetCertificate custom func", func(t *testing.T) {
+		m := &MockClient{
+			GetCertificateFunc: func(_ context.Context, _ string) (*hcloud.Certificate, error) {
+				return &hcloud.Certificate{ID: 42}, nil
+			},
+		}
+		cert, err := m.GetCertificate(ctx, "cert")
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if cert.ID != 42 {
+			t.Errorf("expected ID 42, got %d", cert.ID)
+		}
+	})
+
+	t.Run("DeleteCertificate custom func", func(t *testing.T) {
+		m := &MockClient{
+			DeleteCertificateFunc: func(_ context.Context, _ string) error {
+				return customErr
+			},
+		}
+		err := m.DeleteCertificate(ctx, "cert")
+		if !errors.Is(err, customErr) {
+			t.Errorf("expected custom error, got %v", err)
+		}
+	})
+
+	t.Run("SetServerRDNS custom func", func(t *testing.T) {
+		m := &MockClient{
+			SetServerRDNSFunc: func(_ context.Context, _ int64, _, _ string) error {
+				return customErr
+			},
+		}
+		err := m.SetServerRDNS(ctx, 123, "1.2.3.4", "example.com")
+		if !errors.Is(err, customErr) {
+			t.Errorf("expected custom error, got %v", err)
+		}
+	})
+
+	t.Run("SetLoadBalancerRDNS custom func", func(t *testing.T) {
+		m := &MockClient{
+			SetLoadBalancerRDNSFunc: func(_ context.Context, _ int64, _, _ string) error {
+				return customErr
+			},
+		}
+		err := m.SetLoadBalancerRDNS(ctx, 123, "1.2.3.4", "example.com")
+		if !errors.Is(err, customErr) {
+			t.Errorf("expected custom error, got %v", err)
+		}
+	})
+
+	t.Run("GetPublicIP custom func", func(t *testing.T) {
+		m := &MockClient{
+			GetPublicIPFunc: func(_ context.Context) (string, error) {
+				return "10.0.0.1", nil
+			},
+		}
+		ip, err := m.GetPublicIP(ctx)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if ip != "10.0.0.1" {
+			t.Errorf("expected '10.0.0.1', got %q", ip)
+		}
+	})
+
+	t.Run("CleanupByLabel custom func", func(t *testing.T) {
+		m := &MockClient{
+			CleanupByLabelFunc: func(_ context.Context, _ map[string]string) error {
+				return customErr
+			},
+		}
+		err := m.CleanupByLabel(ctx, map[string]string{"key": "value"})
+		if !errors.Is(err, customErr) {
+			t.Errorf("expected custom error, got %v", err)
+		}
+	})
 }
