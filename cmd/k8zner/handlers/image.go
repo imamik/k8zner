@@ -5,7 +5,21 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning/image"
+)
+
+// ImageBuilder interface for testing - matches image.Builder.
+type ImageBuilder interface {
+	Build(ctx context.Context, talosVersion, k8sVersion, architecture, serverType, location string, labels map[string]string) (string, error)
+}
+
+// Factory function variables for image - can be replaced in tests.
+var (
+	// newImageBuilder creates a new image builder.
+	newImageBuilder = func(client hcloud.InfrastructureManager) ImageBuilder {
+		return image.NewBuilder(client)
+	}
 )
 
 // Build creates a custom Talos Linux snapshot on Hetzner Cloud.
@@ -21,7 +35,7 @@ import (
 // delegate validation to the Hetzner Cloud client.
 func Build(ctx context.Context, imageName, talosVersion, arch, location string) error {
 	client := initializeClient()
-	builder := image.NewBuilder(client)
+	builder := newImageBuilder(client)
 
 	log.Printf("Building image %s (Talos %s, Arch %s) in location %s...", imageName, talosVersion, arch, location)
 

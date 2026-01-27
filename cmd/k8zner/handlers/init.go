@@ -7,6 +7,24 @@ import (
 	"github.com/imamik/k8zner/internal/config/wizard"
 )
 
+// Factory function variables for init - can be replaced in tests.
+var (
+	// wizardFileExists checks if a file exists.
+	wizardFileExists = wizard.FileExists
+
+	// wizardConfirmOverwrite prompts for confirmation to overwrite.
+	wizardConfirmOverwrite = wizard.ConfirmOverwrite
+
+	// wizardRunWizard runs the interactive wizard.
+	wizardRunWizard = wizard.RunWizard
+
+	// wizardBuildConfig builds a config from wizard result.
+	wizardBuildConfig = wizard.BuildConfig
+
+	// wizardWriteConfig writes the config to a file.
+	wizardWriteConfig = wizard.WriteConfig
+)
+
 // Init runs the interactive configuration wizard and writes the result to a file.
 //
 // This function orchestrates the configuration wizard workflow:
@@ -22,8 +40,8 @@ import (
 // Otherwise, a minimal YAML with only essential values is generated.
 func Init(ctx context.Context, outputPath string, advanced bool, fullOutput bool) error {
 	// Check if file exists and prompt for confirmation
-	if wizard.FileExists(outputPath) {
-		confirm, err := wizard.ConfirmOverwrite(outputPath)
+	if wizardFileExists(outputPath) {
+		confirm, err := wizardConfirmOverwrite(outputPath)
 		if err != nil {
 			return fmt.Errorf("failed to prompt for confirmation: %w", err)
 		}
@@ -37,16 +55,16 @@ func Init(ctx context.Context, outputPath string, advanced bool, fullOutput bool
 	printWelcome(advanced, fullOutput)
 
 	// Run the interactive wizard
-	result, err := wizard.RunWizard(ctx, advanced)
+	result, err := wizardRunWizard(ctx, advanced)
 	if err != nil {
 		return fmt.Errorf("wizard failed: %w", err)
 	}
 
 	// Build config from wizard result
-	cfg := wizard.BuildConfig(result)
+	cfg := wizardBuildConfig(result)
 
 	// Write config to file
-	if err := wizard.WriteConfig(cfg, outputPath, fullOutput); err != nil {
+	if err := wizardWriteConfig(cfg, outputPath, fullOutput); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 
