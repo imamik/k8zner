@@ -6,9 +6,32 @@
 [![Release](https://img.shields.io/github/v/release/imamik/k8zner)](https://github.com/imamik/k8zner/releases/latest)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-**Production-ready Kubernetes clusters on Hetzner Cloud using [Talos Linux](https://www.talos.dev/).**
+**k8zner** (k8s + Hetzner) — Production-ready Kubernetes clusters on [Hetzner Cloud](https://www.hetzner.com/cloud) using [Talos Linux](https://www.talos.dev/).
 
-A self-contained Go CLI that provisions highly available, secure Kubernetes clusters on Hetzner Cloud infrastructure. No Terraform, kubectl, or talosctl required.
+A self-contained Go CLI that provisions secure, highly available Kubernetes clusters with batteries included. No Terraform, kubectl, or talosctl required — just download and run.
+
+### Get Started in Minutes
+
+```bash
+export HCLOUD_TOKEN="your-token"
+k8zner init        # Interactive wizard
+k8zner apply       # Deploy cluster
+```
+
+### Batteries Included
+
+k8zner comes with pre-configured integrations for a complete production setup:
+
+| Category | Integrations |
+|----------|-------------|
+| **Networking** | [Cilium](https://cilium.io/) (eBPF CNI), [Gateway API](https://gateway-api.sigs.k8s.io/), [ingress-nginx](https://kubernetes.github.io/ingress-nginx/), [Traefik](https://traefik.io/) |
+| **Cloud Integration** | [Hetzner CCM](https://github.com/hetznercloud/hcloud-cloud-controller-manager), [Hetzner CSI](https://github.com/hetznercloud/csi-driver) |
+| **DNS & TLS** | [Cloudflare](https://www.cloudflare.com/) DNS, [external-dns](https://github.com/kubernetes-sigs/external-dns), [cert-manager](https://cert-manager.io/) with Let's Encrypt |
+| **GitOps** | [ArgoCD](https://argo-cd.readthedocs.io/) |
+| **Storage** | [Longhorn](https://longhorn.io/) distributed storage |
+| **Scaling** | [Cluster Autoscaler](https://github.com/kubernetes/autoscaler) |
+| **Monitoring** | [Metrics Server](https://github.com/kubernetes-sigs/metrics-server), [Prometheus Operator](https://prometheus-operator.dev/) CRDs |
+| **Auth** | OIDC integration |
 
 ---
 
