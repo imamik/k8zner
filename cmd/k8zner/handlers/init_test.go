@@ -119,6 +119,53 @@ func TestPrintInitSuccess(t *testing.T) {
 		assert.NotContains(t, output, "Workers:         2")
 		assert.Contains(t, output, "Talos Default")
 	})
+
+	t.Run("with ssh keys", func(t *testing.T) {
+		result := &wizard.WizardResult{
+			ClusterName:       "test-cluster",
+			Location:          "nbg1",
+			Architecture:      wizard.ArchX86,
+			ServerCategory:    wizard.CategoryShared,
+			ControlPlaneType:  "cpx21",
+			ControlPlaneCount: 1,
+			AddWorkers:        false,
+			CNIChoice:         wizard.CNICilium,
+			TalosVersion:      "v1.9.0",
+			KubernetesVersion: "v1.32.0",
+			SSHKeys:           []string{"my-key-1", "my-key-2"},
+		}
+
+		output := captureOutput(func() {
+			printInitSuccess("output.yaml", result, false)
+		})
+
+		assert.Contains(t, output, "my-key-1")
+		assert.Contains(t, output, "my-key-2")
+		assert.NotContains(t, output, "will be auto-generated")
+	})
+
+	t.Run("full output mode", func(t *testing.T) {
+		result := &wizard.WizardResult{
+			ClusterName:       "test-cluster",
+			Location:          "nbg1",
+			Architecture:      wizard.ArchX86,
+			ServerCategory:    wizard.CategoryShared,
+			ControlPlaneType:  "cpx21",
+			ControlPlaneCount: 1,
+			AddWorkers:        false,
+			CNIChoice:         wizard.CNICilium,
+			TalosVersion:      "v1.9.0",
+			KubernetesVersion: "v1.32.0",
+		}
+
+		output := captureOutput(func() {
+			printInitSuccess("output.yaml", result, true) // fullOutput = true
+		})
+
+		// Should NOT contain the minimal output hint when fullOutput is true
+		assert.NotContains(t, output, "minimal output")
+		assert.NotContains(t, output, "--full")
+	})
 }
 
 // captureOutput captures stdout during function execution.

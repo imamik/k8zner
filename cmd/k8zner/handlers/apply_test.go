@@ -591,4 +591,99 @@ func TestApply_WithInjection(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to initialize secrets")
 	})
+
+	t.Run("write talos files error", func(t *testing.T) {
+		loadConfigFile = func(_ string) (*config.Config, error) {
+			disabled := false
+			return &config.Config{
+				ClusterName:               "test",
+				PrerequisitesCheckEnabled: &disabled,
+			}, nil
+		}
+
+		getOrGenerateSecrets = func(_, _ string) (*secrets.Bundle, error) {
+			return &secrets.Bundle{}, nil
+		}
+
+		newTalosGenerator = func(_, _, _, _ string, _ *secrets.Bundle) provisioning.TalosConfigProducer {
+			return &mockTalosProducer{clientConfigErr: errors.New("config generation failed")}
+		}
+
+		err := Apply(context.Background(), "config.yaml")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to generate talosconfig")
+	})
+
+	t.Run("reconcile infrastructure error", func(t *testing.T) {
+		loadConfigFile = func(_ string) (*config.Config, error) {
+			disabled := false
+			return &config.Config{
+				ClusterName:               "test",
+				PrerequisitesCheckEnabled: &disabled,
+			}, nil
+		}
+
+		getOrGenerateSecrets = func(_, _ string) (*secrets.Bundle, error) {
+			return &secrets.Bundle{}, nil
+		}
+
+		newTalosGenerator = func(_, _, _, _ string, _ *secrets.Bundle) provisioning.TalosConfigProducer {
+			return &mockTalosProducer{clientConfig: []byte("talos-config")}
+		}
+
+		newInfraClient = func(_ string) hcloud.InfrastructureManager {
+			return &hcloud.MockClient{}
+		}
+
+		writeFile = func(_ string, _ []byte, _ os.FileMode) error {
+			return nil
+		}
+
+		newReconciler = func(_ hcloud.InfrastructureManager, _ provisioning.TalosConfigProducer, _ *config.Config) Reconciler {
+			return &mockReconciler{err: errors.New("server creation failed")}
+		}
+
+		err := Apply(context.Background(), "config.yaml")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "reconciliation failed")
+	})
+
+	t.Run("write kubeconfig error", func(t *testing.T) {
+		loadConfigFile = func(_ string) (*config.Config, error) {
+			disabled := false
+			return &config.Config{
+				ClusterName:               "test",
+				PrerequisitesCheckEnabled: &disabled,
+			}, nil
+		}
+
+		getOrGenerateSecrets = func(_, _ string) (*secrets.Bundle, error) {
+			return &secrets.Bundle{}, nil
+		}
+
+		newTalosGenerator = func(_, _, _, _ string, _ *secrets.Bundle) provisioning.TalosConfigProducer {
+			return &mockTalosProducer{clientConfig: []byte("talos-config")}
+		}
+
+		newInfraClient = func(_ string) hcloud.InfrastructureManager {
+			return &hcloud.MockClient{}
+		}
+
+		newReconciler = func(_ hcloud.InfrastructureManager, _ provisioning.TalosConfigProducer, _ *config.Config) Reconciler {
+			return &mockReconciler{kubeconfig: []byte("kubeconfig-data")}
+		}
+
+		writeCallCount := 0
+		writeFile = func(_ string, _ []byte, _ os.FileMode) error {
+			writeCallCount++
+			if writeCallCount == 2 { // First call is talosconfig, second is kubeconfig
+				return errors.New("permission denied")
+			}
+			return nil
+		}
+
+		err := Apply(context.Background(), "config.yaml")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to write kubeconfig")
+	})
 }
