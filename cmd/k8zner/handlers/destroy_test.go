@@ -2,12 +2,17 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/imamik/k8zner/internal/config"
+	"github.com/imamik/k8zner/internal/platform/hcloud"
+	"github.com/imamik/k8zner/internal/provisioning"
 )
 
 func TestDestroy(t *testing.T) {
@@ -103,4 +108,94 @@ control_plane:
 		// Expected to fail with config validation error
 		assert.Contains(t, err.Error(), "configuration validation failed")
 	}
+}
+
+// mockProvisioner implements the Provisioner interface for testing.
+type mockProvisioner struct {
+	err error
+}
+
+func (m *mockProvisioner) Provision(_ *provisioning.Context) error {
+	return m.err
+}
+
+func TestDestroy_WithInjection(t *testing.T) {
+	saveAndRestoreFactories(t)
+
+	validConfig := &config.Config{
+		ClusterName: "test-cluster",
+		HCloudToken: "test-token",
+		Location:    "nbg1",
+		Network: config.NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+		},
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{
+				{Name: "cp", ServerType: "cpx21", Count: 1},
+			},
+		},
+	}
+
+	t.Run("success flow", func(t *testing.T) {
+		loadConfigFile = func(_ string) (*config.Config, error) {
+			return validConfig, nil
+		}
+
+		newInfraClient = func(_ string) hcloud.InfrastructureManager {
+			return &hcloud.MockClient{}
+		}
+
+		newProvisioningContext = func(_ context.Context, _ *config.Config, _ hcloud.InfrastructureManager, _ provisioning.TalosConfigProducer) *provisioning.Context {
+			return &provisioning.Context{}
+		}
+
+		newDestroyProvisioner = func() Provisioner {
+			return &mockProvisioner{}
+		}
+
+		err := Destroy(context.Background(), "config.yaml")
+		require.NoError(t, err)
+	})
+
+	t.Run("config load error", func(t *testing.T) {
+		loadConfigFile = func(_ string) (*config.Config, error) {
+			return nil, errors.New("file not found")
+		}
+
+		err := Destroy(context.Background(), "missing.yaml")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to load config")
+	})
+
+	t.Run("config validation error", func(t *testing.T) {
+		loadConfigFile = func(_ string) (*config.Config, error) {
+			return &config.Config{ClusterName: ""}, nil // Invalid: empty cluster name
+		}
+
+		err := Destroy(context.Background(), "config.yaml")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid configuration")
+	})
+
+	t.Run("destroy provisioner error", func(t *testing.T) {
+		loadConfigFile = func(_ string) (*config.Config, error) {
+			return validConfig, nil
+		}
+
+		newInfraClient = func(_ string) hcloud.InfrastructureManager {
+			return &hcloud.MockClient{}
+		}
+
+		newProvisioningContext = func(_ context.Context, _ *config.Config, _ hcloud.InfrastructureManager, _ provisioning.TalosConfigProducer) *provisioning.Context {
+			return &provisioning.Context{}
+		}
+
+		newDestroyProvisioner = func() Provisioner {
+			return &mockProvisioner{err: errors.New("destroy failed: resource busy")}
+		}
+
+		err := Destroy(context.Background(), "config.yaml")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "destroy failed")
+	})
 }

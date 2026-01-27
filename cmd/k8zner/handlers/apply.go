@@ -11,10 +11,13 @@ import (
 	"log"
 	"os"
 
+	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
+
 	"github.com/imamik/k8zner/internal/config"
 	"github.com/imamik/k8zner/internal/orchestration"
 	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/platform/talos"
+	"github.com/imamik/k8zner/internal/provisioning"
 	"github.com/imamik/k8zner/internal/util/prerequisites"
 )
 
@@ -22,6 +25,41 @@ const (
 	secretsFile     = "secrets.yaml"
 	talosConfigPath = "talosconfig"
 	kubeconfigPath  = "kubeconfig"
+)
+
+// Reconciler interface for testing - matches orchestration.Reconciler.
+type Reconciler interface {
+	Reconcile(ctx context.Context) ([]byte, error)
+}
+
+// Factory function variables - can be replaced in tests for dependency injection.
+var (
+	// newInfraClient creates a new infrastructure client.
+	newInfraClient = func(token string) hcloud.InfrastructureManager {
+		return hcloud.NewRealClient(token)
+	}
+
+	// getOrGenerateSecrets loads or generates Talos secrets.
+	getOrGenerateSecrets = talos.GetOrGenerateSecrets
+
+	// newTalosGenerator creates a new Talos configuration generator.
+	newTalosGenerator = func(clusterName, kubernetesVersion, talosVersion, endpoint string, sb *secrets.Bundle) provisioning.TalosConfigProducer {
+		return talos.NewGenerator(clusterName, kubernetesVersion, talosVersion, endpoint, sb)
+	}
+
+	// newReconciler creates a new infrastructure reconciler.
+	newReconciler = func(infra hcloud.InfrastructureManager, talosGen provisioning.TalosConfigProducer, cfg *config.Config) Reconciler {
+		return orchestration.NewReconciler(infra, talosGen, cfg)
+	}
+
+	// checkDefaultPrereqs runs prerequisite checks.
+	checkDefaultPrereqs = prerequisites.CheckDefault
+
+	// writeFile writes data to a file (for testing injection).
+	writeFile = os.WriteFile
+
+	// loadConfigFile loads config from file (for testing injection).
+	loadConfigFile = config.LoadFile
 )
 
 // Apply provisions a Kubernetes cluster on Hetzner Cloud using Talos Linux.
@@ -65,7 +103,7 @@ func Apply(ctx context.Context, configPath string) error {
 		return err
 	}
 
-	_, kubeconfig, err := reconcileInfrastructure(ctx, client, talosGen, cfg)
+	kubeconfig, err := reconcileInfrastructure(ctx, client, talosGen, cfg)
 	if err != nil {
 		return err
 	}
@@ -84,7 +122,7 @@ func loadConfig(configPath string) (*config.Config, error) {
 		return nil, fmt.Errorf("config file is required (use --config)")
 	}
 
-	cfg, err := config.LoadFile(configPath)
+	cfg, err := loadConfigFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
@@ -94,22 +132,22 @@ func loadConfig(configPath string) (*config.Config, error) {
 
 // initializeClient creates a Hetzner Cloud client using HCLOUD_TOKEN from environment.
 // Token validation is delegated to the client.
-func initializeClient() *hcloud.RealClient {
+func initializeClient() hcloud.InfrastructureManager {
 	token := os.Getenv("HCLOUD_TOKEN")
-	return hcloud.NewRealClient(token)
+	return newInfraClient(token)
 }
 
 // initializeTalosGenerator creates a Talos configuration generator for the orchestration.
 // Generates machine configs, certificates, and client secrets for cluster access.
-func initializeTalosGenerator(cfg *config.Config) (*talos.Generator, error) {
+func initializeTalosGenerator(cfg *config.Config) (provisioning.TalosConfigProducer, error) {
 	endpoint := fmt.Sprintf("https://%s-kube-api:%d", cfg.ClusterName, config.KubeAPIPort)
 
-	sb, err := talos.GetOrGenerateSecrets(secretsFile, cfg.Talos.Version)
+	sb, err := getOrGenerateSecrets(secretsFile, cfg.Talos.Version)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize secrets: %w", err)
 	}
 
-	return talos.NewGenerator(
+	return newTalosGenerator(
 		cfg.ClusterName,
 		cfg.Kubernetes.Version,
 		cfg.Talos.Version,
@@ -119,30 +157,30 @@ func initializeTalosGenerator(cfg *config.Config) (*talos.Generator, error) {
 }
 
 // reconcileInfrastructure provisions infrastructure and bootstraps the Kubernetes orchestration.
-// Returns the reconciler instance and kubeconfig bytes if bootstrap completed.
+// Returns kubeconfig bytes if bootstrap completed.
 // Kubeconfig will be empty if cluster was already bootstrapped.
-func reconcileInfrastructure(ctx context.Context, client *hcloud.RealClient, talosGen *talos.Generator, cfg *config.Config) (*orchestration.Reconciler, []byte, error) {
+func reconcileInfrastructure(ctx context.Context, client hcloud.InfrastructureManager, talosGen provisioning.TalosConfigProducer, cfg *config.Config) ([]byte, error) {
 	log.Println("Starting infrastructure reconciliation...")
 
-	reconciler := orchestration.NewReconciler(client, talosGen, cfg)
+	reconciler := newReconciler(client, talosGen, cfg)
 	kubeconfig, err := reconciler.Reconcile(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("reconciliation failed: %w", err)
+		return nil, fmt.Errorf("reconciliation failed: %w", err)
 	}
 
 	log.Println("Infrastructure reconciliation completed")
-	return reconciler, kubeconfig, nil
+	return kubeconfig, nil
 }
 
 // writeTalosFiles persists Talos secrets and client config to disk.
 // Must be called before reconciliation to ensure secrets survive failures.
-func writeTalosFiles(talosGen *talos.Generator) error {
+func writeTalosFiles(talosGen provisioning.TalosConfigProducer) error {
 	clientCfgBytes, err := talosGen.GetClientConfig()
 	if err != nil {
 		return fmt.Errorf("failed to generate talosconfig: %w", err)
 	}
 
-	if err := os.WriteFile(talosConfigPath, clientCfgBytes, 0600); err != nil {
+	if err := writeFile(talosConfigPath, clientCfgBytes, 0600); err != nil {
 		return fmt.Errorf("failed to write talosconfig: %w", err)
 	}
 
@@ -156,7 +194,7 @@ func writeKubeconfig(kubeconfig []byte) error {
 		return nil
 	}
 
-	if err := os.WriteFile(kubeconfigPath, kubeconfig, 0600); err != nil {
+	if err := writeFile(kubeconfigPath, kubeconfig, 0600); err != nil {
 		return fmt.Errorf("failed to write kubeconfig: %w", err)
 	}
 
@@ -222,7 +260,7 @@ func checkPrerequisites(cfg *config.Config) error {
 	}
 
 	log.Println("Checking prerequisites...")
-	results := prerequisites.CheckDefault()
+	results := checkDefaultPrereqs()
 
 	// Log found tools
 	for _, r := range results.Results {
