@@ -2539,3 +2539,134 @@ func TestValidateWorkers_NegativeCount(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "count cannot be negative")
 }
+
+// Tests for validateNetwork - optional CIDRs
+func TestValidateNetwork_InvalidNodeIPv4CIDR(t *testing.T) {
+	cfg := newTestConfig()
+	cfg.Network.NodeIPv4CIDR = "invalid-cidr"
+
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid network.node_ipv4_cidr")
+}
+
+func TestValidateNetwork_InvalidServiceIPv4CIDR(t *testing.T) {
+	cfg := newTestConfig()
+	cfg.Network.ServiceIPv4CIDR = "not-a-cidr"
+
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid network.service_ipv4_cidr")
+}
+
+func TestValidateNetwork_InvalidPodIPv4CIDR(t *testing.T) {
+	cfg := newTestConfig()
+	cfg.Network.PodIPv4CIDR = "bad-cidr"
+
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid network.pod_ipv4_cidr")
+}
+
+func TestValidateNetwork_ValidOptionalCIDRs(t *testing.T) {
+	cfg := newTestConfig()
+	cfg.Network.NodeIPv4CIDR = "10.0.64.0/19"
+	cfg.Network.ServiceIPv4CIDR = "10.0.96.0/19"
+	cfg.Network.PodIPv4CIDR = "10.0.128.0/17"
+
+	err := cfg.Validate()
+	require.NoError(t, err)
+}
+
+// Tests for validateCombinedNameLengths
+func TestValidateCombinedNameLengths_AutoscalerPoolTooLong(t *testing.T) {
+	cfg := newTestConfig()
+	// Use max 32 char cluster name + 25 char pool name = 58 chars (exceeds 56)
+	cfg.ClusterName = "a1234567890123456789012345678901" // 32 chars
+	cfg.Autoscaler.NodePools = []AutoscalerNodePool{
+		{
+			Name:     "autoscaler-pool-name-123", // 24 chars, total = 32+1+24 = 57 > 56
+			Type:     "cpx31",
+			Location: "nbg1",
+			Min:      1,
+			Max:      3,
+		},
+	}
+
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "combined length")
+	assert.Contains(t, err.Error(), "autoscaler pool")
+}
+
+func TestValidateCombinedNameLengths_IngressLBPoolTooLong(t *testing.T) {
+	cfg := newTestConfig()
+	// Use max 32 char cluster name + 25 char pool name = 58 chars (exceeds 56)
+	cfg.ClusterName = "b1234567890123456789012345678901" // 32 chars
+	cfg.IngressLoadBalancerPools = []IngressLoadBalancerPool{
+		{
+			Name:  "ingress-lb-pool-name-123", // 24 chars, total = 32+1+24 = 57 > 56
+			Count: 1,
+		},
+	}
+
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "combined length")
+	assert.Contains(t, err.Error(), "ingress load balancer pool")
+}
+
+// Tests for validateAutoscaler
+func TestValidateAutoscaler_MissingName(t *testing.T) {
+	cfg := newTestConfig()
+	cfg.Autoscaler.NodePools = []AutoscalerNodePool{
+		{Name: "", Type: "cpx31", Location: "nbg1", Min: 1, Max: 3},
+	}
+
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "autoscaler pool name is required")
+}
+
+func TestValidateAutoscaler_MissingType(t *testing.T) {
+	cfg := newTestConfig()
+	cfg.Autoscaler.NodePools = []AutoscalerNodePool{
+		{Name: "auto", Type: "", Location: "nbg1", Min: 1, Max: 3},
+	}
+
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "server type is required")
+}
+
+func TestValidateAutoscaler_MissingLocation(t *testing.T) {
+	cfg := newTestConfig()
+	cfg.Autoscaler.NodePools = []AutoscalerNodePool{
+		{Name: "auto", Type: "cpx31", Location: "", Min: 1, Max: 3},
+	}
+
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "location is required")
+}
+
+func TestValidateAutoscaler_InvalidLocation(t *testing.T) {
+	cfg := newTestConfig()
+	cfg.Autoscaler.NodePools = []AutoscalerNodePool{
+		{Name: "auto", Type: "cpx31", Location: "invalid", Min: 1, Max: 3},
+	}
+
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid location")
+}
+
+func TestValidateAutoscaler_ValidConfig(t *testing.T) {
+	cfg := newTestConfig()
+	cfg.Autoscaler.NodePools = []AutoscalerNodePool{
+		{Name: "auto", Type: "cpx31", Location: "nbg1", Min: 1, Max: 10},
+	}
+
+	err := cfg.Validate()
+	require.NoError(t, err)
+}

@@ -12,8 +12,25 @@ import (
 // clusterNameRegex validates cluster name format: 1-32 lowercase alphanumeric with hyphens.
 var clusterNameRegex = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$`)
 
-// runClusterIdentityGroup prompts for cluster name and location.
-func runClusterIdentityGroup(ctx context.Context, result *WizardResult) error {
+// Function variables for dependency injection in tests.
+// These allow replacing the interactive prompts with mocks.
+var (
+	runClusterIdentityGroup   = defaultRunClusterIdentityGroup
+	runSSHAccessGroup         = defaultRunSSHAccessGroup
+	runArchitectureGroup      = defaultRunArchitectureGroup
+	runControlPlaneGroup      = defaultRunControlPlaneGroup
+	runWorkersGroup           = defaultRunWorkersGroup
+	runCNIGroup               = defaultRunCNIGroup
+	runIngressControllerGroup = defaultRunIngressControllerGroup
+	runAddonsGroup            = defaultRunAddonsGroup
+	runVersionsGroup          = defaultRunVersionsGroup
+	runNetworkGroup           = defaultRunNetworkGroup
+	runSecurityGroup          = defaultRunSecurityGroup
+	runCiliumAdvancedGroup    = defaultRunCiliumAdvancedGroup
+)
+
+// defaultRunClusterIdentityGroup prompts for cluster name and location.
+func defaultRunClusterIdentityGroup(ctx context.Context, result *WizardResult) error {
 	return huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
@@ -31,8 +48,8 @@ func runClusterIdentityGroup(ctx context.Context, result *WizardResult) error {
 	).RunWithContext(ctx)
 }
 
-// runSSHAccessGroup prompts for SSH key names (optional).
-func runSSHAccessGroup(ctx context.Context, result *WizardResult) error {
+// defaultRunSSHAccessGroup prompts for SSH key names (optional).
+func defaultRunSSHAccessGroup(ctx context.Context, result *WizardResult) error {
 	var sshKeysInput string
 
 	err := huh.NewForm(
@@ -53,8 +70,8 @@ func runSSHAccessGroup(ctx context.Context, result *WizardResult) error {
 	return nil
 }
 
-// runArchitectureGroup prompts for server architecture selection.
-func runArchitectureGroup(ctx context.Context, result *WizardResult) error {
+// defaultRunArchitectureGroup prompts for server architecture selection.
+func defaultRunArchitectureGroup(ctx context.Context, result *WizardResult) error {
 	result.Architecture = ArchX86 // default
 
 	err := huh.NewForm(
@@ -91,8 +108,8 @@ func runArchitectureGroup(ctx context.Context, result *WizardResult) error {
 	return nil
 }
 
-// runControlPlaneGroup prompts for control plane configuration.
-func runControlPlaneGroup(ctx context.Context, result *WizardResult) error {
+// defaultRunControlPlaneGroup prompts for control plane configuration.
+func defaultRunControlPlaneGroup(ctx context.Context, result *WizardResult) error {
 	// Filter server types based on architecture and category
 	filteredTypes := FilterServerTypes(result.Architecture, result.ServerCategory)
 	if len(filteredTypes) == 0 {
@@ -123,8 +140,8 @@ func runControlPlaneGroup(ctx context.Context, result *WizardResult) error {
 	).RunWithContext(ctx)
 }
 
-// runWorkersGroup prompts for worker node configuration.
-func runWorkersGroup(ctx context.Context, result *WizardResult) error {
+// defaultRunWorkersGroup prompts for worker node configuration.
+func defaultRunWorkersGroup(ctx context.Context, result *WizardResult) error {
 	err := huh.NewForm(
 		huh.NewGroup(
 			huh.NewConfirm().
@@ -171,8 +188,8 @@ func runWorkersGroup(ctx context.Context, result *WizardResult) error {
 	return nil
 }
 
-// runCNIGroup prompts for CNI selection.
-func runCNIGroup(ctx context.Context, result *WizardResult) error {
+// defaultRunCNIGroup prompts for CNI selection.
+func defaultRunCNIGroup(ctx context.Context, result *WizardResult) error {
 	result.CNIChoice = CNICilium // default
 
 	return huh.NewForm(
@@ -186,8 +203,8 @@ func runCNIGroup(ctx context.Context, result *WizardResult) error {
 	).RunWithContext(ctx)
 }
 
-// runIngressControllerGroup prompts for ingress controller selection.
-func runIngressControllerGroup(ctx context.Context, result *WizardResult) error {
+// defaultRunIngressControllerGroup prompts for ingress controller selection.
+func defaultRunIngressControllerGroup(ctx context.Context, result *WizardResult) error {
 	result.IngressController = IngressTraefik // default
 
 	return huh.NewForm(
@@ -201,8 +218,8 @@ func runIngressControllerGroup(ctx context.Context, result *WizardResult) error 
 	).RunWithContext(ctx)
 }
 
-// runAddonsGroup prompts for addon selection.
-func runAddonsGroup(ctx context.Context, result *WizardResult) error {
+// defaultRunAddonsGroup prompts for addon selection.
+func defaultRunAddonsGroup(ctx context.Context, result *WizardResult) error {
 	options := make([]huh.Option[string], len(BasicAddons))
 	defaultSelected := []string{}
 
@@ -226,8 +243,8 @@ func runAddonsGroup(ctx context.Context, result *WizardResult) error {
 	).RunWithContext(ctx)
 }
 
-// runVersionsGroup prompts for Talos and Kubernetes versions.
-func runVersionsGroup(ctx context.Context, result *WizardResult) error {
+// defaultRunVersionsGroup prompts for Talos and Kubernetes versions.
+func defaultRunVersionsGroup(ctx context.Context, result *WizardResult) error {
 	result.TalosVersion = TalosVersions[0].Value
 	result.KubernetesVersion = KubernetesVersions[0].Value
 
@@ -247,8 +264,8 @@ func runVersionsGroup(ctx context.Context, result *WizardResult) error {
 	).RunWithContext(ctx)
 }
 
-// runNetworkGroup prompts for network configuration (advanced mode).
-func runNetworkGroup(ctx context.Context, opts *AdvancedOptions) error {
+// defaultRunNetworkGroup prompts for network configuration (advanced mode).
+func defaultRunNetworkGroup(ctx context.Context, opts *AdvancedOptions) error {
 	opts.NetworkCIDR = "10.0.0.0/16"
 	opts.PodCIDR = "10.244.0.0/16"
 	opts.ServiceCIDR = "10.96.0.0/12"
@@ -274,8 +291,8 @@ func runNetworkGroup(ctx context.Context, opts *AdvancedOptions) error {
 	).RunWithContext(ctx)
 }
 
-// runSecurityGroup prompts for security options (advanced mode).
-func runSecurityGroup(ctx context.Context, opts *AdvancedOptions) error {
+// defaultRunSecurityGroup prompts for security options (advanced mode).
+func defaultRunSecurityGroup(ctx context.Context, opts *AdvancedOptions) error {
 	opts.DiskEncryption = true
 	opts.ClusterAccess = "public"
 
@@ -294,8 +311,8 @@ func runSecurityGroup(ctx context.Context, opts *AdvancedOptions) error {
 	).RunWithContext(ctx)
 }
 
-// runCiliumAdvancedGroup prompts for Cilium configuration (advanced mode).
-func runCiliumAdvancedGroup(ctx context.Context, opts *AdvancedOptions) error {
+// defaultRunCiliumAdvancedGroup prompts for Cilium configuration (advanced mode).
+func defaultRunCiliumAdvancedGroup(ctx context.Context, opts *AdvancedOptions) error {
 	err := huh.NewForm(
 		huh.NewGroup(
 			huh.NewConfirm().
