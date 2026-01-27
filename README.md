@@ -15,7 +15,8 @@
 - **Talos Linux** — Immutable, secure, API-managed Kubernetes OS
 - **High Availability** — Multi-node control planes with automatic failover
 - **Auto-scaling** — Cluster Autoscaler integration for dynamic worker pools
-- **Full Addon Suite** — Cilium CNI, Hetzner CCM/CSI, cert-manager, ingress-nginx, and more
+- **Full Addon Suite** — Cilium CNI, Hetzner CCM/CSI, cert-manager, ingress-nginx, Traefik, ArgoCD, and more
+- **Cloudflare DNS Integration** — Automatic DNS records and TLS certificates via external-dns and cert-manager
 - **Snapshot-based Provisioning** — Fast node creation from pre-built Talos images
 - **Self-Contained Binary** — No runtime dependencies (kubectl, talosctl not required)
 
@@ -93,6 +94,34 @@ kubectl get nodes
 | `k8zner upgrade` | Upgrade Talos and/or Kubernetes versions |
 | `k8zner image build` | Build Talos image snapshot |
 | `k8zner image delete` | Delete Talos image snapshots |
+
+## Cloudflare DNS Integration
+
+k8zner supports automatic DNS record creation and TLS certificate provisioning via Cloudflare:
+
+```bash
+export CF_API_TOKEN="your-cloudflare-api-token"
+export CF_DOMAIN="example.com"
+```
+
+```yaml
+addons:
+  cloudflare:
+    enabled: true
+  external_dns:
+    enabled: true
+  cert_manager:
+    enabled: true
+    cloudflare:
+      enabled: true
+      email: "admin@example.com"
+```
+
+With this configuration:
+- **external-dns** automatically creates DNS A records from Ingress annotations
+- **cert-manager** issues TLS certificates via Let's Encrypt DNS01 challenge
+
+See [Configuration Guide](docs/configuration.md#cloudflare-dns-integration) for detailed setup instructions.
 
 ## Documentation
 
