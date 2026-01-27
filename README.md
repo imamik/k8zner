@@ -1,9 +1,9 @@
-# hcloud-kubernetes
+# k8zner
 
-[![CI](https://github.com/imamik/hcloud-kubernetes/actions/workflows/ci.yaml/badge.svg)](https://github.com/imamik/hcloud-kubernetes/actions/workflows/ci.yaml)
-[![codecov](https://codecov.io/gh/imamik/hcloud-kubernetes/branch/main/graph/badge.svg)](https://codecov.io/gh/imamik/hcloud-kubernetes)
-[![Go Report Card](https://goreportcard.com/badge/github.com/imamik/hcloud-kubernetes)](https://goreportcard.com/report/github.com/imamik/hcloud-kubernetes)
-[![Release](https://img.shields.io/github/v/release/imamik/hcloud-kubernetes)](https://github.com/imamik/hcloud-kubernetes/releases/latest)
+[![CI](https://github.com/imamik/k8zner/actions/workflows/ci.yaml/badge.svg)](https://github.com/imamik/k8zner/actions/workflows/ci.yaml)
+[![codecov](https://codecov.io/gh/imamik/k8zner/branch/main/graph/badge.svg)](https://codecov.io/gh/imamik/k8zner)
+[![Go Report Card](https://goreportcard.com/badge/github.com/imamik/k8zner)](https://goreportcard.com/report/github.com/imamik/k8zner)
+[![Release](https://img.shields.io/github/v/release/imamik/k8zner)](https://github.com/imamik/k8zner/releases/latest)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 **Production-ready Kubernetes clusters on Hetzner Cloud using [Talos Linux](https://www.talos.dev/).**
@@ -265,15 +265,15 @@ The [Hetzner CSI Driver](https://github.com/hetznercloud/csi-driver):
 **Homebrew (macOS/Linux):**
 ```bash
 brew tap imamik/tap
-brew install hcloud-kubernetes
+brew install k8zner
 ```
 
 **Go install:**
 ```bash
-go install github.com/imamik/hcloud-kubernetes/cmd/hcloud-kubernetes@latest
+go install github.com/imamik/k8zner/cmd/k8zner@latest
 ```
 
-**Download binary:** See [releases page](https://github.com/imamik/hcloud-kubernetes/releases)
+**Download binary:** See [releases page](https://github.com/imamik/k8zner/releases)
 
 ### 1. Set Environment Variables
 
@@ -289,7 +289,7 @@ export CF_DOMAIN="example.com"
 
 **Interactive Wizard (Recommended):**
 ```bash
-hcloud-kubernetes init
+k8zner init
 ```
 
 The wizard guides you through:
@@ -302,13 +302,13 @@ The wizard guides you through:
 
 **Advanced options:**
 ```bash
-hcloud-kubernetes init --advanced
+k8zner init --advanced
 ```
 
 ### 3. Build Talos Image
 
 ```bash
-hcloud-kubernetes image build -c cluster.yaml
+k8zner image build -c cluster.yaml
 ```
 
 This creates a snapshot of the Talos Linux image in your Hetzner account for fast node provisioning.
@@ -316,7 +316,7 @@ This creates a snapshot of the Talos Linux image in your Hetzner account for fas
 ### 4. Deploy the Cluster
 
 ```bash
-hcloud-kubernetes apply -c cluster.yaml
+k8zner apply -c cluster.yaml
 ```
 
 The provisioning pipeline:
@@ -607,14 +607,14 @@ spec:
 
 | Command | Description |
 |---------|-------------|
-| `hcloud-kubernetes init` | Interactive wizard to create cluster.yaml |
-| `hcloud-kubernetes init --advanced` | Wizard with advanced networking/security options |
-| `hcloud-kubernetes apply -c cluster.yaml` | Create or update cluster |
-| `hcloud-kubernetes destroy -c cluster.yaml` | Tear down all resources |
-| `hcloud-kubernetes upgrade -c cluster.yaml` | Upgrade Talos/Kubernetes |
-| `hcloud-kubernetes image build -c cluster.yaml` | Build Talos image snapshot |
-| `hcloud-kubernetes image delete` | Delete image snapshots |
-| `hcloud-kubernetes version` | Show version information |
+| `k8zner init` | Interactive wizard to create cluster.yaml |
+| `k8zner init --advanced` | Wizard with advanced networking/security options |
+| `k8zner apply -c cluster.yaml` | Create or update cluster |
+| `k8zner destroy -c cluster.yaml` | Tear down all resources |
+| `k8zner upgrade -c cluster.yaml` | Upgrade Talos/Kubernetes |
+| `k8zner image build -c cluster.yaml` | Build Talos image snapshot |
+| `k8zner image delete` | Delete image snapshots |
+| `k8zner version` | Show version information |
 
 ---
 
@@ -686,7 +686,7 @@ All operations are idempotent. Re-running `apply` on an existing cluster:
 
 ```
 cmd/
-└── hcloud-kubernetes/
+└── k8zner/
     ├── commands/         # CLI command definitions (Cobra)
     └── handlers/         # Business logic
 
@@ -762,7 +762,7 @@ kubernetes:
   version: "1.33.0"
 
 # Apply upgrade
-hcloud-kubernetes upgrade -c cluster.yaml
+k8zner upgrade -c cluster.yaml
 ```
 
 ### Talos Version
@@ -773,10 +773,10 @@ talos:
   version: "v1.10.0"
 
 # Rebuild image
-hcloud-kubernetes image build -c cluster.yaml
+k8zner image build -c cluster.yaml
 
 # Apply upgrade (rolling update)
-hcloud-kubernetes upgrade -c cluster.yaml
+k8zner upgrade -c cluster.yaml
 ```
 
 ---
