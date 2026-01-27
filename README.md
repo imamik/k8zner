@@ -38,6 +38,31 @@ export KUBECONFIG=./secrets/my-cluster/kubeconfig
 kubectl get nodes
 ```
 
+### Optional: Cloudflare DNS & TLS
+
+For automatic DNS records and Let's Encrypt certificates, set up Cloudflare:
+
+1. **Create a Cloudflare API Token** at [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens):
+   - Click "Create Token" → Use "Edit zone DNS" template
+   - Set Zone Resources to your domain
+   - Required permissions: `Zone > Zone > Read` and `Zone > DNS > Edit`
+
+2. **Set environment variables:**
+   ```bash
+   export CF_API_TOKEN="your-cloudflare-api-token"
+   export CF_DOMAIN="example.com"
+   ```
+
+3. **Enable in wizard** or add to config:
+   ```yaml
+   addons:
+     cloudflare: { enabled: true }
+     external_dns: { enabled: true }
+     cert_manager: { enabled: true, cloudflare: { enabled: true, email: "you@example.com" } }
+   ```
+
+See [Cloudflare DNS Integration](docs/configuration.md#cloudflare-dns-integration) for full setup guide.
+
 ## Batteries Included
 
 k8zner comes with pre-configured integrations — enable what you need:
@@ -95,6 +120,8 @@ k8zner started as a **Go port** of the excellent [terraform-hcloud-kubernetes](h
 
 <details>
 <summary><strong>Architecture Overview</strong></summary>
+
+Full documentation: **[docs/architecture.md](docs/architecture.md)**
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -221,6 +248,8 @@ addons:
 
 <details>
 <summary><strong>Configuration Reference</strong></summary>
+
+Full documentation: **[docs/configuration.md](docs/configuration.md)** | Interactive setup: **[docs/wizard.md](docs/wizard.md)**
 
 ### Minimal Configuration
 
@@ -372,9 +401,21 @@ addons:
 <details>
 <summary><strong>Cloudflare DNS Integration</strong></summary>
 
-Automatic DNS records and TLS certificates:
+Full documentation: **[docs/configuration.md#cloudflare-dns-integration](docs/configuration.md#cloudflare-dns-integration)**
 
-### Setup
+### Creating a Cloudflare API Token
+
+1. Go to [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens)
+2. Click **"Create Token"**
+3. Use the **"Edit zone DNS"** template (or create custom)
+4. Configure permissions:
+   - `Zone > Zone > Read` — to find zone ID
+   - `Zone > DNS > Edit` — to manage records
+5. Set **Zone Resources** to your specific domain (recommended)
+
+**For teams/CI:** Use Account Owned Tokens at *Manage Account → Account API Tokens* (persists when members leave)
+
+### Configuration
 
 ```bash
 export CF_API_TOKEN="your-cloudflare-token"
@@ -409,7 +450,7 @@ metadata:
   name: my-app
   annotations:
     external-dns.alpha.kubernetes.io/hostname: app.example.com
-    cert-manager.io/cluster-issuer: letsencrypt-prod
+    cert-manager.io/cluster-issuer: letsencrypt-cloudflare-production
 spec:
   tls:
     - hosts: ["app.example.com"]
