@@ -120,3 +120,63 @@ func (m *MockTalosProducer) WithWorkerConfig(config []byte) *MockTalosProducer {
 	m.On("GenerateWorkerConfig", mock.Anything).Return(config, nil)
 	return m
 }
+
+// MockK8sClient is a mock implementation of the k8sclient.Client interface.
+// It tracks method calls and allows configurable behavior via function fields.
+type MockK8sClient struct {
+	mock.Mock
+	// ApplyManifestsFunc allows custom implementation for ApplyManifests
+	ApplyManifestsFunc func(ctx context.Context, manifests []byte, fieldManager string) error
+	// CreateSecretFunc allows custom implementation for CreateSecret
+	CreateSecretFunc func(ctx context.Context, secret any) error
+	// DeleteSecretFunc allows custom implementation for DeleteSecret
+	DeleteSecretFunc func(ctx context.Context, namespace, name string) error
+}
+
+// ApplyManifests applies manifests using SSA.
+func (m *MockK8sClient) ApplyManifests(ctx context.Context, manifests []byte, fieldManager string) error {
+	if m.ApplyManifestsFunc != nil {
+		return m.ApplyManifestsFunc(ctx, manifests, fieldManager)
+	}
+	args := m.Called(ctx, manifests, fieldManager)
+	return args.Error(0)
+}
+
+// CreateSecret creates or replaces a secret.
+func (m *MockK8sClient) CreateSecret(ctx context.Context, secret any) error {
+	if m.CreateSecretFunc != nil {
+		return m.CreateSecretFunc(ctx, secret)
+	}
+	args := m.Called(ctx, secret)
+	return args.Error(0)
+}
+
+// DeleteSecret deletes a secret.
+func (m *MockK8sClient) DeleteSecret(ctx context.Context, namespace, name string) error {
+	if m.DeleteSecretFunc != nil {
+		return m.DeleteSecretFunc(ctx, namespace, name)
+	}
+	args := m.Called(ctx, namespace, name)
+	return args.Error(0)
+}
+
+// NewMockK8sClient creates a new MockK8sClient with default successful behavior.
+func NewMockK8sClient() *MockK8sClient {
+	m := &MockK8sClient{}
+	m.On("ApplyManifests", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	m.On("CreateSecret", mock.Anything, mock.Anything).Return(nil)
+	m.On("DeleteSecret", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	return m
+}
+
+// WithApplyManifestsError configures the mock to return an error on ApplyManifests.
+func (m *MockK8sClient) WithApplyManifestsError(err error) *MockK8sClient {
+	m.On("ApplyManifests", mock.Anything, mock.Anything, mock.Anything).Return(err)
+	return m
+}
+
+// WithCreateSecretError configures the mock to return an error on CreateSecret.
+func (m *MockK8sClient) WithCreateSecretError(err error) *MockK8sClient {
+	m.On("CreateSecret", mock.Anything, mock.Anything).Return(err)
+	return m
+}
