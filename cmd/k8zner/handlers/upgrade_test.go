@@ -3,6 +3,7 @@ package handlers
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -79,8 +80,8 @@ location: ""
 	require.Error(t, err)
 	// Either fails on validation or config load
 	assert.True(t,
-		contains(err.Error(), "invalid configuration") ||
-			contains(err.Error(), "failed to load config"),
+		strings.Contains(err.Error(), "invalid configuration") ||
+			strings.Contains(err.Error(), "failed to load config"),
 	)
 }
 
@@ -113,9 +114,9 @@ control_plane:
 	require.Error(t, err)
 	// Should fail on either secrets or validation
 	assert.True(t,
-		contains(err.Error(), "secrets") ||
-			contains(err.Error(), "invalid configuration") ||
-			contains(err.Error(), "failed to load"),
+		strings.Contains(err.Error(), "secrets") ||
+			strings.Contains(err.Error(), "invalid configuration") ||
+			strings.Contains(err.Error(), "failed to load"),
 	)
 }
 
@@ -127,18 +128,4 @@ func TestUpgrade_K8sVersionOverride(t *testing.T) {
 	}
 
 	assert.Equal(t, "v1.32.0", opts.K8sVersion)
-}
-
-// contains is a helper function for error checking
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsAt(s, substr, 0))
-}
-
-func containsAt(s, substr string, start int) bool {
-	for i := start; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
