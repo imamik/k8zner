@@ -10,74 +10,77 @@
 
 A self-contained Go CLI that provisions secure, highly available Kubernetes clusters with batteries included. No Terraform, kubectl, or talosctl required — just download and run.
 
-### Get Started in Minutes
+## Quick Start
 
 ```bash
+# 1. Install
+brew install imamik/tap/k8zner   # or: go install github.com/imamik/k8zner/cmd/k8zner@latest
+
+# 2. Set your Hetzner Cloud API token
 export HCLOUD_TOKEN="your-token"
-k8zner init        # Interactive wizard
-k8zner apply       # Deploy cluster
+
+# 3. Create and deploy
+k8zner init              # Interactive wizard guides you through setup
+k8zner image build       # Build Talos Linux image (one-time)
+k8zner apply             # Deploy your cluster
+
+# 4. Access
+export KUBECONFIG=./secrets/my-cluster/kubeconfig
+kubectl get nodes
 ```
 
-### Batteries Included
+## Batteries Included
 
-k8zner comes with pre-configured integrations for a complete production setup:
+k8zner comes with pre-configured integrations — enable what you need:
 
 | Category | Integrations |
 |----------|-------------|
-| **Networking** | [Cilium](https://cilium.io/) (eBPF CNI), [Gateway API](https://gateway-api.sigs.k8s.io/), [ingress-nginx](https://kubernetes.github.io/ingress-nginx/), [Traefik](https://traefik.io/) |
-| **Cloud Integration** | [Hetzner CCM](https://github.com/hetznercloud/hcloud-cloud-controller-manager), [Hetzner CSI](https://github.com/hetznercloud/csi-driver) |
-| **DNS & TLS** | [Cloudflare](https://www.cloudflare.com/) DNS, [external-dns](https://github.com/kubernetes-sigs/external-dns), [cert-manager](https://cert-manager.io/) with Let's Encrypt |
+| **Networking** | [Cilium](https://cilium.io/) (eBPF CNI with WireGuard/IPsec encryption), [Gateway API](https://gateway-api.sigs.k8s.io/), [ingress-nginx](https://kubernetes.github.io/ingress-nginx/), [Traefik](https://traefik.io/) |
+| **Cloud** | [Hetzner CCM](https://github.com/hetznercloud/hcloud-cloud-controller-manager) (load balancers, node lifecycle), [Hetzner CSI](https://github.com/hetznercloud/csi-driver) (volumes) |
+| **DNS & TLS** | [Cloudflare](https://www.cloudflare.com/) integration, [external-dns](https://github.com/kubernetes-sigs/external-dns), [cert-manager](https://cert-manager.io/) with Let's Encrypt |
 | **GitOps** | [ArgoCD](https://argo-cd.readthedocs.io/) |
 | **Storage** | [Longhorn](https://longhorn.io/) distributed storage |
 | **Scaling** | [Cluster Autoscaler](https://github.com/kubernetes/autoscaler) |
-| **Monitoring** | [Metrics Server](https://github.com/kubernetes-sigs/metrics-server), [Prometheus Operator](https://prometheus-operator.dev/) CRDs |
+| **Monitoring** | [Metrics Server](https://github.com/kubernetes-sigs/metrics-server), [Prometheus Operator](https://prometheus-operator.dev/) CRDs, [Hubble](https://docs.cilium.io/en/stable/observability/hubble/) |
 | **Auth** | OIDC integration |
-
----
 
 ## Acknowledgments
 
-This project is a **direct Go port** of the excellent [terraform-hcloud-kubernetes](https://github.com/hcloud-k8s/terraform-hcloud-kubernetes) Terraform module. We extend our sincere gratitude to the original authors and contributors of that project for their pioneering work in making production-grade Kubernetes accessible on Hetzner Cloud.
+This project is a **direct Go port** of the excellent [terraform-hcloud-kubernetes](https://github.com/hcloud-k8s/terraform-hcloud-kubernetes) Terraform module. We extend our sincere gratitude to the original authors for their pioneering work.
 
-The architectural decisions, security model, and component integrations in this project are heavily inspired by their Terraform implementation. This Go port aims to provide the same production-ready experience while offering the benefits of a single self-contained binary and native Go tooling.
-
-**If you prefer Infrastructure-as-Code with Terraform, we highly recommend the original module.**
+**Prefer Terraform?** We recommend the [original module](https://github.com/hcloud-k8s/terraform-hcloud-kubernetes).
 
 ---
 
-## Why This Project?
+<details>
+<summary><strong>Why k8zner? (Go CLI vs Terraform)</strong></summary>
 
 ### The Go Advantage
 
-While the original Terraform module is excellent, a native Go implementation offers distinct benefits:
+| Aspect | Terraform Module | k8zner (Go CLI) |
+|--------|------------------|-----------------|
+| **Dependencies** | Terraform, kubectl, talosctl | Single binary |
+| **State** | Terraform state files | Stateless, idempotent |
+| **Setup** | Write HCL manually | Interactive wizard |
+| **CI/CD** | Terraform workflows | Simple binary execution |
+| **Extensibility** | HCL modules | Fork and modify Go code |
 
-| Aspect | Terraform Module | Go CLI |
-|--------|------------------|--------|
-| **Dependencies** | Terraform, kubectl, talosctl | Single binary (104MB) |
-| **State Management** | Terraform state files | Stateless, idempotent operations |
-| **Portability** | Requires Terraform installation | Download and run |
-| **CI/CD Integration** | Terraform workflows | Simple binary execution |
-| **Extensibility** | HCL modules | Go code, easy to fork |
-| **Interactive Setup** | Manual HCL writing | Guided wizard |
-
-### When to Use This Tool
+### When to Use k8zner
 
 - You want a **self-contained CLI** without managing Terraform state
 - You prefer **interactive cluster configuration** over writing HCL
 - You need **simple CI/CD integration** with a single binary
-- You want to **customize the provisioning logic** in Go
-- You're already in a **Go-centric development environment**
 
 ### When to Use Terraform Instead
 
 - You already use **Terraform for infrastructure management**
 - You need **drift detection and plan/apply workflows**
 - You require **Terraform state for compliance/audit**
-- You want to **integrate with other Terraform modules**
 
----
+</details>
 
-## Architecture Overview
+<details>
+<summary><strong>Architecture Overview</strong></summary>
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -116,48 +119,30 @@ While the original Terraform module is excellent, a native Go implementation off
 │  │                                                                          │ │
 │  │  ┌──────────────────────────────────────────────────────────────────┐   │ │
 │  │  │                        Firewall Rules                             │   │ │
-│  │  │  • Kube API (6443) - configurable source IPs                     │   │ │
-│  │  │  • Talos API (50000) - configurable source IPs                   │   │ │
-│  │  │  • Node communication - internal only                             │   │ │
+│  │  │  • Kube API (6443) • Talos API (50000) • Internal only           │   │ │
 │  │  └──────────────────────────────────────────────────────────────────┘   │ │
 │  └────────────────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                          Kubernetes Components                               │
-│                                                                              │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐             │
-│  │     Cilium      │  │   Hetzner CCM   │  │   Hetzner CSI   │             │
-│  │  (CNI + eBPF)   │  │ (Cloud Control) │  │    (Storage)    │             │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘             │
-│                                                                              │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐             │
-│  │  cert-manager   │  │  external-dns   │  │ metrics-server  │             │
-│  │ (Certificates)  │  │ (DNS Records)   │  │  (Monitoring)   │             │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘             │
-│                                                                              │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐             │
-│  │  ingress-nginx  │  │    Traefik      │  │ Cluster Autoscaler            │
-│  │   (Ingress)     │  │   (Ingress)     │  │   (Scaling)     │             │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘             │
-└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
----
+### Provisioning Pipeline
 
-## Talos Linux: The Foundation
+The `apply` command executes these phases:
 
-This project uses [Talos Linux](https://www.talos.dev/) as the operating system for all cluster nodes. Talos is purpose-built for Kubernetes:
+1. **Validation** — Verify configuration and API access
+2. **Infrastructure** — Create network, firewall, load balancers
+3. **Image** — Build/cache Talos Linux snapshot
+4. **Compute** — Provision control plane and worker nodes
+5. **Cluster** — Bootstrap Kubernetes and install addons
 
-### Why Talos?
+All operations are **idempotent** — re-running `apply` safely skips existing resources.
 
-- **Immutable**: The OS is read-only. No SSH, no shell, no package manager. Configuration only via API.
-- **Minimal**: Contains only what's needed to run Kubernetes. Reduced attack surface.
-- **Secure**: API-driven management with mutual TLS. No traditional Linux userland vulnerabilities.
-- **Declarative**: Machine configuration is versioned and reproducible.
-- **Fast**: Boots in seconds. Minimal overhead.
+</details>
 
-### Talos vs Traditional Linux
+<details>
+<summary><strong>Why Talos Linux?</strong></summary>
+
+[Talos Linux](https://www.talos.dev/) is a secure, immutable OS purpose-built for Kubernetes:
 
 | Aspect | Traditional Linux | Talos Linux |
 |--------|-------------------|-------------|
@@ -167,56 +152,47 @@ This project uses [Talos Linux](https://www.talos.dev/) as the operating system 
 | **Attack Surface** | Large (systemd, sshd, etc.) | Minimal (Kubernetes only) |
 | **Drift** | Possible (manual changes) | Impossible (immutable) |
 
----
+**Key benefits:**
+- **Immutable** — Read-only filesystem, no SSH, no shell
+- **Minimal** — Only what's needed for Kubernetes
+- **Secure** — API-driven with mutual TLS
+- **Fast** — Boots in seconds
 
-## Security Architecture
+</details>
+
+<details>
+<summary><strong>Security Architecture</strong></summary>
 
 ### Defense in Depth
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Layer 1: Network Perimeter                  │
-│  • Hetzner Cloud Firewall                                       │
-│  • Configurable source IP allowlists                            │
-│  • Separate rules for Kube API vs Talos API                     │
+│  Layer 1: Network Perimeter                                      │
+│  • Hetzner Cloud Firewall with configurable IP allowlists       │
 └─────────────────────────────────────────────────────────────────┘
-                               │
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Layer 2: Network Isolation                  │
-│  • Private network for node communication                        │
-│  • Pod network isolated from node network                        │
-│  • Cilium NetworkPolicies                                        │
+│  Layer 2: Network Isolation                                      │
+│  • Private network for nodes • Cilium NetworkPolicies           │
 └─────────────────────────────────────────────────────────────────┘
-                               │
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Layer 3: Pod Network Encryption             │
-│  • Cilium WireGuard or IPsec encryption                         │
-│  • Transparent pod-to-pod encryption                             │
-│  • No application changes required                               │
+│  Layer 3: Pod Network Encryption                                 │
+│  • Cilium WireGuard or IPsec • Transparent pod-to-pod encryption│
 └─────────────────────────────────────────────────────────────────┘
-                               │
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Layer 4: OS Security                        │
-│  • Talos immutable filesystem                                    │
-│  • No SSH, no shell access                                       │
-│  • API-only management with mTLS                                 │
-│  • Minimal attack surface                                        │
+│  Layer 4: OS Security                                            │
+│  • Talos immutable filesystem • No SSH • API-only with mTLS     │
 └─────────────────────────────────────────────────────────────────┘
-                               │
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Layer 5: Storage Encryption                 │
-│  • LUKS2 disk encryption (optional)                             │
-│  • Encrypted persistent volumes via CSI                          │
+│  Layer 5: Storage Encryption                                     │
+│  • LUKS2 disk encryption • Encrypted volumes via CSI            │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Network Encryption with Cilium
-
-Pod-to-pod traffic can be encrypted transparently using Cilium's built-in encryption:
+### Enable Network Encryption
 
 ```yaml
 addons:
@@ -227,137 +203,10 @@ addons:
       type: "wireguard"  # or "ipsec"
 ```
 
-- **WireGuard**: Modern, fast, kernel-level encryption
-- **IPsec**: Standards-compliant, FIPS-compatible option
+</details>
 
----
-
-## Bundled Components
-
-### Container Networking: Cilium
-
-[Cilium](https://cilium.io/) provides advanced networking using eBPF:
-
-- **eBPF-based datapath**: High-performance packet processing in the kernel
-- **Network Policies**: L3/L4/L7 policy enforcement
-- **Transparent Encryption**: WireGuard or IPsec for pod traffic
-- **Hubble**: Network observability and flow visualization
-- **Gateway API**: Native Kubernetes Gateway implementation
-
-### Cloud Integration: Hetzner CCM
-
-The [Hetzner Cloud Controller Manager](https://github.com/hetznercloud/hcloud-cloud-controller-manager):
-
-- **Node lifecycle management**: Automatic node registration and cleanup
-- **Load Balancer provisioning**: Native Hetzner Load Balancers for Services
-- **Node metadata**: Zone and region information for scheduling
-
-### Storage: Hetzner CSI
-
-The [Hetzner CSI Driver](https://github.com/hetznercloud/csi-driver):
-
-- **Dynamic provisioning**: Automatic volume creation
-- **Volume expansion**: Resize without downtime
-- **Encryption**: Optional volume encryption
-- **Snapshots**: Point-in-time volume snapshots
-
-### Additional Components
-
-| Component | Purpose |
-|-----------|---------|
-| **cert-manager** | Automated TLS certificate management with Let's Encrypt |
-| **external-dns** | Automatic DNS record creation from Ingress/Service |
-| **ingress-nginx** | Production-grade ingress controller |
-| **Traefik** | Alternative ingress with automatic HTTPS |
-| **metrics-server** | Resource metrics for HPA and kubectl top |
-| **Cluster Autoscaler** | Automatic node scaling based on demand |
-| **Longhorn** | Distributed block storage (alternative to Hetzner volumes) |
-| **ArgoCD** | GitOps continuous delivery |
-
----
-
-## Quick Start
-
-### Prerequisites
-
-- Hetzner Cloud account with API token
-- (Optional) Cloudflare account for DNS integration
-
-### Installation
-
-**Homebrew (macOS/Linux):**
-```bash
-brew tap imamik/tap
-brew install k8zner
-```
-
-**Go install:**
-```bash
-go install github.com/imamik/k8zner/cmd/k8zner@latest
-```
-
-**Download binary:** See [releases page](https://github.com/imamik/k8zner/releases)
-
-### 1. Set Environment Variables
-
-```bash
-export HCLOUD_TOKEN="your-hetzner-api-token"
-
-# Optional: For Cloudflare DNS integration
-export CF_API_TOKEN="your-cloudflare-api-token"
-export CF_DOMAIN="example.com"
-```
-
-### 2. Create Cluster Configuration
-
-**Interactive Wizard (Recommended):**
-```bash
-k8zner init
-```
-
-The wizard guides you through:
-- Cluster name and Hetzner location
-- Server architecture (x86 or ARM)
-- Control plane sizing (1 or 3+ nodes for HA)
-- Worker pool configuration
-- CNI selection and encryption
-- Addon selection
-
-**Advanced options:**
-```bash
-k8zner init --advanced
-```
-
-### 3. Build Talos Image
-
-```bash
-k8zner image build -c cluster.yaml
-```
-
-This creates a snapshot of the Talos Linux image in your Hetzner account for fast node provisioning.
-
-### 4. Deploy the Cluster
-
-```bash
-k8zner apply -c cluster.yaml
-```
-
-The provisioning pipeline:
-1. **Validation**: Verify configuration and API access
-2. **Infrastructure**: Create network, firewall, load balancers
-3. **Compute**: Provision control plane and worker nodes
-4. **Cluster**: Bootstrap Kubernetes and install addons
-
-### 5. Access Your Cluster
-
-```bash
-export KUBECONFIG=./secrets/my-cluster/kubeconfig
-kubectl get nodes
-```
-
----
-
-## Configuration Reference
+<details>
+<summary><strong>Configuration Reference</strong></summary>
 
 ### Minimal Configuration
 
@@ -380,68 +229,51 @@ workers:
 ### Full Configuration Example
 
 ```yaml
-# Cluster identity
 cluster_name: "production"
-location: "nbg1"          # Primary location
-ssh_keys: ["my-ssh-key"]  # For Talos image building
+location: "nbg1"
+ssh_keys: ["my-ssh-key"]
 
-# Kubernetes and Talos versions
 talos:
   version: "v1.9.0"
 kubernetes:
   version: "1.32.0"
 
-# Network configuration
+# Network
 network:
   ipv4_cidr: "10.0.0.0/8"
   node_ipv4_cidr: "10.0.1.0/24"
   pod_ipv4_cidr: "10.244.0.0/16"
   service_ipv4_cidr: "10.96.0.0/12"
 
-  # Existing network (optional)
-  # existing_network_id: 12345
-
-# Firewall rules
+# Firewall
 firewall:
-  # IPs allowed to access Kubernetes API
-  kube_api_allowed_sources:
-    - "0.0.0.0/0"  # All IPs (restrict in production!)
+  kube_api_allowed_sources: ["0.0.0.0/0"]
+  talos_api_allowed_sources: ["1.2.3.4/32"]
 
-  # IPs allowed to access Talos API
-  talos_api_allowed_sources:
-    - "1.2.3.4/32"  # Your IP only
-
-# Control plane (HA with 3 nodes)
+# Control plane (HA)
 control_plane:
   nodepools:
     - name: "control"
-      type: "cpx21"       # 3 vCPU, 4 GB RAM
+      type: "cpx21"
       count: 3
       location: "nbg1"
-      labels:
-        node.kubernetes.io/control-plane: "true"
 
-# Worker pools
+# Workers
 workers:
   - name: "general"
-    type: "cpx31"         # 4 vCPU, 8 GB RAM
+    type: "cpx31"
     count: 3
     location: "nbg1"
-    labels:
-      workload-type: "general"
-
   - name: "memory"
-    type: "cpx41"         # 8 vCPU, 16 GB RAM
+    type: "cpx41"
     count: 2
     location: "fsn1"
-    labels:
-      workload-type: "memory-intensive"
     taints:
       - key: "workload"
         value: "memory"
         effect: "NoSchedule"
 
-# Auto-scaling configuration
+# Auto-scaling
 autoscaler:
   enabled: true
   nodepools:
@@ -449,152 +281,110 @@ autoscaler:
       min: 2
       max: 10
 
-# Load balancer configuration
+# Load balancers
 load_balancer:
   enabled: true
   type: "lb11"
-  location: "nbg1"
-
-# Ingress load balancer
 ingress_load_balancer:
   enabled: true
   type: "lb11"
 
 # Addons
 addons:
-  # Container networking
   cilium:
     enabled: true
-    version: "1.16.0"
     hubble:
-      enabled: true       # Network observability
+      enabled: true
     encryption:
       enabled: true
-      type: "wireguard"   # or "ipsec"
+      type: "wireguard"
     gateway_api:
       enabled: true
-
-  # Cloud integration
   ccm:
     enabled: true
   csi:
     enabled: true
-    encryption: true      # Encrypted volumes
-
-  # Certificate management
+    encryption: true
   cert_manager:
     enabled: true
     cloudflare:
       enabled: true
       email: "admin@example.com"
-
-  # DNS automation
   external_dns:
     enabled: true
-    cloudflare:
-      proxied: false
-
-  # Ingress controllers (choose one)
   ingress_nginx:
     enabled: true
-  traefik:
-    enabled: false
-
-  # Monitoring
   metrics_server:
     enabled: true
-
-  # Auto-scaling
   cluster_autoscaler:
     enabled: true
-
-  # Storage
-  longhorn:
-    enabled: false        # Alternative to Hetzner CSI
-
-  # GitOps
   argocd:
+    enabled: false
+  longhorn:
     enabled: false
 ```
 
----
+</details>
 
-## Hetzner Server Types
+<details>
+<summary><strong>Hetzner Server Types</strong></summary>
 
 ### x86 Servers
 
 | Family | Type | vCPU | RAM | Description |
 |--------|------|------|-----|-------------|
-| **CX** | cx22 | 2 | 4 GB | Shared, cost-optimized (EU only) |
-| | cx32 | 4 | 8 GB | |
-| | cx42 | 8 | 16 GB | |
-| | cx52 | 16 | 32 GB | |
-| **CPX** | cpx11 | 2 | 2 GB | Shared, AMD EPYC |
-| | cpx21 | 3 | 4 GB | |
-| | cpx31 | 4 | 8 GB | |
-| | cpx41 | 8 | 16 GB | |
-| | cpx51 | 16 | 32 GB | |
-| **CCX** | ccx13 | 2 | 8 GB | Dedicated vCPUs |
-| | ccx23 | 4 | 16 GB | |
-| | ccx33 | 8 | 32 GB | |
-| | ccx43 | 16 | 64 GB | |
-| | ccx53 | 32 | 128 GB | |
-| | ccx63 | 48 | 192 GB | |
+| **CX** | cx22-cx52 | 2-16 | 4-32 GB | Shared, cost-optimized (EU only) |
+| **CPX** | cpx11-cpx51 | 2-16 | 2-32 GB | Shared, AMD EPYC |
+| **CCX** | ccx13-ccx63 | 2-48 | 8-192 GB | Dedicated vCPUs |
 
-### ARM Servers (CAX)
+### ARM Servers
 
 | Type | vCPU | RAM | Notes |
 |------|------|-----|-------|
-| cax11 | 2 | 4 GB | Ampere Altra |
-| cax21 | 4 | 8 GB | |
-| cax31 | 8 | 16 GB | |
-| cax41 | 16 | 32 GB | |
+| cax11-cax41 | 2-16 | 4-32 GB | Ampere Altra (Germany, Finland only) |
 
-**Note**: ARM servers are only available in Germany (fsn1, nbg1) and Finland (hel1).
+### Locations
 
-### Location Codes
+| Code | Location |
+|------|----------|
+| fsn1 | Falkenstein, Germany |
+| nbg1 | Nuremberg, Germany |
+| hel1 | Helsinki, Finland |
+| ash | Ashburn, USA |
+| hil | Hillsboro, USA |
 
-| Code | Location | Country |
-|------|----------|---------|
-| fsn1 | Falkenstein | Germany |
-| nbg1 | Nuremberg | Germany |
-| hel1 | Helsinki | Finland |
-| ash | Ashburn | USA |
-| hil | Hillsboro | USA |
+</details>
 
----
+<details>
+<summary><strong>Cloudflare DNS Integration</strong></summary>
 
-## Cloudflare Integration
-
-Automatic DNS and TLS certificate management via Cloudflare:
+Automatic DNS records and TLS certificates:
 
 ### Setup
 
-1. Create a Cloudflare API token with DNS edit permissions
-2. Set environment variables:
-   ```bash
-   export CF_API_TOKEN="your-token"
-   export CF_DOMAIN="example.com"
-   ```
-3. Enable in configuration:
-   ```yaml
-   addons:
-     cloudflare:
-       enabled: true
-     external_dns:
-       enabled: true
-     cert_manager:
-       enabled: true
-       cloudflare:
-         enabled: true
-         email: "admin@example.com"
-   ```
+```bash
+export CF_API_TOKEN="your-cloudflare-token"
+export CF_DOMAIN="example.com"
+```
+
+```yaml
+addons:
+  cloudflare:
+    enabled: true
+  external_dns:
+    enabled: true
+  cert_manager:
+    enabled: true
+    cloudflare:
+      enabled: true
+      email: "admin@example.com"
+```
 
 ### How It Works
 
-1. **external-dns** watches Ingress resources and creates DNS records
-2. **cert-manager** uses DNS01 challenge via Cloudflare for Let's Encrypt
-3. TLS certificates are automatically issued and renewed
+1. **external-dns** watches Ingress resources → creates DNS A records
+2. **cert-manager** uses DNS01 challenge → issues Let's Encrypt certificates
+3. Certificates auto-renew
 
 ### Example Ingress
 
@@ -608,8 +398,7 @@ metadata:
     cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
   tls:
-    - hosts:
-        - app.example.com
+    - hosts: ["app.example.com"]
       secretName: app-tls
   rules:
     - host: app.example.com
@@ -624,14 +413,15 @@ spec:
                   number: 80
 ```
 
----
+</details>
 
-## CLI Commands
+<details>
+<summary><strong>CLI Commands</strong></summary>
 
 | Command | Description |
 |---------|-------------|
 | `k8zner init` | Interactive wizard to create cluster.yaml |
-| `k8zner init --advanced` | Wizard with advanced networking/security options |
+| `k8zner init --advanced` | Wizard with networking/security options |
 | `k8zner apply -c cluster.yaml` | Create or update cluster |
 | `k8zner destroy -c cluster.yaml` | Tear down all resources |
 | `k8zner upgrade -c cluster.yaml` | Upgrade Talos/Kubernetes |
@@ -639,143 +429,10 @@ spec:
 | `k8zner image delete` | Delete image snapshots |
 | `k8zner version` | Show version information |
 
----
+</details>
 
-## Provisioning Pipeline
-
-The `apply` command executes a multi-phase pipeline:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ Phase 1: VALIDATION                                              │
-│ • Parse and validate configuration                               │
-│ • Verify Hetzner API token                                       │
-│ • Check server type and location availability                    │
-│ • Detect resource conflicts                                      │
-└─────────────────────────────────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│ Phase 2: INFRASTRUCTURE                                          │
-│ • Create/verify private network and subnets                     │
-│ • Configure firewall rules                                       │
-│ • Provision load balancers (API, ingress)                       │
-│ • Allocate floating IPs (if configured)                         │
-│ • Setup placement groups                                         │
-└─────────────────────────────────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│ Phase 3: IMAGE                                                   │
-│ • Check for existing Talos snapshot                             │
-│ • Build custom image if needed                                   │
-│ • Upload and cache snapshot                                      │
-└─────────────────────────────────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│ Phase 4: COMPUTE                                                 │
-│ • Provision control plane nodes                                  │
-│ • Generate and apply Talos machine configs                      │
-│ • Provision worker nodes                                         │
-│ • Configure reverse DNS                                          │
-└─────────────────────────────────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│ Phase 5: CLUSTER                                                 │
-│ • Initialize etcd on first control plane                        │
-│ • Bootstrap Kubernetes                                           │
-│ • Join remaining control plane nodes                             │
-│ • Generate kubeconfig                                            │
-│ • Install configured addons                                      │
-│   └─ CNI (Cilium)                                               │
-│   └─ Cloud controller manager                                    │
-│   └─ CSI driver                                                  │
-│   └─ Ingress, cert-manager, etc.                                │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Idempotency
-
-All operations are idempotent. Re-running `apply` on an existing cluster:
-- Skips resources that already exist
-- Updates configurations if changed
-- Adds new nodes if pool sizes increased
-
----
-
-## Project Structure
-
-```
-cmd/
-└── k8zner/
-    ├── commands/         # CLI command definitions (Cobra)
-    └── handlers/         # Business logic
-
-internal/
-├── config/              # Configuration parsing and validation
-│   └── wizard/          # Interactive setup wizard
-├── orchestration/       # Provisioning workflow coordination
-├── provisioning/        # Infrastructure and cluster provisioning
-│   ├── infrastructure/  # Network, firewall, load balancers
-│   ├── compute/         # Server provisioning
-│   ├── cluster/         # Kubernetes bootstrap
-│   ├── image/           # Talos image building
-│   ├── destroy/         # Resource cleanup
-│   └── upgrade/         # Version upgrades
-├── addons/              # Kubernetes addon installation
-│   ├── helm/            # Helm chart rendering
-│   └── k8sclient/       # Embedded Kubernetes client
-├── platform/
-│   ├── hcloud/          # Hetzner Cloud API wrapper
-│   ├── talos/           # Talos configuration generation
-│   └── ssh/             # SSH client for image building
-└── util/                # Shared utilities
-```
-
----
-
-## Development
-
-```bash
-# Build
-make build
-
-# Run tests
-make test
-
-# Run linters
-make lint
-
-# Run all checks
-make check
-
-# Build for all platforms
-make build-all
-```
-
-### Testing
-
-The project includes comprehensive tests:
-- Unit tests with >80% coverage
-- Mock Hetzner client for isolated testing
-- E2E tests against real Hetzner infrastructure
-
-```bash
-# Run unit tests
-make test
-
-# Run with coverage
-make test-coverage
-
-# Run E2E tests (requires HCLOUD_TOKEN)
-make test-e2e
-```
-
----
-
-## Upgrading
+<details>
+<summary><strong>Upgrading</strong></summary>
 
 ### Kubernetes Version
 
@@ -795,66 +452,93 @@ k8zner upgrade -c cluster.yaml
 talos:
   version: "v1.10.0"
 
-# Rebuild image
+# Rebuild image and apply
 k8zner image build -c cluster.yaml
-
-# Apply upgrade (rolling update)
 k8zner upgrade -c cluster.yaml
 ```
 
----
+</details>
 
-## Troubleshooting
+<details>
+<summary><strong>Troubleshooting</strong></summary>
 
-### Common Issues
+### API Token Errors
 
-**API token errors:**
 ```bash
-# Verify token is set
 echo $HCLOUD_TOKEN
-
-# Test API access
-curl -H "Authorization: Bearer $HCLOUD_TOKEN" \
-  https://api.hetzner.cloud/v1/servers
+curl -H "Authorization: Bearer $HCLOUD_TOKEN" https://api.hetzner.cloud/v1/servers
 ```
 
-**Node not joining cluster:**
-- Check firewall rules allow Talos API (port 50000)
+### Node Not Joining
+
+- Check firewall allows Talos API (port 50000)
 - Verify network connectivity between nodes
-- Check Talos machine config with `talosctl`
+- Inspect with `talosctl`
 
-**Addon installation failures:**
-- Ensure cluster is fully bootstrapped
-- Check addon prerequisites (e.g., CRDs)
-- Review addon logs in cluster
-
-### Getting Cluster Credentials
+### Cluster Credentials
 
 ```bash
-# Kubeconfig is saved to secrets directory
 export KUBECONFIG=./secrets/<cluster-name>/kubeconfig
-
-# Talos config for node management
 export TALOSCONFIG=./secrets/<cluster-name>/talosconfig
 ```
 
----
+</details>
 
-## Contributing
+<details>
+<summary><strong>Project Structure</strong></summary>
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
+```
+cmd/k8zner/
+├── commands/         # CLI commands (Cobra)
+└── handlers/         # Business logic
 
----
+internal/
+├── config/           # Configuration & wizard
+├── orchestration/    # Workflow coordination
+├── provisioning/     # Infrastructure provisioning
+│   ├── infrastructure/   # Network, firewall, LBs
+│   ├── compute/          # Servers
+│   ├── cluster/          # K8s bootstrap
+│   └── image/            # Talos images
+├── addons/           # K8s addon installation
+│   ├── helm/             # Chart rendering
+│   └── k8sclient/        # Embedded K8s client
+├── platform/
+│   ├── hcloud/           # Hetzner API
+│   ├── talos/            # Talos config
+│   └── ssh/              # SSH client
+└── util/             # Shared utilities
+```
 
-## License
+</details>
 
-Apache License 2.0 - see [LICENSE](LICENSE)
+<details>
+<summary><strong>Development</strong></summary>
+
+```bash
+make build          # Build binary
+make test           # Run unit tests
+make test-coverage  # With coverage
+make lint           # Run linters
+make check          # All checks
+make test-e2e       # E2E tests (requires HCLOUD_TOKEN)
+```
+
+</details>
 
 ---
 
 ## Related Projects
 
-- [terraform-hcloud-kubernetes](https://github.com/hcloud-k8s/terraform-hcloud-kubernetes) - The original Terraform module this project is based on
-- [Talos Linux](https://www.talos.dev/) - The secure, immutable Kubernetes OS
-- [Cilium](https://cilium.io/) - eBPF-based networking
-- [Hetzner Cloud](https://www.hetzner.com/cloud) - Affordable cloud infrastructure
+- [terraform-hcloud-kubernetes](https://github.com/hcloud-k8s/terraform-hcloud-kubernetes) — Original Terraform module
+- [Talos Linux](https://www.talos.dev/) — Secure, immutable Kubernetes OS
+- [Cilium](https://cilium.io/) — eBPF-based networking
+- [Hetzner Cloud](https://www.hetzner.com/cloud) — Affordable cloud infrastructure
+
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE)
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
