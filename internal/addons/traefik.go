@@ -10,8 +10,8 @@ import (
 )
 
 // applyTraefik installs the Traefik Proxy ingress controller.
-// Traefik is configured to use NodePort services on ports 30000/30001
-// for compatibility with Hetzner Load Balancers, matching the ingress-nginx setup.
+// Traefik uses LoadBalancer service type for Kubernetes-native external IP discovery,
+// which allows external-dns to auto-discover the IP for DNS records.
 func applyTraefik(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	// Create namespace first
 	namespaceYAML := createTraefikNamespace()
@@ -40,7 +40,7 @@ func applyTraefik(ctx context.Context, client k8sclient.Client, cfg *config.Conf
 }
 
 // buildTraefikValues creates helm values for Traefik configuration.
-// This mirrors the ingress-nginx setup for consistency with Hetzner Load Balancers.
+// Uses LoadBalancer service for Kubernetes-native external IP discovery.
 func buildTraefikValues(cfg *config.Config) helm.Values {
 	traefikCfg := cfg.Addons.Traefik
 	workerCount := getWorkerCount(cfg)
@@ -74,13 +74,19 @@ func buildTraefikValues(cfg *config.Config) helm.Values {
 		ingressClassName = "traefik"
 	}
 
+	// Determine location for load balancer
+	location := cfg.Location
+	if location == "" {
+		location = "nbg1"
+	}
+
 	values := helm.Values{
 		"deployment":   deployment,
 		"ingressClass": buildTraefikIngressClass(ingressClassName),
 		"ingressRoute": buildTraefikIngressRoute(),
 		"providers":    buildTraefikProviders(),
-		"ports":        buildTraefikPorts(externalTrafficPolicy),
-		"service":      buildTraefikService(externalTrafficPolicy),
+		"ports":        buildTraefikPorts(),
+		"service":      buildTraefikService(externalTrafficPolicy, location),
 		"additionalArguments": []string{
 			// Enable proxy protocol for proper client IP preservation with Hetzner LBs
 			"--entryPoints.web.proxyProtocol.trustedIPs=127.0.0.1/32,10.0.0.0/8",
@@ -153,14 +159,13 @@ func buildTraefikProviders() helm.Values {
 }
 
 // buildTraefikPorts creates the ports configuration.
-// Uses NodePort on 30000/30001 for Hetzner LB compatibility (same as nginx).
-func buildTraefikPorts(externalTrafficPolicy string) helm.Values {
+// Uses standard ports for LoadBalancer service.
+func buildTraefikPorts() helm.Values {
 	return helm.Values{
 		"web": helm.Values{
 			"port":        8000,
 			"expose":      true,
 			"exposedPort": 80,
-			"nodePort":    30000,
 			"protocol":    "TCP",
 			// Enable proxy protocol for client IP preservation
 			"proxyProtocol": helm.Values{
@@ -171,7 +176,6 @@ func buildTraefikPorts(externalTrafficPolicy string) helm.Values {
 			"port":        8443,
 			"expose":      true,
 			"exposedPort": 443,
-			"nodePort":    30001,
 			"protocol":    "TCP",
 			// Enable proxy protocol for client IP preservation
 			"proxyProtocol": helm.Values{
@@ -190,12 +194,20 @@ func buildTraefikPorts(externalTrafficPolicy string) helm.Values {
 }
 
 // buildTraefikService creates the service configuration.
-func buildTraefikService(externalTrafficPolicy string) helm.Values {
+// Uses LoadBalancer type for Kubernetes-native external IP discovery.
+func buildTraefikService(externalTrafficPolicy, location string) helm.Values {
 	return helm.Values{
 		"enabled": true,
-		"type":    "NodePort",
+		"type":    "LoadBalancer",
 		"spec": helm.Values{
 			"externalTrafficPolicy": externalTrafficPolicy,
+		},
+		// Hetzner LB annotations for proxy protocol support
+		"annotations": helm.Values{
+			"load-balancer.hetzner.cloud/name":               "ingress",
+			"load-balancer.hetzner.cloud/use-private-ip":     "true",
+			"load-balancer.hetzner.cloud/uses-proxyprotocol": "true",
+			"load-balancer.hetzner.cloud/location":           location,
 		},
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
@@ -137,19 +138,51 @@ func buildLabelSelector(labels map[string]string) string {
 	return selector
 }
 
-// deleteServersByLabel deletes all servers matching the label selector.
+// deleteServersByLabel deletes all servers matching the label selector
+// and waits for them to be fully deleted.
 func (c *RealClient) deleteServersByLabel(ctx context.Context, labelSelector string) error {
-	return deleteResourcesByLabel(ctx, "server",
-		func(ctx context.Context) ([]*hcloud.Server, error) {
-			return c.client.Server.AllWithOpts(ctx, hcloud.ServerListOpts{
+	// First, list all servers to delete
+	servers, err := c.client.Server.AllWithOpts(ctx, hcloud.ServerListOpts{
+		ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list servers: %w", err)
+	}
+
+	// Delete all servers
+	for _, s := range servers {
+		log.Printf("[Cleanup] Deleting server: %s (ID: %d)", s.Name, s.ID)
+		if _, _, err := c.client.Server.DeleteWithResult(ctx, s); err != nil {
+			log.Printf("[Cleanup] Warning: Failed to delete server %s: %v", s.Name, err)
+		}
+	}
+
+	// Wait for all servers to be fully deleted
+	if len(servers) > 0 {
+		log.Printf("[Cleanup] Waiting for %d servers to be fully deleted...", len(servers))
+		for i := 0; i < 60; i++ { // Wait up to 5 minutes (60 * 5s)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+
+			remaining, err := c.client.Server.AllWithOpts(ctx, hcloud.ServerListOpts{
 				ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
 			})
-		},
-		func(ctx context.Context, s *hcloud.Server) error {
-			_, _, err := c.client.Server.DeleteWithResult(ctx, s)
-			return err
-		},
-	)
+			if err != nil {
+				log.Printf("[Cleanup] Warning: Failed to check remaining servers: %v", err)
+				break
+			}
+			if len(remaining) == 0 {
+				log.Printf("[Cleanup] All servers deleted successfully")
+				break
+			}
+			time.Sleep(5 * time.Second)
+		}
+	}
+
+	return nil
 }
 
 // deleteLoadBalancersByLabel deletes all load balancers matching the label selector.
@@ -183,18 +216,46 @@ func (c *RealClient) deleteFloatingIPsByLabel(ctx context.Context, labelSelector
 }
 
 // deleteFirewallsByLabel deletes all firewalls matching the label selector.
+// It retries if the firewall is still in use (e.g., servers being deleted).
 func (c *RealClient) deleteFirewallsByLabel(ctx context.Context, labelSelector string) error {
-	return deleteResourcesByLabel(ctx, "firewall",
-		func(ctx context.Context) ([]*hcloud.Firewall, error) {
-			return c.client.Firewall.AllWithOpts(ctx, hcloud.FirewallListOpts{
-				ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
-			})
-		},
-		func(ctx context.Context, fw *hcloud.Firewall) error {
+	firewalls, err := c.client.Firewall.AllWithOpts(ctx, hcloud.FirewallListOpts{
+		ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list firewalls: %w", err)
+	}
+
+	for _, fw := range firewalls {
+		log.Printf("[Cleanup] Deleting firewall: %s (ID: %d)", fw.Name, fw.ID)
+
+		// Retry up to 30 times (2.5 minutes) in case firewall is still in use
+		for i := 0; i < 30; i++ {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+
 			_, err := c.client.Firewall.Delete(ctx, fw)
-			return err
-		},
-	)
+			if err == nil {
+				break
+			}
+
+			// Check if error is "resource in use"
+			if hcloud.IsError(err, hcloud.ErrorCodeResourceInUse) {
+				if i < 29 {
+					log.Printf("[Cleanup] Firewall %s still in use, waiting...", fw.Name)
+					time.Sleep(5 * time.Second)
+					continue
+				}
+			}
+
+			log.Printf("[Cleanup] Warning: Failed to delete firewall %s: %v", fw.Name, err)
+			break
+		}
+	}
+
+	return nil
 }
 
 // deleteNetworksByLabel deletes all networks matching the label selector.

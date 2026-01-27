@@ -44,6 +44,9 @@ func phaseAddons(t *testing.T, state *E2EState) {
 	t.Run("ClusterAutoscaler", func(t *testing.T) { testAddonClusterAutoscaler(t, state, token) })
 	t.Run("TalosBackup", func(t *testing.T) { testAddonTalosBackup(t, state) })
 
+	// DNS and TLS integration (requires CF_API_TOKEN and CF_DOMAIN env vars)
+	t.Run("Cloudflare", func(t *testing.T) { testAddonCloudflare(t, state, token) })
+
 	t.Log("✓ Phase 3: Addons (all tested)")
 }
 
