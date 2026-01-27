@@ -1,6 +1,8 @@
 package wizard
 
 import (
+	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -498,5 +500,469 @@ func TestFilterServerTypes(t *testing.T) {
 	x86Dedicated := FilterServerTypes(ArchX86, CategoryDedicated)
 	if len(x86Dedicated) == 0 {
 		t.Error("Expected x86 dedicated server types")
+	}
+}
+
+// saveAndRestoreWizardFunctions saves the current function variables and restores them after the test.
+func saveAndRestoreWizardFunctions(t *testing.T) {
+	t.Helper()
+
+	// Save original functions
+	origClusterIdentity := runClusterIdentityGroup
+	origSSHAccess := runSSHAccessGroup
+	origArchitecture := runArchitectureGroup
+	origControlPlane := runControlPlaneGroup
+	origWorkers := runWorkersGroup
+	origCNI := runCNIGroup
+	origIngress := runIngressControllerGroup
+	origAddons := runAddonsGroup
+	origVersions := runVersionsGroup
+	origNetwork := runNetworkGroup
+	origSecurity := runSecurityGroup
+	origCiliumAdvanced := runCiliumAdvancedGroup
+	origConfirmOverwrite := confirmOverwrite
+
+	// Restore after test
+	t.Cleanup(func() {
+		runClusterIdentityGroup = origClusterIdentity
+		runSSHAccessGroup = origSSHAccess
+		runArchitectureGroup = origArchitecture
+		runControlPlaneGroup = origControlPlane
+		runWorkersGroup = origWorkers
+		runCNIGroup = origCNI
+		runIngressControllerGroup = origIngress
+		runAddonsGroup = origAddons
+		runVersionsGroup = origVersions
+		runNetworkGroup = origNetwork
+		runSecurityGroup = origSecurity
+		runCiliumAdvancedGroup = origCiliumAdvanced
+		confirmOverwrite = origConfirmOverwrite
+	})
+}
+
+// mockAllPrompts sets up mock functions that populate the result with test data.
+func mockAllPrompts() {
+	runClusterIdentityGroup = func(_ context.Context, result *WizardResult) error {
+		result.ClusterName = "test-cluster"
+		result.Location = "nbg1"
+		return nil
+	}
+
+	runSSHAccessGroup = func(_ context.Context, result *WizardResult) error {
+		result.SSHKeys = []string{"my-key"}
+		return nil
+	}
+
+	runArchitectureGroup = func(_ context.Context, result *WizardResult) error {
+		result.Architecture = ArchX86
+		result.ServerCategory = CategoryShared
+		return nil
+	}
+
+	runControlPlaneGroup = func(_ context.Context, result *WizardResult) error {
+		result.ControlPlaneType = "cpx21"
+		result.ControlPlaneCount = 3
+		return nil
+	}
+
+	runWorkersGroup = func(_ context.Context, result *WizardResult) error {
+		result.AddWorkers = true
+		result.WorkerType = "cpx31"
+		result.WorkerCount = 2
+		return nil
+	}
+
+	runCNIGroup = func(_ context.Context, result *WizardResult) error {
+		result.CNIChoice = CNICilium
+		return nil
+	}
+
+	runIngressControllerGroup = func(_ context.Context, result *WizardResult) error {
+		result.IngressController = IngressNginx
+		return nil
+	}
+
+	runAddonsGroup = func(_ context.Context, result *WizardResult) error {
+		result.EnabledAddons = []string{"metrics_server", "csi"}
+		return nil
+	}
+
+	runVersionsGroup = func(_ context.Context, result *WizardResult) error {
+		result.TalosVersion = "v1.9.0"
+		result.KubernetesVersion = "v1.32.0"
+		return nil
+	}
+
+	runNetworkGroup = func(_ context.Context, opts *AdvancedOptions) error {
+		opts.NetworkCIDR = "10.0.0.0/16"
+		opts.PodCIDR = "10.244.0.0/16"
+		opts.ServiceCIDR = "10.96.0.0/12"
+		return nil
+	}
+
+	runSecurityGroup = func(_ context.Context, opts *AdvancedOptions) error {
+		opts.DiskEncryption = true
+		opts.ClusterAccess = "public"
+		return nil
+	}
+
+	runCiliumAdvancedGroup = func(_ context.Context, opts *AdvancedOptions) error {
+		opts.CiliumEncryption = true
+		opts.CiliumEncryptionType = "wireguard"
+		opts.HubbleEnabled = true
+		opts.GatewayAPIEnabled = true
+		return nil
+	}
+}
+
+func TestRunWizard_BasicMode(t *testing.T) {
+	saveAndRestoreWizardFunctions(t)
+	mockAllPrompts()
+
+	result, err := RunWizard(context.Background(), false)
+	if err != nil {
+		t.Fatalf("RunWizard() error = %v", err)
+	}
+
+	if result.ClusterName != "test-cluster" {
+		t.Errorf("ClusterName = %q, want %q", result.ClusterName, "test-cluster")
+	}
+	if result.Location != "nbg1" {
+		t.Errorf("Location = %q, want %q", result.Location, "nbg1")
+	}
+	if len(result.SSHKeys) != 1 || result.SSHKeys[0] != "my-key" {
+		t.Errorf("SSHKeys = %v, want [my-key]", result.SSHKeys)
+	}
+	if result.ControlPlaneType != "cpx21" {
+		t.Errorf("ControlPlaneType = %q, want %q", result.ControlPlaneType, "cpx21")
+	}
+	if result.ControlPlaneCount != 3 {
+		t.Errorf("ControlPlaneCount = %d, want 3", result.ControlPlaneCount)
+	}
+	if !result.AddWorkers {
+		t.Error("AddWorkers should be true")
+	}
+	if result.WorkerType != "cpx31" {
+		t.Errorf("WorkerType = %q, want %q", result.WorkerType, "cpx31")
+	}
+	if result.CNIChoice != CNICilium {
+		t.Errorf("CNIChoice = %q, want %q", result.CNIChoice, CNICilium)
+	}
+
+	// Advanced options should be nil in basic mode
+	if result.AdvancedOptions != nil {
+		t.Error("AdvancedOptions should be nil in basic mode")
+	}
+}
+
+func TestRunWizard_AdvancedMode(t *testing.T) {
+	saveAndRestoreWizardFunctions(t)
+	mockAllPrompts()
+
+	result, err := RunWizard(context.Background(), true)
+	if err != nil {
+		t.Fatalf("RunWizard() error = %v", err)
+	}
+
+	// Check basic fields
+	if result.ClusterName != "test-cluster" {
+		t.Errorf("ClusterName = %q, want %q", result.ClusterName, "test-cluster")
+	}
+
+	// Advanced options should be populated
+	if result.AdvancedOptions == nil {
+		t.Fatal("AdvancedOptions should not be nil in advanced mode")
+	}
+	if result.AdvancedOptions.NetworkCIDR != "10.0.0.0/16" {
+		t.Errorf("NetworkCIDR = %q, want %q", result.AdvancedOptions.NetworkCIDR, "10.0.0.0/16")
+	}
+	if !result.AdvancedOptions.DiskEncryption {
+		t.Error("DiskEncryption should be true")
+	}
+	if !result.AdvancedOptions.CiliumEncryption {
+		t.Error("CiliumEncryption should be true")
+	}
+	if result.AdvancedOptions.CiliumEncryptionType != "wireguard" {
+		t.Errorf("CiliumEncryptionType = %q, want %q", result.AdvancedOptions.CiliumEncryptionType, "wireguard")
+	}
+}
+
+func TestRunWizard_AdvancedModeWithoutCilium(t *testing.T) {
+	saveAndRestoreWizardFunctions(t)
+	mockAllPrompts()
+
+	// Override CNI to not be Cilium
+	runCNIGroup = func(_ context.Context, result *WizardResult) error {
+		result.CNIChoice = CNITalosNative
+		return nil
+	}
+
+	result, err := RunWizard(context.Background(), true)
+	if err != nil {
+		t.Fatalf("RunWizard() error = %v", err)
+	}
+
+	// Advanced options should exist but Cilium options should be empty/false
+	if result.AdvancedOptions == nil {
+		t.Fatal("AdvancedOptions should not be nil")
+	}
+	// Cilium advanced group should not have been called, so options should be default (false/empty)
+	if result.AdvancedOptions.CiliumEncryption {
+		t.Error("CiliumEncryption should be false when CNI is not Cilium")
+	}
+}
+
+func TestRunWizard_ClusterIdentityError(t *testing.T) {
+	saveAndRestoreWizardFunctions(t)
+	mockAllPrompts()
+
+	runClusterIdentityGroup = func(_ context.Context, _ *WizardResult) error {
+		return errors.New("user cancelled")
+	}
+
+	result, err := RunWizard(context.Background(), false)
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "cluster identity") {
+		t.Errorf("Error should mention 'cluster identity', got: %v", err)
+	}
+	if result != nil {
+		t.Error("Result should be nil on error")
+	}
+}
+
+func TestRunWizard_SSHAccessError(t *testing.T) {
+	saveAndRestoreWizardFunctions(t)
+	mockAllPrompts()
+
+	runSSHAccessGroup = func(_ context.Context, _ *WizardResult) error {
+		return errors.New("ssh error")
+	}
+
+	_, err := RunWizard(context.Background(), false)
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "ssh access") {
+		t.Errorf("Error should mention 'ssh access', got: %v", err)
+	}
+}
+
+func TestRunWizard_ArchitectureError(t *testing.T) {
+	saveAndRestoreWizardFunctions(t)
+	mockAllPrompts()
+
+	runArchitectureGroup = func(_ context.Context, _ *WizardResult) error {
+		return errors.New("arch error")
+	}
+
+	_, err := RunWizard(context.Background(), false)
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "architecture") {
+		t.Errorf("Error should mention 'architecture', got: %v", err)
+	}
+}
+
+func TestRunWizard_ControlPlaneError(t *testing.T) {
+	saveAndRestoreWizardFunctions(t)
+	mockAllPrompts()
+
+	runControlPlaneGroup = func(_ context.Context, _ *WizardResult) error {
+		return errors.New("cp error")
+	}
+
+	_, err := RunWizard(context.Background(), false)
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "control plane") {
+		t.Errorf("Error should mention 'control plane', got: %v", err)
+	}
+}
+
+func TestRunWizard_WorkersError(t *testing.T) {
+	saveAndRestoreWizardFunctions(t)
+	mockAllPrompts()
+
+	runWorkersGroup = func(_ context.Context, _ *WizardResult) error {
+		return errors.New("workers error")
+	}
+
+	_, err := RunWizard(context.Background(), false)
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "workers") {
+		t.Errorf("Error should mention 'workers', got: %v", err)
+	}
+}
+
+func TestRunWizard_CNIError(t *testing.T) {
+	saveAndRestoreWizardFunctions(t)
+	mockAllPrompts()
+
+	runCNIGroup = func(_ context.Context, _ *WizardResult) error {
+		return errors.New("cni error")
+	}
+
+	_, err := RunWizard(context.Background(), false)
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "cni") {
+		t.Errorf("Error should mention 'cni', got: %v", err)
+	}
+}
+
+func TestRunWizard_IngressError(t *testing.T) {
+	saveAndRestoreWizardFunctions(t)
+	mockAllPrompts()
+
+	runIngressControllerGroup = func(_ context.Context, _ *WizardResult) error {
+		return errors.New("ingress error")
+	}
+
+	_, err := RunWizard(context.Background(), false)
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "ingress") {
+		t.Errorf("Error should mention 'ingress', got: %v", err)
+	}
+}
+
+func TestRunWizard_AddonsError(t *testing.T) {
+	saveAndRestoreWizardFunctions(t)
+	mockAllPrompts()
+
+	runAddonsGroup = func(_ context.Context, _ *WizardResult) error {
+		return errors.New("addons error")
+	}
+
+	_, err := RunWizard(context.Background(), false)
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "addons") {
+		t.Errorf("Error should mention 'addons', got: %v", err)
+	}
+}
+
+func TestRunWizard_VersionsError(t *testing.T) {
+	saveAndRestoreWizardFunctions(t)
+	mockAllPrompts()
+
+	runVersionsGroup = func(_ context.Context, _ *WizardResult) error {
+		return errors.New("versions error")
+	}
+
+	_, err := RunWizard(context.Background(), false)
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "versions") {
+		t.Errorf("Error should mention 'versions', got: %v", err)
+	}
+}
+
+func TestRunWizard_AdvancedNetworkError(t *testing.T) {
+	saveAndRestoreWizardFunctions(t)
+	mockAllPrompts()
+
+	runNetworkGroup = func(_ context.Context, _ *AdvancedOptions) error {
+		return errors.New("network error")
+	}
+
+	_, err := RunWizard(context.Background(), true)
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "network") {
+		t.Errorf("Error should mention 'network', got: %v", err)
+	}
+}
+
+func TestRunWizard_AdvancedSecurityError(t *testing.T) {
+	saveAndRestoreWizardFunctions(t)
+	mockAllPrompts()
+
+	runSecurityGroup = func(_ context.Context, _ *AdvancedOptions) error {
+		return errors.New("security error")
+	}
+
+	_, err := RunWizard(context.Background(), true)
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "security") {
+		t.Errorf("Error should mention 'security', got: %v", err)
+	}
+}
+
+func TestRunWizard_AdvancedCiliumError(t *testing.T) {
+	saveAndRestoreWizardFunctions(t)
+	mockAllPrompts()
+
+	runCiliumAdvancedGroup = func(_ context.Context, _ *AdvancedOptions) error {
+		return errors.New("cilium error")
+	}
+
+	_, err := RunWizard(context.Background(), true)
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "cilium") {
+		t.Errorf("Error should mention 'cilium', got: %v", err)
+	}
+}
+
+func TestConfirmOverwrite_Yes(t *testing.T) {
+	saveAndRestoreWizardFunctions(t)
+
+	confirmOverwrite = func(_ string) (bool, error) {
+		return true, nil
+	}
+
+	result, err := ConfirmOverwrite("/path/to/file")
+	if err != nil {
+		t.Fatalf("ConfirmOverwrite() error = %v", err)
+	}
+	if !result {
+		t.Error("ConfirmOverwrite() should return true")
+	}
+}
+
+func TestConfirmOverwrite_No(t *testing.T) {
+	saveAndRestoreWizardFunctions(t)
+
+	confirmOverwrite = func(_ string) (bool, error) {
+		return false, nil
+	}
+
+	result, err := ConfirmOverwrite("/path/to/file")
+	if err != nil {
+		t.Fatalf("ConfirmOverwrite() error = %v", err)
+	}
+	if result {
+		t.Error("ConfirmOverwrite() should return false")
+	}
+}
+
+func TestConfirmOverwrite_Error(t *testing.T) {
+	saveAndRestoreWizardFunctions(t)
+
+	confirmOverwrite = func(_ string) (bool, error) {
+		return false, errors.New("stdin error")
+	}
+
+	_, err := ConfirmOverwrite("/path/to/file")
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "stdin error") {
+		t.Errorf("Error should mention 'stdin error', got: %v", err)
 	}
 }

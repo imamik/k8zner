@@ -10,6 +10,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Function variable for dependency injection in tests.
+var confirmOverwrite = defaultConfirmOverwrite
+
 // WriteConfig writes the config to a YAML file with a descriptive header.
 // If fullOutput is false, only essential non-default values are written.
 func WriteConfig(cfg *config.Config, outputPath string, fullOutput bool) error {
@@ -263,6 +266,11 @@ func FileExists(path string) bool {
 
 // ConfirmOverwrite prompts the user to confirm overwriting an existing file.
 func ConfirmOverwrite(path string) (bool, error) {
+	return confirmOverwrite(path)
+}
+
+// defaultConfirmOverwrite is the default implementation that prompts via stdin.
+func defaultConfirmOverwrite(path string) (bool, error) {
 	fmt.Printf("\nFile already exists: %s\n", path)
 	fmt.Print("Overwrite? (y/n): ")
 
