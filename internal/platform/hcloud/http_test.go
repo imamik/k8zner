@@ -3,6 +3,7 @@ package hcloud
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -753,4 +754,1294 @@ func TestRealClient_DeleteSSHKey_WithHTTPMock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+}
+
+func TestRealClient_EnsureFirewall_WithHTTPMock(t *testing.T) {
+	t.Run("creates firewall when not exists", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		firewallCreated := false
+
+		ts.handleFunc("/firewalls", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost {
+				firewallCreated = true
+				jsonResponse(w, http.StatusCreated, schema.FirewallCreateResponse{
+					Firewall: schema.Firewall{
+						ID:   201,
+						Name: "test-firewall",
+						Rules: []schema.FirewallRule{
+							{Direction: "in", Protocol: "tcp", Port: hcloud.Ptr("22")},
+						},
+					},
+					Actions: []schema.Action{{ID: 1, Status: "success"}},
+				})
+				return
+			}
+			// GET request
+			name := r.URL.Query().Get("name")
+			if name == "test-firewall" && firewallCreated {
+				jsonResponse(w, http.StatusOK, schema.FirewallListResponse{
+					Firewalls: []schema.Firewall{
+						{ID: 201, Name: "test-firewall"},
+					},
+				})
+				return
+			}
+			jsonResponse(w, http.StatusOK, schema.FirewallListResponse{Firewalls: []schema.Firewall{}})
+		})
+
+		ts.handleFunc("/actions/1", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+				Action: schema.Action{ID: 1, Status: "success", Progress: 100},
+			})
+		})
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		rules := []hcloud.FirewallRule{
+			{Direction: hcloud.FirewallRuleDirectionIn, Protocol: hcloud.FirewallRuleProtocolTCP, Port: hcloud.Ptr("22")},
+		}
+		fw, err := client.EnsureFirewall(ctx, "test-firewall", rules, map[string]string{"env": "test"}, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if fw == nil {
+			t.Fatal("expected firewall, got nil")
+		}
+		if fw.ID != 201 {
+			t.Errorf("expected ID 201, got %d", fw.ID)
+		}
+	})
+
+	t.Run("creates firewall with label selector", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		ts.handleFunc("/firewalls", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost {
+				jsonResponse(w, http.StatusCreated, schema.FirewallCreateResponse{
+					Firewall: schema.Firewall{
+						ID:        202,
+						Name:      "test-firewall-selector",
+						AppliedTo: []schema.FirewallResource{},
+					},
+					Actions: []schema.Action{{ID: 2, Status: "success"}},
+				})
+				return
+			}
+			jsonResponse(w, http.StatusOK, schema.FirewallListResponse{Firewalls: []schema.Firewall{}})
+		})
+
+		ts.handleFunc("/firewalls/202/actions/apply_to_resources", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusCreated, schema.FirewallActionApplyToResourcesResponse{
+				Actions: []schema.Action{{ID: 3, Status: "success"}},
+			})
+		})
+
+		ts.handleFunc("/actions/2", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+				Action: schema.Action{ID: 2, Status: "success", Progress: 100},
+			})
+		})
+
+		ts.handleFunc("/actions/3", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+				Action: schema.Action{ID: 3, Status: "success", Progress: 100},
+			})
+		})
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		rules := []hcloud.FirewallRule{}
+		fw, err := client.EnsureFirewall(ctx, "test-firewall-selector", rules, nil, "cluster=test")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if fw == nil {
+			t.Fatal("expected firewall, got nil")
+		}
+	})
+
+	t.Run("updates existing firewall rules", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		ts.handleFunc("/firewalls", func(w http.ResponseWriter, r *http.Request) {
+			name := r.URL.Query().Get("name")
+			if name == "existing-firewall" {
+				jsonResponse(w, http.StatusOK, schema.FirewallListResponse{
+					Firewalls: []schema.Firewall{
+						{ID: 203, Name: "existing-firewall", Rules: []schema.FirewallRule{}},
+					},
+				})
+				return
+			}
+			jsonResponse(w, http.StatusOK, schema.FirewallListResponse{Firewalls: []schema.Firewall{}})
+		})
+
+		ts.handleFunc("/firewalls/203/actions/set_rules", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusCreated, schema.FirewallActionSetRulesResponse{
+				Actions: []schema.Action{{ID: 4, Status: "success"}},
+			})
+		})
+
+		ts.handleFunc("/actions/4", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+				Action: schema.Action{ID: 4, Status: "success", Progress: 100},
+			})
+		})
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		rules := []hcloud.FirewallRule{
+			{Direction: hcloud.FirewallRuleDirectionIn, Protocol: hcloud.FirewallRuleProtocolTCP, Port: hcloud.Ptr("443")},
+		}
+		fw, err := client.EnsureFirewall(ctx, "existing-firewall", rules, nil, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if fw == nil {
+			t.Fatal("expected firewall, got nil")
+		}
+		if fw.ID != 203 {
+			t.Errorf("expected ID 203, got %d", fw.ID)
+		}
+	})
+
+	t.Run("skips applying existing label selector", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		ts.handleFunc("/firewalls", func(w http.ResponseWriter, r *http.Request) {
+			name := r.URL.Query().Get("name")
+			if name == "existing-firewall-selector" {
+				jsonResponse(w, http.StatusOK, schema.FirewallListResponse{
+					Firewalls: []schema.Firewall{
+						{
+							ID:   204,
+							Name: "existing-firewall-selector",
+							AppliedTo: []schema.FirewallResource{
+								{
+									Type: "label_selector",
+									LabelSelector: &schema.FirewallResourceLabelSelector{
+										Selector: "cluster=test",
+									},
+								},
+							},
+						},
+					},
+				})
+				return
+			}
+			jsonResponse(w, http.StatusOK, schema.FirewallListResponse{Firewalls: []schema.Firewall{}})
+		})
+
+		ts.handleFunc("/firewalls/204/actions/set_rules", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusCreated, schema.FirewallActionSetRulesResponse{
+				Actions: []schema.Action{{ID: 5, Status: "success"}},
+			})
+		})
+
+		ts.handleFunc("/actions/5", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+				Action: schema.Action{ID: 5, Status: "success", Progress: 100},
+			})
+		})
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		fw, err := client.EnsureFirewall(ctx, "existing-firewall-selector", []hcloud.FirewallRule{}, nil, "cluster=test")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if fw == nil {
+			t.Fatal("expected firewall, got nil")
+		}
+	})
+}
+
+func TestRealClient_EnsureLoadBalancer_WithHTTPMock(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/load_balancers", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			jsonResponse(w, http.StatusCreated, schema.LoadBalancerCreateResponse{
+				LoadBalancer: schema.LoadBalancer{
+					ID:   301,
+					Name: "test-lb",
+				},
+				Action: schema.Action{ID: 10, Status: "success"},
+			})
+			return
+		}
+		// GET request
+		jsonResponse(w, http.StatusOK, schema.LoadBalancerListResponse{LoadBalancers: []schema.LoadBalancer{}})
+	})
+
+	ts.handleFunc("/load_balancer_types", func(w http.ResponseWriter, r *http.Request) {
+		// SDK uses GET /load_balancer_types?name=lb11
+		name := r.URL.Query().Get("name")
+		if name == "lb11" {
+			jsonResponse(w, http.StatusOK, schema.LoadBalancerTypeListResponse{
+				LoadBalancerTypes: []schema.LoadBalancerType{
+					{ID: 1, Name: "lb11"},
+				},
+			})
+			return
+		}
+		jsonResponse(w, http.StatusOK, schema.LoadBalancerTypeListResponse{LoadBalancerTypes: []schema.LoadBalancerType{}})
+	})
+
+	ts.handleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
+		// SDK uses GET /locations?name=nbg1
+		name := r.URL.Query().Get("name")
+		if name == "nbg1" {
+			jsonResponse(w, http.StatusOK, schema.LocationListResponse{
+				Locations: []schema.Location{
+					{ID: 1, Name: "nbg1"},
+				},
+			})
+			return
+		}
+		jsonResponse(w, http.StatusOK, schema.LocationListResponse{Locations: []schema.Location{}})
+	})
+
+	ts.handleFunc("/actions/10", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+			Action: schema.Action{ID: 10, Status: "success", Progress: 100},
+		})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	lb, err := client.EnsureLoadBalancer(ctx, "test-lb", "nbg1", "lb11", hcloud.LoadBalancerAlgorithmTypeRoundRobin, map[string]string{"test": "true"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if lb == nil {
+		t.Fatal("expected load balancer, got nil")
+	}
+	if lb.ID != 301 {
+		t.Errorf("expected ID 301, got %d", lb.ID)
+	}
+}
+
+func TestRealClient_ConfigureService_WithHTTPMock(t *testing.T) {
+	t.Run("adds new service", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		ts.handleFunc("/load_balancers/301/actions/add_service", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusCreated, schema.LoadBalancerActionAddServiceResponse{
+				Action: schema.Action{ID: 11, Status: "success"},
+			})
+		})
+
+		ts.handleFunc("/actions/11", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+				Action: schema.Action{ID: 11, Status: "success", Progress: 100},
+			})
+		})
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		lb := &hcloud.LoadBalancer{ID: 301, Services: []hcloud.LoadBalancerService{}}
+		service := hcloud.LoadBalancerAddServiceOpts{
+			Protocol:        hcloud.LoadBalancerServiceProtocolTCP,
+			ListenPort:      hcloud.Ptr(80),
+			DestinationPort: hcloud.Ptr(80),
+		}
+
+		err := client.ConfigureService(ctx, lb, service)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("skips existing service", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		lb := &hcloud.LoadBalancer{
+			ID: 302,
+			Services: []hcloud.LoadBalancerService{
+				{ListenPort: 80, DestinationPort: 80, Protocol: hcloud.LoadBalancerServiceProtocolTCP},
+			},
+		}
+		service := hcloud.LoadBalancerAddServiceOpts{
+			Protocol:   hcloud.LoadBalancerServiceProtocolTCP,
+			ListenPort: hcloud.Ptr(80),
+		}
+
+		err := client.ConfigureService(ctx, lb, service)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("errors on nil listen port", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		lb := &hcloud.LoadBalancer{ID: 303}
+		service := hcloud.LoadBalancerAddServiceOpts{
+			Protocol: hcloud.LoadBalancerServiceProtocolTCP,
+			// ListenPort is nil
+		}
+
+		err := client.ConfigureService(ctx, lb, service)
+		if err == nil {
+			t.Fatal("expected error for nil listen port")
+		}
+	})
+}
+
+func TestRealClient_AddTarget_WithHTTPMock(t *testing.T) {
+	t.Run("adds label selector target", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		ts.handleFunc("/load_balancers/301/actions/add_target", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusCreated, schema.LoadBalancerActionAddTargetResponse{
+				Action: schema.Action{ID: 12, Status: "success"},
+			})
+		})
+
+		ts.handleFunc("/actions/12", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+				Action: schema.Action{ID: 12, Status: "success", Progress: 100},
+			})
+		})
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		lb := &hcloud.LoadBalancer{ID: 301, Targets: []hcloud.LoadBalancerTarget{}}
+
+		err := client.AddTarget(ctx, lb, hcloud.LoadBalancerTargetTypeLabelSelector, "role=worker")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("skips existing target", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		lb := &hcloud.LoadBalancer{
+			ID: 302,
+			Targets: []hcloud.LoadBalancerTarget{
+				{
+					Type:          hcloud.LoadBalancerTargetTypeLabelSelector,
+					LabelSelector: &hcloud.LoadBalancerTargetLabelSelector{Selector: "role=worker"},
+				},
+			},
+		}
+
+		err := client.AddTarget(ctx, lb, hcloud.LoadBalancerTargetTypeLabelSelector, "role=worker")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("errors on unsupported target type", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		lb := &hcloud.LoadBalancer{ID: 303}
+
+		err := client.AddTarget(ctx, lb, hcloud.LoadBalancerTargetTypeIP, "")
+		if err == nil {
+			t.Fatal("expected error for unsupported target type")
+		}
+	})
+}
+
+func TestRealClient_DeleteLoadBalancer_WithHTTPMock(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/load_balancers", func(w http.ResponseWriter, r *http.Request) {
+		name := r.URL.Query().Get("name")
+		if name == "lb-to-delete" {
+			jsonResponse(w, http.StatusOK, schema.LoadBalancerListResponse{
+				LoadBalancers: []schema.LoadBalancer{
+					{ID: 350, Name: "lb-to-delete"},
+				},
+			})
+			return
+		}
+		jsonResponse(w, http.StatusOK, schema.LoadBalancerListResponse{LoadBalancers: []schema.LoadBalancer{}})
+	})
+
+	ts.handleFunc("/load_balancers/350", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	err := client.DeleteLoadBalancer(ctx, "lb-to-delete")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRealClient_EnsureFloatingIP_WithHTTPMock(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/floating_ips", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			jsonResponse(w, http.StatusCreated, schema.FloatingIPCreateResponse{
+				FloatingIP: schema.FloatingIP{
+					ID:   501,
+					Name: "test-fip",
+					IP:   "1.2.3.4",
+					Type: "ipv4",
+				},
+			})
+			return
+		}
+		// GET request
+		jsonResponse(w, http.StatusOK, schema.FloatingIPListResponse{FloatingIPs: []schema.FloatingIP{}})
+	})
+
+	ts.handleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
+		// SDK uses GET /locations?name=nbg1
+		name := r.URL.Query().Get("name")
+		if name == "nbg1" {
+			jsonResponse(w, http.StatusOK, schema.LocationListResponse{
+				Locations: []schema.Location{
+					{ID: 1, Name: "nbg1"},
+				},
+			})
+			return
+		}
+		jsonResponse(w, http.StatusOK, schema.LocationListResponse{Locations: []schema.Location{}})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	fip, err := client.EnsureFloatingIP(ctx, "test-fip", "nbg1", "ipv4", map[string]string{"test": "true"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fip == nil {
+		t.Fatal("expected floating IP, got nil")
+	}
+	if fip.ID != 501 {
+		t.Errorf("expected ID 501, got %d", fip.ID)
+	}
+}
+
+func TestRealClient_DeleteFloatingIP_WithHTTPMock(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/floating_ips", func(w http.ResponseWriter, r *http.Request) {
+		name := r.URL.Query().Get("name")
+		if name == "fip-to-delete" {
+			jsonResponse(w, http.StatusOK, schema.FloatingIPListResponse{
+				FloatingIPs: []schema.FloatingIP{
+					{ID: 550, Name: "fip-to-delete"},
+				},
+			})
+			return
+		}
+		jsonResponse(w, http.StatusOK, schema.FloatingIPListResponse{FloatingIPs: []schema.FloatingIP{}})
+	})
+
+	ts.handleFunc("/floating_ips/550", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	err := client.DeleteFloatingIP(ctx, "fip-to-delete")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRealClient_EnsureCertificate_WithHTTPMock(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/certificates", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			jsonResponse(w, http.StatusCreated, schema.CertificateCreateResponse{
+				Certificate: schema.Certificate{
+					ID:   601,
+					Name: "test-cert",
+					Type: "uploaded",
+				},
+			})
+			return
+		}
+		// GET request
+		jsonResponse(w, http.StatusOK, schema.CertificateListResponse{Certificates: []schema.Certificate{}})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	cert, err := client.EnsureCertificate(ctx, "test-cert", "-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----", "-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----", map[string]string{"test": "true"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cert == nil {
+		t.Fatal("expected certificate, got nil")
+	}
+	if cert.ID != 601 {
+		t.Errorf("expected ID 601, got %d", cert.ID)
+	}
+}
+
+func TestRealClient_DeleteCertificate_WithHTTPMock(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/certificates", func(w http.ResponseWriter, r *http.Request) {
+		name := r.URL.Query().Get("name")
+		if name == "cert-to-delete" {
+			jsonResponse(w, http.StatusOK, schema.CertificateListResponse{
+				Certificates: []schema.Certificate{
+					{ID: 650, Name: "cert-to-delete"},
+				},
+			})
+			return
+		}
+		jsonResponse(w, http.StatusOK, schema.CertificateListResponse{Certificates: []schema.Certificate{}})
+	})
+
+	ts.handleFunc("/certificates/650", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	err := client.DeleteCertificate(ctx, "cert-to-delete")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRealClient_CreateSnapshot_WithHTTPMock(t *testing.T) {
+	t.Run("creates snapshot successfully", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		ts.handleFunc("/servers/123/actions/create_image", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusCreated, schema.ServerActionCreateImageResponse{
+				Image: schema.Image{
+					ID:   701,
+					Type: "snapshot",
+				},
+				Action: schema.Action{ID: 20, Status: "success"},
+			})
+		})
+
+		ts.handleFunc("/actions/20", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+				Action: schema.Action{ID: 20, Status: "success", Progress: 100},
+			})
+		})
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		imageID, err := client.CreateSnapshot(ctx, "123", "test-snapshot", map[string]string{"type": "backup"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if imageID != "701" {
+			t.Errorf("expected image ID '701', got %q", imageID)
+		}
+	})
+
+	t.Run("errors on invalid server ID", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		_, err := client.CreateSnapshot(ctx, "invalid", "test-snapshot", nil)
+		if err == nil {
+			t.Fatal("expected error for invalid server ID")
+		}
+	})
+}
+
+func TestRealClient_DeleteImage_WithHTTPMock(t *testing.T) {
+	t.Run("deletes image successfully", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		ts.handleFunc("/images/701", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodDelete {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		})
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		err := client.DeleteImage(ctx, "701")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("errors on invalid image ID", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		err := client.DeleteImage(ctx, "invalid")
+		if err == nil {
+			t.Fatal("expected error for invalid image ID")
+		}
+	})
+}
+
+func TestRealClient_SetServerRDNS_InvalidIP(t *testing.T) {
+	// Test that invalid IP addresses are rejected before making API calls
+	ts := newTestServer()
+	defer ts.close()
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	err := client.SetServerRDNS(ctx, 123, "invalid-ip", "server.example.com")
+	if err == nil {
+		t.Fatal("expected error for invalid IP address")
+	}
+	if err.Error() != "invalid IP address: invalid-ip" {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestRealClient_SetLoadBalancerRDNS_InvalidIP(t *testing.T) {
+	// Test that invalid IP addresses are rejected before making API calls
+	ts := newTestServer()
+	defer ts.close()
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	err := client.SetLoadBalancerRDNS(ctx, 301, "not-an-ip", "lb.example.com")
+	if err == nil {
+		t.Fatal("expected error for invalid IP address")
+	}
+	if err.Error() != "invalid IP address: not-an-ip" {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestRealClient_AttachToNetwork_WithHTTPMock(t *testing.T) {
+	t.Run("attaches LB to network", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		ts.handleFunc("/load_balancers/301/actions/attach_to_network", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusCreated, schema.LoadBalancerActionAttachToNetworkResponse{
+				Action: schema.Action{ID: 40, Status: "success"},
+			})
+		})
+
+		ts.handleFunc("/actions/40", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+				Action: schema.Action{ID: 40, Status: "success", Progress: 100},
+			})
+		})
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		lb := &hcloud.LoadBalancer{ID: 301, PrivateNet: []hcloud.LoadBalancerPrivateNet{}}
+		network := &hcloud.Network{ID: 100}
+		ip := net.ParseIP("10.0.0.50")
+
+		err := client.AttachToNetwork(ctx, lb, network, ip)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("skips if already attached", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		lb := &hcloud.LoadBalancer{
+			ID: 302,
+			PrivateNet: []hcloud.LoadBalancerPrivateNet{
+				{Network: &hcloud.Network{ID: 100}},
+			},
+		}
+		network := &hcloud.Network{ID: 100}
+		ip := net.ParseIP("10.0.0.50")
+
+		err := client.AttachToNetwork(ctx, lb, network, ip)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("errors on nil IP", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		lb := &hcloud.LoadBalancer{ID: 303}
+		network := &hcloud.Network{ID: 100}
+
+		err := client.AttachToNetwork(ctx, lb, network, nil)
+		if err == nil {
+			t.Fatal("expected error for nil IP")
+		}
+	})
+}
+
+func TestRealClient_EnableRescue_WithHTTPMock(t *testing.T) {
+	t.Run("enables rescue mode", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		ts.handleFunc("/servers/123/actions/enable_rescue", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ServerActionEnableRescueResponse{
+				RootPassword: "secret123",
+				Action:       schema.Action{ID: 50, Status: "success"},
+			})
+		})
+
+		ts.handleFunc("/actions/50", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+				Action: schema.Action{ID: 50, Status: "success", Progress: 100},
+			})
+		})
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		password, err := client.EnableRescue(ctx, "123", []string{"456"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if password != "secret123" {
+			t.Errorf("expected password 'secret123', got %q", password)
+		}
+	})
+
+	t.Run("errors on invalid server ID", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		_, err := client.EnableRescue(ctx, "invalid", nil)
+		if err == nil {
+			t.Fatal("expected error for invalid server ID")
+		}
+	})
+
+	t.Run("handles invalid SSH key IDs gracefully", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		ts.handleFunc("/servers/123/actions/enable_rescue", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ServerActionEnableRescueResponse{
+				RootPassword: "pass",
+				Action:       schema.Action{ID: 51, Status: "success"},
+			})
+		})
+
+		ts.handleFunc("/actions/51", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+				Action: schema.Action{ID: 51, Status: "success", Progress: 100},
+			})
+		})
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		// Invalid SSH key IDs should be ignored
+		_, err := client.EnableRescue(ctx, "123", []string{"invalid", "456", "abc"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestRealClient_ResetServer_WithHTTPMock(t *testing.T) {
+	t.Run("resets server successfully", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		ts.handleFunc("/servers/123/actions/reset", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ServerActionResetResponse{
+				Action: schema.Action{ID: 60, Status: "success"},
+			})
+		})
+
+		ts.handleFunc("/actions/60", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+				Action: schema.Action{ID: 60, Status: "success", Progress: 100},
+			})
+		})
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		err := client.ResetServer(ctx, "123")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("errors on invalid server ID", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		err := client.ResetServer(ctx, "invalid")
+		if err == nil {
+			t.Fatal("expected error for invalid server ID")
+		}
+	})
+}
+
+func TestRealClient_PoweroffServer_WithHTTPMock(t *testing.T) {
+	t.Run("powers off server successfully", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		ts.handleFunc("/servers/123/actions/poweroff", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ServerActionPoweroffResponse{
+				Action: schema.Action{ID: 70, Status: "success"},
+			})
+		})
+
+		ts.handleFunc("/actions/70", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+				Action: schema.Action{ID: 70, Status: "success", Progress: 100},
+			})
+		})
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		err := client.PoweroffServer(ctx, "123")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("errors on invalid server ID", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		err := client.PoweroffServer(ctx, "invalid")
+		if err == nil {
+			t.Fatal("expected error for invalid server ID")
+		}
+	})
+}
+
+func TestRealClient_EnsureSubnet_WithHTTPMock(t *testing.T) {
+	t.Run("creates subnet when not exists", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		ts.handleFunc("/networks/100/actions/add_subnet", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusCreated, schema.NetworkActionAddSubnetResponse{
+				Action: schema.Action{ID: 80, Status: "success"},
+			})
+		})
+
+		ts.handleFunc("/actions/80", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+				Action: schema.Action{ID: 80, Status: "success", Progress: 100},
+			})
+		})
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		network := &hcloud.Network{ID: 100, Subnets: []hcloud.NetworkSubnet{}}
+
+		err := client.EnsureSubnet(ctx, network, "10.0.1.0/24", "eu-central", hcloud.NetworkSubnetTypeCloud)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("skips existing subnet", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		_, ipNet, _ := net.ParseCIDR("10.0.1.0/24")
+		network := &hcloud.Network{
+			ID: 100,
+			Subnets: []hcloud.NetworkSubnet{
+				{IPRange: ipNet, Type: hcloud.NetworkSubnetTypeCloud},
+			},
+		}
+
+		err := client.EnsureSubnet(ctx, network, "10.0.1.0/24", "eu-central", hcloud.NetworkSubnetTypeCloud)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("errors on invalid CIDR", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		network := &hcloud.Network{ID: 100, Subnets: []hcloud.NetworkSubnet{}}
+
+		err := client.EnsureSubnet(ctx, network, "invalid-cidr", "eu-central", hcloud.NetworkSubnetTypeCloud)
+		if err == nil {
+			t.Fatal("expected error for invalid CIDR")
+		}
+	})
+}
+
+func TestRealClient_EnsureNetwork_Validation(t *testing.T) {
+	t.Run("validates IP range mismatch", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		ts.handleFunc("/networks", func(w http.ResponseWriter, r *http.Request) {
+			name := r.URL.Query().Get("name")
+			if name == "test-network" {
+				jsonResponse(w, http.StatusOK, schema.NetworkListResponse{
+					Networks: []schema.Network{
+						{ID: 100, Name: "test-network", IPRange: "192.168.0.0/16"},
+					},
+				})
+				return
+			}
+			jsonResponse(w, http.StatusOK, schema.NetworkListResponse{Networks: []schema.Network{}})
+		})
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		// Try to ensure with different IP range
+		_, err := client.EnsureNetwork(ctx, "test-network", "10.0.0.0/16", "eu-central", nil)
+		if err == nil {
+			t.Fatal("expected error for IP range mismatch")
+		}
+	})
+}
+
+func TestRealClient_CreateServer_WithHTTPMock(t *testing.T) {
+	t.Run("creates server with all options", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		// Mock server type lookup
+		ts.handleFunc("/server_types", func(w http.ResponseWriter, r *http.Request) {
+			name := r.URL.Query().Get("name")
+			if name == "cx21" {
+				jsonResponse(w, http.StatusOK, schema.ServerTypeListResponse{
+					ServerTypes: []schema.ServerType{
+						{ID: 1, Name: "cx21", Architecture: "x86"},
+					},
+				})
+				return
+			}
+			jsonResponse(w, http.StatusOK, schema.ServerTypeListResponse{ServerTypes: []schema.ServerType{}})
+		})
+
+		// Mock image lookup
+		ts.handleFunc("/images", func(w http.ResponseWriter, r *http.Request) {
+			name := r.URL.Query().Get("name")
+			if name == "ubuntu-22.04" {
+				imageName := "ubuntu-22.04"
+				jsonResponse(w, http.StatusOK, schema.ImageListResponse{
+					Images: []schema.Image{
+						{ID: 10, Name: &imageName, Type: "system", Architecture: "x86", Status: "available"},
+					},
+				})
+				return
+			}
+			jsonResponse(w, http.StatusOK, schema.ImageListResponse{Images: []schema.Image{}})
+		})
+
+		// Mock SSH key lookup
+		ts.handleFunc("/ssh_keys", func(w http.ResponseWriter, r *http.Request) {
+			name := r.URL.Query().Get("name")
+			if name == "my-key" {
+				jsonResponse(w, http.StatusOK, schema.SSHKeyListResponse{
+					SSHKeys: []schema.SSHKey{
+						{ID: 100, Name: "my-key"},
+					},
+				})
+				return
+			}
+			jsonResponse(w, http.StatusOK, schema.SSHKeyListResponse{SSHKeys: []schema.SSHKey{}})
+		})
+
+		// Mock location lookup
+		ts.handleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
+			name := r.URL.Query().Get("name")
+			if name == "nbg1" {
+				jsonResponse(w, http.StatusOK, schema.LocationListResponse{
+					Locations: []schema.Location{
+						{ID: 1, Name: "nbg1"},
+					},
+				})
+				return
+			}
+			jsonResponse(w, http.StatusOK, schema.LocationListResponse{Locations: []schema.Location{}})
+		})
+
+		// Mock server creation
+		ts.handleFunc("/servers", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost {
+				jsonResponse(w, http.StatusCreated, schema.ServerCreateResponse{
+					Server: schema.Server{
+						ID:   999,
+						Name: "test-server",
+					},
+					Action: schema.Action{ID: 100, Status: "success"},
+				})
+				return
+			}
+			jsonResponse(w, http.StatusOK, schema.ServerListResponse{Servers: []schema.Server{}})
+		})
+
+		// Mock action wait
+		ts.handleFunc("/actions/100", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+				Action: schema.Action{ID: 100, Status: "success", Progress: 100},
+			})
+		})
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		// No network attachment (simple case)
+		serverID, err := client.CreateServer(ctx, "test-server", "ubuntu-22.04", "cx21", "nbg1", []string{"my-key"}, map[string]string{"test": "true"}, "#!/bin/bash\necho hello", nil, 0, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if serverID != "999" {
+			t.Errorf("expected server ID '999', got %q", serverID)
+		}
+	})
+
+	t.Run("resolves SSH keys correctly", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		// Mock SSH key lookup - return empty to trigger "not found" error
+		ts.handleFunc("/ssh_keys", func(w http.ResponseWriter, r *http.Request) {
+			name := r.URL.Query().Get("name")
+			if name == "nonexistent-key" {
+				jsonResponse(w, http.StatusOK, schema.SSHKeyListResponse{
+					SSHKeys: []schema.SSHKey{},
+				})
+				return
+			}
+			jsonResponse(w, http.StatusOK, schema.SSHKeyListResponse{SSHKeys: []schema.SSHKey{}})
+		})
+
+		// Mock server type lookup (needed first)
+		ts.handleFunc("/server_types", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ServerTypeListResponse{
+				ServerTypes: []schema.ServerType{
+					{ID: 1, Name: "cx21", Architecture: "x86"},
+				},
+			})
+		})
+
+		// Mock image lookup
+		ts.handleFunc("/images", func(w http.ResponseWriter, _ *http.Request) {
+			imageName := "ubuntu-22.04"
+			jsonResponse(w, http.StatusOK, schema.ImageListResponse{
+				Images: []schema.Image{
+					{ID: 10, Name: &imageName, Type: "system", Architecture: "x86", Status: "available"},
+				},
+			})
+		})
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		_, err := client.CreateServer(ctx, "test-server", "ubuntu-22.04", "cx21", "", []string{"nonexistent-key"}, nil, "", nil, 0, "")
+		if err == nil {
+			t.Fatal("expected error for nonexistent SSH key")
+		}
+	})
+
+	t.Run("resolves location correctly", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		// Mock server type lookup
+		ts.handleFunc("/server_types", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ServerTypeListResponse{
+				ServerTypes: []schema.ServerType{
+					{ID: 1, Name: "cx21", Architecture: "x86"},
+				},
+			})
+		})
+
+		// Mock image lookup
+		ts.handleFunc("/images", func(w http.ResponseWriter, _ *http.Request) {
+			imageName := "ubuntu-22.04"
+			jsonResponse(w, http.StatusOK, schema.ImageListResponse{
+				Images: []schema.Image{
+					{ID: 10, Name: &imageName, Type: "system", Architecture: "x86", Status: "available"},
+				},
+			})
+		})
+
+		// Mock SSH key lookup - return empty since we pass empty slice
+		ts.handleFunc("/ssh_keys", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.SSHKeyListResponse{SSHKeys: []schema.SSHKey{}})
+		})
+
+		// Mock location lookup - return empty to trigger "not found" error
+		ts.handleFunc("/locations", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.LocationListResponse{
+				Locations: []schema.Location{},
+			})
+		})
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		_, err := client.CreateServer(ctx, "test-server", "ubuntu-22.04", "cx21", "nonexistent-location", []string{}, nil, "", nil, 0, "")
+		if err == nil {
+			t.Fatal("expected error for nonexistent location")
+		}
+	})
+
+	t.Run("resolves talos image by label", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		// Mock server type lookup
+		ts.handleFunc("/server_types", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ServerTypeListResponse{
+				ServerTypes: []schema.ServerType{
+					{ID: 1, Name: "cx21", Architecture: "x86"},
+				},
+			})
+		})
+
+		// Mock image lookup - return image with os=talos label
+		ts.handleFunc("/images", func(w http.ResponseWriter, r *http.Request) {
+			labelSelector := r.URL.Query().Get("label_selector")
+			if labelSelector == "os=talos" {
+				imageName := "talos-v1.7.0"
+				jsonResponse(w, http.StatusOK, schema.ImageListResponse{
+					Images: []schema.Image{
+						{ID: 10, Name: &imageName, Type: "snapshot", Architecture: "x86", Status: "available", Labels: map[string]string{"os": "talos"}},
+					},
+				})
+				return
+			}
+			jsonResponse(w, http.StatusOK, schema.ImageListResponse{Images: []schema.Image{}})
+		})
+
+		// Mock location lookup
+		ts.handleFunc("/locations", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.LocationListResponse{
+				Locations: []schema.Location{
+					{ID: 1, Name: "nbg1"},
+				},
+			})
+		})
+
+		// Mock server creation
+		ts.handleFunc("/servers", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost {
+				jsonResponse(w, http.StatusCreated, schema.ServerCreateResponse{
+					Server: schema.Server{ID: 1000, Name: "talos-server"},
+					Action: schema.Action{ID: 101, Status: "success"},
+				})
+				return
+			}
+			jsonResponse(w, http.StatusOK, schema.ServerListResponse{Servers: []schema.Server{}})
+		})
+
+		ts.handleFunc("/actions/101", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+				Action: schema.Action{ID: 101, Status: "success", Progress: 100},
+			})
+		})
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		serverID, err := client.CreateServer(ctx, "talos-server", "talos", "cx21", "nbg1", []string{}, nil, "", nil, 0, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if serverID != "1000" {
+			t.Errorf("expected server ID '1000', got %q", serverID)
+		}
+	})
 }
