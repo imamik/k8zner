@@ -209,6 +209,183 @@ addons:
     replicas: 2
 ```
 
+### Traefik
+
+Alternative ingress controller to NGINX:
+
+```yaml
+addons:
+  traefik:
+    enabled: true
+    replicas: 2
+```
+
+### ArgoCD
+
+GitOps continuous delivery:
+
+```yaml
+addons:
+  argocd:
+    enabled: true
+    ha: false
+    ingress_enabled: true
+    ingress_host: "argocd.example.com"
+```
+
+## Cloudflare DNS Integration
+
+k8zner integrates with Cloudflare for automatic DNS management and TLS certificate provisioning.
+
+### Prerequisites
+
+1. A Cloudflare account with a domain
+2. A Cloudflare API token with permissions:
+   - **Zone > Zone > Read** (to find zone ID automatically)
+   - **Zone > DNS > Edit** (to manage DNS records)
+
+**Creating an API Token:**
+
+For teams and CI/CD, use **Account Owned Tokens** (recommended):
+1. Go to Cloudflare Dashboard → **Manage Account** → **Account API Tokens**
+2. Click "Create Token"
+3. These tokens persist when team members leave
+
+For personal use, use **User Tokens**:
+1. Go to [Profile API Tokens](https://dash.cloudflare.com/profile/api-tokens)
+2. Click "Create Token"
+
+Token configuration:
+1. Use "Edit zone DNS" template or create custom token
+2. Set Zone Resources to your specific domain (recommended) or all zones
+
+### Environment Variables
+
+Set your Cloudflare credentials (recommended over config file):
+
+```bash
+export CF_API_TOKEN="your-cloudflare-api-token"
+export CF_DOMAIN="example.com"
+```
+
+### Cloudflare Base Configuration
+
+```yaml
+addons:
+  cloudflare:
+    enabled: true
+    # api_token: "..."    # Or use CF_API_TOKEN env var (preferred)
+    domain: "example.com" # Or use CF_DOMAIN env var
+    proxied: false        # true = orange cloud (CDN), false = DNS only
+```
+
+### External-DNS
+
+Automatically creates DNS records from Ingress resources:
+
+```yaml
+addons:
+  cloudflare:
+    enabled: true
+    domain: "example.com"
+
+  external_dns:
+    enabled: true
+    txt_owner_id: "my-cluster"  # Default: cluster_name
+    policy: "sync"              # sync (deletes orphans), upsert-only (never deletes)
+    sources:
+      - ingress               # Watch Ingress resources
+      # - service             # Watch LoadBalancer Services
+```
+
+When you create an Ingress, external-dns will automatically create DNS records:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-app
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: my-app.example.com
+spec:
+  rules:
+    - host: my-app.example.com
+      # ...
+```
+
+### Cert-Manager with Cloudflare DNS01
+
+For TLS certificates via Let's Encrypt DNS01 challenge (supports wildcards):
+
+```yaml
+addons:
+  cloudflare:
+    enabled: true
+    domain: "example.com"
+
+  cert_manager:
+    enabled: true
+    cloudflare:
+      enabled: true
+      email: "admin@example.com"  # Required for Let's Encrypt
+      production: false           # Use staging first to test
+```
+
+This creates ClusterIssuers:
+- `letsencrypt-cloudflare-staging` — For testing (not browser-trusted)
+- `letsencrypt-cloudflare-production` — For production (browser-trusted)
+
+Use in Ingress:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-app
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-cloudflare-production
+spec:
+  tls:
+    - hosts:
+        - my-app.example.com
+      secretName: my-app-tls
+  rules:
+    - host: my-app.example.com
+      # ...
+```
+
+### Full Cloudflare Example
+
+Complete configuration with DNS and TLS:
+
+```yaml
+addons:
+  # Ingress controller (choose one)
+  ingress_nginx:
+    enabled: true
+
+  # Cloudflare integration
+  cloudflare:
+    enabled: true
+    domain: "example.com"
+    proxied: false
+
+  # Automatic DNS records
+  external_dns:
+    enabled: true
+    policy: "sync"
+    sources:
+      - ingress
+
+  # TLS certificates
+  cert_manager:
+    enabled: true
+    cloudflare:
+      enabled: true
+      email: "admin@example.com"
+      production: true
+```
+
 ### Longhorn
 
 ```yaml
