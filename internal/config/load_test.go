@@ -174,4 +174,263 @@ func TestShouldEnableAddonByDefault(t *testing.T) {
 	}
 	result = shouldEnableAddonByDefault(rawConfig, "some_addon")
 	assert.False(t, result, "addon should not be enabled when explicitly set in rawConfig")
+
+	// When rawConfig has addons but not this specific addon
+	rawConfig2 := map[string]interface{}{
+		"addons": map[string]interface{}{
+			"other_addon": map[string]interface{}{},
+		},
+	}
+	result = shouldEnableAddonByDefault(rawConfig2, "some_addon")
+	assert.True(t, result, "addon should be enabled when not in rawConfig")
+
+	// When addons key exists but is not a map
+	rawConfig3 := map[string]interface{}{
+		"addons": "not a map",
+	}
+	result = shouldEnableAddonByDefault(rawConfig3, "some_addon")
+	assert.True(t, result, "addon should be enabled when addons is not a map")
+}
+
+func TestApplyAutoCalculatedDefaults_MetricsServerReplicas(t *testing.T) {
+	t.Run("1 replica with 0 workers", func(t *testing.T) {
+		cfg := &Config{
+			Addons: AddonsConfig{
+				MetricsServer: MetricsServerConfig{
+					Enabled: true,
+				},
+			},
+			Workers: []WorkerNodePool{},
+		}
+		applyAutoCalculatedDefaults(cfg)
+		assert.NotNil(t, cfg.Addons.MetricsServer.Replicas)
+		assert.Equal(t, 1, *cfg.Addons.MetricsServer.Replicas)
+	})
+
+	t.Run("1 replica with 1 worker", func(t *testing.T) {
+		cfg := &Config{
+			Addons: AddonsConfig{
+				MetricsServer: MetricsServerConfig{
+					Enabled: true,
+				},
+			},
+			Workers: []WorkerNodePool{
+				{Count: 1},
+			},
+		}
+		applyAutoCalculatedDefaults(cfg)
+		assert.NotNil(t, cfg.Addons.MetricsServer.Replicas)
+		assert.Equal(t, 1, *cfg.Addons.MetricsServer.Replicas)
+	})
+
+	t.Run("2 replicas with 2+ workers", func(t *testing.T) {
+		cfg := &Config{
+			Addons: AddonsConfig{
+				MetricsServer: MetricsServerConfig{
+					Enabled: true,
+				},
+			},
+			Workers: []WorkerNodePool{
+				{Count: 2},
+			},
+		}
+		applyAutoCalculatedDefaults(cfg)
+		assert.NotNil(t, cfg.Addons.MetricsServer.Replicas)
+		assert.Equal(t, 2, *cfg.Addons.MetricsServer.Replicas)
+	})
+
+	t.Run("preserves existing replicas", func(t *testing.T) {
+		replicas := 5
+		cfg := &Config{
+			Addons: AddonsConfig{
+				MetricsServer: MetricsServerConfig{
+					Enabled:  true,
+					Replicas: &replicas,
+				},
+			},
+		}
+		applyAutoCalculatedDefaults(cfg)
+		assert.Equal(t, 5, *cfg.Addons.MetricsServer.Replicas)
+	})
+
+	t.Run("skips when metrics server disabled", func(t *testing.T) {
+		cfg := &Config{
+			Addons: AddonsConfig{
+				MetricsServer: MetricsServerConfig{
+					Enabled: false,
+				},
+			},
+		}
+		applyAutoCalculatedDefaults(cfg)
+		assert.Nil(t, cfg.Addons.MetricsServer.Replicas)
+	})
+}
+
+func TestApplyAutoCalculatedDefaults_MetricsServerScheduleOnCP(t *testing.T) {
+	t.Run("schedule on CP when no workers", func(t *testing.T) {
+		cfg := &Config{
+			Addons: AddonsConfig{
+				MetricsServer: MetricsServerConfig{
+					Enabled: true,
+				},
+			},
+			Workers: []WorkerNodePool{},
+		}
+		applyAutoCalculatedDefaults(cfg)
+		assert.NotNil(t, cfg.Addons.MetricsServer.ScheduleOnControlPlane)
+		assert.True(t, *cfg.Addons.MetricsServer.ScheduleOnControlPlane)
+	})
+
+	t.Run("don't schedule on CP when workers exist", func(t *testing.T) {
+		cfg := &Config{
+			Addons: AddonsConfig{
+				MetricsServer: MetricsServerConfig{
+					Enabled: true,
+				},
+			},
+			Workers: []WorkerNodePool{
+				{Count: 1},
+			},
+		}
+		applyAutoCalculatedDefaults(cfg)
+		assert.NotNil(t, cfg.Addons.MetricsServer.ScheduleOnControlPlane)
+		assert.False(t, *cfg.Addons.MetricsServer.ScheduleOnControlPlane)
+	})
+}
+
+func TestApplyAutoCalculatedDefaults_IngressNginxReplicas(t *testing.T) {
+	t.Run("2 replicas with <3 workers", func(t *testing.T) {
+		cfg := &Config{
+			Addons: AddonsConfig{
+				IngressNginx: IngressNginxConfig{
+					Enabled: true,
+					Kind:    "Deployment",
+				},
+			},
+			Workers: []WorkerNodePool{
+				{Count: 2},
+			},
+		}
+		applyAutoCalculatedDefaults(cfg)
+		assert.NotNil(t, cfg.Addons.IngressNginx.Replicas)
+		assert.Equal(t, 2, *cfg.Addons.IngressNginx.Replicas)
+	})
+
+	t.Run("3 replicas with 3+ workers", func(t *testing.T) {
+		cfg := &Config{
+			Addons: AddonsConfig{
+				IngressNginx: IngressNginxConfig{
+					Enabled: true,
+					Kind:    "Deployment",
+				},
+			},
+			Workers: []WorkerNodePool{
+				{Count: 3},
+			},
+		}
+		applyAutoCalculatedDefaults(cfg)
+		assert.NotNil(t, cfg.Addons.IngressNginx.Replicas)
+		assert.Equal(t, 3, *cfg.Addons.IngressNginx.Replicas)
+	})
+
+	t.Run("skips DaemonSet kind", func(t *testing.T) {
+		cfg := &Config{
+			Addons: AddonsConfig{
+				IngressNginx: IngressNginxConfig{
+					Enabled: true,
+					Kind:    "DaemonSet",
+				},
+			},
+		}
+		applyAutoCalculatedDefaults(cfg)
+		assert.Nil(t, cfg.Addons.IngressNginx.Replicas)
+	})
+}
+
+func TestApplyAutoCalculatedDefaults_FirewallDefaults(t *testing.T) {
+	t.Run("sets firewall IP defaults for public cluster", func(t *testing.T) {
+		cfg := &Config{
+			ClusterAccess: "public",
+		}
+		applyAutoCalculatedDefaults(cfg)
+		assert.NotNil(t, cfg.Firewall.UseCurrentIPv4)
+		assert.True(t, *cfg.Firewall.UseCurrentIPv4)
+		assert.NotNil(t, cfg.Firewall.UseCurrentIPv6)
+		assert.True(t, *cfg.Firewall.UseCurrentIPv6)
+	})
+
+	t.Run("skips for non-public cluster", func(t *testing.T) {
+		cfg := &Config{
+			ClusterAccess: "private",
+		}
+		applyAutoCalculatedDefaults(cfg)
+		assert.Nil(t, cfg.Firewall.UseCurrentIPv4)
+		assert.Nil(t, cfg.Firewall.UseCurrentIPv6)
+	})
+
+	t.Run("preserves existing values", func(t *testing.T) {
+		falseVal := false
+		cfg := &Config{
+			ClusterAccess: "public",
+			Firewall: FirewallConfig{
+				UseCurrentIPv4: &falseVal,
+				UseCurrentIPv6: &falseVal,
+			},
+		}
+		applyAutoCalculatedDefaults(cfg)
+		assert.False(t, *cfg.Firewall.UseCurrentIPv4)
+		assert.False(t, *cfg.Firewall.UseCurrentIPv6)
+	})
+}
+
+func TestApplyCloudflareEnvVars(t *testing.T) {
+	t.Run("sets API token from env when config empty", func(t *testing.T) {
+		t.Setenv("CF_API_TOKEN", "test-cf-token")
+		cfg := &Config{}
+		applyCloudflareEnvVars(cfg)
+		assert.Equal(t, "test-cf-token", cfg.Addons.Cloudflare.APIToken)
+	})
+
+	t.Run("sets domain from env when config empty", func(t *testing.T) {
+		t.Setenv("CF_DOMAIN", "example.com")
+		cfg := &Config{}
+		applyCloudflareEnvVars(cfg)
+		assert.Equal(t, "example.com", cfg.Addons.Cloudflare.Domain)
+	})
+
+	t.Run("preserves API token when already set", func(t *testing.T) {
+		t.Setenv("CF_API_TOKEN", "env-token")
+		cfg := &Config{
+			Addons: AddonsConfig{
+				Cloudflare: CloudflareConfig{
+					APIToken: "config-token",
+				},
+			},
+		}
+		applyCloudflareEnvVars(cfg)
+		assert.Equal(t, "config-token", cfg.Addons.Cloudflare.APIToken)
+	})
+
+	t.Run("preserves domain when already set", func(t *testing.T) {
+		t.Setenv("CF_DOMAIN", "env-domain.com")
+		cfg := &Config{
+			Addons: AddonsConfig{
+				Cloudflare: CloudflareConfig{
+					Domain: "config-domain.com",
+				},
+			},
+		}
+		applyCloudflareEnvVars(cfg)
+		assert.Equal(t, "config-domain.com", cfg.Addons.Cloudflare.Domain)
+	})
+
+	t.Run("does nothing when env vars not set", func(t *testing.T) {
+		// Ensure env vars are not set
+		t.Setenv("CF_API_TOKEN", "")
+		t.Setenv("CF_DOMAIN", "")
+		cfg := &Config{}
+		applyCloudflareEnvVars(cfg)
+		assert.Empty(t, cfg.Addons.Cloudflare.APIToken)
+		assert.Empty(t, cfg.Addons.Cloudflare.Domain)
+	})
 }
