@@ -389,3 +389,62 @@ func TestCalculateNodeSubnetMask_InvalidPodCIDR(t *testing.T) {
 		t.Error("calculateNodeSubnetMask() expected error for invalid CIDR, got nil")
 	}
 }
+
+func TestCalculateSubnets_InvalidIPv4CIDR(t *testing.T) {
+	cfg := &Config{
+		Network: NetworkConfig{
+			IPv4CIDR: "invalid-cidr",
+		},
+	}
+	err := cfg.CalculateSubnets()
+	if err == nil {
+		t.Error("CalculateSubnets() expected error for invalid CIDR, got nil")
+	}
+}
+
+func TestCalculateServiceSubnet_InvalidIPv4CIDR(t *testing.T) {
+	cfg := &Config{
+		Network: NetworkConfig{
+			IPv4CIDR:     "invalid-cidr",
+			NodeIPv4CIDR: "10.0.64.0/19", // Set so node subnet calculation passes
+		},
+	}
+	err := cfg.calculateServiceSubnet()
+	if err == nil {
+		t.Error("calculateServiceSubnet() expected error for invalid CIDR, got nil")
+	}
+}
+
+func TestCalculatePodSubnet_InvalidIPv4CIDR(t *testing.T) {
+	cfg := &Config{
+		Network: NetworkConfig{
+			IPv4CIDR:        "invalid-cidr",
+			NodeIPv4CIDR:    "10.0.64.0/19",
+			ServiceIPv4CIDR: "10.0.96.0/19",
+		},
+	}
+	err := cfg.calculatePodSubnet()
+	if err == nil {
+		t.Error("calculatePodSubnet() expected error for invalid CIDR, got nil")
+	}
+}
+
+func TestGetSubnetForRole_Autoscaler(t *testing.T) {
+	cfg := &Config{
+		Network: NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+		},
+	}
+	_ = cfg.CalculateSubnets()
+
+	// Autoscaler uses the last subnet
+	subnet, err := cfg.GetSubnetForRole(RoleAutoscaler, 0)
+	if err != nil {
+		t.Fatalf("GetSubnetForRole(autoscaler) error = %v", err)
+	}
+	// With newBits=6 (from /19 to /25), last index is 63
+	// This gives 10.0.95.128/25 (the last /25 in the /19 range)
+	if subnet != "10.0.95.128/25" {
+		t.Errorf("Autoscaler Subnet = %v, want 10.0.95.128/25", subnet)
+	}
+}

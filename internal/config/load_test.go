@@ -382,3 +382,55 @@ func TestApplyAutoCalculatedDefaults_FirewallDefaults(t *testing.T) {
 		assert.False(t, *cfg.Firewall.UseCurrentIPv6)
 	})
 }
+
+func TestApplyCloudflareEnvVars(t *testing.T) {
+	t.Run("sets API token from env when config empty", func(t *testing.T) {
+		t.Setenv("CF_API_TOKEN", "test-cf-token")
+		cfg := &Config{}
+		applyCloudflareEnvVars(cfg)
+		assert.Equal(t, "test-cf-token", cfg.Addons.Cloudflare.APIToken)
+	})
+
+	t.Run("sets domain from env when config empty", func(t *testing.T) {
+		t.Setenv("CF_DOMAIN", "example.com")
+		cfg := &Config{}
+		applyCloudflareEnvVars(cfg)
+		assert.Equal(t, "example.com", cfg.Addons.Cloudflare.Domain)
+	})
+
+	t.Run("preserves API token when already set", func(t *testing.T) {
+		t.Setenv("CF_API_TOKEN", "env-token")
+		cfg := &Config{
+			Addons: AddonsConfig{
+				Cloudflare: CloudflareConfig{
+					APIToken: "config-token",
+				},
+			},
+		}
+		applyCloudflareEnvVars(cfg)
+		assert.Equal(t, "config-token", cfg.Addons.Cloudflare.APIToken)
+	})
+
+	t.Run("preserves domain when already set", func(t *testing.T) {
+		t.Setenv("CF_DOMAIN", "env-domain.com")
+		cfg := &Config{
+			Addons: AddonsConfig{
+				Cloudflare: CloudflareConfig{
+					Domain: "config-domain.com",
+				},
+			},
+		}
+		applyCloudflareEnvVars(cfg)
+		assert.Equal(t, "config-domain.com", cfg.Addons.Cloudflare.Domain)
+	})
+
+	t.Run("does nothing when env vars not set", func(t *testing.T) {
+		// Ensure env vars are not set
+		t.Setenv("CF_API_TOKEN", "")
+		t.Setenv("CF_DOMAIN", "")
+		cfg := &Config{}
+		applyCloudflareEnvVars(cfg)
+		assert.Empty(t, cfg.Addons.Cloudflare.APIToken)
+		assert.Empty(t, cfg.Addons.Cloudflare.Domain)
+	})
+}
