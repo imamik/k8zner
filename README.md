@@ -6,9 +6,18 @@
 [![Release](https://img.shields.io/github/v/release/imamik/k8zner)](https://github.com/imamik/k8zner/releases/latest)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-**k8zner** (k8s + Hetzner) — Production-ready Kubernetes clusters on [Hetzner Cloud](https://www.hetzner.com/cloud) using [Talos Linux](https://www.talos.dev/).
+**k8zner** (k8s + Hetzner) — Production-ready Kubernetes on [Hetzner Cloud](https://www.hetzner.com/cloud), the cost-effective way.
 
-A self-contained Go CLI that provisions secure, highly available Kubernetes clusters with batteries included. No Terraform, kubectl, or talosctl required — just download and run.
+### Why k8zner?
+
+Running Kubernetes shouldn't require a dedicated platform team. k8zner enables engineers to deploy **production-ready, highly available clusters** on Hetzner Cloud — one of the most cost-effective cloud providers — without the complexity.
+
+- **From zero to production cluster** in minutes, not days
+- **Day-one operations solved**: networking, storage, TLS, DNS, GitOps — all pre-configured
+- **Bridge to application deployment**: built-in ArgoCD, ingress, and cert-manager get your apps running fast
+- **Single binary**: No Terraform, kubectl, or talosctl required — just download and run
+
+Built on [Talos Linux](https://www.talos.dev/), the secure and immutable Kubernetes OS.
 
 ## Quick Start
 
@@ -44,38 +53,43 @@ k8zner comes with pre-configured integrations — enable what you need:
 | **Monitoring** | [Metrics Server](https://github.com/kubernetes-sigs/metrics-server), [Prometheus Operator](https://prometheus-operator.dev/) CRDs, [Hubble](https://docs.cilium.io/en/stable/observability/hubble/) |
 | **Auth** | OIDC integration |
 
-## Acknowledgments
+## Origin & Vision
 
-This project is a **direct Go port** of the excellent [terraform-hcloud-kubernetes](https://github.com/hcloud-k8s/terraform-hcloud-kubernetes) Terraform module. We extend our sincere gratitude to the original authors for their pioneering work.
+k8zner started as a **Go port** of the excellent [terraform-hcloud-kubernetes](https://github.com/hcloud-k8s/terraform-hcloud-kubernetes) Terraform module. We extend our sincere gratitude to the original authors for their pioneering work in making production-grade Kubernetes accessible on Hetzner Cloud.
 
-**Prefer Terraform?** We recommend the [original module](https://github.com/hcloud-k8s/terraform-hcloud-kubernetes).
+**Where we're headed:** Beyond cluster provisioning, k8zner aims to become a broader toolkit that simplifies the entire Kubernetes journey — from infrastructure to application deployment. Our goal is to make highly available, production-ready Kubernetes accessible to every engineer, not just platform teams.
+
+**Prefer Terraform?** The [original module](https://github.com/hcloud-k8s/terraform-hcloud-kubernetes) is excellent for IaC workflows.
 
 ---
 
 <details>
-<summary><strong>Why k8zner? (Go CLI vs Terraform)</strong></summary>
+<summary><strong>k8zner vs Terraform Module</strong></summary>
 
-### The Go Advantage
+### Comparison
 
-| Aspect | Terraform Module | k8zner (Go CLI) |
-|--------|------------------|-----------------|
+| Aspect | Terraform Module | k8zner |
+|--------|------------------|--------|
 | **Dependencies** | Terraform, kubectl, talosctl | Single binary |
 | **State** | Terraform state files | Stateless, idempotent |
 | **Setup** | Write HCL manually | Interactive wizard |
 | **CI/CD** | Terraform workflows | Simple binary execution |
 | **Extensibility** | HCL modules | Fork and modify Go code |
+| **Day-one ops** | Manual addon setup | Pre-configured & integrated |
 
-### When to Use k8zner
+### Choose k8zner when you want to
 
-- You want a **self-contained CLI** without managing Terraform state
-- You prefer **interactive cluster configuration** over writing HCL
-- You need **simple CI/CD integration** with a single binary
+- Get a **production cluster running fast** without IaC expertise
+- Have **day-one operations pre-configured** (DNS, TLS, GitOps, monitoring)
+- Use a **self-contained CLI** without managing Terraform state
+- **Simplify CI/CD** with a single binary
 
-### When to Use Terraform Instead
+### Choose Terraform when you need
 
-- You already use **Terraform for infrastructure management**
-- You need **drift detection and plan/apply workflows**
-- You require **Terraform state for compliance/audit**
+- **Infrastructure-as-Code workflows** with plan/apply
+- **Drift detection** and state management
+- **Integration with other Terraform modules**
+- **Compliance/audit trails** via Terraform state
 
 </details>
 
