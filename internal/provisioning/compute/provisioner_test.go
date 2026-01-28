@@ -168,7 +168,7 @@ func TestProvisionControlPlane_SingleNode(t *testing.T) {
 	}
 
 	serverCreated := false
-	mockInfra.CreateServerFunc = func(_ context.Context, name, _, serverType, location string, _ []string, labels map[string]string, _ string, pgID *int64, _ int64, privateIP string) (string, error) {
+	mockInfra.CreateServerFunc = func(_ context.Context, name, _, serverType, location string, _ []string, labels map[string]string, _ string, pgID *int64, _ int64, privateIP string, _, _ bool) (string, error) {
 		serverCreated = true
 		assert.Contains(t, name, "test-cluster")
 		assert.Contains(t, name, "control-plane")
@@ -224,7 +224,7 @@ func TestProvisionWorkers_MultipleNodes(t *testing.T) {
 
 	createdServers := make(map[string]bool)
 	var mu sync.Mutex
-	mockInfra.CreateServerFunc = func(_ context.Context, name, _, serverType, _ string, _ []string, labels map[string]string, _ string, _ *int64, _ int64, _ string) (string, error) {
+	mockInfra.CreateServerFunc = func(_ context.Context, name, _, serverType, _ string, _ []string, labels map[string]string, _ string, _ *int64, _ int64, _ string, _, _ bool) (string, error) {
 		mu.Lock()
 		createdServers[name] = true
 		mu.Unlock()
@@ -290,7 +290,7 @@ func TestProvisionControlPlane_ExistingServer(t *testing.T) {
 	}
 
 	// CreateServer should NOT be called since server exists
-	mockInfra.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string) (string, error) {
+	mockInfra.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string, _, _ bool) (string, error) {
 		t.Fatal("CreateServer should not be called for existing server")
 		return "", nil
 	}

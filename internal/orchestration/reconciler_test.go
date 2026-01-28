@@ -174,7 +174,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 	mockInfra.GetServerIDFunc = func(_ context.Context, _ string) (string, error) {
 		return "", nil // Does not exist
 	}
-	mockInfra.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string) (string, error) {
+	mockInfra.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string, _, _ bool) (string, error) {
 		return "server-id", nil
 	}
 	mockInfra.GetServerIPFunc = func(_ context.Context, _ string) (string, error) {
@@ -305,7 +305,7 @@ func TestReconciler_Reconcile_ServerCreationError(t *testing.T) {
 	mockInfra.EnsurePlacementGroupFunc = func(_ context.Context, _, _ string, _ map[string]string) (*hcloud.PlacementGroup, error) {
 		return &hcloud.PlacementGroup{ID: 1}, nil
 	}
-	mockInfra.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string) (string, error) {
+	mockInfra.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string, _, _ bool) (string, error) {
 		return "", expectedErr
 	}
 	mockInfra.GetSnapshotByLabelsFunc = func(_ context.Context, labels map[string]string) (*hcloud.Image, error) {

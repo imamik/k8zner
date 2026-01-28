@@ -156,7 +156,8 @@ func verifySnapshot(ctx context.Context, t *testing.T, state *E2EState, arch, sn
 	}
 
 	t.Logf("Creating verification server %s from snapshot...", serverName)
-	_, err := state.Client.CreateServer(ctx, serverName, snapshotID, serverType, "", []string{sshKeyName}, labels, "", nil, 0, "")
+	// E2E tests need public IPv4 for SSH verification
+	_, err := state.Client.CreateServer(ctx, serverName, snapshotID, serverType, "", []string{sshKeyName}, labels, "", nil, 0, "", true, true)
 	if err != nil {
 		t.Fatalf("Failed to create verification server: %v", err)
 	}

@@ -71,7 +71,7 @@ func (f *InfraFixture) SuccessfulProvisioning() *hcloud_internal.MockClient {
 	f.mock.GetServerIDFunc = func(_ context.Context, _ string) (string, error) {
 		return "", nil // Does not exist
 	}
-	f.mock.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string) (string, error) {
+	f.mock.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string, _, _ bool) (string, error) {
 		return "server-id", nil
 	}
 	f.mock.GetServerIPFunc = func(_ context.Context, _ string) (string, error) {
@@ -133,7 +133,7 @@ func (f *InfraFixture) WithServerError(err error) *hcloud_internal.MockClient {
 	f.mock.EnsurePlacementGroupFunc = func(_ context.Context, _, _ string, _ map[string]string) (*hcloud.PlacementGroup, error) {
 		return &hcloud.PlacementGroup{ID: 1}, nil
 	}
-	f.mock.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string) (string, error) {
+	f.mock.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string, _, _ bool) (string, error) {
 		return "", err
 	}
 	f.mock.GetSnapshotByLabelsFunc = func(_ context.Context, labels map[string]string) (*hcloud.Image, error) {

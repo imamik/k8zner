@@ -48,7 +48,7 @@ func TestCreateServer_NetworkParameterValidation(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
-			_, err := client.CreateServer(ctx, "test", "image", "type", "nbg1", nil, nil, "", nil, tc.networkID, tc.privateIP)
+			_, err := client.CreateServer(ctx, "test", "image", "type", "nbg1", nil, nil, "", nil, tc.networkID, tc.privateIP, true, true)
 
 			if tc.wantErr {
 				assert.Error(t, err)

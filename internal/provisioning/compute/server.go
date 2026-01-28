@@ -13,18 +13,20 @@ import (
 // ServerSpec defines the configuration for creating a server.
 // All fields are self-documenting - no need to remember parameter order.
 type ServerSpec struct {
-	Name           string
-	Type           string
-	Location       string
-	Image          string // empty or "talos" = auto-detect
-	Role           string // "control-plane" or "worker"
-	Pool           string
-	ExtraLabels    map[string]string
-	UserData       string
-	PlacementGroup *int64
-	PrivateIP      string
-	RDNSIPv4       string // RDNS template for IPv4
-	RDNSIPv6       string // RDNS template for IPv6
+	Name             string
+	Type             string
+	Location         string
+	Image            string // empty or "talos" = auto-detect
+	Role             string // "control-plane" or "worker"
+	Pool             string
+	ExtraLabels      map[string]string
+	UserData         string
+	PlacementGroup   *int64
+	PrivateIP        string
+	RDNSIPv4         string // RDNS template for IPv4
+	RDNSIPv6         string // RDNS template for IPv6
+	EnablePublicIPv4 bool   // Enable public IPv4 (default: true for backwards compatibility)
+	EnablePublicIPv6 bool   // Enable public IPv6 (default: true)
 }
 
 // ensureServer ensures a server exists and returns its IP.
@@ -71,6 +73,15 @@ func (p *Provisioner) ensureServer(ctx *provisioning.Context, spec ServerSpec) (
 	}
 	networkID := ctx.State.Network.ID
 
+	// Default to dual-stack if not specified (for backwards compatibility)
+	enableIPv4 := spec.EnablePublicIPv4
+	enableIPv6 := spec.EnablePublicIPv6
+	// If neither is explicitly set, default to dual-stack
+	if !enableIPv4 && !enableIPv6 {
+		enableIPv4 = true
+		enableIPv6 = true
+	}
+
 	_, err = ctx.Infra.CreateServer(
 		ctx,
 		spec.Name,
@@ -83,6 +94,8 @@ func (p *Provisioner) ensureServer(ctx *provisioning.Context, spec ServerSpec) (
 		spec.PlacementGroup,
 		networkID,
 		spec.PrivateIP,
+		enableIPv4,
+		enableIPv6,
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to create server %s: %w", spec.Name, err)
