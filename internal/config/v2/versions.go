@@ -1,0 +1,114 @@
+package v2
+
+// VersionMatrix contains all pinned, tested versions for the k8zner stack.
+// These versions are validated to work together and are not configurable.
+type VersionMatrix struct {
+	// Core infrastructure
+	Talos      string // Talos Linux version (e.g., "v1.9.0")
+	Kubernetes string // Kubernetes version without 'v' prefix (e.g., "1.32.0")
+
+	// CNI and networking
+	Cilium string // Cilium CNI version
+
+	// Ingress
+	Traefik string // Traefik ingress controller version
+
+	// TLS and DNS
+	CertManager string // cert-manager version
+	ExternalDNS string // external-dns version
+
+	// GitOps
+	ArgoCD string // ArgoCD version
+
+	// Observability
+	MetricsServer string // metrics-server version
+
+	// Cloud integration
+	HCloudCCM string // Hetzner Cloud Controller Manager version
+	HCloudCSI string // Hetzner CSI Driver version
+	TalosCCM  string // Talos Cloud Controller Manager version
+}
+
+// DefaultVersionMatrix returns the default pinned version matrix.
+// All versions are tested together and known to be compatible.
+func DefaultVersionMatrix() VersionMatrix {
+	return VersionMatrix{
+		// Core infrastructure - pinned to stable, tested versions
+		Talos:      "v1.9.0",
+		Kubernetes: "1.32.0",
+
+		// CNI - Cilium with kube-proxy replacement
+		Cilium: "1.16.5",
+
+		// Ingress - Traefik for automatic TLS
+		Traefik: "34.3.0", // Chart version (app version ~3.2.x)
+
+		// TLS and DNS
+		CertManager: "v1.16.2",
+		ExternalDNS: "0.15.1",
+
+		// GitOps
+		ArgoCD: "7.7.12", // Chart version (app version ~2.13.x)
+
+		// Observability
+		MetricsServer: "3.12.2",
+
+		// Cloud integration
+		HCloudCCM: "1.22.0",
+		HCloudCSI: "2.12.0",
+		TalosCCM:  "v1.11.0",
+	}
+}
+
+// Hardcoded infrastructure constants
+const (
+	// ControlPlaneServerType is the Hetzner server type for control planes.
+	// CX22 (2 vCPU, 4GB RAM) is sufficient for etcd + API server.
+	ControlPlaneServerType = "cx22"
+
+	// LoadBalancerType is the Hetzner load balancer type.
+	// LB11 is sufficient for most workloads.
+	LoadBalancerType = "lb11"
+
+	// Architecture is the CPU architecture (AMD64 only, no ARM).
+	Architecture = "amd64"
+)
+
+// Network CIDRs - hardcoded best practices
+const (
+	// NetworkCIDR is the Hetzner private network CIDR.
+	NetworkCIDR = "10.0.0.0/16"
+
+	// NodeCIDR is the CIDR for node IPs within the private network.
+	NodeCIDR = "10.0.0.0/16"
+
+	// PodCIDR is the CIDR for pod IPs.
+	PodCIDR = "10.244.0.0/16"
+
+	// ServiceCIDR is the CIDR for service IPs.
+	ServiceCIDR = "10.96.0.0/12"
+)
+
+// Network zone mapping
+var regionToZone = map[Region]string{
+	RegionNuremberg:   "eu-central",
+	RegionFalkenstein: "eu-central",
+	RegionHelsinki:    "eu-central",
+}
+
+// NetworkZone returns the Hetzner network zone for a region.
+func NetworkZone(region Region) string {
+	if zone, ok := regionToZone[region]; ok {
+		return zone
+	}
+	return "eu-central"
+}
+
+// Addon namespaces - hardcoded for consistency
+const (
+	NamespaceKubeSystem  = "kube-system"
+	NamespaceCertManager = "cert-manager"
+	NamespaceTraefik     = "traefik"
+	NamespaceArgoCD      = "argocd"
+	NamespaceExternalDNS = "external-dns"
+)
