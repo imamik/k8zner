@@ -252,7 +252,7 @@ func TestBuildTraefikValuesReplicas(t *testing.T) {
 		},
 		{
 			name:             "explicit replicas",
-			replicas:         intPtr(5),
+			replicas:         func(i int) *int { return &i }(5),
 			workerCount:      2,
 			expectedReplicas: 5,
 		},

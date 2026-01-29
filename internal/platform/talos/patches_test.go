@@ -78,27 +78,6 @@ func TestNewMachineConfigOptions(t *testing.T) {
 				assert.True(t, opts.KubeProxyReplacement)
 			},
 		},
-		{
-			name: "longhorn mount added when enabled",
-			cfg: &config.Config{
-				Talos: config.TalosConfig{
-					Machine: config.TalosMachineConfig{},
-				},
-				Kubernetes: config.KubernetesConfig{},
-				Addons: config.AddonsConfig{
-					Longhorn: config.LonghornConfig{
-						Enabled: true,
-					},
-				},
-			},
-			validate: func(t *testing.T, opts *MachineConfigOptions) {
-				require.Len(t, opts.KubeletExtraMounts, 1)
-				mount := opts.KubeletExtraMounts[0]
-				assert.Equal(t, "/var/lib/longhorn", mount.Source)
-				assert.Equal(t, "/var/lib/longhorn", mount.Destination)
-				assert.Equal(t, "bind", mount.Type)
-			},
-		},
 	}
 
 	for _, tt := range tests {
@@ -260,25 +239,6 @@ func TestBuildKubeletPatch(t *testing.T) {
 				systemReserved := extraConfig["systemReserved"].(map[string]any)
 				assert.Equal(t, "100m", systemReserved["cpu"])
 				assert.Equal(t, "300Mi", systemReserved["memory"])
-			},
-		},
-		{
-			name:           "with extra mounts",
-			isControlPlane: false,
-			opts: &MachineConfigOptions{
-				KubeletExtraMounts: []config.TalosKubeletMount{
-					{
-						Source:      "/var/lib/longhorn",
-						Destination: "/var/lib/longhorn",
-						Type:        "bind",
-						Options:     []string{"bind", "rshared", "rw"},
-					},
-				},
-			},
-			validateFunc: func(t *testing.T, result map[string]any) {
-				mounts := result["extraMounts"].([]map[string]any)
-				require.Len(t, mounts, 1)
-				assert.Equal(t, "/var/lib/longhorn", mounts[0]["source"])
 			},
 		},
 		{

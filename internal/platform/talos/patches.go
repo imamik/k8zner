@@ -101,16 +101,6 @@ func NewMachineConfigOptions(cfg *config.Config) *MachineConfigOptions {
 		KubeProxyReplacement: cfg.Addons.Cilium.KubeProxyReplacementEnabled,
 	}
 
-	// Add Longhorn mount if enabled
-	if cfg.Addons.Longhorn.Enabled {
-		opts.KubeletExtraMounts = append(opts.KubeletExtraMounts, config.TalosKubeletMount{
-			Source:      "/var/lib/longhorn",
-			Destination: "/var/lib/longhorn",
-			Type:        "bind",
-			Options:     []string{"bind", "rshared", "rw"},
-		})
-	}
-
 	return opts
 }
 
