@@ -103,12 +103,3 @@ func NetworkZone(region Region) string {
 	}
 	return "eu-central"
 }
-
-// Addon namespaces - hardcoded for consistency
-const (
-	NamespaceKubeSystem  = "kube-system"
-	NamespaceCertManager = "cert-manager"
-	NamespaceTraefik     = "traefik"
-	NamespaceArgoCD      = "argocd"
-	NamespaceExternalDNS = "external-dns"
-)
