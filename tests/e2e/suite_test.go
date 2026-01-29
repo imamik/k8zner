@@ -15,15 +15,6 @@ import (
 	"github.com/imamik/k8zner/internal/provisioning/image"
 )
 
-// SharedTestContext holds resources shared across E2E tests.
-type SharedTestContext struct {
-	SnapshotAMD64 string // Snapshot ID for amd64
-	SnapshotARM64 string // Snapshot ID for arm64
-	Client        *hcloud_client.RealClient
-}
-
-var sharedCtx *SharedTestContext
-
 // TestMain orchestrates E2E tests to run sequentially and manage shared resources.
 func TestMain(m *testing.M) {
 	token := os.Getenv("HCLOUD_TOKEN")
