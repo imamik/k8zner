@@ -71,7 +71,7 @@ Worker node configuration:
 
 | Field | Description | Valid Values |
 |-------|-------------|--------------|
-| `count` | Number of worker nodes | 1-10 |
+| `count` | Number of worker nodes | 1-5 |
 | `size` | Worker server size | cx22, cx32, cx42, cx52 |
 
 ```yaml
