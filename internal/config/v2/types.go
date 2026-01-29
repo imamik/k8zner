@@ -324,12 +324,12 @@ func isValidDNSName(name string) bool {
 	}
 	// Must end with lowercase letter or digit
 	last := name[len(name)-1]
-	if !((last >= 'a' && last <= 'z') || (last >= '0' && last <= '9')) {
+	if (last < 'a' || last > 'z') && (last < '0' || last > '9') {
 		return false
 	}
 	// Must contain only lowercase letters, digits, and hyphens
 	for _, c := range name {
-		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') {
+		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' {
 			return false
 		}
 	}

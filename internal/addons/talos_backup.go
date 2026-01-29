@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"log"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -27,6 +28,11 @@ func applyTalosBackup(ctx context.Context, client k8sclient.Client, cfg *config.
 	backup := cfg.Addons.TalosBackup
 	if backup.S3Bucket == "" || backup.S3AccessKey == "" || backup.S3SecretKey == "" {
 		return fmt.Errorf("talos backup requires s3_bucket, s3_access_key, and s3_secret_key")
+	}
+
+	// Warn if encryption is disabled
+	if backup.EncryptionDisabled {
+		log.Printf("WARNING: Talos backup encryption is disabled. etcd backups will be stored unencrypted in S3 bucket %q", backup.S3Bucket)
 	}
 
 	manifests := generateTalosBackupManifests(cfg)
@@ -146,6 +152,12 @@ func generateTalosBackupCronJob(cfg *config.Config) string {
 func buildTalosBackupEnv(cfg *config.Config) []map[string]any {
 	backup := cfg.Addons.TalosBackup
 
+	// Determine encryption setting - default to enabled (DISABLE_ENCRYPTION=false)
+	disableEncryption := "false"
+	if backup.EncryptionDisabled {
+		disableEncryption = "true"
+	}
+
 	return []map[string]any{
 		{
 			"name": "AWS_ACCESS_KEY_ID",
@@ -166,6 +178,6 @@ func buildTalosBackupEnv(cfg *config.Config) []map[string]any {
 		{"name": "S3_PREFIX", "value": "etcd-backups"},
 		{"name": "USE_PATH_STYLE", "value": "false"},
 		{"name": "ENABLE_COMPRESSION", "value": "true"},
-		{"name": "DISABLE_ENCRYPTION", "value": "true"},
+		{"name": "DISABLE_ENCRYPTION", "value": disableEncryption},
 	}
 }

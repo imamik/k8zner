@@ -592,3 +592,31 @@ func TestExpand_BackupDifferentRegions(t *testing.T) {
 		})
 	}
 }
+
+func TestExpand_BackupEncryptionDisabled(t *testing.T) {
+	os.Setenv("HETZNER_S3_ACCESS_KEY", "test-access-key")
+	os.Setenv("HETZNER_S3_SECRET_KEY", "test-secret-key")
+	defer os.Unsetenv("HETZNER_S3_ACCESS_KEY")
+	defer os.Unsetenv("HETZNER_S3_SECRET_KEY")
+
+	cfg := &Config{
+		Name:   "encryption-test",
+		Region: RegionFalkenstein,
+		Mode:   ModeHA,
+		Workers: Worker{
+			Count: 3,
+			Size:  SizeCX32,
+		},
+		Backup: true,
+	}
+
+	expanded, err := Expand(cfg)
+	if err != nil {
+		t.Fatalf("Expand() error = %v", err)
+	}
+
+	// v2 config defaults to EncryptionDisabled=true (private bucket provides security)
+	if !expanded.Addons.TalosBackup.EncryptionDisabled {
+		t.Error("TalosBackup.EncryptionDisabled should be true for v2 config")
+	}
+}

@@ -135,7 +135,7 @@ func validateClusterName(s string) error {
 	}
 	// Basic DNS-safe validation
 	for _, c := range s {
-		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') {
+		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' {
 			return fmt.Errorf("cluster name can only contain lowercase letters, numbers, and hyphens")
 		}
 	}

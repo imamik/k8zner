@@ -273,14 +273,15 @@ func expandTalosBackup(cfg *Config) config.TalosBackupConfig {
 	}
 
 	return config.TalosBackupConfig{
-		Enabled:           true,
-		Schedule:          "0 * * * *", // Hourly
-		S3Bucket:          cfg.BackupBucketName(),
-		S3Region:          string(cfg.Region),
-		S3Endpoint:        cfg.S3Endpoint(),
-		S3AccessKey:       os.Getenv("HETZNER_S3_ACCESS_KEY"),
-		S3SecretKey:       os.Getenv("HETZNER_S3_SECRET_KEY"),
-		S3Prefix:          "etcd-backups",
-		EnableCompression: true,
+		Enabled:            true,
+		Schedule:           "0 * * * *", // Hourly
+		S3Bucket:           cfg.BackupBucketName(),
+		S3Region:           string(cfg.Region),
+		S3Endpoint:         cfg.S3Endpoint(),
+		S3AccessKey:        os.Getenv("HETZNER_S3_ACCESS_KEY"),
+		S3SecretKey:        os.Getenv("HETZNER_S3_SECRET_KEY"),
+		S3Prefix:           "etcd-backups",
+		EnableCompression:  true,
+		EncryptionDisabled: true, // v2 config: encryption disabled by default (private bucket provides security)
 	}
 }

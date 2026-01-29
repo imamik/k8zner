@@ -14,6 +14,7 @@ import (
 
 	"github.com/imamik/k8zner/internal/addons"
 	"github.com/imamik/k8zner/internal/config"
+	v2 "github.com/imamik/k8zner/internal/config/v2"
 )
 
 // phaseAddons installs and tests addons sequentially.
@@ -712,7 +713,7 @@ func testAddonTalosBackup(t *testing.T, state *E2EState) {
 		Addons: config.AddonsConfig{
 			TalosBackup: config.TalosBackupConfig{
 				Enabled:           true,
-				Version:           "v0.3.6",
+				Version:           v2.DefaultVersionMatrix().TalosBackup,
 				Schedule:          "0 2 * * *", // 2 AM daily
 				S3Bucket:          s3Bucket,
 				S3Region:          "us-east-1",
@@ -733,11 +734,11 @@ func testAddonTalosBackup(t *testing.T, state *E2EState) {
 	// Verify CronJob exists
 	verifyCronJobExists(t, state.KubeconfigPath, "kube-system", "talos-backup")
 
-	// Verify Secret exists
-	verifySecretExists(t, state.KubeconfigPath, "kube-system", "talos-backup-s3")
+	// Verify Secret exists (generated name: talos-backup-s3-secrets)
+	verifySecretExists(t, state.KubeconfigPath, "kube-system", "talos-backup-s3-secrets")
 
-	// Verify Talos ServiceAccount exists
-	verifyTalosServiceAccountExists(t, state.KubeconfigPath, "kube-system", "talos-backup")
+	// Verify Talos ServiceAccount exists (generated name: talos-backup-secrets)
+	verifyTalosServiceAccountExists(t, state.KubeconfigPath, "kube-system", "talos-backup-secrets")
 
 	state.AddonsInstalled["talos-backup"] = true
 	t.Log("✓ Talos Backup addon working")

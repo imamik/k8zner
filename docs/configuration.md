@@ -126,6 +126,20 @@ export HETZNER_S3_SECRET_KEY="your-secret-key"
 
 **Note**: Backups are stored unencrypted in the private S3 bucket. The bucket is not publicly accessible. For additional security, enable server-side encryption in the Hetzner Cloud Console.
 
+**Important - S3 Bucket Cleanup**: When you destroy a cluster with `k8zner destroy`, the S3 backup bucket is **intentionally NOT deleted** to prevent accidental data loss. This ensures your etcd backups remain available for disaster recovery or cluster migration.
+
+To manually delete the bucket after destroying a cluster:
+```bash
+# Using AWS CLI (configured for Hetzner Object Storage)
+aws s3 rb s3://{cluster-name}-etcd-backups --force \
+  --endpoint-url https://{region}.your-objectstorage.com
+
+# Or via Hetzner Cloud Console:
+# 1. Navigate to Object Storage
+# 2. Select the bucket "{cluster-name}-etcd-backups"
+# 3. Delete all objects, then delete the bucket
+```
+
 ## Opinionated Defaults
 
 The simplified config automatically includes production-ready settings:

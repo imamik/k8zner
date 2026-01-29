@@ -939,6 +939,11 @@ type TalosBackupConfig struct {
 	AGEX25519PublicKey string `mapstructure:"age_x25519_public_key" yaml:"age_x25519_public_key"`
 	EnableCompression  bool   `mapstructure:"enable_compression" yaml:"enable_compression"`
 
+	// EncryptionDisabled disables backup encryption when set to true.
+	// Default: false (encryption enabled). When enabled, backups are encrypted using age encryption.
+	// Warning: Disabling encryption stores etcd data unencrypted in the S3 bucket.
+	EncryptionDisabled bool `mapstructure:"encryption_disabled" yaml:"encryption_disabled,omitempty"`
+
 	// S3HcloudURL is a convenience field for Hetzner Object Storage.
 	// Format: bucket.region.your-objectstorage.com or https://bucket.region.your-objectstorage.com
 	// When set, automatically extracts S3Bucket, S3Region, and S3Endpoint.
