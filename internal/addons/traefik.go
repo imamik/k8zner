@@ -40,12 +40,16 @@ func applyTraefik(ctx context.Context, client k8sclient.Client, cfg *config.Conf
 }
 
 // buildTraefikValues creates helm values for Traefik configuration.
-// Uses LoadBalancer service for Kubernetes-native external IP discovery.
+// When hostNetwork is enabled (dev mode): uses DaemonSet with direct host port binding.
+// When hostNetwork is disabled (HA mode): uses LoadBalancer service with Hetzner LB.
 func buildTraefikValues(cfg *config.Config) helm.Values {
 	traefikCfg := cfg.Addons.Traefik
 	workerCount := getWorkerCount(cfg)
 
-	// Determine replicas
+	// Check if hostNetwork mode is enabled (dev mode)
+	hostNetwork := traefikCfg.HostNetwork != nil && *traefikCfg.HostNetwork
+
+	// Determine replicas (not used for DaemonSet)
 	replicas := 2
 	if traefikCfg.Replicas != nil {
 		replicas = *traefikCfg.Replicas
@@ -53,14 +57,18 @@ func buildTraefikValues(cfg *config.Config) helm.Values {
 		replicas = 3
 	}
 
-	// Determine kind (default: Deployment)
+	// Determine kind (default: Deployment, or DaemonSet for hostNetwork)
 	kind := traefikCfg.Kind
 	if kind == "" {
-		kind = "Deployment"
+		if hostNetwork {
+			kind = "DaemonSet"
+		} else {
+			kind = "Deployment"
+		}
 	}
 
 	// Build the deployment configuration
-	deployment := buildTraefikDeployment(replicas, kind)
+	deployment := buildTraefikDeployment(replicas, kind, hostNetwork)
 
 	// External traffic policy - default to "Local" (preserves client IP)
 	externalTrafficPolicy := traefikCfg.ExternalTrafficPolicy
@@ -85,13 +93,8 @@ func buildTraefikValues(cfg *config.Config) helm.Values {
 		"ingressClass": buildTraefikIngressClass(ingressClassName),
 		"ingressRoute": buildTraefikIngressRoute(),
 		"providers":    buildTraefikProviders(),
-		"ports":        buildTraefikPorts(),
-		"service":      buildTraefikService(externalTrafficPolicy, location),
-		"additionalArguments": []string{
-			// Enable proxy protocol for proper client IP preservation with Hetzner LBs
-			"--entryPoints.web.proxyProtocol.trustedIPs=127.0.0.1/32,10.0.0.0/8",
-			"--entryPoints.websecure.proxyProtocol.trustedIPs=127.0.0.1/32,10.0.0.0/8",
-		},
+		"ports":        buildTraefikPorts(hostNetwork),
+		"service":      buildTraefikService(externalTrafficPolicy, location, hostNetwork),
 		// Add tolerations for CCM uninitialized taint
 		// This allows Traefik to schedule before CCM has fully initialized nodes
 		"tolerations": []helm.Values{
@@ -100,8 +103,17 @@ func buildTraefikValues(cfg *config.Config) helm.Values {
 				"operator": "Exists",
 			},
 		},
-		// Topology spread constraints for HA
-		"topologySpreadConstraints": buildTraefikTopologySpread(workerCount),
+	}
+
+	// Add proxy protocol args only for LoadBalancer mode (not hostNetwork)
+	if !hostNetwork {
+		values["additionalArguments"] = []string{
+			// Enable proxy protocol for proper client IP preservation with Hetzner LBs
+			"--entryPoints.web.proxyProtocol.trustedIPs=127.0.0.1/32,10.0.0.0/8",
+			"--entryPoints.websecure.proxyProtocol.trustedIPs=127.0.0.1/32,10.0.0.0/8",
+		}
+		// Topology spread constraints for HA (not relevant for DaemonSet)
+		values["topologySpreadConstraints"] = buildTraefikTopologySpread(workerCount)
 	}
 
 	// Merge custom Helm values from config
@@ -109,8 +121,8 @@ func buildTraefikValues(cfg *config.Config) helm.Values {
 }
 
 // buildTraefikDeployment creates the deployment configuration.
-func buildTraefikDeployment(replicas int, kind string) helm.Values {
-	return helm.Values{
+func buildTraefikDeployment(replicas int, kind string, hostNetwork bool) helm.Values {
+	deployment := helm.Values{
 		"enabled":  true,
 		"kind":     kind,
 		"replicas": replicas,
@@ -119,6 +131,15 @@ func buildTraefikDeployment(replicas int, kind string) helm.Values {
 			"maxUnavailable": 1,
 		},
 	}
+
+	// Enable hostNetwork mode for direct port binding (dev mode)
+	if hostNetwork {
+		deployment["hostNetwork"] = true
+		// When using hostNetwork, set dnsPolicy to ClusterFirstWithHostNet
+		deployment["dnsPolicy"] = "ClusterFirstWithHostNet"
+	}
+
+	return deployment
 }
 
 // buildTraefikIngressClass creates the IngressClass configuration.
@@ -159,33 +180,40 @@ func buildTraefikProviders() helm.Values {
 }
 
 // buildTraefikPorts creates the ports configuration.
-// Uses standard ports for LoadBalancer service.
-func buildTraefikPorts() helm.Values {
+// When hostNetwork is true: uses hostPort for direct binding to 80/443.
+// When hostNetwork is false: uses standard service ports with proxy protocol.
+func buildTraefikPorts(hostNetwork bool) helm.Values {
+	webPort := helm.Values{
+		"port":        8000,
+		"expose":      true,
+		"exposedPort": 80,
+		"protocol":    "TCP",
+	}
+
+	websecurePort := helm.Values{
+		"port":        8443,
+		"expose":      true,
+		"exposedPort": 443,
+		"protocol":    "TCP",
+		// TLS configuration
+		"tls": helm.Values{
+			"enabled": true,
+		},
+	}
+
+	if hostNetwork {
+		// In hostNetwork mode, bind directly to host ports
+		webPort["hostPort"] = 80
+		websecurePort["hostPort"] = 443
+	} else {
+		// In LoadBalancer mode, enable proxy protocol for client IP preservation
+		webPort["proxyProtocol"] = helm.Values{"enabled": true}
+		websecurePort["proxyProtocol"] = helm.Values{"enabled": true}
+	}
+
 	return helm.Values{
-		"web": helm.Values{
-			"port":        8000,
-			"expose":      true,
-			"exposedPort": 80,
-			"protocol":    "TCP",
-			// Enable proxy protocol for client IP preservation
-			"proxyProtocol": helm.Values{
-				"enabled": true,
-			},
-		},
-		"websecure": helm.Values{
-			"port":        8443,
-			"expose":      true,
-			"exposedPort": 443,
-			"protocol":    "TCP",
-			// Enable proxy protocol for client IP preservation
-			"proxyProtocol": helm.Values{
-				"enabled": true,
-			},
-			// TLS configuration
-			"tls": helm.Values{
-				"enabled": true,
-			},
-		},
+		"web":       webPort,
+		"websecure": websecurePort,
 		"traefik": helm.Values{
 			"port":   9000,
 			"expose": false,
@@ -194,8 +222,18 @@ func buildTraefikPorts() helm.Values {
 }
 
 // buildTraefikService creates the service configuration.
-// Uses LoadBalancer type for Kubernetes-native external IP discovery.
-func buildTraefikService(externalTrafficPolicy, location string) helm.Values {
+// When hostNetwork is true: uses ClusterIP (no external LB needed).
+// When hostNetwork is false: uses LoadBalancer with Hetzner annotations.
+func buildTraefikService(externalTrafficPolicy, location string, hostNetwork bool) helm.Values {
+	if hostNetwork {
+		// In hostNetwork mode, use ClusterIP - traffic goes directly to host ports
+		return helm.Values{
+			"enabled": true,
+			"type":    "ClusterIP",
+		}
+	}
+
+	// In LoadBalancer mode, create Hetzner LB with proxy protocol
 	return helm.Values{
 		"enabled": true,
 		"type":    "LoadBalancer",

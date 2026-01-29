@@ -694,13 +694,19 @@ type TraefikConfig struct {
 	Helm HelmChartConfig `mapstructure:"helm" yaml:"helm"`
 
 	// Kind specifies the Kubernetes controller type: "Deployment" or "DaemonSet".
-	// Default: "Deployment"
+	// Default: "Deployment" (or "DaemonSet" when HostNetwork is true)
 	Kind string `mapstructure:"kind" yaml:"kind"`
 
 	// Replicas specifies the number of controller replicas.
 	// If nil, auto-calculated: 2 for <3 workers, 3 for >=3 workers.
 	// Must be nil when Kind is "DaemonSet".
 	Replicas *int `mapstructure:"replicas" yaml:"replicas"`
+
+	// HostNetwork enables hostNetwork mode for Traefik pods.
+	// When enabled, Traefik binds directly to host ports 80/443 instead of
+	// using a LoadBalancer service. Useful for dev mode to avoid LB costs.
+	// Default: false
+	HostNetwork *bool `mapstructure:"host_network" yaml:"host_network"`
 
 	// ExternalTrafficPolicy controls how external traffic is routed.
 	// Valid values: "Cluster" (cluster-wide) or "Local" (node-local).

@@ -122,8 +122,10 @@ func expandWorkers(cfg *Config) []config.WorkerNodePool {
 }
 
 func expandIngress(cfg *Config) config.IngressConfig {
+	// Dev mode: No separate ingress LB - Traefik uses hostNetwork on workers
+	// HA mode: Dedicated ingress LB for high availability
 	return config.IngressConfig{
-		Enabled:          true,
+		Enabled:          cfg.Mode == ModeHA,
 		LoadBalancerType: LoadBalancerType,
 		PublicNetwork:    true,
 		Algorithm:        "round_robin",
@@ -174,8 +176,22 @@ func expandKubernetes(cfg *Config, vm VersionMatrix) config.KubernetesConfig {
 	}
 }
 
+// traefikKind returns the deployment kind for Traefik.
+// Always uses DaemonSet with hostNetwork since we use infrastructure-level
+// load balancers that target worker nodes directly.
+func traefikKind(_ bool) string {
+	// DaemonSet ensures Traefik runs on each worker, binding to host ports 80/443.
+	// The infrastructure LB (or direct node access) routes traffic to these ports.
+	return "DaemonSet"
+}
+
 func expandAddons(cfg *Config, vm VersionMatrix) config.AddonsConfig {
 	hasDomain := cfg.HasDomain()
+	boolPtr := func(b bool) *bool { return &b }
+
+	// Dev mode uses hostNetwork for Traefik to avoid creating a separate ingress LB
+	// HA mode uses LoadBalancer service with a dedicated ingress LB
+	isDevMode := cfg.Mode == ModeDev
 
 	return config.AddonsConfig{
 		// Hetzner Cloud Controller Manager - always enabled
@@ -200,9 +216,13 @@ func expandAddons(cfg *Config, vm VersionMatrix) config.AddonsConfig {
 		},
 
 		// Traefik ingress - always enabled (replaces ingress-nginx)
+		// Always uses DaemonSet with hostNetwork to bind to host ports 80/443.
+		// Dev mode: Traffic goes directly to worker node IPs (or through API LB if extended)
+		// HA mode: Dedicated ingress LB routes to Traefik on workers via private network
 		Traefik: config.TraefikConfig{
 			Enabled:               true,
-			Kind:                  "Deployment",
+			Kind:                  traefikKind(isDevMode),
+			HostNetwork:          boolPtr(true), // Always use hostNetwork
 			ExternalTrafficPolicy: "Local",
 			IngressClass:          "traefik",
 		},

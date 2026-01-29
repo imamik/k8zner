@@ -308,9 +308,84 @@ func TestExpand_Ingress_DevMode(t *testing.T) {
 		t.Fatalf("Expand() error = %v", err)
 	}
 
-	// Dev mode uses shared LB - ingress should be enabled
+	// Dev mode: No separate ingress LB (Traefik uses hostNetwork)
+	// This keeps costs low with only 1 API LB
+	if expanded.Ingress.Enabled {
+		t.Error("Ingress should be disabled in dev mode (no separate LB)")
+	}
+}
+
+func TestExpand_Traefik_DevMode(t *testing.T) {
+	cfg := &Config{
+		Name:   "dev-traefik",
+		Region: RegionFalkenstein,
+		Mode:   ModeDev,
+		Workers: Worker{
+			Count: 1,
+			Size:  SizeCX22,
+		},
+	}
+
+	expanded, err := Expand(cfg)
+	if err != nil {
+		t.Fatalf("Expand() error = %v", err)
+	}
+
+	// Traefik always uses hostNetwork with DaemonSet (both modes)
+	// In dev mode, traffic goes directly to worker nodes or through shared API LB
+	if expanded.Addons.Traefik.HostNetwork == nil || !*expanded.Addons.Traefik.HostNetwork {
+		t.Error("Traefik.HostNetwork should be true")
+	}
+	if expanded.Addons.Traefik.Kind != "DaemonSet" {
+		t.Errorf("Traefik.Kind = %q, want %q", expanded.Addons.Traefik.Kind, "DaemonSet")
+	}
+}
+
+func TestExpand_Traefik_HAMode(t *testing.T) {
+	cfg := &Config{
+		Name:   "ha-traefik",
+		Region: RegionFalkenstein,
+		Mode:   ModeHA,
+		Workers: Worker{
+			Count: 3,
+			Size:  SizeCX32,
+		},
+	}
+
+	expanded, err := Expand(cfg)
+	if err != nil {
+		t.Fatalf("Expand() error = %v", err)
+	}
+
+	// Traefik always uses hostNetwork with DaemonSet (both modes)
+	// In HA mode, dedicated ingress LB routes to Traefik on workers
+	if expanded.Addons.Traefik.HostNetwork == nil || !*expanded.Addons.Traefik.HostNetwork {
+		t.Error("Traefik.HostNetwork should be true")
+	}
+	if expanded.Addons.Traefik.Kind != "DaemonSet" {
+		t.Errorf("Traefik.Kind = %q, want %q", expanded.Addons.Traefik.Kind, "DaemonSet")
+	}
+}
+
+func TestExpand_Ingress_HAMode(t *testing.T) {
+	cfg := &Config{
+		Name:   "ha-ingress",
+		Region: RegionFalkenstein,
+		Mode:   ModeHA,
+		Workers: Worker{
+			Count: 3,
+			Size:  SizeCX32,
+		},
+	}
+
+	expanded, err := Expand(cfg)
+	if err != nil {
+		t.Fatalf("Expand() error = %v", err)
+	}
+
+	// HA mode: Dedicated ingress LB for high availability
 	if !expanded.Ingress.Enabled {
-		t.Error("Ingress should be enabled in dev mode")
+		t.Error("Ingress should be enabled in HA mode (dedicated LB)")
 	}
 	if expanded.Ingress.LoadBalancerType != LoadBalancerType {
 		t.Errorf("Ingress.LoadBalancerType = %q, want %q", expanded.Ingress.LoadBalancerType, LoadBalancerType)
