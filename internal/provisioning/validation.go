@@ -77,12 +77,7 @@ func (vp *ValidationPhase) Provision(ctx *Context) error {
 		ctx.Logger.Printf("[Validation] WARNING: %s", warning.Message)
 	}
 
-	// Apply defaults
-	if err := ctx.Config.ApplyDefaults(); err != nil {
-		return fmt.Errorf("failed to apply defaults: %w", err)
-	}
-
-	// Calculate subnets (moved from infrastructure phase)
+	// Calculate subnets if not already set (v2 configs have them pre-set)
 	if err := ctx.Config.CalculateSubnets(); err != nil {
 		return fmt.Errorf("failed to calculate subnets: %w", err)
 	}

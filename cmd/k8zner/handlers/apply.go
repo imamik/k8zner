@@ -14,7 +14,7 @@ import (
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
 
 	"github.com/imamik/k8zner/internal/config"
-	v2 "github.com/imamik/k8zner/internal/config/v2"
+	v2config "github.com/imamik/k8zner/internal/config/v2"
 	"github.com/imamik/k8zner/internal/orchestration"
 	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/platform/talos"
@@ -59,17 +59,14 @@ var (
 	// writeFile writes data to a file (for testing injection).
 	writeFile = os.WriteFile
 
-	// loadConfigFile loads config from file (for testing injection).
-	loadConfigFile = config.LoadFile
-
 	// loadV2ConfigFile loads v2 config from file (for testing injection).
-	loadV2ConfigFile = v2.Load
+	loadV2ConfigFile = v2config.Load
 
 	// expandV2Config expands v2 config to internal format (for testing injection).
-	expandV2Config = v2.Expand
+	expandV2Config = v2config.Expand
 
 	// findV2ConfigFile finds the v2 config file (for testing injection).
-	findV2ConfigFile = v2.FindConfigFile
+	findV2ConfigFile = v2config.FindConfigFile
 )
 
 // Apply provisions a Kubernetes cluster on Hetzner Cloud using Talos Linux.
@@ -127,10 +124,9 @@ func Apply(ctx context.Context, configPath string) error {
 }
 
 // loadConfig loads and validates cluster configuration.
-// It auto-detects v2 config format (simple 5-field config) vs legacy format.
 // If configPath is empty, it looks for k8zner.yaml in the current directory.
 func loadConfig(configPath string) (*config.Config, error) {
-	// If no path provided, try to find default v2 config
+	// If no path provided, try to find default config
 	if configPath == "" {
 		path, err := findV2ConfigFile()
 		if err != nil {
@@ -139,22 +135,14 @@ func loadConfig(configPath string) (*config.Config, error) {
 		configPath = path
 	}
 
-	// Try loading as v2 config first (the new simplified format)
+	// Load config and expand to internal format
 	v2Cfg, err := loadV2ConfigFile(configPath)
-	if err == nil {
-		// Successfully loaded as v2, expand to internal format
-		log.Printf("Using v2 config: %s", configPath)
-		return expandV2Config(v2Cfg)
-	}
-
-	// Fall back to legacy config format
-	cfg, err := loadConfigFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load config: %w", err)
+		return nil, fmt.Errorf("failed to load config %s: %w", configPath, err)
 	}
 
-	log.Printf("Using legacy config: %s", configPath)
-	return cfg, nil
+	log.Printf("Using config: %s", configPath)
+	return expandV2Config(v2Cfg)
 }
 
 // initializeClient creates a Hetzner Cloud client using HCLOUD_TOKEN from environment.

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	v2 "github.com/imamik/k8zner/internal/config/v2"
+	v2config "github.com/imamik/k8zner/internal/config/v2"
 	"github.com/imamik/k8zner/internal/pricing"
 )
 
@@ -17,11 +17,11 @@ var (
 		return err == nil
 	}
 
-	// runV2Wizard runs the simplified v2 wizard.
-	runV2Wizard = v2.RunWizard
+	// runV2Wizard runs the simplified wizard.
+	runV2Wizard = v2config.RunWizard
 
-	// writeV2Config writes the v2 config to a file.
-	writeV2Config = v2.WriteYAML
+	// writeV2Config writes the config to a file.
+	writeV2Config = v2config.WriteYAML
 )
 
 // Init runs the simplified v2 configuration wizard and writes the result to a file.
@@ -73,7 +73,7 @@ func printWelcome() {
 }
 
 // printInitSuccess prints the success message with cost estimate and next steps.
-func printInitSuccess(outputPath string, cfg *v2.Config) {
+func printInitSuccess(outputPath string, cfg *v2config.Config) {
 	fmt.Println()
 	fmt.Println("Configuration saved!")
 	fmt.Println()
@@ -86,9 +86,9 @@ func printInitSuccess(outputPath string, cfg *v2.Config) {
 	fmt.Printf("  Name:           %s\n", cfg.Name)
 	fmt.Printf("  Region:         %s\n", cfg.Region.String())
 	fmt.Printf("  Mode:           %s\n", cfg.Mode)
-	fmt.Printf("  Control Planes: %d x %s\n", cfg.ControlPlaneCount(), v2.ControlPlaneServerType)
+	fmt.Printf("  Control Planes: %d x %s\n", cfg.ControlPlaneCount(), v2config.ControlPlaneServerType)
 	fmt.Printf("  Workers:        %d x %s\n", cfg.Workers.Count, cfg.Workers.Size)
-	fmt.Printf("  Load Balancers: %d x %s\n", cfg.LoadBalancerCount(), v2.LoadBalancerType)
+	fmt.Printf("  Load Balancers: %d x %s\n", cfg.LoadBalancerCount(), v2config.LoadBalancerType)
 	if cfg.Domain != "" {
 		fmt.Printf("  Domain:         %s\n", cfg.Domain)
 	}

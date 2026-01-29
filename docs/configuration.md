@@ -228,13 +228,7 @@ k8zner apply
 k8zner apply -c /path/to/config.yaml
 ```
 
-## Legacy Configuration
-
-For advanced use cases requiring full control, k8zner still supports the legacy `cluster.yaml` format with all configuration options. See the [legacy configuration reference](https://github.com/hcloud-k8s/terraform-hcloud-kubernetes) for details.
-
-However, we recommend the simplified format for most deployments.
-
 ## See Also
 
-- [Interactive Wizard](wizard.md) — Create configurations interactively
-- [Architecture](architecture.md) — Understanding cluster architecture
+- [Interactive Wizard](wizard.md)
+- [Architecture](architecture.md)
