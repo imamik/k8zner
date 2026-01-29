@@ -80,6 +80,8 @@ workers:
   size: cx32
 ```
 
+**Why 1-5 workers?** The simplified config uses an opinionated limit to keep clusters predictable and cost-effective for initial deployment. For larger clusters, update the config and run `k8zner apply` again to scale workers.
+
 #### Available Sizes
 
 | Size | vCPU | RAM | Best For |
@@ -102,6 +104,27 @@ When set, this automatically enables:
 - **cert-manager Cloudflare DNS01**: Issues Let's Encrypt certificates
 
 Requires `CF_API_TOKEN` environment variable.
+
+### backup (optional)
+
+Enable automatic etcd backups to Hetzner Object Storage.
+
+```yaml
+backup: true
+```
+
+When enabled:
+- Creates S3 bucket: `{cluster-name}-etcd-backups`
+- Schedules hourly etcd snapshots via CronJob
+- Stores compressed backups in Hetzner Object Storage
+
+Requires environment variables:
+```bash
+export HETZNER_S3_ACCESS_KEY="your-access-key"
+export HETZNER_S3_SECRET_KEY="your-secret-key"
+```
+
+**Note**: Backups are stored unencrypted in the private S3 bucket. The bucket is not publicly accessible. For additional security, enable server-side encryption in the Hetzner Cloud Console.
 
 ## Opinionated Defaults
 
@@ -153,6 +176,14 @@ Optional (for DNS/TLS):
 ```bash
 export CF_API_TOKEN="your-cloudflare-api-token"
 ```
+
+Optional (for backups):
+```bash
+export HETZNER_S3_ACCESS_KEY="your-s3-access-key"
+export HETZNER_S3_SECRET_KEY="your-s3-secret-key"
+```
+
+Get S3 credentials from [Hetzner Cloud Console](https://console.hetzner.cloud/) → Object Storage → Security Credentials.
 
 ## Cost Estimation
 

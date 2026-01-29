@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Simplified Wizard** - Only 5-6 questions to create a cluster
   - Cluster name, region, mode, worker count, worker size, domain (optional)
   - Shows cost estimate after configuration
+- **Automatic etcd Backups** (`backup: true`) - S3-based etcd snapshots
+  - Backs up etcd to Hetzner Object Storage every hour
+  - Bucket auto-created during provisioning: `{cluster-name}-etcd-backups`
+  - Requires `HETZNER_S3_ACCESS_KEY` and `HETZNER_S3_SECRET_KEY` environment variables
+  - Uses talos-backup with compression enabled
 
 ### Changed
 

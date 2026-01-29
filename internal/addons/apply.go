@@ -154,6 +154,10 @@ func hasEnabledAddons(cfg *config.Config) bool {
 
 // validateAddonConfig performs pre-flight validation of addon configuration.
 // Returns an error if required configuration is missing for enabled addons.
+//
+// Note: Some validations (e.g., S3 credentials) are intentionally duplicated
+// from v2/types.go for defense-in-depth. The v2 layer validates at config load
+// time (fail fast), while this validates at addon install time (runtime check).
 func validateAddonConfig(cfg *config.Config) error {
 	a := &cfg.Addons
 
