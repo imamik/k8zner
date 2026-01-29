@@ -12,8 +12,10 @@ func TestInit(t *testing.T) {
 
 	require.NotNil(t, cmd)
 	assert.Equal(t, "init", cmd.Use)
-	assert.Equal(t, "Interactively create a cluster configuration", cmd.Short)
-	assert.Contains(t, cmd.Long, "Interactively create a cluster configuration file")
+	assert.Equal(t, "Create a cluster configuration interactively", cmd.Short)
+	assert.Contains(t, cmd.Long, "5 questions")
+	assert.Contains(t, cmd.Long, "Talos Linux")
+	assert.Contains(t, cmd.Long, "IPv6-only")
 }
 
 func TestInit_OutputFlag(t *testing.T) {
@@ -22,28 +24,24 @@ func TestInit_OutputFlag(t *testing.T) {
 	flag := cmd.Flags().Lookup("output")
 	require.NotNil(t, flag, "output flag should exist")
 	assert.Equal(t, "o", flag.Shorthand)
-	assert.Equal(t, "cluster.yaml", flag.DefValue)
+	assert.Equal(t, "k8zner.yaml", flag.DefValue, "default should be k8zner.yaml")
 	assert.Equal(t, "Output file path", flag.Usage)
 }
 
-func TestInit_AdvancedFlag(t *testing.T) {
+func TestInit_NoAdvancedFlag(t *testing.T) {
 	cmd := Init()
 
+	// Advanced flag should no longer exist in v2
 	flag := cmd.Flags().Lookup("advanced")
-	require.NotNil(t, flag, "advanced flag should exist")
-	assert.Equal(t, "a", flag.Shorthand)
-	assert.Equal(t, "false", flag.DefValue)
-	assert.Equal(t, "Show advanced configuration options", flag.Usage)
+	assert.Nil(t, flag, "advanced flag should not exist in v2")
 }
 
-func TestInit_FullFlag(t *testing.T) {
+func TestInit_NoFullFlag(t *testing.T) {
 	cmd := Init()
 
+	// Full flag should no longer exist in v2
 	flag := cmd.Flags().Lookup("full")
-	require.NotNil(t, flag, "full flag should exist")
-	assert.Equal(t, "f", flag.Shorthand)
-	assert.Equal(t, "false", flag.DefValue)
-	assert.Equal(t, "Output full YAML with all options", flag.Usage)
+	assert.Nil(t, flag, "full flag should not exist in v2")
 }
 
 func TestInit_RunE(t *testing.T) {

@@ -9,53 +9,47 @@ import (
 // Init returns the command for interactively creating a cluster configuration.
 //
 // This command guides users through creating a cluster configuration YAML file
-// using an interactive wizard with text inputs, single-select, and multi-select
-// prompts.
+// using a simplified wizard with just 5 questions.
 //
 // Flags:
 //
-//	--output, -o: Path to output file (default "cluster.yaml")
-//	--advanced, -a: Show advanced configuration options
-//	--full, -f: Output full YAML with all options (default: minimal output)
+//	--output, -o: Path to output file (default "k8zner.yaml")
 func Init() *cobra.Command {
-	var (
-		outputPath string
-		advanced   bool
-		fullOutput bool
-	)
+	var outputPath string
 
 	cmd := &cobra.Command{
 		Use:   "init",
-		Short: "Interactively create a cluster configuration",
-		Long: `Interactively create a cluster configuration file.
+		Short: "Create a cluster configuration interactively",
+		Long: `Create a cluster configuration file with a simple wizard.
 
-This command guides you through configuring your Kubernetes cluster
-step by step. It will ask about:
+This command asks just 5 questions:
 
-  - Cluster identity (name and location)
-  - SSH access keys (optional)
-  - Server architecture (x86 or ARM)
-  - Server category (shared, dedicated, or cost-optimized)
-  - Control plane configuration
-  - Worker node configuration
-  - CNI selection (Cilium, Talos default, or none)
-  - Cluster addons
-  - Talos and Kubernetes versions
+  1. Cluster name     (DNS-safe identifier)
+  2. Region           (fsn1, nbg1, or hel1)
+  3. Mode             (dev or ha)
+  4. Worker count     (1-5 workers)
+  5. Worker size      (cx22, cx32, cx42, cx52)
+  6. Domain           (optional, for DNS + TLS)
 
-Use --advanced for additional options like network CIDRs,
-disk encryption, and Cilium features.
+Everything else is automatically configured with best practices:
 
-Use --full to output the complete YAML with all configuration
-options (useful for manual editing). By default, a minimal
-YAML is generated with only essential values.`,
+  - Talos Linux for immutable, secure nodes
+  - IPv6-only nodes (saves cost, improves security)
+  - Cilium CNI with eBPF networking
+  - Full addon stack (ArgoCD, Traefik, cert-manager, etc.)
+
+Examples:
+  # Create config in current directory
+  k8zner init
+
+  # Create config with custom path
+  k8zner init -o production.yaml`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return handlers.Init(cmd.Context(), outputPath, advanced, fullOutput)
+			return handlers.Init(cmd.Context(), outputPath)
 		},
 	}
 
-	cmd.Flags().StringVarP(&outputPath, "output", "o", "cluster.yaml", "Output file path")
-	cmd.Flags().BoolVarP(&advanced, "advanced", "a", false, "Show advanced configuration options")
-	cmd.Flags().BoolVarP(&fullOutput, "full", "f", false, "Output full YAML with all options")
+	cmd.Flags().StringVarP(&outputPath, "output", "o", "k8zner.yaml", "Output file path")
 
 	return cmd
 }

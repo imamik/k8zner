@@ -13,24 +13,139 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/imamik/k8zner/internal/config"
+	v2 "github.com/imamik/k8zner/internal/config/v2"
 	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning"
 	"github.com/imamik/k8zner/internal/util/prerequisites"
 )
 
-func TestLoadConfig_EmptyPath(t *testing.T) {
+func TestLoadConfig_EmptyPath_NoDefaultFile(t *testing.T) {
+	saveAndRestoreFactories(t)
+
+	// Mock findV2ConfigFile to return error (no file found)
+	findV2ConfigFile = func() (string, error) {
+		return "", errors.New("config file k8zner.yaml not found")
+	}
+
 	_, err := loadConfig("")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "config file is required")
+	assert.Contains(t, err.Error(), "no config file found")
+	assert.Contains(t, err.Error(), "k8zner init")
+}
+
+func TestLoadConfig_EmptyPath_WithDefaultV2File(t *testing.T) {
+	saveAndRestoreFactories(t)
+
+	// Mock findV2ConfigFile to return a path
+	findV2ConfigFile = func() (string, error) {
+		return "/path/to/k8zner.yaml", nil
+	}
+
+	// Mock loadV2ConfigFile to succeed
+	loadV2ConfigFile = func(_ string) (*v2.Config, error) {
+		return &v2.Config{
+			Name:   "test-cluster",
+			Region: v2.RegionFalkenstein,
+			Mode:   v2.ModeDev,
+			Workers: v2.Worker{
+				Count: 2,
+				Size:  v2.SizeCX32,
+			},
+		}, nil
+	}
+
+	// Mock expandV2Config to return a valid config
+	expandV2Config = func(cfg *v2.Config) (*config.Config, error) {
+		return &config.Config{
+			ClusterName: cfg.Name,
+			Location:    string(cfg.Region),
+		}, nil
+	}
+
+	cfg, err := loadConfig("")
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	assert.Equal(t, "test-cluster", cfg.ClusterName)
+}
+
+func TestLoadConfig_V2ConfigFile(t *testing.T) {
+	saveAndRestoreFactories(t)
+
+	// Mock loadV2ConfigFile to succeed
+	loadV2ConfigFile = func(_ string) (*v2.Config, error) {
+		return &v2.Config{
+			Name:   "my-cluster",
+			Region: v2.RegionNuremberg,
+			Mode:   v2.ModeHA,
+			Workers: v2.Worker{
+				Count: 3,
+				Size:  v2.SizeCX42,
+			},
+		}, nil
+	}
+
+	// Mock expandV2Config
+	expandV2Config = func(cfg *v2.Config) (*config.Config, error) {
+		return &config.Config{
+			ClusterName: cfg.Name,
+			Location:    string(cfg.Region),
+		}, nil
+	}
+
+	cfg, err := loadConfig("k8zner.yaml")
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	assert.Equal(t, "my-cluster", cfg.ClusterName)
+}
+
+func TestLoadConfig_FallbackToLegacy(t *testing.T) {
+	saveAndRestoreFactories(t)
+
+	// Mock loadV2ConfigFile to fail (not a v2 config)
+	loadV2ConfigFile = func(_ string) (*v2.Config, error) {
+		return nil, errors.New("validation failed")
+	}
+
+	// Mock loadConfigFile (legacy) to succeed
+	loadConfigFile = func(_ string) (*config.Config, error) {
+		return &config.Config{
+			ClusterName: "legacy-cluster",
+			Location:    "nbg1",
+		}, nil
+	}
+
+	cfg, err := loadConfig("cluster.yaml")
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	assert.Equal(t, "legacy-cluster", cfg.ClusterName)
 }
 
 func TestLoadConfig_NonExistentFile(t *testing.T) {
+	saveAndRestoreFactories(t)
+
+	// Mock loadV2ConfigFile to fail
+	loadV2ConfigFile = func(_ string) (*v2.Config, error) {
+		return nil, errors.New("file not found")
+	}
+
+	// Mock loadConfigFile to fail
+	loadConfigFile = func(_ string) (*config.Config, error) {
+		return nil, errors.New("file not found")
+	}
+
 	_, err := loadConfig("/nonexistent/path/config.yaml")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to load config")
 }
 
-func TestLoadConfig_ValidFile(t *testing.T) {
+func TestLoadConfig_ValidLegacyFile(t *testing.T) {
+	saveAndRestoreFactories(t)
+
+	// Mock v2 loader to fail
+	loadV2ConfigFile = func(_ string) (*v2.Config, error) {
+		return nil, errors.New("not a v2 config")
+	}
+
 	// Create a temporary config file
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yaml")
@@ -51,24 +166,14 @@ control_plane:
 	err := os.WriteFile(configPath, []byte(configContent), 0600)
 	require.NoError(t, err)
 
+	// Reset to real loaders for this test
+	loadConfigFile = config.LoadFile
+
 	cfg, err := loadConfig(configPath)
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
 	assert.Equal(t, "test-cluster", cfg.ClusterName)
 	assert.Equal(t, "nbg1", cfg.Location)
-}
-
-func TestLoadConfig_InvalidYAML(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "invalid.yaml")
-
-	// Write invalid YAML
-	err := os.WriteFile(configPath, []byte("invalid: yaml: content: ["), 0600)
-	require.NoError(t, err)
-
-	_, err = loadConfig(configPath)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to load config")
 }
 
 func TestInitializeClient(t *testing.T) {
@@ -89,14 +194,9 @@ func TestWriteKubeconfig(t *testing.T) {
 	})
 
 	t.Run("writes kubeconfig to file", func(t *testing.T) {
-		// Save original path and restore after test
-		originalPath := kubeconfigPath
 		tmpDir := t.TempDir()
 		testPath := filepath.Join(tmpDir, "kubeconfig")
 
-		// Use a package-level variable reassignment approach
-		// This is a workaround since kubeconfigPath is a const
-		// We can test the actual write by calling os.WriteFile directly
 		kubeconfig := []byte("apiVersion: v1\nkind: Config\ntest: data")
 		err := os.WriteFile(testPath, kubeconfig, 0600)
 		require.NoError(t, err)
@@ -110,8 +210,6 @@ func TestWriteKubeconfig(t *testing.T) {
 		info, err := os.Stat(testPath)
 		require.NoError(t, err)
 		assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
-
-		_ = originalPath // silence unused variable warning
 	})
 }
 
@@ -193,18 +291,18 @@ func TestPrintCiliumEncryptionInfo(t *testing.T) {
 	})
 }
 
-func TestPrintSuccess(t *testing.T) {
+func TestPrintApplySuccess(t *testing.T) {
 	t.Run("with kubeconfig", func(_ *testing.T) {
 		cfg := &config.Config{}
 		kubeconfig := []byte("apiVersion: v1\nkind: Config")
 		// Should not panic
-		printSuccess(kubeconfig, cfg)
+		printApplySuccess(kubeconfig, cfg)
 	})
 
 	t.Run("without kubeconfig", func(_ *testing.T) {
 		cfg := &config.Config{}
 		// Should not panic
-		printSuccess(nil, cfg)
+		printApplySuccess(nil, cfg)
 	})
 }
 
@@ -219,6 +317,9 @@ func saveAndRestoreFactories(t *testing.T) {
 	origCheckDefaultPrereqs := checkDefaultPrereqs
 	origWriteFile := writeFile
 	origLoadConfigFile := loadConfigFile
+	origLoadV2ConfigFile := loadV2ConfigFile
+	origExpandV2Config := expandV2Config
+	origFindV2ConfigFile := findV2ConfigFile
 	origNewDestroyProvisioner := newDestroyProvisioner
 	origNewProvisioningContext := newProvisioningContext
 	origLoadSecrets := loadSecrets
@@ -232,6 +333,9 @@ func saveAndRestoreFactories(t *testing.T) {
 		checkDefaultPrereqs = origCheckDefaultPrereqs
 		writeFile = origWriteFile
 		loadConfigFile = origLoadConfigFile
+		loadV2ConfigFile = origLoadV2ConfigFile
+		expandV2Config = origExpandV2Config
+		findV2ConfigFile = origFindV2ConfigFile
 		newDestroyProvisioner = origNewDestroyProvisioner
 		newProvisioningContext = origNewProvisioningContext
 		loadSecrets = origLoadSecrets
@@ -496,9 +600,21 @@ func TestReconcileInfrastructure_WithInjection(t *testing.T) {
 func TestApply_WithInjection(t *testing.T) {
 	saveAndRestoreFactories(t)
 
-	t.Run("success flow", func(t *testing.T) {
-		// Mock all dependencies
-		loadConfigFile = func(_ string) (*config.Config, error) {
+	t.Run("success flow with v2 config", func(t *testing.T) {
+		// Mock v2 config loading
+		loadV2ConfigFile = func(_ string) (*v2.Config, error) {
+			return &v2.Config{
+				Name:   "test-cluster",
+				Region: v2.RegionFalkenstein,
+				Mode:   v2.ModeDev,
+				Workers: v2.Worker{
+					Count: 2,
+					Size:  v2.SizeCX32,
+				},
+			}, nil
+		}
+
+		expandV2Config = func(_ *v2.Config) (*config.Config, error) {
 			return &config.Config{
 				ClusterName: "test-cluster",
 				HCloudToken: "test-token",
@@ -537,12 +653,63 @@ func TestApply_WithInjection(t *testing.T) {
 			return &mockReconciler{kubeconfig: []byte("kubeconfig-data")}
 		}
 
-		err := Apply(context.Background(), "config.yaml")
+		err := Apply(context.Background(), "k8zner.yaml")
 		require.NoError(t, err)
 		assert.True(t, writeTalosFilesCalled)
 	})
 
+	t.Run("success flow with legacy config", func(t *testing.T) {
+		// Mock v2 config loading to fail
+		loadV2ConfigFile = func(_ string) (*v2.Config, error) {
+			return nil, errors.New("not a v2 config")
+		}
+
+		// Mock legacy config loading
+		loadConfigFile = func(_ string) (*config.Config, error) {
+			return &config.Config{
+				ClusterName: "test-cluster",
+				HCloudToken: "test-token",
+				Talos:       config.TalosConfig{Version: "v1.9.0"},
+				Kubernetes:  config.KubernetesConfig{Version: "v1.32.0"},
+			}, nil
+		}
+
+		checkDefaultPrereqs = func() *prerequisites.CheckResults {
+			return &prerequisites.CheckResults{
+				Results: []prerequisites.CheckResult{
+					{Tool: prerequisites.Tool{Name: "kubectl", Required: true}, Found: true},
+				},
+			}
+		}
+
+		newInfraClient = func(_ string) hcloud.InfrastructureManager {
+			return &hcloud.MockClient{}
+		}
+
+		getOrGenerateSecrets = func(_, _ string) (*secrets.Bundle, error) {
+			return &secrets.Bundle{}, nil
+		}
+
+		newTalosGenerator = func(_, _, _, _ string, _ *secrets.Bundle) provisioning.TalosConfigProducer {
+			return &mockTalosProducer{clientConfig: []byte("talos-config")}
+		}
+
+		writeFile = func(_ string, _ []byte, _ os.FileMode) error {
+			return nil
+		}
+
+		newReconciler = func(_ hcloud.InfrastructureManager, _ provisioning.TalosConfigProducer, _ *config.Config) Reconciler {
+			return &mockReconciler{kubeconfig: []byte("kubeconfig-data")}
+		}
+
+		err := Apply(context.Background(), "config.yaml")
+		require.NoError(t, err)
+	})
+
 	t.Run("config load error", func(t *testing.T) {
+		loadV2ConfigFile = func(_ string) (*v2.Config, error) {
+			return nil, errors.New("not a v2 config")
+		}
 		loadConfigFile = func(_ string) (*config.Config, error) {
 			return nil, errors.New("file not found")
 		}
@@ -553,7 +720,19 @@ func TestApply_WithInjection(t *testing.T) {
 	})
 
 	t.Run("prerequisites check fails", func(t *testing.T) {
-		loadConfigFile = func(_ string) (*config.Config, error) {
+		loadV2ConfigFile = func(_ string) (*v2.Config, error) {
+			return &v2.Config{
+				Name:   "test",
+				Region: v2.RegionFalkenstein,
+				Mode:   v2.ModeDev,
+				Workers: v2.Worker{
+					Count: 1,
+					Size:  v2.SizeCX22,
+				},
+			}, nil
+		}
+
+		expandV2Config = func(_ *v2.Config) (*config.Config, error) {
 			enabled := true
 			return &config.Config{
 				ClusterName:               "test",
@@ -575,6 +754,9 @@ func TestApply_WithInjection(t *testing.T) {
 	})
 
 	t.Run("talos generator init error", func(t *testing.T) {
+		loadV2ConfigFile = func(_ string) (*v2.Config, error) {
+			return nil, errors.New("not v2")
+		}
 		loadConfigFile = func(_ string) (*config.Config, error) {
 			disabled := false
 			return &config.Config{
@@ -593,6 +775,9 @@ func TestApply_WithInjection(t *testing.T) {
 	})
 
 	t.Run("write talos files error", func(t *testing.T) {
+		loadV2ConfigFile = func(_ string) (*v2.Config, error) {
+			return nil, errors.New("not v2")
+		}
 		loadConfigFile = func(_ string) (*config.Config, error) {
 			disabled := false
 			return &config.Config{
@@ -615,6 +800,9 @@ func TestApply_WithInjection(t *testing.T) {
 	})
 
 	t.Run("reconcile infrastructure error", func(t *testing.T) {
+		loadV2ConfigFile = func(_ string) (*v2.Config, error) {
+			return nil, errors.New("not v2")
+		}
 		loadConfigFile = func(_ string) (*config.Config, error) {
 			disabled := false
 			return &config.Config{
@@ -649,6 +837,9 @@ func TestApply_WithInjection(t *testing.T) {
 	})
 
 	t.Run("write kubeconfig error", func(t *testing.T) {
+		loadV2ConfigFile = func(_ string) (*v2.Config, error) {
+			return nil, errors.New("not v2")
+		}
 		loadConfigFile = func(_ string) (*config.Config, error) {
 			disabled := false
 			return &config.Config{

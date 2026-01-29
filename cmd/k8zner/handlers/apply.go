@@ -14,6 +14,7 @@ import (
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
 
 	"github.com/imamik/k8zner/internal/config"
+	v2 "github.com/imamik/k8zner/internal/config/v2"
 	"github.com/imamik/k8zner/internal/orchestration"
 	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/platform/talos"
@@ -60,12 +61,21 @@ var (
 
 	// loadConfigFile loads config from file (for testing injection).
 	loadConfigFile = config.LoadFile
+
+	// loadV2ConfigFile loads v2 config from file (for testing injection).
+	loadV2ConfigFile = v2.Load
+
+	// expandV2Config expands v2 config to internal format (for testing injection).
+	expandV2Config = v2.Expand
+
+	// findV2ConfigFile finds the v2 config file (for testing injection).
+	findV2ConfigFile = v2.FindConfigFile
 )
 
 // Apply provisions a Kubernetes cluster on Hetzner Cloud using Talos Linux.
 //
 // This function orchestrates the complete cluster provisioning workflow:
-//  1. Loads and validates cluster configuration from the specified YAML file
+//  1. Loads and validates cluster configuration (auto-detects v2 or legacy format)
 //  2. Initializes Hetzner Cloud client using HCLOUD_TOKEN environment variable
 //  3. Generates Talos machine configurations and persists secrets immediately
 //  4. Reconciles cluster infrastructure (networks, servers, load balancers, bootstrap)
@@ -112,21 +122,38 @@ func Apply(ctx context.Context, configPath string) error {
 		return err
 	}
 
-	printSuccess(kubeconfig, cfg)
+	printApplySuccess(kubeconfig, cfg)
 	return nil
 }
 
-// loadConfig loads and validates cluster configuration from a YAML file.
+// loadConfig loads and validates cluster configuration.
+// It auto-detects v2 config format (simple 5-field config) vs legacy format.
+// If configPath is empty, it looks for k8zner.yaml in the current directory.
 func loadConfig(configPath string) (*config.Config, error) {
+	// If no path provided, try to find default v2 config
 	if configPath == "" {
-		return nil, fmt.Errorf("config file is required (use --config)")
+		path, err := findV2ConfigFile()
+		if err != nil {
+			return nil, fmt.Errorf("no config file found: %w\nRun 'k8zner init' to create one", err)
+		}
+		configPath = path
 	}
 
+	// Try loading as v2 config first (the new simplified format)
+	v2Cfg, err := loadV2ConfigFile(configPath)
+	if err == nil {
+		// Successfully loaded as v2, expand to internal format
+		log.Printf("Using v2 config: %s", configPath)
+		return expandV2Config(v2Cfg)
+	}
+
+	// Fall back to legacy config format
 	cfg, err := loadConfigFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
 
+	log.Printf("Using legacy config: %s", configPath)
 	return cfg, nil
 }
 
@@ -201,9 +228,9 @@ func writeKubeconfig(kubeconfig []byte) error {
 	return nil
 }
 
-// printSuccess outputs completion message and next steps for the user.
+// printApplySuccess outputs completion message and next steps for the user.
 // Message varies depending on whether this was initial bootstrap or re-apply.
-func printSuccess(kubeconfig []byte, cfg *config.Config) {
+func printApplySuccess(kubeconfig []byte, cfg *config.Config) {
 	fmt.Printf("\nReconciliation complete!\n")
 	fmt.Printf("Secrets saved to: %s\n", secretsFile)
 	fmt.Printf("Talos config saved to: %s\n", talosConfigPath)
