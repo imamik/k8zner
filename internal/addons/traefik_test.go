@@ -46,6 +46,7 @@ func TestBuildTraefikValues(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &config.Config{
+				ClusterName: "test-cluster",
 				Workers: []config.WorkerNodePool{
 					{Count: tt.workerCount},
 				},
@@ -119,7 +120,7 @@ func TestBuildTraefikValues(t *testing.T) {
 			// Check Hetzner LB annotations
 			annotations, ok := service["annotations"].(helm.Values)
 			require.True(t, ok)
-			assert.Equal(t, "ingress", annotations["load-balancer.hetzner.cloud/name"])
+			assert.Equal(t, "test-cluster-ingress", annotations["load-balancer.hetzner.cloud/name"])
 			assert.Equal(t, "true", annotations["load-balancer.hetzner.cloud/use-private-ip"])
 			assert.Equal(t, "true", annotations["load-balancer.hetzner.cloud/uses-proxyprotocol"])
 
@@ -215,7 +216,8 @@ func TestBuildTraefikValuesKind(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &config.Config{
-				Workers: []config.WorkerNodePool{{Count: 2}},
+				ClusterName: "test-cluster",
+				Workers:     []config.WorkerNodePool{{Count: 2}},
 				Addons: config.AddonsConfig{
 					Traefik: config.TraefikConfig{
 						Enabled: true,
@@ -261,7 +263,8 @@ func TestBuildTraefikValuesReplicas(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &config.Config{
-				Workers: []config.WorkerNodePool{{Count: tt.workerCount}},
+				ClusterName: "test-cluster",
+				Workers:     []config.WorkerNodePool{{Count: tt.workerCount}},
 				Addons: config.AddonsConfig{
 					Traefik: config.TraefikConfig{
 						Enabled:  true,
@@ -303,7 +306,8 @@ func TestBuildTraefikValuesExternalTrafficPolicy(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &config.Config{
-				Workers: []config.WorkerNodePool{{Count: 2}},
+				ClusterName: "test-cluster",
+				Workers:     []config.WorkerNodePool{{Count: 2}},
 				Addons: config.AddonsConfig{
 					Traefik: config.TraefikConfig{
 						Enabled:               true,
@@ -341,7 +345,8 @@ func TestBuildTraefikValuesIngressClass(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &config.Config{
-				Workers: []config.WorkerNodePool{{Count: 2}},
+				ClusterName: "test-cluster",
+				Workers:     []config.WorkerNodePool{{Count: 2}},
 				Addons: config.AddonsConfig{
 					Traefik: config.TraefikConfig{
 						Enabled:      true,
@@ -360,7 +365,8 @@ func TestBuildTraefikValuesIngressClass(t *testing.T) {
 func TestBuildTraefikValuesIngressRoute(t *testing.T) {
 	// IngressRoute is always disabled since we don't install Traefik CRDs
 	cfg := &config.Config{
-		Workers: []config.WorkerNodePool{{Count: 2}},
+		ClusterName: "test-cluster",
+		Workers:     []config.WorkerNodePool{{Count: 2}},
 		Addons: config.AddonsConfig{
 			Traefik: config.TraefikConfig{
 				Enabled: true,
@@ -418,8 +424,9 @@ func TestBuildTraefikValuesHostNetwork(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &config.Config{
-				Location: "fsn1",
-				Workers:  []config.WorkerNodePool{{Count: 2}},
+				ClusterName: "test-cluster",
+				Location:    "fsn1",
+				Workers:     []config.WorkerNodePool{{Count: 2}},
 				Addons: config.AddonsConfig{
 					Traefik: config.TraefikConfig{
 						Enabled:     true,

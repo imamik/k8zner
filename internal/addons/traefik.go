@@ -7,6 +7,7 @@ import (
 	"github.com/imamik/k8zner/internal/addons/helm"
 	"github.com/imamik/k8zner/internal/addons/k8sclient"
 	"github.com/imamik/k8zner/internal/config"
+	"github.com/imamik/k8zner/internal/util/naming"
 )
 
 // applyTraefik installs the Traefik Proxy ingress controller.
@@ -94,7 +95,7 @@ func buildTraefikValues(cfg *config.Config) helm.Values {
 		"ingressRoute": buildTraefikIngressRoute(),
 		"providers":    buildTraefikProviders(),
 		"ports":        buildTraefikPorts(hostNetwork),
-		"service":      buildTraefikService(externalTrafficPolicy, location, hostNetwork),
+		"service":      buildTraefikService(cfg.ClusterName, externalTrafficPolicy, location, hostNetwork),
 		// Add tolerations for CCM uninitialized taint
 		// This allows Traefik to schedule before CCM has fully initialized nodes
 		"tolerations": []helm.Values{
@@ -221,7 +222,7 @@ func buildTraefikPorts(hostNetwork bool) helm.Values {
 // buildTraefikService creates the service configuration.
 // When hostNetwork is true: uses ClusterIP (no external LB needed).
 // When hostNetwork is false: uses LoadBalancer with Hetzner annotations.
-func buildTraefikService(externalTrafficPolicy, location string, hostNetwork bool) helm.Values {
+func buildTraefikService(clusterName, externalTrafficPolicy, location string, hostNetwork bool) helm.Values {
 	if hostNetwork {
 		// In hostNetwork mode, use ClusterIP - traffic goes directly to host ports
 		return helm.Values{
@@ -229,6 +230,9 @@ func buildTraefikService(externalTrafficPolicy, location string, hostNetwork boo
 			"type":    "ClusterIP",
 		}
 	}
+
+	// Use proper naming convention for the load balancer
+	lbName := naming.IngressLoadBalancer(clusterName)
 
 	// In LoadBalancer mode, create Hetzner LB with proxy protocol
 	return helm.Values{
@@ -239,7 +243,7 @@ func buildTraefikService(externalTrafficPolicy, location string, hostNetwork boo
 		},
 		// Hetzner LB annotations for proxy protocol support
 		"annotations": helm.Values{
-			"load-balancer.hetzner.cloud/name":               "ingress",
+			"load-balancer.hetzner.cloud/name":               lbName,
 			"load-balancer.hetzner.cloud/use-private-ip":     "true",
 			"load-balancer.hetzner.cloud/uses-proxyprotocol": "true",
 			"load-balancer.hetzner.cloud/location":           location,
