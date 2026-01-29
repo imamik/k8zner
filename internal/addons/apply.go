@@ -20,6 +20,11 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		return nil
 	}
 
+	// Pre-flight validation: check addon configuration requirements
+	if err := validateAddonConfig(cfg); err != nil {
+		return fmt.Errorf("addon configuration validation failed: %w", err)
+	}
+
 	// Create k8s client from kubeconfig bytes
 	client, err := k8sclient.NewFromKubeconfig(kubeconfig)
 	if err != nil {
@@ -145,4 +150,45 @@ func hasEnabledAddons(cfg *config.Config) bool {
 		a.MetricsServer.Enabled || a.CertManager.Enabled || a.Traefik.Enabled ||
 		a.ArgoCD.Enabled || a.Cloudflare.Enabled || a.ExternalDNS.Enabled ||
 		a.TalosBackup.Enabled
+}
+
+// validateAddonConfig performs pre-flight validation of addon configuration.
+// Returns an error if required configuration is missing for enabled addons.
+func validateAddonConfig(cfg *config.Config) error {
+	a := &cfg.Addons
+
+	// CCM/CSI require HCloud token
+	if (a.CCM.Enabled || a.CSI.Enabled) && cfg.HCloudToken == "" {
+		return fmt.Errorf("ccm/csi addons require hcloud_token to be set")
+	}
+
+	// Cloudflare addons require API token
+	if a.Cloudflare.Enabled && a.Cloudflare.APIToken == "" {
+		return fmt.Errorf("cloudflare addon requires api_token to be set")
+	}
+
+	// ExternalDNS uses Cloudflare as the DNS provider
+	if a.ExternalDNS.Enabled && !a.Cloudflare.Enabled {
+		return fmt.Errorf("external-dns addon requires cloudflare addon to be enabled")
+	}
+
+	// CertManager Cloudflare integration requires Cloudflare addon
+	if a.CertManager.Enabled && a.CertManager.Cloudflare.Enabled && !a.Cloudflare.Enabled {
+		return fmt.Errorf("cert-manager cloudflare integration requires cloudflare addon to be enabled")
+	}
+
+	// TalosBackup requires S3 configuration
+	if a.TalosBackup.Enabled {
+		if a.TalosBackup.S3Bucket == "" {
+			return fmt.Errorf("talos-backup addon requires s3_bucket to be set")
+		}
+		if a.TalosBackup.S3AccessKey == "" || a.TalosBackup.S3SecretKey == "" {
+			return fmt.Errorf("talos-backup addon requires s3_access_key and s3_secret_key to be set")
+		}
+		if a.TalosBackup.S3Endpoint == "" {
+			return fmt.Errorf("talos-backup addon requires s3_endpoint to be set")
+		}
+	}
+
+	return nil
 }

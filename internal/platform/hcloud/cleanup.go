@@ -2,12 +2,42 @@ package hcloud
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
+
+// CleanupError represents accumulated errors from cleanup operations.
+type CleanupError struct {
+	Errors []error
+}
+
+func (e *CleanupError) Error() string {
+	if len(e.Errors) == 1 {
+		return e.Errors[0].Error()
+	}
+	return fmt.Sprintf("cleanup encountered %d errors: %v", len(e.Errors), e.Errors)
+}
+
+func (e *CleanupError) Unwrap() error {
+	if len(e.Errors) == 1 {
+		return e.Errors[0]
+	}
+	return errors.Join(e.Errors...)
+}
+
+func (e *CleanupError) Add(err error) {
+	if err != nil {
+		e.Errors = append(e.Errors, err)
+	}
+}
+
+func (e *CleanupError) HasErrors() bool {
+	return len(e.Errors) > 0
+}
 
 // resource is a constraint for Hetzner Cloud resources that have Name and ID fields.
 type resource interface {
@@ -46,6 +76,7 @@ func getResourceInfo[T resource](r T) resourceInfo {
 }
 
 // deleteResourcesByLabel is a generic helper for deleting resources by label selector.
+// Returns an error if listing fails, or a combined error of all deletion failures.
 func deleteResourcesByLabel[T resource](
 	ctx context.Context,
 	resourceType string,
@@ -57,24 +88,32 @@ func deleteResourcesByLabel[T resource](
 		return fmt.Errorf("failed to list %s: %w", resourceType, err)
 	}
 
+	var deleteErrs []error
 	for _, r := range resources {
 		info := getResourceInfo(r)
 		log.Printf("[Cleanup] Deleting %s: %s (ID: %d)", resourceType, info.Name, info.ID)
 		if err := deleteFn(ctx, r); err != nil {
 			log.Printf("[Cleanup] Warning: Failed to delete %s %s: %v", resourceType, info.Name, err)
+			deleteErrs = append(deleteErrs, fmt.Errorf("%s %q: %w", resourceType, info.Name, err))
 		}
 	}
 
+	if len(deleteErrs) > 0 {
+		return errors.Join(deleteErrs...)
+	}
 	return nil
 }
 
 // CleanupByLabel deletes all Hetzner Cloud resources matching the given label selector.
 // This is useful for cleaning up E2E test resources or orphaned resources.
+// Returns a CleanupError containing all errors encountered during cleanup.
+// The function attempts to delete all resource types even if some deletions fail.
 func (c *RealClient) CleanupByLabel(ctx context.Context, labelSelector map[string]string) error {
 	log.Printf("[Cleanup] Starting cleanup for resources with labels: %v", labelSelector)
 
 	// Build label selector string
 	labelString := buildLabelSelector(labelSelector)
+	cleanupErrs := &CleanupError{}
 
 	// Delete in order to respect dependencies:
 	// 1. Servers (must be deleted before networks, load balancers)
@@ -88,34 +127,47 @@ func (c *RealClient) CleanupByLabel(ctx context.Context, labelSelector map[strin
 
 	if err := c.deleteServersByLabel(ctx, labelString); err != nil {
 		log.Printf("[Cleanup] Warning: Failed to delete servers: %v", err)
+		cleanupErrs.Add(fmt.Errorf("servers: %w", err))
 	}
 
 	if err := c.deleteLoadBalancersByLabel(ctx, labelString); err != nil {
 		log.Printf("[Cleanup] Warning: Failed to delete load balancers: %v", err)
+		cleanupErrs.Add(fmt.Errorf("load balancers: %w", err))
 	}
 
 	if err := c.deleteFloatingIPsByLabel(ctx, labelString); err != nil {
 		log.Printf("[Cleanup] Warning: Failed to delete floating IPs: %v", err)
+		cleanupErrs.Add(fmt.Errorf("floating IPs: %w", err))
 	}
 
 	if err := c.deleteFirewallsByLabel(ctx, labelString); err != nil {
 		log.Printf("[Cleanup] Warning: Failed to delete firewalls: %v", err)
+		cleanupErrs.Add(fmt.Errorf("firewalls: %w", err))
 	}
 
 	if err := c.deleteNetworksByLabel(ctx, labelString); err != nil {
 		log.Printf("[Cleanup] Warning: Failed to delete networks: %v", err)
+		cleanupErrs.Add(fmt.Errorf("networks: %w", err))
 	}
 
 	if err := c.deletePlacementGroupsByLabel(ctx, labelString); err != nil {
 		log.Printf("[Cleanup] Warning: Failed to delete placement groups: %v", err)
+		cleanupErrs.Add(fmt.Errorf("placement groups: %w", err))
 	}
 
 	if err := c.deleteSSHKeysByLabel(ctx, labelString); err != nil {
 		log.Printf("[Cleanup] Warning: Failed to delete SSH keys: %v", err)
+		cleanupErrs.Add(fmt.Errorf("SSH keys: %w", err))
 	}
 
 	if err := c.deleteCertificatesByLabel(ctx, labelString); err != nil {
 		log.Printf("[Cleanup] Warning: Failed to delete certificates: %v", err)
+		cleanupErrs.Add(fmt.Errorf("certificates: %w", err))
+	}
+
+	if cleanupErrs.HasErrors() {
+		log.Printf("[Cleanup] Cleanup completed with %d errors", len(cleanupErrs.Errors))
+		return cleanupErrs
 	}
 
 	log.Printf("[Cleanup] Cleanup complete")

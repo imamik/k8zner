@@ -99,3 +99,90 @@ func TestGetControlPlaneCount(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateAddonConfig(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     *config.Config
+		wantErr string
+	}{
+		{
+			name:    "no addons enabled",
+			cfg:     &config.Config{},
+			wantErr: "",
+		},
+		{
+			name: "CCM enabled without token",
+			cfg: &config.Config{
+				Addons: config.AddonsConfig{
+					CCM: config.CCMConfig{Enabled: true},
+				},
+			},
+			wantErr: "ccm/csi addons require hcloud_token",
+		},
+		{
+			name: "CCM enabled with token",
+			cfg: &config.Config{
+				HCloudToken: "test-token",
+				Addons: config.AddonsConfig{
+					CCM: config.CCMConfig{Enabled: true},
+				},
+			},
+			wantErr: "",
+		},
+		{
+			name: "Cloudflare enabled without API token",
+			cfg: &config.Config{
+				Addons: config.AddonsConfig{
+					Cloudflare: config.CloudflareConfig{Enabled: true},
+				},
+			},
+			wantErr: "cloudflare addon requires api_token",
+		},
+		{
+			name: "ExternalDNS enabled without Cloudflare",
+			cfg: &config.Config{
+				Addons: config.AddonsConfig{
+					ExternalDNS: config.ExternalDNSConfig{Enabled: true},
+				},
+			},
+			wantErr: "external-dns addon requires cloudflare",
+		},
+		{
+			name: "TalosBackup without S3 bucket",
+			cfg: &config.Config{
+				Addons: config.AddonsConfig{
+					TalosBackup: config.TalosBackupConfig{Enabled: true},
+				},
+			},
+			wantErr: "talos-backup addon requires s3_bucket",
+		},
+		{
+			name: "TalosBackup with full config",
+			cfg: &config.Config{
+				Addons: config.AddonsConfig{
+					TalosBackup: config.TalosBackupConfig{
+						Enabled:     true,
+						S3Bucket:    "test-bucket",
+						S3AccessKey: "access-key",
+						S3SecretKey: "secret-key",
+						S3Endpoint:  "https://s3.example.com",
+					},
+				},
+			},
+			wantErr: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateAddonConfig(tt.cfg)
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+			}
+		})
+	}
+}

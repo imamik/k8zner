@@ -2,12 +2,70 @@ package hcloud
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud/schema"
 )
+
+func TestCleanupError(t *testing.T) {
+	t.Run("single error", func(t *testing.T) {
+		ce := &CleanupError{}
+		ce.Add(errors.New("test error"))
+
+		if !ce.HasErrors() {
+			t.Error("expected HasErrors() to return true")
+		}
+
+		if ce.Error() != "test error" {
+			t.Errorf("expected 'test error', got %q", ce.Error())
+		}
+	})
+
+	t.Run("multiple errors", func(t *testing.T) {
+		ce := &CleanupError{}
+		ce.Add(errors.New("error 1"))
+		ce.Add(errors.New("error 2"))
+
+		if !ce.HasErrors() {
+			t.Error("expected HasErrors() to return true")
+		}
+
+		errStr := ce.Error()
+		if errStr != "cleanup encountered 2 errors: [error 1 error 2]" {
+			t.Errorf("unexpected error message: %q", errStr)
+		}
+	})
+
+	t.Run("no errors", func(t *testing.T) {
+		ce := &CleanupError{}
+
+		if ce.HasErrors() {
+			t.Error("expected HasErrors() to return false")
+		}
+	})
+
+	t.Run("add nil error", func(t *testing.T) {
+		ce := &CleanupError{}
+		ce.Add(nil)
+
+		if ce.HasErrors() {
+			t.Error("adding nil should not create an error")
+		}
+	})
+
+	t.Run("unwrap single error", func(t *testing.T) {
+		original := errors.New("original error")
+		ce := &CleanupError{}
+		ce.Add(original)
+
+		if !errors.Is(ce.Unwrap(), original) {
+			t.Error("Unwrap should return the original error")
+		}
+	})
+}
 
 // TestBuildLabelSelector is already tested in real_client_test.go
 
@@ -426,9 +484,9 @@ func TestDeleteResourcesByLabel(t *testing.T) {
 		}
 	})
 
-	t.Run("handles delete error gracefully", func(t *testing.T) {
+	t.Run("returns delete errors", func(t *testing.T) {
 		ctx := context.Background()
-		// deleteResourcesByLabel should log errors but not return them
+		// deleteResourcesByLabel now returns errors for failed deletions
 		err := deleteResourcesByLabel(ctx, "test",
 			func(ctx context.Context) ([]*hcloud.Server, error) {
 				return []*hcloud.Server{{ID: 1, Name: "test-server"}}, nil
@@ -437,9 +495,9 @@ func TestDeleteResourcesByLabel(t *testing.T) {
 				return context.DeadlineExceeded
 			},
 		)
-		// Should not return error even if delete fails (just logs warning)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+		// Should return error when delete fails
+		if err == nil {
+			t.Fatal("expected error from delete function")
 		}
 	})
 
