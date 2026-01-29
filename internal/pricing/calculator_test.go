@@ -8,12 +8,17 @@ import (
 
 func TestCalculator_Calculate(t *testing.T) {
 	// Use static prices for testing
+	// Include both old and new server type names for backwards compatibility
 	prices := &Prices{
 		Servers: map[string]float64{
 			"cx22": 4.35,
+			"cx23": 4.35,
 			"cx32": 8.09,
+			"cx33": 8.09,
 			"cx42": 15.59,
+			"cx43": 15.59,
 			"cx52": 29.59,
+			"cx53": 29.59,
 		},
 		LoadBalancers: map[string]float64{
 			"lb11": 6.41,
@@ -40,7 +45,7 @@ func TestCalculator_Calculate(t *testing.T) {
 					Size:  v2.SizeCX22,
 				},
 			},
-			// 1x CP (cx22) + 1x worker (cx22) + 1x LB
+			// 1x CP (cx23) + 1x worker (cx22) + 1x LB
 			// 4.35 + 4.35 + 6.41 = 15.11
 			wantSubtotal: 15.11,
 			wantItems:    3,
@@ -56,7 +61,7 @@ func TestCalculator_Calculate(t *testing.T) {
 					Size:  v2.SizeCX32,
 				},
 			},
-			// 3x CP (cx22) + 3x worker (cx32) + 2x LB
+			// 3x CP (cx23) + 3x worker (cx32) + 2x LB
 			// (3 * 4.35) + (3 * 8.09) + (2 * 6.41)
 			// 13.05 + 24.27 + 12.82 = 50.14
 			wantSubtotal: 50.14,
@@ -73,7 +78,7 @@ func TestCalculator_Calculate(t *testing.T) {
 					Size:  v2.SizeCX52,
 				},
 			},
-			// 3x CP (cx22) + 5x worker (cx52) + 2x LB
+			// 3x CP (cx23) + 5x worker (cx52) + 2x LB
 			// (3 * 4.35) + (5 * 29.59) + (2 * 6.41)
 			// 13.05 + 147.95 + 12.82 = 173.82
 			wantSubtotal: 173.82,
@@ -101,7 +106,9 @@ func TestCalculator_CalculateWithVAT(t *testing.T) {
 	prices := &Prices{
 		Servers: map[string]float64{
 			"cx22": 4.35,
+			"cx23": 4.35,
 			"cx32": 8.09,
+			"cx33": 8.09,
 		},
 		LoadBalancers: map[string]float64{
 			"lb11": 6.41,
@@ -142,6 +149,9 @@ func TestCalculator_IPv6Savings(t *testing.T) {
 	prices := &Prices{
 		Servers: map[string]float64{
 			"cx22": 4.35,
+			"cx23": 4.35,
+			"cx32": 8.09,
+			"cx33": 8.09,
 		},
 		LoadBalancers: map[string]float64{
 			"lb11": 6.41,

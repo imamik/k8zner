@@ -28,6 +28,12 @@ func phaseCluster(t *testing.T, state *E2EState) {
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Minute)
 	defer cancel()
 
+	// Validate that snapshots are available before proceeding
+	if state.SnapshotAMD64 == "" {
+		t.Fatal("No AMD64 snapshot available - run Phase 1 (Snapshots) first")
+	}
+	t.Logf("Using snapshot: amd64=%s", state.SnapshotAMD64)
+
 	t.Log("Provisioning full cluster (infrastructure + nodes + bootstrap)...")
 
 	// Setup SSH key
@@ -79,12 +85,14 @@ func phaseCluster(t *testing.T, state *E2EState) {
 	state.KubeconfigPath = kubeconfigPath
 
 	// Get cluster IPs for state
+	// Naming convention: {cluster}-{poolName}-{index}
+	// Control plane pool name is "control-plane", worker pool name is "workers" (from v2 config)
 	cpIP, err := state.Client.GetServerIP(ctx, state.ClusterName+"-control-plane-1")
 	if err == nil {
 		state.ControlPlaneIPs = append(state.ControlPlaneIPs, cpIP)
 	}
 
-	workerIP, err := state.Client.GetServerIP(ctx, state.ClusterName+"-worker-1-1")
+	workerIP, err := state.Client.GetServerIP(ctx, state.ClusterName+"-workers-1")
 	if err == nil {
 		state.WorkerIPs = append(state.WorkerIPs, workerIP)
 	}

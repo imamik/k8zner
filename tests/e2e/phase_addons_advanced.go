@@ -13,6 +13,7 @@ import (
 
 	"github.com/imamik/k8zner/internal/addons"
 	"github.com/imamik/k8zner/internal/config"
+	v2 "github.com/imamik/k8zner/internal/config/v2"
 )
 
 // phaseAddonsAdvanced tests advanced addon configurations.
@@ -68,12 +69,15 @@ func phaseAddonsAdvanced(t *testing.T, state *E2EState) {
 func testAddonTalosCCM(t *testing.T, state *E2EState) {
 	t.Log("Installing Talos CCM...")
 
+	// Use version from version matrix
+	vm := v2.DefaultVersionMatrix()
+
 	cfg := &config.Config{
 		ClusterName: state.ClusterName,
 		Addons: config.AddonsConfig{
 			TalosCCM: config.TalosCCMConfig{
 				Enabled: true,
-				Version: "v1.11.0",
+				Version: vm.TalosCCM,
 			},
 		},
 	}
@@ -177,13 +181,13 @@ func verifyMetricsServerNodeSelector(t *testing.T, kubeconfigPath string) {
 func testAddonGatewayAPICRDs(t *testing.T, state *E2EState) {
 	t.Log("Installing Gateway API CRDs...")
 
-	// Test with standard channel
+	// Test with standard channel - use empty version to let addon use its default
 	cfg := &config.Config{
 		ClusterName: state.ClusterName,
 		Addons: config.AddonsConfig{
 			GatewayAPICRDs: config.GatewayAPICRDsConfig{
 				Enabled:        true,
-				Version:        "v1.2.1",
+				Version:        "", // Use addon's default version
 				ReleaseChannel: "standard",
 			},
 		},
@@ -218,7 +222,7 @@ func testAddonPrometheusOperatorCRDs(t *testing.T, state *E2EState) {
 		Addons: config.AddonsConfig{
 			PrometheusOperatorCRDs: config.PrometheusOperatorCRDsConfig{
 				Enabled: true,
-				Version: "v0.79.2",
+				Version: "", // Use addon's default version
 			},
 		},
 	}

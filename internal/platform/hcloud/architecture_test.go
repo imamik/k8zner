@@ -50,9 +50,9 @@ func TestGetDefaultServerType(t *testing.T) {
 		arch     Architecture
 		expected string
 	}{
-		{ArchAMD64, "cpx22"},
+		{ArchAMD64, "cx23"},
 		{ArchARM64, "cax11"},
-		{"unknown", "cpx22"}, // Unknown defaults to AMD64 server type
+		{"unknown", "cx23"}, // Unknown defaults to AMD64 server type
 	}
 
 	for _, tt := range tests {

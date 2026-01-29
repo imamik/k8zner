@@ -84,13 +84,18 @@ func buildArgoCDValues(cfg *config.Config) helm.Values {
 		},
 	}
 
-	// Add HA configuration if enabled
+	// Configure HA mode
 	if argoCDCfg.HA {
 		values["redis-ha"] = helm.Values{
 			"enabled": true,
 		}
 		// Disable standalone redis when using HA
 		values["redis"] = helm.Values{
+			"enabled": false,
+		}
+	} else {
+		// Explicitly disable redis-ha for non-HA mode
+		values["redis-ha"] = helm.Values{
 			"enabled": false,
 		}
 	}

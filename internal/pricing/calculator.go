@@ -110,7 +110,7 @@ func (c *Calculator) Calculate(cfg *v2.Config) *Estimate {
 
 	// Workers
 	workerCount := cfg.Workers.Count
-	workerType := string(cfg.Workers.Size)
+	workerType := string(cfg.Workers.Size.Normalize())
 	workerPrice := c.prices.Servers[workerType]
 	workerTotal := float64(workerCount) * workerPrice
 
@@ -159,10 +159,16 @@ func (c *Calculator) Calculate(cfg *v2.Config) *Estimate {
 func DefaultPrices() *Prices {
 	return &Prices{
 		Servers: map[string]float64{
+			// Old names (Hetzner renamed types in 2024)
 			"cx22": 4.35,
 			"cx32": 8.09,
 			"cx42": 15.59,
 			"cx52": 29.59,
+			// New names
+			"cx23": 4.35,
+			"cx33": 8.09,
+			"cx43": 15.59,
+			"cx53": 29.59,
 		},
 		LoadBalancers: map[string]float64{
 			"lb11": 6.41,

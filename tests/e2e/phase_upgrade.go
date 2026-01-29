@@ -14,6 +14,7 @@ import (
 
 	"github.com/imamik/k8zner/cmd/k8zner/handlers"
 	"github.com/imamik/k8zner/internal/config"
+	v2 "github.com/imamik/k8zner/internal/config/v2"
 )
 
 // phaseUpgrade tests cluster upgrade functionality.
@@ -70,48 +71,51 @@ func phaseUpgrade(t *testing.T, state *E2EState) {
 }
 
 // createUpgradeConfig creates a config with updated Talos/K8s versions for testing.
+// Uses the v2 config format expanded to internal config for consistency.
 func createUpgradeConfig(state *E2EState) *config.Config {
-	// Use slightly newer versions for upgrade test
-	// In reality, these versions should be validated to ensure they're compatible
-	newTalosVersion := "v1.8.3" // Upgrade from v1.8.3 to same (idempotent test)
-	newK8sVersion := "v1.31.0"  // Upgrade K8s if different
+	// Use target versions from version matrix
+	// This tests upgrading to the current supported versions
+	vm := v2.DefaultVersionMatrix()
+	targetTalosVersion := vm.Talos
+	targetK8sVersion := vm.Kubernetes // Without 'v' prefix
 
-	return &config.Config{
-		ClusterName: state.ClusterName,
-		HCloudToken: os.Getenv("HCLOUD_TOKEN"),
-		Location:    "nbg1",
-		SSHKeys:     []string{}, // Empty for now
-		Network: config.NetworkConfig{
-			Zone:         "eu-central",
-			IPv4CIDR:     "10.0.0.0/16",
-			NodeIPv4CIDR: "10.0.0.0/22",
-		},
-		Talos: config.TalosConfig{
-			Version:     newTalosVersion,
-			SchematicID: "ce4c980550dd2ab1b17bbf2b08801c7eb59418eafe8f279833297925d67c7515", // Default schematic
-		},
-		Kubernetes: config.KubernetesConfig{
-			Version: newK8sVersion,
-		},
-		ControlPlane: config.ControlPlaneConfig{
-			NodePools: []config.ControlPlaneNodePool{
-				{
-					Name:       "control-plane",
-					Location:   "nbg1",
-					ServerType: "cpx22",
-					Count:      3, // 3 control planes for HA
-				},
-			},
-		},
-		Workers: []config.WorkerNodePool{
-			{
-				Name:       "pool1",
-				Location:   "nbg1",
-				ServerType: "cpx22",
-				Count:      1, // 1 worker
-			},
+	// Determine cluster mode based on whether scale phase ran
+	// After scale phase: HA mode (3 CP, 3 workers)
+	// Before scale phase: Dev mode (1 CP, 1 worker)
+	mode := v2.ModeDev
+	workerCount := 1
+	if state.ScaledOut {
+		mode = v2.ModeHA
+		workerCount = 3
+	}
+
+	// Create v2 config matching current cluster state
+	v2Cfg := &v2.Config{
+		Name:   state.ClusterName,
+		Region: v2.RegionNuremberg,
+		Mode:   mode,
+		Workers: v2.Worker{
+			Count: workerCount,
+			Size:  v2.SizeCX22,
 		},
 	}
+
+	// Expand to internal config
+	cfg, err := v2.Expand(v2Cfg)
+	if err != nil {
+		panic(fmt.Sprintf("failed to expand v2 config for upgrade: %v", err))
+	}
+
+	// Override versions with target versions for upgrade
+	cfg.Talos.Version = targetTalosVersion
+	cfg.Kubernetes.Version = targetK8sVersion
+
+	// Set required fields
+	cfg.HCloudToken = os.Getenv("HCLOUD_TOKEN")
+	cfg.TestID = state.TestID
+	cfg.SSHKeys = []string{state.SSHKeyName}
+
+	return cfg
 }
 
 // saveConfigToFile saves a config to a YAML file.

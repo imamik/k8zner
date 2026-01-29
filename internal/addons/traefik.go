@@ -182,23 +182,20 @@ func buildTraefikProviders() helm.Values {
 // buildTraefikPorts creates the ports configuration.
 // When hostNetwork is true: uses hostPort for direct binding to 80/443.
 // When hostNetwork is false: uses standard service ports with proxy protocol.
+// Note: Traefik chart v39+ uses new schema where 'expose' is an object with 'default' key.
 func buildTraefikPorts(hostNetwork bool) helm.Values {
 	webPort := helm.Values{
 		"port":        8000,
-		"expose":      true,
+		"expose":      helm.Values{"default": true},
 		"exposedPort": 80,
 		"protocol":    "TCP",
 	}
 
 	websecurePort := helm.Values{
 		"port":        8443,
-		"expose":      true,
+		"expose":      helm.Values{"default": true},
 		"exposedPort": 443,
 		"protocol":    "TCP",
-		// TLS configuration
-		"tls": helm.Values{
-			"enabled": true,
-		},
 	}
 
 	if hostNetwork {
@@ -216,7 +213,7 @@ func buildTraefikPorts(hostNetwork bool) helm.Values {
 		"websecure": websecurePort,
 		"traefik": helm.Values{
 			"port":   9000,
-			"expose": false,
+			"expose": helm.Values{"default": false},
 		},
 	}
 }

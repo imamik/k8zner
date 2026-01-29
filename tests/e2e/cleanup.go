@@ -32,17 +32,20 @@ func cleanupE2ECluster(t *testing.T, state *E2EState) {
 		t.Logf("[Cleanup] Warning: Label-based cleanup encountered errors: %v", err)
 	}
 
-	// Cleanup snapshots separately if needed (they may not have labels in older runs)
+	// Cleanup snapshot separately if needed (it may not have labels in older runs)
+	// Skip if snapshot came from sharedCtx (TestMain handles cleanup)
 	if os.Getenv("E2E_KEEP_SNAPSHOTS") != "true" {
-		t.Log("[Cleanup] Deleting snapshots...")
-		if state.SnapshotAMD64 != "" {
+		// Only delete snapshot if it was built by this test (not from sharedCtx)
+		snapshotFromSharedCtx := sharedCtx != nil && state.SnapshotAMD64 == sharedCtx.SnapshotAMD64
+
+		if snapshotFromSharedCtx {
+			t.Log("[Cleanup] Snapshot from sharedCtx - TestMain will clean it up")
+		} else if state.SnapshotAMD64 != "" {
+			t.Log("[Cleanup] Deleting snapshot...")
 			deleteSnapshot(ctx, t, state.Client, state.SnapshotAMD64)
 		}
-		if state.SnapshotARM64 != "" {
-			deleteSnapshot(ctx, t, state.Client, state.SnapshotARM64)
-		}
 	} else {
-		t.Log("[Cleanup] Keeping snapshots (E2E_KEEP_SNAPSHOTS=true)")
+		t.Log("[Cleanup] Keeping snapshot (E2E_KEEP_SNAPSHOTS=true)")
 	}
 
 	// Cleanup temporary files

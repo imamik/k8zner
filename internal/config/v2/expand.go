@@ -112,7 +112,7 @@ func expandWorkers(cfg *Config) []config.WorkerNodePool {
 		{
 			Name:       "workers",
 			Location:   string(cfg.Region),
-			ServerType: string(cfg.Workers.Size),
+			ServerType: string(cfg.Workers.Size.Normalize()), // Convert old cx22 to cx23 etc.
 			Count:      cfg.Workers.Count,
 			Labels: map[string]string{
 				"node.kubernetes.io/role": "worker",
@@ -246,6 +246,7 @@ func expandAddons(cfg *Config, vm VersionMatrix) config.AddonsConfig {
 		// Talos CCM - always enabled
 		TalosCCM: config.TalosCCMConfig{
 			Enabled: true,
+			Version: vm.TalosCCM,
 		},
 
 		// Cloudflare - enabled only when domain is set

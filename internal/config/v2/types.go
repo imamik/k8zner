@@ -157,31 +157,63 @@ type Worker struct {
 }
 
 // ServerSize is a Hetzner shared instance type.
+// Note: Hetzner renamed server types in 2024 (cx22 → cx23, etc.).
+// Both old and new names are accepted for backwards compatibility.
 type ServerSize string
 
 const (
-	// SizeCX22 is 2 vCPU, 4GB RAM, 40GB disk (~€4.35/mo).
+	// SizeCX22 is kept for backwards compatibility, maps to cx23.
+	// Deprecated: Use SizeCX23 instead.
 	SizeCX22 ServerSize = "cx22"
-	// SizeCX32 is 4 vCPU, 8GB RAM, 80GB disk (~€8.09/mo).
+	// SizeCX23 is 2 vCPU, 4GB RAM, 40GB disk (~€4.35/mo).
+	SizeCX23 ServerSize = "cx23"
+	// SizeCX32 is kept for backwards compatibility, maps to cx33.
+	// Deprecated: Use SizeCX33 instead.
 	SizeCX32 ServerSize = "cx32"
-	// SizeCX42 is 8 vCPU, 16GB RAM, 160GB disk (~€15.59/mo).
+	// SizeCX33 is 4 vCPU, 8GB RAM, 80GB disk (~€8.09/mo).
+	SizeCX33 ServerSize = "cx33"
+	// SizeCX42 is kept for backwards compatibility, maps to cx43.
+	// Deprecated: Use SizeCX43 instead.
 	SizeCX42 ServerSize = "cx42"
-	// SizeCX52 is 16 vCPU, 32GB RAM, 320GB disk (~€29.59/mo).
+	// SizeCX43 is 8 vCPU, 16GB RAM, 160GB disk (~€15.59/mo).
+	SizeCX43 ServerSize = "cx43"
+	// SizeCX52 is kept for backwards compatibility, maps to cx53.
+	// Deprecated: Use SizeCX53 instead.
 	SizeCX52 ServerSize = "cx52"
+	// SizeCX53 is 16 vCPU, 32GB RAM, 320GB disk (~€29.59/mo).
+	SizeCX53 ServerSize = "cx53"
 )
 
-// ValidServerSizes returns all valid server sizes.
+// ValidServerSizes returns all valid server sizes (new names only).
 func ValidServerSizes() []ServerSize {
-	return []ServerSize{SizeCX22, SizeCX32, SizeCX42, SizeCX52}
+	return []ServerSize{SizeCX23, SizeCX33, SizeCX43, SizeCX53}
 }
 
 // IsValid returns true if the server size is valid.
+// Accepts both old (cx22) and new (cx23) server type names.
 func (s ServerSize) IsValid() bool {
 	switch s {
-	case SizeCX22, SizeCX32, SizeCX42, SizeCX52:
+	case SizeCX22, SizeCX23, SizeCX32, SizeCX33, SizeCX42, SizeCX43, SizeCX52, SizeCX53:
 		return true
 	default:
 		return false
+	}
+}
+
+// Normalize returns the current Hetzner server type name.
+// Converts old names (cx22) to new names (cx23).
+func (s ServerSize) Normalize() ServerSize {
+	switch s {
+	case SizeCX22:
+		return SizeCX23
+	case SizeCX32:
+		return SizeCX33
+	case SizeCX42:
+		return SizeCX43
+	case SizeCX52:
+		return SizeCX53
+	default:
+		return s
 	}
 }
 
@@ -194,14 +226,16 @@ type ServerSpecs struct {
 
 // Specs returns the specifications for this server size.
 func (s ServerSize) Specs() ServerSpecs {
-	switch s {
-	case SizeCX22:
+	// Normalize first to handle old server type names
+	normalized := s.Normalize()
+	switch normalized {
+	case SizeCX23:
 		return ServerSpecs{VCPU: 2, RAMGB: 4, DiskGB: 40}
-	case SizeCX32:
+	case SizeCX33:
 		return ServerSpecs{VCPU: 4, RAMGB: 8, DiskGB: 80}
-	case SizeCX42:
+	case SizeCX43:
 		return ServerSpecs{VCPU: 8, RAMGB: 16, DiskGB: 160}
-	case SizeCX52:
+	case SizeCX53:
 		return ServerSpecs{VCPU: 16, RAMGB: 32, DiskGB: 320}
 	default:
 		return ServerSpecs{}
@@ -307,9 +341,9 @@ func (c *Config) TotalWorkerRAMGB() int {
 }
 
 // ControlPlaneSize returns the server size for control planes.
-// This is hardcoded to CX22 as it's sufficient for etcd + API server.
+// This is hardcoded to CX23 as it's sufficient for etcd + API server.
 func (c *Config) ControlPlaneSize() ServerSize {
-	return SizeCX22
+	return SizeCX23
 }
 
 // isValidDNSName checks if a string is a valid DNS name.

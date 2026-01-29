@@ -90,6 +90,11 @@ func TestBuildArgoCDValues(t *testing.T) {
 				redis, ok := values["redis"].(helm.Values)
 				require.True(t, ok)
 				assert.Equal(t, false, redis["enabled"])
+			} else {
+				// Verify redis-ha is explicitly disabled in non-HA mode
+				redisHA, ok := values["redis-ha"].(helm.Values)
+				require.True(t, ok, "redis-ha should be set in non-HA mode")
+				assert.Equal(t, false, redisHA["enabled"], "redis-ha should be disabled in non-HA mode")
 			}
 
 			// Check ingress

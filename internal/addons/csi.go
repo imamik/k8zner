@@ -60,6 +60,7 @@ func buildCSIValues(cfg *config.Config) helm.Values {
 	}
 
 	// Storage classes with encryption support (matches terraform defaults)
+	// Note: The Hetzner CSI chart already sets volumeBindingMode: WaitForFirstConsumer by default
 	storageClasses := []helm.Values{
 		{
 			"name":                "hcloud-volumes-encrypted",

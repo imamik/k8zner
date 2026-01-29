@@ -117,8 +117,9 @@ func TestExpand_Workers(t *testing.T) {
 	if workers.Count != 5 {
 		t.Errorf("Workers count = %d, want 5", workers.Count)
 	}
-	if workers.ServerType != "cx52" {
-		t.Errorf("Workers type = %q, want %q", workers.ServerType, "cx52")
+	// Note: cx52 is normalized to cx53 (Hetzner renamed types in 2024)
+	if workers.ServerType != "cx53" {
+		t.Errorf("Workers type = %q, want %q", workers.ServerType, "cx53")
 	}
 	if workers.Name != "workers" {
 		t.Errorf("Workers name = %q, want %q", workers.Name, "workers")
@@ -218,6 +219,16 @@ func TestExpand_Addons(t *testing.T) {
 	}
 	if !expanded.Addons.CSI.Enabled {
 		t.Error("CSI should be enabled")
+	}
+	if !expanded.Addons.TalosCCM.Enabled {
+		t.Error("TalosCCM should be enabled")
+	}
+	if expanded.Addons.TalosCCM.Version == "" {
+		t.Error("TalosCCM version should be set")
+	}
+	vm := DefaultVersionMatrix()
+	if expanded.Addons.TalosCCM.Version != vm.TalosCCM {
+		t.Errorf("TalosCCM version = %q, want %q", expanded.Addons.TalosCCM.Version, vm.TalosCCM)
 	}
 
 	// Ingress-nginx should be disabled (we use Traefik)

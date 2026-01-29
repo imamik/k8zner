@@ -15,17 +15,26 @@ import (
 )
 
 // Get versions from the v2 default version matrix
+// Note: Kubernetes version is used WITHOUT 'v' prefix to match provisioning code labels
 var (
 	versionMatrix = v2.DefaultVersionMatrix()
 	talosVersion  = versionMatrix.Talos
-	k8sVersion    = "v" + versionMatrix.Kubernetes // Add 'v' prefix for image building
+	k8sVersion    = versionMatrix.Kubernetes // NO 'v' prefix - must match provisioning labels
 )
 
-// phaseSnapshots builds and verifies Talos snapshots for both architectures.
+// phaseSnapshots builds and verifies Talos snapshot for AMD64 (ARM64 not used).
 // This is Phase 1 of the E2E lifecycle and must complete before other phases.
 func phaseSnapshots(t *testing.T, state *E2EState) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
+
+	// First, check if sharedCtx has snapshot from TestMain (avoids duplicate building)
+	if sharedCtx != nil && sharedCtx.SnapshotAMD64 != "" {
+		t.Logf("Using pre-built snapshot from TestMain: amd64=%s", sharedCtx.SnapshotAMD64)
+		state.SnapshotAMD64 = sharedCtx.SnapshotAMD64
+		t.Log("✓ Phase 1: Snapshots (using shared context)")
+		return
+	}
 
 	// Check for existing snapshots if reuse is enabled
 	if os.Getenv("E2E_KEEP_SNAPSHOTS") == "true" {
@@ -35,55 +44,26 @@ func phaseSnapshots(t *testing.T, state *E2EState) {
 		}
 	}
 
-	t.Log("Building fresh snapshots for amd64 and arm64...")
+	t.Log("Building fresh snapshot for amd64...")
 
-	// Build both snapshots in parallel for speed
-	type result struct {
-		arch       string
-		snapshotID string
-		err        error
-	}
-
-	resultChan := make(chan result, 2)
 	builder := image.NewBuilder(state.Client)
-
-	// Build amd64
-	go func() {
-		snapshotID, err := buildSnapshot(ctx, builder, "amd64", state.ClusterName, state.TestID)
-		resultChan <- result{arch: "amd64", snapshotID: snapshotID, err: err}
-	}()
-
-	// Build arm64
-	go func() {
-		snapshotID, err := buildSnapshot(ctx, builder, "arm64", state.ClusterName, state.TestID)
-		resultChan <- result{arch: "arm64", snapshotID: snapshotID, err: err}
-	}()
-
-	// Collect results
-	for i := 0; i < 2; i++ {
-		res := <-resultChan
-		if res.err != nil {
-			t.Fatalf("Failed to build %s snapshot: %v", res.arch, res.err)
-		}
-		if res.arch == "amd64" {
-			state.SnapshotAMD64 = res.snapshotID
-		} else {
-			state.SnapshotARM64 = res.snapshotID
-		}
-		t.Logf("✓ Built %s snapshot: %s", res.arch, res.snapshotID)
+	snapshotID, err := buildSnapshot(ctx, builder, "amd64", state.ClusterName, state.TestID)
+	if err != nil {
+		t.Fatalf("Failed to build amd64 snapshot: %v", err)
 	}
+	state.SnapshotAMD64 = snapshotID
+	t.Logf("✓ Built amd64 snapshot: %s", snapshotID)
 
-	// Create temporary SSH key for verification servers
+	// Create temporary SSH key for verification server
 	verifyKeyName, cleanupKey, err := createVerificationSSHKey(ctx, t, state)
 	if err != nil {
 		t.Fatalf("Failed to create verification SSH key: %v", err)
 	}
 	defer cleanupKey()
 
-	// Verify both snapshots boot correctly
-	t.Log("Verifying snapshots boot correctly...")
+	// Verify snapshot boots correctly
+	t.Log("Verifying snapshot boots correctly...")
 	verifySnapshot(ctx, t, state, "amd64", state.SnapshotAMD64, verifyKeyName)
-	verifySnapshot(ctx, t, state, "arm64", state.SnapshotARM64, verifyKeyName)
 
 	t.Log("✓ Phase 1: Snapshots (built and verified)")
 }
@@ -146,7 +126,7 @@ func createVerificationSSHKey(ctx context.Context, t *testing.T, state *E2EState
 func verifySnapshot(ctx context.Context, t *testing.T, state *E2EState, arch, snapshotID, sshKeyName string) {
 	serverName := fmt.Sprintf("%s-verify-%s-%d", state.ClusterName, arch, time.Now().Unix())
 
-	serverType := "cpx22"
+	serverType := "cx23" // Must match disk size of image builder server
 	if arch == "arm64" {
 		serverType = "cax11"
 	}
@@ -165,11 +145,13 @@ func verifySnapshot(ctx context.Context, t *testing.T, state *E2EState, arch, sn
 		t.Fatalf("Failed to create verification server: %v", err)
 	}
 
-	// Schedule cleanup
+	// Schedule cleanup with error logging
 	defer func() {
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
-		state.Client.DeleteServer(cleanupCtx, serverName)
+		if err := state.Client.DeleteServer(cleanupCtx, serverName); err != nil {
+			t.Logf("Warning: failed to delete verification server %s: %v", serverName, err)
+		}
 	}()
 
 	ip, err := state.Client.GetServerIP(ctx, serverName)
@@ -186,7 +168,7 @@ func verifySnapshot(ctx context.Context, t *testing.T, state *E2EState, arch, sn
 	t.Logf("✓ %s snapshot verified (Talos API responding)", arch)
 }
 
-// tryReuseSnapshots attempts to find and reuse existing snapshots.
+// tryReuseSnapshots attempts to find and reuse existing AMD64 snapshot.
 func tryReuseSnapshots(ctx context.Context, t *testing.T, state *E2EState) bool {
 	labelsAMD64 := map[string]string{
 		"os":            "talos",
@@ -195,26 +177,12 @@ func tryReuseSnapshots(ctx context.Context, t *testing.T, state *E2EState) bool 
 		"arch":          "amd64",
 	}
 
-	labelsARM64 := map[string]string{
-		"os":            "talos",
-		"talos-version": talosVersion,
-		"k8s-version":   k8sVersion,
-		"arch":          "arm64",
-	}
-
 	amd64Snapshot, err := state.Client.GetSnapshotByLabels(ctx, labelsAMD64)
 	if err != nil || amd64Snapshot == nil {
 		return false
 	}
 
-	arm64Snapshot, err := state.Client.GetSnapshotByLabels(ctx, labelsARM64)
-	if err != nil || arm64Snapshot == nil {
-		return false
-	}
-
 	state.SnapshotAMD64 = fmt.Sprintf("%d", amd64Snapshot.ID)
-	state.SnapshotARM64 = fmt.Sprintf("%d", arm64Snapshot.ID)
-
-	t.Logf("Reusing existing snapshots: amd64=%s, arm64=%s", state.SnapshotAMD64, state.SnapshotARM64)
+	t.Logf("Reusing existing snapshot: amd64=%s", state.SnapshotAMD64)
 	return true
 }

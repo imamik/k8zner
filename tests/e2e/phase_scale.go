@@ -84,11 +84,13 @@ func createScaledClusterConfig(state *E2EState) *config.Config {
 
 // verifyScaledCluster verifies the scaled cluster has expected resources.
 // In HA mode: 3 control planes + 3 workers = 6 total nodes
+// Naming convention: {cluster}-{poolName}-{index}
 func verifyScaledCluster(t *testing.T, state *E2EState) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
 	// Verify control plane nodes exist (HA mode = 3)
+	// Pool name: "control-plane" (from v2 config)
 	for i := 1; i <= 3; i++ {
 		serverName := fmt.Sprintf("%s-control-plane-%d", state.ClusterName, i)
 		if _, err := state.Client.GetServerIP(ctx, serverName); err != nil {
@@ -99,6 +101,7 @@ func verifyScaledCluster(t *testing.T, state *E2EState) {
 	}
 
 	// Verify worker nodes exist (scaled to 3)
+	// Pool name: "workers" (from v2 config)
 	for i := 1; i <= 3; i++ {
 		serverName := fmt.Sprintf("%s-workers-%d", state.ClusterName, i)
 		if _, err := state.Client.GetServerIP(ctx, serverName); err != nil {
