@@ -10,12 +10,12 @@ import (
 
 // WizardResult holds the user's choices from the v2 wizard.
 type WizardResult struct {
-	Name         string
-	Region       Region
-	Mode         Mode
-	WorkerCount  int
-	WorkerSize   ServerSize
-	Domain       string
+	Name        string
+	Region      Region
+	Mode        Mode
+	WorkerCount int
+	WorkerSize  ServerSize
+	Domain      string
 }
 
 // RunWizard runs the simplified v2 configuration wizard.
@@ -104,7 +104,7 @@ func RunWizard(ctx context.Context) (*WizardResult, error) {
 
 	// Run the form
 	if err := form.RunWithContext(ctx); err != nil {
-		return nil, fmt.Errorf("wizard cancelled: %w", err)
+		return nil, fmt.Errorf("wizard canceled: %w", err)
 	}
 
 	return result, nil

@@ -10,12 +10,13 @@ import (
 
 	"github.com/imamik/k8zner/internal/addons/k8sclient"
 	"github.com/imamik/k8zner/internal/config"
+	v2 "github.com/imamik/k8zner/internal/config/v2"
 )
 
-const (
-	talosBackupVersion  = "v0.1.0-beta.3-3-g38dad7c"
-	talosBackupSchedule = "0 * * * *" // Hourly
-)
+// talosBackupVersion returns the pinned talos-backup version from the version matrix.
+func talosBackupVersion() string {
+	return v2.DefaultVersionMatrix().TalosBackup
+}
 
 // applyTalosBackup installs the Talos etcd backup CronJob.
 func applyTalosBackup(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
@@ -85,7 +86,7 @@ func generateTalosBackupCronJob(cfg *config.Config) string {
 
 	container := map[string]any{
 		"name":            "talos-backup",
-		"image":           fmt.Sprintf("ghcr.io/siderolabs/talos-backup:%s", talosBackupVersion),
+		"image":           fmt.Sprintf("ghcr.io/siderolabs/talos-backup:%s", talosBackupVersion()),
 		"workingDir":      "/tmp",
 		"imagePullPolicy": "IfNotPresent",
 		"env":             buildTalosBackupEnv(cfg),

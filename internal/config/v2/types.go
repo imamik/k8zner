@@ -9,6 +9,9 @@ import (
 	"strings"
 )
 
+// domainRegex is compiled once at package init for domain validation.
+var domainRegex = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$`)
+
 // Config is the simplified, opinionated configuration for k8zner.
 // It requires only 5 fields to deploy a production-ready Kubernetes cluster.
 type Config struct {
@@ -342,7 +345,5 @@ func isValidDomain(domain string) bool {
 	if len(domain) == 0 || len(domain) > 253 {
 		return false
 	}
-	// Simple domain validation regex
-	domainRegex := regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$`)
 	return domainRegex.MatchString(domain)
 }

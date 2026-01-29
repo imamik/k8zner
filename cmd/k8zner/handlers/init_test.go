@@ -191,13 +191,13 @@ func TestInit_WithInjection(t *testing.T) {
 		}
 
 		runV2Wizard = func(_ context.Context) (*v2.WizardResult, error) {
-			return nil, errors.New("user cancelled")
+			return nil, errors.New("user canceled")
 		}
 
 		_ = captureOutput(func() {
 			err := Init(context.Background(), "output.yaml")
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "wizard cancelled")
+			assert.Contains(t, err.Error(), "wizard canceled")
 		})
 	})
 

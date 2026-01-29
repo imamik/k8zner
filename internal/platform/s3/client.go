@@ -3,12 +3,15 @@ package s3
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 )
 
 // Client wraps the S3 client for Hetzner Object Storage.
@@ -67,12 +70,30 @@ func (c *Client) BucketExists(ctx context.Context, bucketName string) (bool, err
 
 // isBucketAlreadyOwnedByYou checks if the error indicates the bucket exists and is owned by us.
 func isBucketAlreadyOwnedByYou(err error) bool {
-	// AWS SDK v2 error handling
 	if err == nil {
 		return false
 	}
-	errStr := err.Error()
-	return contains(errStr, "BucketAlreadyOwnedByYou") || contains(errStr, "BucketAlreadyExists")
+
+	// Check for typed S3 errors first
+	var baoby *types.BucketAlreadyOwnedByYou
+	if errors.As(err, &baoby) {
+		return true
+	}
+
+	var bae *types.BucketAlreadyExists
+	if errors.As(err, &bae) {
+		return true
+	}
+
+	// Fall back to API error code checking for S3-compatible services
+	// that may not return the exact SDK error types
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		code := apiErr.ErrorCode()
+		return code == "BucketAlreadyOwnedByYou" || code == "BucketAlreadyExists"
+	}
+
+	return false
 }
 
 // isNotFoundError checks if the error is a not found error.
@@ -80,19 +101,24 @@ func isNotFoundError(err error) bool {
 	if err == nil {
 		return false
 	}
-	errStr := err.Error()
-	return contains(errStr, "NotFound") || contains(errStr, "NoSuchBucket")
-}
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsImpl(s, substr))
-}
-
-func containsImpl(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
+	// Check for typed S3 errors first
+	var nsb *types.NoSuchBucket
+	if errors.As(err, &nsb) {
+		return true
 	}
+
+	var nf *types.NotFound
+	if errors.As(err, &nf) {
+		return true
+	}
+
+	// Fall back to API error code checking for S3-compatible services
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		code := apiErr.ErrorCode()
+		return code == "NotFound" || code == "NoSuchBucket" || code == "404"
+	}
+
 	return false
 }

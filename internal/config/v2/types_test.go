@@ -92,8 +92,8 @@ func TestMode_LoadBalancerCount(t *testing.T) {
 		mode Mode
 		want int
 	}{
-		{ModeDev, 1},  // Shared LB
-		{ModeHA, 2},   // Separate LBs
+		{ModeDev, 1}, // Shared LB
+		{ModeHA, 2},  // Separate LBs
 	}
 
 	for _, tt := range tests {

@@ -27,6 +27,9 @@ type VersionMatrix struct {
 	HCloudCCM string // Hetzner Cloud Controller Manager version
 	HCloudCSI string // Hetzner CSI Driver version
 	TalosCCM  string // Talos Cloud Controller Manager version
+
+	// Backup
+	TalosBackup string // Talos etcd backup tool version
 }
 
 // DefaultVersionMatrix returns the default pinned version matrix.
@@ -57,6 +60,12 @@ func DefaultVersionMatrix() VersionMatrix {
 		HCloudCCM: "1.22.0",
 		HCloudCSI: "2.12.0",
 		TalosCCM:  "v1.11.0",
+
+		// Backup
+		// NOTE: Using dev build as latest stable (v0.1.0-beta.2) lacks required features.
+		// TODO: Update to stable release when v0.1.0 or later is released.
+		// Track: https://github.com/siderolabs/talos-backup/releases
+		TalosBackup: "v0.1.0-beta.3-3-g38dad7c",
 	}
 }
 

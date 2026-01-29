@@ -106,17 +106,29 @@ type mockTalosProducer struct {
 	clientConfigErr error
 }
 
-func (m *mockTalosProducer) SetMachineConfigOptions(_ any)                                                   {}
-func (m *mockTalosProducer) GenerateControlPlaneConfig(_ []string, _ string) ([]byte, error)                 { return nil, nil }
-func (m *mockTalosProducer) GenerateWorkerConfig(_ string) ([]byte, error)                                   { return nil, nil }
-func (m *mockTalosProducer) GenerateAutoscalerConfig(_ string, _ map[string]string, _ []string) ([]byte, error) { return nil, nil }
-func (m *mockTalosProducer) GetClientConfig() ([]byte, error)                                                { return m.clientConfig, m.clientConfigErr }
-func (m *mockTalosProducer) SetEndpoint(_ string)                                                            {}
-func (m *mockTalosProducer) GetNodeVersion(_ context.Context, _ string) (string, error)                      { return "", nil }
-func (m *mockTalosProducer) UpgradeNode(_ context.Context, _, _ string, _ provisioning.UpgradeOptions) error { return nil }
-func (m *mockTalosProducer) UpgradeKubernetes(_ context.Context, _, _ string) error                          { return nil }
-func (m *mockTalosProducer) WaitForNodeReady(_ context.Context, _ string, _ time.Duration) error             { return nil }
-func (m *mockTalosProducer) HealthCheck(_ context.Context, _ string) error                                   { return nil }
+func (m *mockTalosProducer) SetMachineConfigOptions(_ any) {}
+func (m *mockTalosProducer) GenerateControlPlaneConfig(_ []string, _ string) ([]byte, error) {
+	return nil, nil
+}
+func (m *mockTalosProducer) GenerateWorkerConfig(_ string) ([]byte, error) { return nil, nil }
+func (m *mockTalosProducer) GenerateAutoscalerConfig(_ string, _ map[string]string, _ []string) ([]byte, error) {
+	return nil, nil
+}
+func (m *mockTalosProducer) GetClientConfig() ([]byte, error) {
+	return m.clientConfig, m.clientConfigErr
+}
+func (m *mockTalosProducer) SetEndpoint(_ string) {}
+func (m *mockTalosProducer) GetNodeVersion(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
+func (m *mockTalosProducer) UpgradeNode(_ context.Context, _, _ string, _ provisioning.UpgradeOptions) error {
+	return nil
+}
+func (m *mockTalosProducer) UpgradeKubernetes(_ context.Context, _, _ string) error { return nil }
+func (m *mockTalosProducer) WaitForNodeReady(_ context.Context, _ string, _ time.Duration) error {
+	return nil
+}
+func (m *mockTalosProducer) HealthCheck(_ context.Context, _ string) error { return nil }
 
 type mockReconciler struct {
 	kubeconfig []byte

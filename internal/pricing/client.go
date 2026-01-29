@@ -63,7 +63,7 @@ func (c *Client) FetchPrices(ctx context.Context) (*Prices, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch pricing: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("pricing API returned status %d", resp.StatusCode)
@@ -90,8 +90,8 @@ type pricingData struct {
 }
 
 type serverTypePricing struct {
-	Name   string        `json:"name"`
-	Prices []priceByLoc  `json:"prices"`
+	Name   string       `json:"name"`
+	Prices []priceByLoc `json:"prices"`
 }
 
 type loadBalancerTypePricing struct {

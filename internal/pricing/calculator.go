@@ -150,6 +150,12 @@ func (c *Calculator) Calculate(cfg *v2.Config) *Estimate {
 
 // DefaultPrices returns default Hetzner pricing (as of 2024).
 // These are approximate and should be updated from the Hetzner API.
+// DefaultPrices returns hardcoded Hetzner pricing (as of January 2025).
+// These are net prices in EUR before VAT.
+//
+// TODO: Fetch pricing dynamically from Hetzner API to avoid drift.
+// The HCloud API provides pricing via GET /pricing endpoint.
+// See: https://docs.hetzner.cloud/#pricing-get-all-prices
 func DefaultPrices() *Prices {
 	return &Prices{
 		Servers: map[string]float64{

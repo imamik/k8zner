@@ -44,7 +44,7 @@ func Init(ctx context.Context, outputPath string) error {
 	// Run the simplified v2 wizard
 	result, err := runV2Wizard(ctx)
 	if err != nil {
-		return fmt.Errorf("wizard cancelled: %w", err)
+		return fmt.Errorf("wizard canceled: %w", err)
 	}
 
 	// Convert to config

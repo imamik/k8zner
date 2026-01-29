@@ -59,14 +59,24 @@ func (m *upgradeMock) Provision(_ *provisioning.Context) error { return nil }
 
 type upgradeMockTalos struct{}
 
-func (m *upgradeMockTalos) SetMachineConfigOptions(_ any)                                                   {}
-func (m *upgradeMockTalos) GenerateControlPlaneConfig(_ []string, _ string) ([]byte, error)                 { return nil, nil }
-func (m *upgradeMockTalos) GenerateWorkerConfig(_ string) ([]byte, error)                                   { return nil, nil }
-func (m *upgradeMockTalos) GenerateAutoscalerConfig(_ string, _ map[string]string, _ []string) ([]byte, error) { return nil, nil }
-func (m *upgradeMockTalos) GetClientConfig() ([]byte, error)                                                { return nil, nil }
-func (m *upgradeMockTalos) SetEndpoint(_ string)                                                            {}
-func (m *upgradeMockTalos) GetNodeVersion(_ context.Context, _ string) (string, error)                      { return "", nil }
-func (m *upgradeMockTalos) UpgradeNode(_ context.Context, _, _ string, _ provisioning.UpgradeOptions) error { return nil }
-func (m *upgradeMockTalos) UpgradeKubernetes(_ context.Context, _, _ string) error                          { return nil }
-func (m *upgradeMockTalos) WaitForNodeReady(_ context.Context, _ string, _ time.Duration) error             { return nil }
-func (m *upgradeMockTalos) HealthCheck(_ context.Context, _ string) error                                   { return nil }
+func (m *upgradeMockTalos) SetMachineConfigOptions(_ any) {}
+func (m *upgradeMockTalos) GenerateControlPlaneConfig(_ []string, _ string) ([]byte, error) {
+	return nil, nil
+}
+func (m *upgradeMockTalos) GenerateWorkerConfig(_ string) ([]byte, error) { return nil, nil }
+func (m *upgradeMockTalos) GenerateAutoscalerConfig(_ string, _ map[string]string, _ []string) ([]byte, error) {
+	return nil, nil
+}
+func (m *upgradeMockTalos) GetClientConfig() ([]byte, error) { return nil, nil }
+func (m *upgradeMockTalos) SetEndpoint(_ string)             {}
+func (m *upgradeMockTalos) GetNodeVersion(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
+func (m *upgradeMockTalos) UpgradeNode(_ context.Context, _, _ string, _ provisioning.UpgradeOptions) error {
+	return nil
+}
+func (m *upgradeMockTalos) UpgradeKubernetes(_ context.Context, _, _ string) error { return nil }
+func (m *upgradeMockTalos) WaitForNodeReady(_ context.Context, _ string, _ time.Duration) error {
+	return nil
+}
+func (m *upgradeMockTalos) HealthCheck(_ context.Context, _ string) error { return nil }
