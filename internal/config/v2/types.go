@@ -163,21 +163,25 @@ type ServerSize string
 
 const (
 	// SizeCX22 is kept for backwards compatibility, maps to cx23.
+	//
 	// Deprecated: Use SizeCX23 instead.
 	SizeCX22 ServerSize = "cx22"
 	// SizeCX23 is 2 vCPU, 4GB RAM, 40GB disk (~€4.35/mo).
 	SizeCX23 ServerSize = "cx23"
 	// SizeCX32 is kept for backwards compatibility, maps to cx33.
+	//
 	// Deprecated: Use SizeCX33 instead.
 	SizeCX32 ServerSize = "cx32"
 	// SizeCX33 is 4 vCPU, 8GB RAM, 80GB disk (~€8.09/mo).
 	SizeCX33 ServerSize = "cx33"
 	// SizeCX42 is kept for backwards compatibility, maps to cx43.
+	//
 	// Deprecated: Use SizeCX43 instead.
 	SizeCX42 ServerSize = "cx42"
 	// SizeCX43 is 8 vCPU, 16GB RAM, 160GB disk (~€15.59/mo).
 	SizeCX43 ServerSize = "cx43"
 	// SizeCX52 is kept for backwards compatibility, maps to cx53.
+	//
 	// Deprecated: Use SizeCX53 instead.
 	SizeCX52 ServerSize = "cx52"
 	// SizeCX53 is 16 vCPU, 32GB RAM, 320GB disk (~€29.59/mo).

@@ -124,6 +124,10 @@ func TestExpand_Workers(t *testing.T) {
 	if workers.Name != "workers" {
 		t.Errorf("Workers name = %q, want %q", workers.Name, "workers")
 	}
+	// Workers should have placement groups enabled by default
+	if !workers.PlacementGroup {
+		t.Error("Workers PlacementGroup should be enabled by default")
+	}
 }
 
 func TestExpand_Network(t *testing.T) {

@@ -110,10 +110,11 @@ func expandControlPlane(cfg *Config) config.ControlPlaneConfig {
 func expandWorkers(cfg *Config) []config.WorkerNodePool {
 	return []config.WorkerNodePool{
 		{
-			Name:       "workers",
-			Location:   string(cfg.Region),
-			ServerType: string(cfg.Workers.Size.Normalize()), // Convert old cx22 to cx23 etc.
-			Count:      cfg.Workers.Count,
+			Name:           "workers",
+			Location:       string(cfg.Region),
+			ServerType:     string(cfg.Workers.Size.Normalize()), // Convert old cx22 to cx23 etc.
+			Count:          cfg.Workers.Count,
+			PlacementGroup: true, // Spread workers across different physical hosts
 			Labels: map[string]string{
 				"node.kubernetes.io/role": "worker",
 			},
