@@ -62,6 +62,12 @@ func buildArgoCDValues(cfg *config.Config) helm.Values {
 			"install": true,
 			"keep":    true,
 		},
+		// Disable the redis secret init job - we don't use password auth
+		// This is a TOP-LEVEL key, not nested under redis
+		// See: https://github.com/argoproj/argo-helm/issues/3057
+		"redisSecretInit": helm.Values{
+			"enabled": false,
+		},
 		// Controller configuration
 		"controller": buildArgoCDController(argoCDCfg),
 		// Server configuration
@@ -88,6 +94,9 @@ func buildArgoCDValues(cfg *config.Config) helm.Values {
 	if argoCDCfg.HA {
 		values["redis-ha"] = helm.Values{
 			"enabled": true,
+			// Disable redis-ha auth to avoid secret dependency issues
+			// See: https://github.com/argoproj/argo-helm/issues/3057
+			"auth": false,
 		}
 		// Disable standalone redis when using HA
 		values["redis"] = helm.Values{

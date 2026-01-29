@@ -97,6 +97,13 @@ func TestBuildArgoCDValues(t *testing.T) {
 				assert.Equal(t, false, redisHA["enabled"], "redis-ha should be disabled in non-HA mode")
 			}
 
+			// Check redisSecretInit is disabled (prevents argocd-redis secret issues)
+			// This is a TOP-LEVEL key, not nested under redis
+			// See: https://github.com/argoproj/argo-helm/issues/3057
+			redisSecretInit, ok := values["redisSecretInit"].(helm.Values)
+			require.True(t, ok, "redisSecretInit should be set")
+			assert.Equal(t, false, redisSecretInit["enabled"], "redisSecretInit.enabled should be false")
+
 			// Check ingress
 			if tt.expectIngress {
 				_, hasIngress := server["ingress"]
@@ -288,6 +295,12 @@ func TestBuildArgoCDRedis(t *testing.T) {
 			redis := buildArgoCDRedis(tt.cfg)
 
 			assert.Equal(t, tt.expectEnabled, redis["enabled"])
+
+			// When enabled, tolerations should be present for CCM
+			if tt.expectEnabled {
+				_, hasTolerations := redis["tolerations"]
+				assert.True(t, hasTolerations, "tolerations should be present")
+			}
 		})
 	}
 }
