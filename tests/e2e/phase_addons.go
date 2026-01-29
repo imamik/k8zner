@@ -83,7 +83,8 @@ func testAddonCCM(t *testing.T, state *E2EState, token string) {
 	waitForPod(t, state.KubeconfigPath, "kube-system", "app.kubernetes.io/name=hcloud-cloud-controller-manager", 5*time.Minute)
 
 	// Verify provider IDs are set
-	verifyProviderIDs(t, state.KubeconfigPath, 2*time.Minute)
+	// Increased timeout to 4 minutes - CCM needs time to query Hetzner API and set provider IDs
+	verifyProviderIDs(t, state.KubeconfigPath, 4*time.Minute)
 
 	// Test LB provisioning
 	testCCMLoadBalancer(t, state)
