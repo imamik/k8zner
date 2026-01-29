@@ -1,6 +1,8 @@
 package v2
 
 import (
+	"os"
+
 	"github.com/imamik/k8zner/internal/config"
 )
 
@@ -259,5 +261,26 @@ func expandAddons(cfg *Config, vm VersionMatrix) config.AddonsConfig {
 			Policy:     "sync",
 			Sources:    []string{"ingress"},
 		},
+
+		// Talos Backup - enabled only when backup is set
+		TalosBackup: expandTalosBackup(cfg),
+	}
+}
+
+func expandTalosBackup(cfg *Config) config.TalosBackupConfig {
+	if !cfg.HasBackup() {
+		return config.TalosBackupConfig{Enabled: false}
+	}
+
+	return config.TalosBackupConfig{
+		Enabled:           true,
+		Schedule:          "0 * * * *", // Hourly
+		S3Bucket:          cfg.BackupBucketName(),
+		S3Region:          string(cfg.Region),
+		S3Endpoint:        cfg.S3Endpoint(),
+		S3AccessKey:       os.Getenv("HETZNER_S3_ACCESS_KEY"),
+		S3SecretKey:       os.Getenv("HETZNER_S3_SECRET_KEY"),
+		S3Prefix:          "etcd-backups",
+		EnableCompression: true,
 	}
 }

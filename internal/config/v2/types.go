@@ -28,6 +28,11 @@ type Config struct {
 	// Domain enables automatic DNS and TLS via Cloudflare.
 	// Requires CF_API_TOKEN environment variable.
 	Domain string `yaml:"domain,omitempty"`
+
+	// Backup enables automatic etcd backups to Hetzner Object Storage.
+	// Requires HETZNER_S3_ACCESS_KEY and HETZNER_S3_SECRET_KEY environment variables.
+	// Creates bucket "{cluster-name}-etcd-backups" automatically.
+	Backup bool `yaml:"backup,omitempty"`
 }
 
 // Region is a Hetzner datacenter location.
@@ -245,6 +250,16 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	// Backup: if enabled, check for S3 credentials
+	if c.Backup {
+		if os.Getenv("HETZNER_S3_ACCESS_KEY") == "" {
+			errs = append(errs, errors.New("HETZNER_S3_ACCESS_KEY environment variable required when backup is enabled"))
+		}
+		if os.Getenv("HETZNER_S3_SECRET_KEY") == "" {
+			errs = append(errs, errors.New("HETZNER_S3_SECRET_KEY environment variable required when backup is enabled"))
+		}
+	}
+
 	return errors.Join(errs...)
 }
 
@@ -261,6 +276,21 @@ func (c *Config) LoadBalancerCount() int {
 // HasDomain returns true if a domain is configured.
 func (c *Config) HasDomain() bool {
 	return c.Domain != ""
+}
+
+// HasBackup returns true if backup is enabled.
+func (c *Config) HasBackup() bool {
+	return c.Backup
+}
+
+// BackupBucketName returns the S3 bucket name for etcd backups.
+func (c *Config) BackupBucketName() string {
+	return c.Name + "-etcd-backups"
+}
+
+// S3Endpoint returns the Hetzner S3 endpoint for the configured region.
+func (c *Config) S3Endpoint() string {
+	return "https://" + string(c.Region) + ".your-objectstorage.com"
 }
 
 // TotalWorkerVCPU returns the total vCPU across all workers.

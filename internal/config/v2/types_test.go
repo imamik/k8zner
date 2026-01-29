@@ -479,6 +479,156 @@ func TestConfig_TotalWorkerRAMGB(t *testing.T) {
 	}
 }
 
+func TestConfig_HasBackup(t *testing.T) {
+	tests := []struct {
+		name   string
+		backup bool
+		want   bool
+	}{
+		{"backup enabled", true, true},
+		{"backup disabled", false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := Config{Backup: tt.backup}
+			if got := c.HasBackup(); got != tt.want {
+				t.Errorf("Config.HasBackup() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConfig_BackupBucketName(t *testing.T) {
+	tests := []struct {
+		name        string
+		clusterName string
+		want        string
+	}{
+		{"simple name", "mycluster", "mycluster-etcd-backups"},
+		{"hyphenated name", "my-cluster", "my-cluster-etcd-backups"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := Config{Name: tt.clusterName}
+			if got := c.BackupBucketName(); got != tt.want {
+				t.Errorf("Config.BackupBucketName() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConfig_S3Endpoint(t *testing.T) {
+	tests := []struct {
+		name   string
+		region Region
+		want   string
+	}{
+		{"nbg1", RegionNuremberg, "https://nbg1.your-objectstorage.com"},
+		{"fsn1", RegionFalkenstein, "https://fsn1.your-objectstorage.com"},
+		{"hel1", RegionHelsinki, "https://hel1.your-objectstorage.com"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := Config{Region: tt.region}
+			if got := c.S3Endpoint(); got != tt.want {
+				t.Errorf("Config.S3Endpoint() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConfig_Validate_Backup(t *testing.T) {
+	validConfig := Config{
+		Name:   "my-cluster",
+		Region: RegionFalkenstein,
+		Mode:   ModeHA,
+		Workers: Worker{
+			Count: 3,
+			Size:  SizeCX32,
+		},
+	}
+
+	tests := []struct {
+		name      string
+		backup    bool
+		envVars   map[string]string
+		wantError bool
+		errorMsg  string
+	}{
+		{
+			name:      "backup disabled - no credentials needed",
+			backup:    false,
+			envVars:   map[string]string{},
+			wantError: false,
+		},
+		{
+			name:   "backup enabled - with credentials",
+			backup: true,
+			envVars: map[string]string{
+				"HETZNER_S3_ACCESS_KEY": "test-access-key",
+				"HETZNER_S3_SECRET_KEY": "test-secret-key",
+			},
+			wantError: false,
+		},
+		{
+			name:      "backup enabled - missing access key",
+			backup:    true,
+			envVars:   map[string]string{"HETZNER_S3_SECRET_KEY": "test-secret-key"},
+			wantError: true,
+			errorMsg:  "HETZNER_S3_ACCESS_KEY environment variable required",
+		},
+		{
+			name:      "backup enabled - missing secret key",
+			backup:    true,
+			envVars:   map[string]string{"HETZNER_S3_ACCESS_KEY": "test-access-key"},
+			wantError: true,
+			errorMsg:  "HETZNER_S3_SECRET_KEY environment variable required",
+		},
+		{
+			name:      "backup enabled - missing both keys",
+			backup:    true,
+			envVars:   map[string]string{},
+			wantError: true,
+			errorMsg:  "HETZNER_S3_ACCESS_KEY environment variable required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Clear environment first
+			os.Unsetenv("HETZNER_S3_ACCESS_KEY")
+			os.Unsetenv("HETZNER_S3_SECRET_KEY")
+
+			// Set up environment variables
+			for k, v := range tt.envVars {
+				os.Setenv(k, v)
+				defer os.Unsetenv(k)
+			}
+
+			cfg := validConfig
+			cfg.Backup = tt.backup
+			err := cfg.Validate()
+
+			if tt.wantError {
+				if err == nil {
+					t.Errorf("Config.Validate() expected error containing %q, got nil", tt.errorMsg)
+					return
+				}
+				if tt.errorMsg != "" && !containsString(err.Error(), tt.errorMsg) {
+					t.Errorf("Config.Validate() error = %v, want error containing %q", err, tt.errorMsg)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Config.Validate() unexpected error = %v", err)
+				}
+			}
+		})
+	}
+}
+
 // Helper function
 func containsString(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstring(s, substr))

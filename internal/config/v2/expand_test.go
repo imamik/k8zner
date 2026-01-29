@@ -466,3 +466,129 @@ func TestExpand_ReturnsValidConfig(t *testing.T) {
 	// Type assertion to verify it's the correct type
 	var _ *config.Config = expanded
 }
+
+func TestExpand_WithBackupEnabled(t *testing.T) {
+	os.Setenv("HETZNER_S3_ACCESS_KEY", "test-access-key")
+	os.Setenv("HETZNER_S3_SECRET_KEY", "test-secret-key")
+	defer os.Unsetenv("HETZNER_S3_ACCESS_KEY")
+	defer os.Unsetenv("HETZNER_S3_SECRET_KEY")
+
+	cfg := &Config{
+		Name:   "backup-test",
+		Region: RegionFalkenstein,
+		Mode:   ModeHA,
+		Workers: Worker{
+			Count: 3,
+			Size:  SizeCX32,
+		},
+		Backup: true,
+	}
+
+	expanded, err := Expand(cfg)
+	if err != nil {
+		t.Fatalf("Expand() error = %v", err)
+	}
+
+	// TalosBackup should be enabled
+	if !expanded.Addons.TalosBackup.Enabled {
+		t.Error("TalosBackup should be enabled when backup is true")
+	}
+
+	// Verify bucket name
+	expectedBucket := "backup-test-etcd-backups"
+	if expanded.Addons.TalosBackup.S3Bucket != expectedBucket {
+		t.Errorf("TalosBackup.S3Bucket = %q, want %q", expanded.Addons.TalosBackup.S3Bucket, expectedBucket)
+	}
+
+	// Verify S3 region
+	if expanded.Addons.TalosBackup.S3Region != "fsn1" {
+		t.Errorf("TalosBackup.S3Region = %q, want %q", expanded.Addons.TalosBackup.S3Region, "fsn1")
+	}
+
+	// Verify S3 endpoint
+	expectedEndpoint := "https://fsn1.your-objectstorage.com"
+	if expanded.Addons.TalosBackup.S3Endpoint != expectedEndpoint {
+		t.Errorf("TalosBackup.S3Endpoint = %q, want %q", expanded.Addons.TalosBackup.S3Endpoint, expectedEndpoint)
+	}
+
+	// Verify credentials are from env vars
+	if expanded.Addons.TalosBackup.S3AccessKey != "test-access-key" {
+		t.Errorf("TalosBackup.S3AccessKey = %q, want %q", expanded.Addons.TalosBackup.S3AccessKey, "test-access-key")
+	}
+	if expanded.Addons.TalosBackup.S3SecretKey != "test-secret-key" {
+		t.Errorf("TalosBackup.S3SecretKey = %q, want %q", expanded.Addons.TalosBackup.S3SecretKey, "test-secret-key")
+	}
+
+	// Verify hourly schedule
+	if expanded.Addons.TalosBackup.Schedule != "0 * * * *" {
+		t.Errorf("TalosBackup.Schedule = %q, want %q", expanded.Addons.TalosBackup.Schedule, "0 * * * *")
+	}
+
+	// Verify compression is enabled
+	if !expanded.Addons.TalosBackup.EnableCompression {
+		t.Error("TalosBackup.EnableCompression should be true")
+	}
+}
+
+func TestExpand_WithBackupDisabled(t *testing.T) {
+	cfg := &Config{
+		Name:   "no-backup",
+		Region: RegionFalkenstein,
+		Mode:   ModeHA,
+		Workers: Worker{
+			Count: 3,
+			Size:  SizeCX32,
+		},
+		Backup: false,
+	}
+
+	expanded, err := Expand(cfg)
+	if err != nil {
+		t.Fatalf("Expand() error = %v", err)
+	}
+
+	// TalosBackup should be disabled
+	if expanded.Addons.TalosBackup.Enabled {
+		t.Error("TalosBackup should be disabled when backup is false")
+	}
+}
+
+func TestExpand_BackupDifferentRegions(t *testing.T) {
+	os.Setenv("HETZNER_S3_ACCESS_KEY", "test-key")
+	os.Setenv("HETZNER_S3_SECRET_KEY", "test-secret")
+	defer os.Unsetenv("HETZNER_S3_ACCESS_KEY")
+	defer os.Unsetenv("HETZNER_S3_SECRET_KEY")
+
+	tests := []struct {
+		region           Region
+		expectedEndpoint string
+	}{
+		{RegionNuremberg, "https://nbg1.your-objectstorage.com"},
+		{RegionFalkenstein, "https://fsn1.your-objectstorage.com"},
+		{RegionHelsinki, "https://hel1.your-objectstorage.com"},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.region), func(t *testing.T) {
+			cfg := &Config{
+				Name:   "region-test",
+				Region: tt.region,
+				Mode:   ModeDev,
+				Workers: Worker{
+					Count: 1,
+					Size:  SizeCX22,
+				},
+				Backup: true,
+			}
+
+			expanded, err := Expand(cfg)
+			if err != nil {
+				t.Fatalf("Expand() error = %v", err)
+			}
+
+			if expanded.Addons.TalosBackup.S3Endpoint != tt.expectedEndpoint {
+				t.Errorf("S3Endpoint = %q, want %q", expanded.Addons.TalosBackup.S3Endpoint, tt.expectedEndpoint)
+			}
+		})
+	}
+}

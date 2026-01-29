@@ -119,6 +119,13 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		}
 	}
 
+	// Install Talos Backup (etcd backup to S3)
+	if cfg.Addons.TalosBackup.Enabled {
+		if err := applyTalosBackup(ctx, client, cfg); err != nil {
+			return fmt.Errorf("failed to install Talos Backup: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -136,5 +143,6 @@ func hasEnabledAddons(cfg *config.Config) bool {
 	return a.GatewayAPICRDs.Enabled || a.PrometheusOperatorCRDs.Enabled ||
 		a.TalosCCM.Enabled || a.Cilium.Enabled || a.CCM.Enabled || a.CSI.Enabled ||
 		a.MetricsServer.Enabled || a.CertManager.Enabled || a.Traefik.Enabled ||
-		a.ArgoCD.Enabled || a.Cloudflare.Enabled || a.ExternalDNS.Enabled
+		a.ArgoCD.Enabled || a.Cloudflare.Enabled || a.ExternalDNS.Enabled ||
+		a.TalosBackup.Enabled
 }
