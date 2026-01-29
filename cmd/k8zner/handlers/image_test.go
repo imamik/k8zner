@@ -44,36 +44,67 @@ func TestBuild_MissingToken(t *testing.T) {
 }
 
 func TestBuild_InvalidParameters(t *testing.T) {
+	saveAndRestoreImageFactories(t)
+
 	tests := []struct {
 		name         string
 		imageName    string
 		talosVersion string
 		arch         string
 		location     string
+		expectError  bool
 	}{
 		{
-			name:         "empty image name",
+			name:         "empty image name - builds with auto-generated name",
 			imageName:    "",
 			talosVersion: "v1.8.3",
 			arch:         "amd64",
 			location:     "nbg1",
+			expectError:  false, // Empty image name is allowed, auto-generates one
 		},
 		{
-			name:         "empty talos version",
+			name:         "empty talos version - uses default",
 			imageName:    "test-image",
 			talosVersion: "",
 			arch:         "amd64",
 			location:     "nbg1",
+			expectError:  false, // Empty version is allowed, uses default
+		},
+		{
+			name:         "invalid arch",
+			imageName:    "test-image",
+			talosVersion: "v1.8.3",
+			arch:         "invalid-arch",
+			location:     "nbg1",
+			expectError:  true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Use mock to avoid hitting real API
+			newInfraClient = func(_ string) hcloud.InfrastructureManager {
+				return &hcloud.MockClient{}
+			}
+
+			if tt.expectError {
+				newImageBuilder = func(_ hcloud.InfrastructureManager) ImageBuilder {
+					return &mockImageBuilder{err: errors.New("invalid arch")}
+				}
+			} else {
+				newImageBuilder = func(_ hcloud.InfrastructureManager) ImageBuilder {
+					return &mockImageBuilder{snapshotID: "snap-test"}
+				}
+			}
+
 			ctx := context.Background()
 			err := Build(ctx, tt.imageName, tt.talosVersion, tt.arch, tt.location)
-			// These may fail for various reasons (no token, invalid params, etc.)
-			// The important thing is they don't panic
-			assert.Error(t, err)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
 		})
 	}
 }
