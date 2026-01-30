@@ -124,7 +124,7 @@ func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architect
 
 	// URL generation - use generic metal image from Talos releases
 	// The metal image works with all platforms. The Hetzner CCM will set the correct
-	// provider IDs (hcloud://<server-id>) via the externalCloudProvider configuration.
+	// provider IDs (hcloud://<server-id>) using the nodeid label we set in machine config patches.
 	var talosURL string
 	switch architecture {
 	case "amd64", "arm64":

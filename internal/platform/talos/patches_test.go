@@ -209,17 +209,21 @@ func TestBuildKubeletPatch(t *testing.T) {
 	tests := []struct {
 		name           string
 		isControlPlane bool
+		serverID       int64
 		opts           *MachineConfigOptions
 		validateFunc   func(t *testing.T, result map[string]any)
 	}{
 		{
-			name:           "control plane with defaults",
+			name:           "control plane with defaults and server ID",
 			isControlPlane: true,
+			serverID:       12345,
 			opts:           &MachineConfigOptions{},
 			validateFunc: func(t *testing.T, result map[string]any) {
 				// Check extra args
 				extraArgs := result["extraArgs"].(map[string]any)
 				assert.Equal(t, "external", extraArgs["cloud-provider"])
+				// Check provider-id is set with server ID
+				assert.Equal(t, "hcloud://12345", extraArgs["provider-id"])
 				// Note: rotate-server-certificates is NOT set because it requires a CSR approver
 
 				// Check control plane reserved resources
@@ -230,10 +234,14 @@ func TestBuildKubeletPatch(t *testing.T) {
 			},
 		},
 		{
-			name:           "worker with defaults",
+			name:           "worker with defaults and server ID",
 			isControlPlane: false,
+			serverID:       67890,
 			opts:           &MachineConfigOptions{},
 			validateFunc: func(t *testing.T, result map[string]any) {
+				// Check provider-id is set with server ID
+				extraArgs := result["extraArgs"].(map[string]any)
+				assert.Equal(t, "hcloud://67890", extraArgs["provider-id"])
 				// Check worker reserved resources (less than control plane)
 				extraConfig := result["extraConfig"].(map[string]any)
 				systemReserved := extraConfig["systemReserved"].(map[string]any)
@@ -242,8 +250,21 @@ func TestBuildKubeletPatch(t *testing.T) {
 			},
 		},
 		{
+			name:           "without server ID (provider-id not set)",
+			isControlPlane: false,
+			serverID:       0,
+			opts:           &MachineConfigOptions{},
+			validateFunc: func(t *testing.T, result map[string]any) {
+				// Check provider-id is NOT set when serverID is 0
+				extraArgs := result["extraArgs"].(map[string]any)
+				_, hasProviderID := extraArgs["provider-id"]
+				assert.False(t, hasProviderID, "provider-id should not be set when serverID is 0")
+			},
+		},
+		{
 			name:           "with nodeIP CIDR",
 			isControlPlane: false,
+			serverID:       12345,
 			opts: &MachineConfigOptions{
 				NodeIPv4CIDR: "10.0.0.0/16",
 			},
@@ -257,7 +278,7 @@ func TestBuildKubeletPatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := buildKubeletPatch(tt.opts, tt.isControlPlane)
+			result := buildKubeletPatch(tt.opts, tt.isControlPlane, tt.serverID)
 			tt.validateFunc(t, result)
 		})
 	}

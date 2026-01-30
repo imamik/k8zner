@@ -164,7 +164,7 @@ func buildMachinePatch(hostname string, serverID int64, opts *MachineConfigOptio
 	machine["network"] = buildNetworkPatch(hostname, opts, isControlPlane)
 
 	// Kubelet configuration
-	machine["kubelet"] = buildKubeletPatch(opts, isControlPlane)
+	machine["kubelet"] = buildKubeletPatch(opts, isControlPlane, serverID)
 
 	// Kernel modules
 	if len(opts.KernelModules) > 0 {
@@ -298,13 +298,21 @@ func buildNetworkPatch(hostname string, opts *MachineConfigOptions, _ bool) map[
 
 // buildKubeletPatch builds the kubelet section.
 // See: terraform/talos_config.tf control_plane_talos_config_patch.machine.kubelet
-func buildKubeletPatch(opts *MachineConfigOptions, isControlPlane bool) map[string]any {
+func buildKubeletPatch(opts *MachineConfigOptions, isControlPlane bool, serverID int64) map[string]any {
 	// Base extra args (matching Terraform)
 	// Note: rotate-server-certificates is NOT enabled because it requires a CSR approver.
 	// Without a CSR approver, the kubelet has no serving certificate, causing "tls: internal error".
 	// Talos manages kubelet certificates internally, so this flag is not needed.
 	extraArgs := map[string]any{
 		"cloud-provider": "external",
+	}
+
+	// Set provider-id for Hetzner CCM integration
+	// This tells the kubelet its cloud provider identity, allowing the Hetzner CCM to properly
+	// recognize and manage the node. Format: hcloud://<server-id>
+	// Without this, metal images would use talos://metal/<ip> which the CCM can't recognize.
+	if serverID > 0 {
+		extraArgs["provider-id"] = fmt.Sprintf("hcloud://%d", serverID)
 	}
 
 	// Merge user extra args
