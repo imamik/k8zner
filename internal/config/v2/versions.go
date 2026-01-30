@@ -85,17 +85,23 @@ const (
 )
 
 // Network CIDRs - hardcoded best practices
+// IMPORTANT: Pod CIDR must be WITHIN the Network CIDR for Cilium native routing to work.
+// Cilium's ipv4NativeRoutingCIDR is set to NetworkCIDR, so all pod traffic must be routable within it.
 const (
 	// NetworkCIDR is the Hetzner private network CIDR.
 	NetworkCIDR = "10.0.0.0/16"
 
 	// NodeCIDR is the CIDR for node IPs within the private network.
-	NodeCIDR = "10.0.0.0/16"
+	// Uses the lower half of the network CIDR (10.0.0.0 - 10.0.127.255).
+	NodeCIDR = "10.0.0.0/17"
 
 	// PodCIDR is the CIDR for pod IPs.
-	PodCIDR = "10.244.0.0/16"
+	// MUST be within NetworkCIDR for Cilium native routing.
+	// Uses the upper half of the network CIDR (10.0.128.0 - 10.0.255.255).
+	PodCIDR = "10.0.128.0/17"
 
-	// ServiceCIDR is the CIDR for service IPs.
+	// ServiceCIDR is the CIDR for Kubernetes service IPs.
+	// This is outside the network CIDR but handled by Cilium's kube-proxy replacement.
 	ServiceCIDR = "10.96.0.0/12"
 )
 
