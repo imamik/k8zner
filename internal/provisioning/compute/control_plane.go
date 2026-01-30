@@ -61,7 +61,7 @@ func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
 		rdnsIPv4 := rdns.ResolveTemplate(pool.RDNSIPv4, ctx.Config.RDNS.ClusterRDNSIPv4, ctx.Config.RDNS.ClusterRDNS)
 		rdnsIPv6 := rdns.ResolveTemplate(pool.RDNSIPv6, ctx.Config.RDNS.ClusterRDNSIPv6, ctx.Config.RDNS.ClusterRDNS)
 
-		poolIPs, err := p.reconcileNodePool(ctx, NodePoolSpec{
+		poolResult, err := p.reconcileNodePool(ctx, NodePoolSpec{
 			Name:             pool.Name,
 			Count:            pool.Count,
 			ServerType:       pool.ServerType,
@@ -78,8 +78,11 @@ func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to reconcile node pool %s: %w", pool.Name, err)
 		}
-		for k, v := range poolIPs {
+		for k, v := range poolResult.IPs {
 			ctx.State.ControlPlaneIPs[k] = v
+		}
+		for k, v := range poolResult.ServerIDs {
+			ctx.State.ControlPlaneServerIDs[k] = v
 		}
 	}
 

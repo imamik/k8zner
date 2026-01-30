@@ -107,10 +107,10 @@ type mockTalosProducer struct {
 }
 
 func (m *mockTalosProducer) SetMachineConfigOptions(_ any) {}
-func (m *mockTalosProducer) GenerateControlPlaneConfig(_ []string, _ string) ([]byte, error) {
+func (m *mockTalosProducer) GenerateControlPlaneConfig(_ []string, _ string, _ int64) ([]byte, error) {
 	return nil, nil
 }
-func (m *mockTalosProducer) GenerateWorkerConfig(_ string) ([]byte, error) { return nil, nil }
+func (m *mockTalosProducer) GenerateWorkerConfig(_ string, _ int64) ([]byte, error) { return nil, nil }
 func (m *mockTalosProducer) GenerateAutoscalerConfig(_ string, _ map[string]string, _ []string) ([]byte, error) {
 	return nil, nil
 }

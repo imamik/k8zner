@@ -3,7 +3,9 @@ package orchestration
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,13 +23,13 @@ type MockTalosProducer struct {
 	mock.Mock
 }
 
-func (m *MockTalosProducer) GenerateControlPlaneConfig(san []string, hostname string) ([]byte, error) {
-	args := m.Called(san, hostname)
+func (m *MockTalosProducer) GenerateControlPlaneConfig(san []string, hostname string, serverID int64) ([]byte, error) {
+	args := m.Called(san, hostname, serverID)
 	return args.Get(0).([]byte), args.Error(1)
 }
 
-func (m *MockTalosProducer) GenerateWorkerConfig(hostname string) ([]byte, error) {
-	args := m.Called(hostname)
+func (m *MockTalosProducer) GenerateWorkerConfig(hostname string, serverID int64) ([]byte, error) {
+	args := m.Called(hostname, serverID)
 	return args.Get(0).([]byte), args.Error(1)
 }
 
@@ -170,12 +172,26 @@ func TestReconciler_Reconcile(t *testing.T) {
 	// GenerateControlPlaneConfig is NOT called if cluster already exists (state marker present)
 	// and we skip bootstrap.
 
-	// Servers
-	mockInfra.GetServerIDFunc = func(_ context.Context, _ string) (string, error) {
+	// Servers - stateful mock to track created servers
+	createdServerIDs := make(map[string]string)
+	var serverMu sync.Mutex
+	serverCounter := int64(10000)
+
+	mockInfra.GetServerIDFunc = func(_ context.Context, name string) (string, error) {
+		serverMu.Lock()
+		defer serverMu.Unlock()
+		if id, exists := createdServerIDs[name]; exists {
+			return id, nil
+		}
 		return "", nil // Does not exist
 	}
-	mockInfra.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string, _, _ bool) (string, error) {
-		return "server-id", nil
+	mockInfra.CreateServerFunc = func(_ context.Context, name, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string, _, _ bool) (string, error) {
+		serverMu.Lock()
+		serverCounter++
+		idStr := fmt.Sprintf("%d", serverCounter)
+		createdServerIDs[name] = idStr
+		serverMu.Unlock()
+		return idStr, nil
 	}
 	mockInfra.GetServerIPFunc = func(_ context.Context, _ string) (string, error) {
 		return "10.0.1.2", nil

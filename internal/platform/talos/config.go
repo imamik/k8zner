@@ -126,7 +126,8 @@ func (g *Generator) SetEndpoint(endpoint string) {
 
 // GenerateControlPlaneConfig generates the configuration for a control plane node.
 // If hostname is provided, it will be set in the machine config.
-func (g *Generator) GenerateControlPlaneConfig(san []string, hostname string) ([]byte, error) {
+// serverID is the Hetzner server ID, used to set the nodeid label for CCM integration.
+func (g *Generator) GenerateControlPlaneConfig(san []string, hostname string, serverID int64) ([]byte, error) {
 	opts := []generate.Option{
 		generate.WithAdditionalSubjectAltNames(san),
 	}
@@ -140,13 +141,14 @@ func (g *Generator) GenerateControlPlaneConfig(san []string, hostname string) ([
 	installerImage := g.getInstallerImageURL()
 
 	// Build and apply enhanced patch with all machine config options
-	patch := buildControlPlanePatch(hostname, g.machineOpts, installerImage, san)
+	patch := buildControlPlanePatch(hostname, serverID, g.machineOpts, installerImage, san)
 	return applyConfigPatch(baseConfig, patch)
 }
 
 // GenerateWorkerConfig generates the configuration for a worker node.
 // If hostname is provided, it will be set in the machine config.
-func (g *Generator) GenerateWorkerConfig(hostname string) ([]byte, error) {
+// serverID is the Hetzner server ID, used to set the nodeid label for CCM integration.
+func (g *Generator) GenerateWorkerConfig(hostname string, serverID int64) ([]byte, error) {
 	baseConfig, err := g.generateBaseConfig(machine.TypeWorker)
 	if err != nil {
 		return nil, err
@@ -156,7 +158,7 @@ func (g *Generator) GenerateWorkerConfig(hostname string) ([]byte, error) {
 	installerImage := g.getInstallerImageURL()
 
 	// Build and apply enhanced patch with all machine config options
-	patch := buildWorkerPatch(hostname, g.machineOpts, installerImage, nil)
+	patch := buildWorkerPatch(hostname, serverID, g.machineOpts, installerImage, nil)
 	return applyConfigPatch(baseConfig, patch)
 }
 
@@ -171,8 +173,8 @@ func (g *Generator) GenerateAutoscalerConfig(poolName string, labels map[string]
 	// Build installer image URL
 	installerImage := g.getInstallerImageURL()
 
-	// Build worker patch
-	patch := buildWorkerPatch("", g.machineOpts, installerImage, nil)
+	// Build worker patch - serverID is 0 for autoscaler nodes since they're dynamically created
+	patch := buildWorkerPatch("", 0, g.machineOpts, installerImage, nil)
 
 	// Add autoscaler-specific node labels and taints to the patch
 	machinePatch := patch["machine"].(map[string]any)

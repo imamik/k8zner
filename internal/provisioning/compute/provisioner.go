@@ -101,7 +101,7 @@ func (p *Provisioner) provisionAllServers(ctx *provisioning.Context) error {
 				rdnsIPv4 := rdns.ResolveTemplate(pool.RDNSIPv4, ctx.Config.RDNS.ClusterRDNSIPv4, ctx.Config.RDNS.ClusterRDNS)
 				rdnsIPv6 := rdns.ResolveTemplate(pool.RDNSIPv6, ctx.Config.RDNS.ClusterRDNSIPv6, ctx.Config.RDNS.ClusterRDNS)
 
-				poolIPs, err := p.reconcileNodePool(ctx, NodePoolSpec{
+				poolResult, err := p.reconcileNodePool(ctx, NodePoolSpec{
 					Name:             pool.Name,
 					Count:            pool.Count,
 					ServerType:       pool.ServerType,
@@ -120,8 +120,11 @@ func (p *Provisioner) provisionAllServers(ctx *provisioning.Context) error {
 				}
 
 				mu.Lock()
-				for k, v := range poolIPs {
+				for k, v := range poolResult.IPs {
 					ctx.State.ControlPlaneIPs[k] = v
+				}
+				for k, v := range poolResult.ServerIDs {
+					ctx.State.ControlPlaneServerIDs[k] = v
 				}
 				mu.Unlock()
 				return nil
@@ -139,7 +142,7 @@ func (p *Provisioner) provisionAllServers(ctx *provisioning.Context) error {
 				rdnsIPv4 := rdns.ResolveTemplate(pool.RDNSIPv4, ctx.Config.RDNS.ClusterRDNSIPv4, ctx.Config.RDNS.ClusterRDNS)
 				rdnsIPv6 := rdns.ResolveTemplate(pool.RDNSIPv6, ctx.Config.RDNS.ClusterRDNSIPv6, ctx.Config.RDNS.ClusterRDNS)
 
-				ips, err := p.reconcileNodePool(ctx, NodePoolSpec{
+				poolResult, err := p.reconcileNodePool(ctx, NodePoolSpec{
 					Name:             pool.Name,
 					Count:            pool.Count,
 					ServerType:       pool.ServerType,
@@ -158,8 +161,11 @@ func (p *Provisioner) provisionAllServers(ctx *provisioning.Context) error {
 				}
 
 				mu.Lock()
-				for name, ip := range ips {
+				for name, ip := range poolResult.IPs {
 					ctx.State.WorkerIPs[name] = ip
+				}
+				for name, id := range poolResult.ServerIDs {
+					ctx.State.WorkerServerIDs[name] = id
 				}
 				mu.Unlock()
 				return nil

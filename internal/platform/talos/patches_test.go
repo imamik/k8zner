@@ -566,7 +566,7 @@ func TestBuildControlPlanePatch(t *testing.T) {
 		DiscoveryKubernetesEnabled: false,
 	}
 
-	result := buildControlPlanePatch("cp-1", opts, "factory.talos.dev/installer/test:v1.7.0", []string{"api.example.com"})
+	result := buildControlPlanePatch("cp-1", 12345, opts, "factory.talos.dev/installer/test:v1.7.0", []string{"api.example.com"})
 
 	// Verify top-level structure
 	machine, ok := result["machine"].(map[string]any)
@@ -601,7 +601,7 @@ func TestBuildWorkerPatch(t *testing.T) {
 		DiscoveryServiceEnabled: true,
 	}
 
-	result := buildWorkerPatch("worker-1", opts, "ghcr.io/siderolabs/installer:v1.7.0", nil)
+	result := buildWorkerPatch("worker-1", 12345, opts, "ghcr.io/siderolabs/installer:v1.7.0", nil)
 
 	// Verify top-level structure
 	machine, ok := result["machine"].(map[string]any)

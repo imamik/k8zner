@@ -2,6 +2,7 @@ package compute
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"sync"
 	"testing"
@@ -21,11 +22,11 @@ type mockTalosProducer struct {
 	endpoint string
 }
 
-func (m *mockTalosProducer) GenerateControlPlaneConfig(_ []string, _ string) ([]byte, error) {
+func (m *mockTalosProducer) GenerateControlPlaneConfig(_ []string, _ string, _ int64) ([]byte, error) {
 	return []byte("control-plane-config"), nil
 }
 
-func (m *mockTalosProducer) GenerateWorkerConfig(_ string) ([]byte, error) {
+func (m *mockTalosProducer) GenerateWorkerConfig(_ string, _ int64) ([]byte, error) {
 	return []byte("worker-config"), nil
 }
 
@@ -83,8 +84,10 @@ func createTestContext(t *testing.T, mockInfra *hcloud_internal.MockClient, cfg 
 			ID:      1,
 			IPRange: ipNet,
 		},
-		ControlPlaneIPs: make(map[string]string),
-		WorkerIPs:       make(map[string]string),
+		ControlPlaneIPs:       make(map[string]string),
+		WorkerIPs:             make(map[string]string),
+		ControlPlaneServerIDs: make(map[string]int64),
+		WorkerServerIDs:       make(map[string]int64),
 	}
 
 	return ctx
@@ -162,7 +165,16 @@ func TestProvisionControlPlane_SingleNode(t *testing.T) {
 		return &hcloud.PlacementGroup{ID: 1}, nil
 	}
 
-	mockInfra.GetServerIDFunc = func(_ context.Context, _ string) (string, error) {
+	// Track which servers have been created
+	createdServerIDs := make(map[string]string)
+	var serverMu sync.Mutex
+
+	mockInfra.GetServerIDFunc = func(_ context.Context, name string) (string, error) {
+		serverMu.Lock()
+		defer serverMu.Unlock()
+		if id, exists := createdServerIDs[name]; exists {
+			return id, nil
+		}
 		// Server doesn't exist yet
 		return "", nil
 	}
@@ -177,7 +189,11 @@ func TestProvisionControlPlane_SingleNode(t *testing.T) {
 		assert.NotNil(t, pgID)
 		assert.NotEmpty(t, privateIP)
 		assert.Equal(t, "control-plane", labels["role"])
-		return "server-123", nil
+		// Store the server ID for later lookup
+		serverMu.Lock()
+		createdServerIDs[name] = "12345"
+		serverMu.Unlock()
+		return "12345", nil
 	}
 
 	mockInfra.GetServerIPFunc = func(_ context.Context, _ string) (string, error) {
@@ -218,19 +234,31 @@ func TestProvisionWorkers_MultipleNodes(t *testing.T) {
 	// Calculate subnets for IP allocation
 	require.NoError(t, cfg.CalculateSubnets())
 
-	mockInfra.GetServerIDFunc = func(_ context.Context, _ string) (string, error) {
+	// Track which servers have been created with their IDs
+	createdServerIDs := make(map[string]string)
+	var mu sync.Mutex
+	serverCounter := int64(10000)
+
+	mockInfra.GetServerIDFunc = func(_ context.Context, name string) (string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if id, exists := createdServerIDs[name]; exists {
+			return id, nil
+		}
 		return "", nil
 	}
 
 	createdServers := make(map[string]bool)
-	var mu sync.Mutex
 	mockInfra.CreateServerFunc = func(_ context.Context, name, _, serverType, _ string, _ []string, labels map[string]string, _ string, _ *int64, _ int64, _ string, _, _ bool) (string, error) {
 		mu.Lock()
+		serverCounter++
+		idStr := fmt.Sprintf("%d", serverCounter)
+		createdServerIDs[name] = idStr
 		createdServers[name] = true
 		mu.Unlock()
 		assert.Equal(t, "cx31", serverType)
 		assert.Equal(t, "worker", labels["role"])
-		return "server-" + name, nil
+		return idStr, nil
 	}
 
 	mockInfra.GetServerIPFunc = func(_ context.Context, _ string) (string, error) {
@@ -282,7 +310,7 @@ func TestProvisionControlPlane_ExistingServer(t *testing.T) {
 
 	// Server already exists
 	mockInfra.GetServerIDFunc = func(_ context.Context, _ string) (string, error) {
-		return "existing-server-id", nil
+		return "12345", nil
 	}
 
 	mockInfra.GetServerIPFunc = func(_ context.Context, _ string) (string, error) {
