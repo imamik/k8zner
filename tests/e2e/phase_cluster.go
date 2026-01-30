@@ -169,6 +169,7 @@ func createInitialClusterConfig(state *E2EState) *config.Config {
 	// Set e2e-specific fields
 	cfg.TestID = state.TestID
 	cfg.SSHKeys = []string{state.SSHKeyName}
+	cfg.HCloudToken = os.Getenv("HCLOUD_TOKEN")
 
 	return cfg
 }

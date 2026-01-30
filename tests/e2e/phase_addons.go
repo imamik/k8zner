@@ -702,16 +702,21 @@ func testAddonCilium(t *testing.T, state *E2EState) {
 func testAddonTalosBackup(t *testing.T, state *E2EState) {
 	// Check if S3 credentials are provided
 	s3Bucket := os.Getenv("E2E_BACKUP_S3_BUCKET")
+	s3Endpoint := os.Getenv("E2E_BACKUP_S3_ENDPOINT")
 	s3AccessKey := os.Getenv("E2E_BACKUP_S3_ACCESS_KEY")
 	s3SecretKey := os.Getenv("E2E_BACKUP_S3_SECRET_KEY")
+	s3Region := os.Getenv("E2E_BACKUP_S3_REGION")
+	if s3Region == "" {
+		s3Region = "us-east-1" // Default region for AWS-compatible S3
+	}
 
-	if s3Bucket == "" || s3AccessKey == "" || s3SecretKey == "" {
+	if s3Bucket == "" || s3Endpoint == "" || s3AccessKey == "" || s3SecretKey == "" {
 		t.Log("Talos Backup test skipped (S3 credentials not provided)")
-		t.Log("  Set E2E_BACKUP_S3_BUCKET, E2E_BACKUP_S3_ACCESS_KEY, E2E_BACKUP_S3_SECRET_KEY to test")
+		t.Log("  Set E2E_BACKUP_S3_BUCKET, E2E_BACKUP_S3_ENDPOINT, E2E_BACKUP_S3_ACCESS_KEY, E2E_BACKUP_S3_SECRET_KEY to test")
 		return
 	}
 
-	t.Log("Installing Talos Backup addon...")
+	t.Logf("Installing Talos Backup addon with endpoint: %s", s3Endpoint)
 
 	cfg := &config.Config{
 		ClusterName: state.ClusterName,
@@ -721,12 +726,12 @@ func testAddonTalosBackup(t *testing.T, state *E2EState) {
 				Version:           v2.DefaultVersionMatrix().TalosBackup,
 				Schedule:          "0 2 * * *", // 2 AM daily
 				S3Bucket:          s3Bucket,
-				S3Region:          "us-east-1",
-				S3Endpoint:        "",
+				S3Region:          s3Region,
+				S3Endpoint:        s3Endpoint,
 				S3Prefix:          "e2e-test",
 				S3AccessKey:       s3AccessKey,
 				S3SecretKey:       s3SecretKey,
-				S3PathStyle:       false,
+				S3PathStyle:       true, // Required for Hetzner Object Storage
 				EnableCompression: true,
 			},
 		},
