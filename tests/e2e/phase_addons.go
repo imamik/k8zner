@@ -53,6 +53,9 @@ func phaseAddons(t *testing.T, state *E2EState) {
 	// DNS and TLS integration (requires CF_API_TOKEN and CF_DOMAIN env vars)
 	t.Run("Cloudflare", func(t *testing.T) { testAddonCloudflare(t, state, token) })
 
+	// ArgoCD Dashboard HTTPS test (requires Cloudflare to be set up first)
+	t.Run("ArgoCDDashboard", func(t *testing.T) { testArgoCDDashboard(t, state, token) })
+
 	t.Log("✓ Phase 3: Addons (all tested)")
 }
 

@@ -228,11 +228,8 @@ func expandAddons(cfg *Config, vm VersionMatrix) config.AddonsConfig {
 			Enabled: true,
 		},
 
-		// ArgoCD - always enabled
-		ArgoCD: config.ArgoCDConfig{
-			Enabled: true,
-			HA:      cfg.Mode == ModeHA,
-		},
+		// ArgoCD - always enabled, with ingress when domain is set
+		ArgoCD: expandArgoCD(cfg),
 
 		// Gateway API CRDs - always enabled
 		GatewayAPICRDs: config.GatewayAPICRDsConfig{
@@ -286,4 +283,21 @@ func expandTalosBackup(cfg *Config) config.TalosBackupConfig {
 		EnableCompression:  true,
 		EncryptionDisabled: true, // v2 config: encryption disabled by default (private bucket provides security)
 	}
+}
+
+func expandArgoCD(cfg *Config) config.ArgoCDConfig {
+	argoCfg := config.ArgoCDConfig{
+		Enabled: true,
+		HA:      cfg.Mode == ModeHA,
+	}
+
+	// Enable ingress with TLS when domain is configured
+	if cfg.HasDomain() {
+		argoCfg.IngressEnabled = true
+		argoCfg.IngressHost = cfg.ArgoHost()
+		argoCfg.IngressClassName = "traefik"
+		argoCfg.IngressTLS = true
+	}
+
+	return argoCfg
 }

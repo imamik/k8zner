@@ -70,8 +70,8 @@ func buildArgoCDValues(cfg *config.Config) helm.Values {
 		},
 		// Controller configuration
 		"controller": buildArgoCDController(argoCDCfg),
-		// Server configuration
-		"server": buildArgoCDServer(argoCDCfg),
+		// Server configuration - pass full config for ingress annotations
+		"server": buildArgoCDServer(cfg),
 		// Repo server configuration
 		"repoServer": buildArgoCDRepoServer(argoCDCfg),
 		// Redis configuration
@@ -143,12 +143,13 @@ func buildArgoCDController(cfg config.ArgoCDConfig) helm.Values {
 }
 
 // buildArgoCDServer creates the ArgoCD server configuration.
-func buildArgoCDServer(cfg config.ArgoCDConfig) helm.Values {
+func buildArgoCDServer(cfg *config.Config) helm.Values {
+	argoCDCfg := cfg.Addons.ArgoCD
 	replicas := 1
-	if cfg.HA {
+	if argoCDCfg.HA {
 		replicas = 2
-		if cfg.ServerReplicas != nil {
-			replicas = *cfg.ServerReplicas
+		if argoCDCfg.ServerReplicas != nil {
+			replicas = *argoCDCfg.ServerReplicas
 		}
 	}
 
@@ -174,7 +175,7 @@ func buildArgoCDServer(cfg config.ArgoCDConfig) helm.Values {
 	}
 
 	// Configure ingress if enabled
-	if cfg.IngressEnabled && cfg.IngressHost != "" {
+	if argoCDCfg.IngressEnabled && argoCDCfg.IngressHost != "" {
 		server["ingress"] = buildArgoCDIngress(cfg)
 	}
 
@@ -245,35 +246,54 @@ func buildArgoCDRedis(cfg config.ArgoCDConfig) helm.Values {
 }
 
 // buildArgoCDIngress creates the ingress configuration for ArgoCD server.
-func buildArgoCDIngress(cfg config.ArgoCDConfig) helm.Values {
+func buildArgoCDIngress(cfg *config.Config) helm.Values {
+	argoCDCfg := cfg.Addons.ArgoCD
+
 	ingress := helm.Values{
 		"enabled": true,
 		"hosts": []string{
-			cfg.IngressHost,
+			argoCDCfg.IngressHost,
 		},
 		// ArgoCD server handles TLS termination internally
 		"https": true,
 	}
 
 	// Set ingress class if specified
-	if cfg.IngressClassName != "" {
-		ingress["ingressClassName"] = cfg.IngressClassName
+	if argoCDCfg.IngressClassName != "" {
+		ingress["ingressClassName"] = argoCDCfg.IngressClassName
 	}
 
 	// Configure TLS if enabled
-	if cfg.IngressTLS {
+	if argoCDCfg.IngressTLS {
 		ingress["tls"] = []helm.Values{
 			{
 				"hosts": []string{
-					cfg.IngressHost,
+					argoCDCfg.IngressHost,
 				},
 				"secretName": "argocd-server-tls",
 			},
 		}
-		// Add cert-manager annotation for automatic certificate
-		ingress["annotations"] = helm.Values{
-			"cert-manager.io/cluster-issuer": "letsencrypt-prod",
+
+		// Build annotations for TLS and DNS
+		annotations := helm.Values{}
+
+		// Determine which ClusterIssuer to use based on cert-manager Cloudflare config
+		clusterIssuer := "letsencrypt-prod" // Default fallback
+		if cfg.Addons.CertManager.Cloudflare.Enabled {
+			if cfg.Addons.CertManager.Cloudflare.Production {
+				clusterIssuer = "letsencrypt-cloudflare-production"
+			} else {
+				clusterIssuer = "letsencrypt-cloudflare-staging"
+			}
 		}
+		annotations["cert-manager.io/cluster-issuer"] = clusterIssuer
+
+		// Add external-dns annotations if Cloudflare/external-dns is enabled
+		if cfg.Addons.Cloudflare.Enabled && cfg.Addons.ExternalDNS.Enabled {
+			annotations["external-dns.alpha.kubernetes.io/hostname"] = argoCDCfg.IngressHost
+		}
+
+		ingress["annotations"] = annotations
 	}
 
 	return ingress

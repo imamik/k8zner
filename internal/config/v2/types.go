@@ -32,6 +32,11 @@ type Config struct {
 	// Requires CF_API_TOKEN environment variable.
 	Domain string `yaml:"domain,omitempty"`
 
+	// ArgoSubdomain is the subdomain for ArgoCD dashboard (default: "argo").
+	// When Domain is set, ArgoCD will be accessible at {ArgoSubdomain}.{Domain}.
+	// Example: with Domain="example.com" and ArgoSubdomain="argo", ArgoCD is at argo.example.com
+	ArgoSubdomain string `yaml:"argo_subdomain,omitempty"`
+
 	// Backup enables automatic etcd backups to Hetzner Object Storage.
 	// Requires HETZNER_S3_ACCESS_KEY and HETZNER_S3_SECRET_KEY environment variables.
 	// Creates bucket "{cluster-name}-etcd-backups" automatically.
@@ -322,6 +327,23 @@ func (c *Config) HasDomain() bool {
 // HasBackup returns true if backup is enabled.
 func (c *Config) HasBackup() bool {
 	return c.Backup
+}
+
+// GetArgoSubdomain returns the ArgoCD subdomain (default: "argo").
+func (c *Config) GetArgoSubdomain() string {
+	if c.ArgoSubdomain == "" {
+		return "argo"
+	}
+	return c.ArgoSubdomain
+}
+
+// ArgoHost returns the full ArgoCD hostname (e.g., "argo.example.com").
+// Returns empty string if no domain is configured.
+func (c *Config) ArgoHost() string {
+	if c.Domain == "" {
+		return ""
+	}
+	return c.GetArgoSubdomain() + "." + c.Domain
 }
 
 // BackupBucketName returns the S3 bucket name for etcd backups.

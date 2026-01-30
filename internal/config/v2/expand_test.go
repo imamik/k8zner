@@ -307,6 +307,114 @@ func TestExpand_WithoutDomain(t *testing.T) {
 	}
 }
 
+func TestExpand_ArgoCDIngressWithDomain(t *testing.T) {
+	os.Setenv("CF_API_TOKEN", "test-token")
+	defer os.Unsetenv("CF_API_TOKEN")
+
+	cfg := &Config{
+		Name:   "argocd-test",
+		Region: RegionFalkenstein,
+		Mode:   ModeHA,
+		Workers: Worker{
+			Count: 2,
+			Size:  SizeCX33,
+		},
+		Domain: "example.com",
+	}
+
+	expanded, err := Expand(cfg)
+	if err != nil {
+		t.Fatalf("Expand() error = %v", err)
+	}
+
+	// ArgoCD should be enabled
+	if !expanded.Addons.ArgoCD.Enabled {
+		t.Error("ArgoCD should be enabled")
+	}
+
+	// ArgoCD ingress should be enabled when domain is set
+	if !expanded.Addons.ArgoCD.IngressEnabled {
+		t.Error("ArgoCD IngressEnabled should be true when domain is set")
+	}
+
+	// ArgoCD ingress host should be argo.example.com (default subdomain)
+	expectedHost := "argo.example.com"
+	if expanded.Addons.ArgoCD.IngressHost != expectedHost {
+		t.Errorf("ArgoCD IngressHost = %q, want %q", expanded.Addons.ArgoCD.IngressHost, expectedHost)
+	}
+
+	// IngressClassName should be traefik
+	if expanded.Addons.ArgoCD.IngressClassName != "traefik" {
+		t.Errorf("ArgoCD IngressClassName = %q, want %q", expanded.Addons.ArgoCD.IngressClassName, "traefik")
+	}
+
+	// TLS should be enabled
+	if !expanded.Addons.ArgoCD.IngressTLS {
+		t.Error("ArgoCD IngressTLS should be true when domain is set")
+	}
+}
+
+func TestExpand_ArgoCDCustomSubdomain(t *testing.T) {
+	os.Setenv("CF_API_TOKEN", "test-token")
+	defer os.Unsetenv("CF_API_TOKEN")
+
+	cfg := &Config{
+		Name:   "argocd-custom",
+		Region: RegionFalkenstein,
+		Mode:   ModeDev,
+		Workers: Worker{
+			Count: 1,
+			Size:  SizeCX23,
+		},
+		Domain:        "mycompany.com",
+		ArgoSubdomain: "gitops", // Custom subdomain
+	}
+
+	expanded, err := Expand(cfg)
+	if err != nil {
+		t.Fatalf("Expand() error = %v", err)
+	}
+
+	// ArgoCD ingress host should use custom subdomain
+	expectedHost := "gitops.mycompany.com"
+	if expanded.Addons.ArgoCD.IngressHost != expectedHost {
+		t.Errorf("ArgoCD IngressHost = %q, want %q", expanded.Addons.ArgoCD.IngressHost, expectedHost)
+	}
+}
+
+func TestExpand_ArgoCDNoIngressWithoutDomain(t *testing.T) {
+	cfg := &Config{
+		Name:   "argocd-nodomain",
+		Region: RegionFalkenstein,
+		Mode:   ModeHA,
+		Workers: Worker{
+			Count: 2,
+			Size:  SizeCX33,
+		},
+		// No domain set
+	}
+
+	expanded, err := Expand(cfg)
+	if err != nil {
+		t.Fatalf("Expand() error = %v", err)
+	}
+
+	// ArgoCD should still be enabled
+	if !expanded.Addons.ArgoCD.Enabled {
+		t.Error("ArgoCD should be enabled even without domain")
+	}
+
+	// But ingress should NOT be enabled
+	if expanded.Addons.ArgoCD.IngressEnabled {
+		t.Error("ArgoCD IngressEnabled should be false when no domain is set")
+	}
+
+	// IngressHost should be empty
+	if expanded.Addons.ArgoCD.IngressHost != "" {
+		t.Errorf("ArgoCD IngressHost should be empty when no domain, got %q", expanded.Addons.ArgoCD.IngressHost)
+	}
+}
+
 func TestExpand_Ingress_DevMode(t *testing.T) {
 	cfg := &Config{
 		Name:   "dev-ingress",
