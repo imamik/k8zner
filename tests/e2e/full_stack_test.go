@@ -506,9 +506,13 @@ func checklistCoreAddons(t *testing.T, state *E2EState) {
 	// Check CCM (Hetzner CCM handles LoadBalancers and sets provider IDs)
 	t.Run("CCM", func(t *testing.T) {
 		// Wait for Hetzner CCM pod to be ready
-		waitForPod(t, state.KubeconfigPath, "kube-system", "app.kubernetes.io/name=hcloud-cloud-controller-manager", 5*time.Minute)
-		// Verify provider IDs are set - CCM needs time to initialize and set provider IDs on all nodes
-		verifyProviderIDs(t, state.KubeconfigPath, 4*time.Minute)
+		waitForPod(t, state.KubeconfigPath, "kube-system", "app.kubernetes.io/name=hcloud-cloud-controller-manager", 6*time.Minute)
+		// Verify provider IDs are set - CCM needs significant time to:
+		// 1. Initialize and become leader
+		// 2. Query Hetzner API for server metadata
+		// 3. Set provider IDs on all nodes
+		// Using 7 minutes to handle slow API responses and node initialization
+		verifyProviderIDs(t, state.KubeconfigPath, 7*time.Minute)
 		t.Log("[x] Hetzner CCM running with provider IDs set")
 		state.AddonsInstalled["ccm"] = true
 	})

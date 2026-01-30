@@ -80,11 +80,14 @@ func testAddonCCM(t *testing.T, state *E2EState, token string) {
 	}
 
 	// Wait for CCM pod
-	waitForPod(t, state.KubeconfigPath, "kube-system", "app.kubernetes.io/name=hcloud-cloud-controller-manager", 5*time.Minute)
+	waitForPod(t, state.KubeconfigPath, "kube-system", "app.kubernetes.io/name=hcloud-cloud-controller-manager", 6*time.Minute)
 
-	// Verify provider IDs are set
-	// Increased timeout to 4 minutes - CCM needs time to query Hetzner API and set provider IDs
-	verifyProviderIDs(t, state.KubeconfigPath, 4*time.Minute)
+	// Verify provider IDs are set - CCM needs significant time to:
+	// 1. Initialize and become leader
+	// 2. Query Hetzner API for server metadata
+	// 3. Set provider IDs on all nodes
+	// Using 7 minutes to handle slow API responses and node initialization
+	verifyProviderIDs(t, state.KubeconfigPath, 7*time.Minute)
 
 	// Test LB provisioning
 	testCCMLoadBalancer(t, state)
@@ -466,9 +469,10 @@ spec:
 		t.Fatalf("Failed to create test LB service: %v\nOutput: %s", err, string(output))
 	}
 
-	// Wait for external IP (max 3 minutes)
+	// Wait for external IP (max 6 minutes)
+	// CCM needs time to create LB in Hetzner and update Service status
 	externalIP := ""
-	maxAttempts := 36 // 36 * 5s = 3 minutes
+	maxAttempts := 72 // 72 * 5s = 6 minutes
 	for i := 0; i < maxAttempts; i++ {
 		cmd = exec.CommandContext(context.Background(), "kubectl",
 			"--kubeconfig", state.KubeconfigPath,

@@ -122,13 +122,15 @@ func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architect
 		return "", fmt.Errorf("failed to create SSH client: %w", err)
 	}
 
-	// URL generation.
+	// URL generation - use generic metal image from Talos releases
+	// The metal image works with all platforms. The Hetzner CCM will set the correct
+	// provider IDs (hcloud://<server-id>) via the externalCloudProvider configuration.
 	var talosURL string
 	switch architecture {
 	case "amd64", "arm64":
 		talosURL = fmt.Sprintf("https://github.com/siderolabs/talos/releases/download/%s/metal-%s.raw.zst", talosVersion, architecture)
 	default:
-		talosURL = fmt.Sprintf("https://github.com/siderolabs/talos/releases/download/%s/talos-%s-%s.raw.zst", talosVersion, architecture, architecture)
+		talosURL = fmt.Sprintf("https://github.com/siderolabs/talos/releases/download/%s/metal-%s.raw.zst", talosVersion, architecture)
 	}
 
 	installCmd := fmt.Sprintf("DISK=$(lsblk -d -n -o NAME | grep -E '^sda|^vda' | head -n 1) && if [ -z \"$DISK\" ]; then echo 'No disk found'; exit 1; fi && echo \"Writing to /dev/$DISK\" && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y zstd wget && wget -qO- %s | zstd -d | dd of=/dev/$DISK bs=4M && sync", talosURL)
