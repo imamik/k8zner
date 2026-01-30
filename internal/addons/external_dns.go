@@ -102,16 +102,25 @@ func buildExternalDNSValues(cfg *config.Config) helm.Values {
 			"enabled":      true,
 			"minAvailable": 1,
 		},
-		// Schedule on control plane nodes for reliability
-		"nodeSelector": helm.Values{
-			"node-role.kubernetes.io/control-plane": "",
+		// Run on worker nodes - control plane nodes have Cilium network restrictions
+		// that prevent outbound DNS/HTTPS connections needed for Cloudflare API
+		"affinity": helm.Values{
+			"nodeAffinity": helm.Values{
+				"requiredDuringSchedulingIgnoredDuringExecution": helm.Values{
+					"nodeSelectorTerms": []helm.Values{
+						{
+							"matchExpressions": []helm.Values{
+								{
+									"key":      "node-role.kubernetes.io/control-plane",
+									"operator": "DoesNotExist",
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 		"tolerations": []helm.Values{
-			{
-				"key":      "node-role.kubernetes.io/control-plane",
-				"effect":   "NoSchedule",
-				"operator": "Exists",
-			},
 			{
 				"key":      "node.cloudprovider.kubernetes.io/uninitialized",
 				"operator": "Exists",
