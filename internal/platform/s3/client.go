@@ -202,4 +202,3 @@ func (c *Client) DeleteBucket(ctx context.Context, bucketName string) error {
 	}
 	return nil
 }
-
