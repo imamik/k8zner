@@ -4,9 +4,12 @@ package e2e
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -93,6 +96,439 @@ func TestE2EDevCluster(t *testing.T) {
 	})
 
 	t.Log("=== DEV CLUSTER E2E TEST PASSED ===")
+}
+
+// TestE2EDevClusterWithArgoCD runs a dev cluster E2E test with ArgoCD dashboard verification.
+//
+// This test specifically validates the ArgoCD dashboard is accessible via HTTPS
+// with automatic DNS (via external-dns) and TLS certificate (via cert-manager).
+//
+// Dev Mode Configuration:
+//   - 1 Control Plane node (cx23)
+//   - 1 Worker node (cx22)
+//   - Shared Load Balancer
+//   - Domain configured for DNS/TLS
+//   - ArgoCD with ingress enabled
+//
+// Environment variables:
+//
+//	HCLOUD_TOKEN - Required
+//	CF_API_TOKEN - Required (Cloudflare API token)
+//	CF_DOMAIN - Required (e.g., k8zner.org)
+//	CF_ARGO_SUBDOMAIN - Optional (default: "argo")
+//	E2E_KEEP_SNAPSHOTS - Set to "true" to cache snapshots
+//
+// Example:
+//
+//	HCLOUD_TOKEN=xxx CF_API_TOKEN=yyy CF_DOMAIN=k8zner.org \
+//	go test -v -timeout=45m -tags=e2e -run TestE2EDevClusterWithArgoCD ./tests/e2e/
+func TestE2EDevClusterWithArgoCD(t *testing.T) {
+	token := os.Getenv("HCLOUD_TOKEN")
+	if token == "" {
+		t.Skip("HCLOUD_TOKEN not set, skipping E2E test")
+	}
+
+	cfAPIToken := os.Getenv("CF_API_TOKEN")
+	cfDomain := os.Getenv("CF_DOMAIN")
+	if cfAPIToken == "" || cfDomain == "" {
+		t.Skip("CF_API_TOKEN and CF_DOMAIN required for ArgoCD dashboard test")
+	}
+
+	// Generate unique cluster name and ArgoCD subdomain for this test run
+	// Using unique subdomains avoids DNS ownership conflicts between test runs
+	timestamp := time.Now().Unix()
+	clusterName := fmt.Sprintf("e2e-argo-%d", timestamp)
+	argoSubdomain := fmt.Sprintf("argo-%d", timestamp) // Unique subdomain per test
+	argoHost := fmt.Sprintf("%s.%s", argoSubdomain, cfDomain)
+	t.Logf("=== Starting Dev Cluster with ArgoCD Dashboard E2E Test: %s ===", clusterName)
+	t.Logf("=== ArgoCD will be accessible at: https://%s ===", argoHost)
+
+	client := hcloud.NewRealClient(token)
+	state := NewE2EState(clusterName, client)
+	defer cleanupE2ECluster(t, state)
+
+	// === PHASE 1: DEPLOY EVERYTHING ===
+	t.Log("=== DEPLOYMENT PHASE ===")
+
+	// 1.1 Get snapshot (from sharedCtx or build)
+	deployGetSnapshot(t, state)
+
+	// 1.2 Deploy cluster infrastructure + bootstrap with domain configuration
+	// The v2 config expansion reads CF_API_TOKEN from environment and includes
+	// all addons (Cilium, CCM, CSI, Traefik, CertManager, ArgoCD, Cloudflare, ExternalDNS)
+	_ = deployDevClusterWithDomain(t, state, token, cfDomain, argoSubdomain)
+
+	// Mark addons as installed (the reconciler installs them during provisioning)
+	state.AddonsInstalled["cilium"] = true
+	state.AddonsInstalled["ccm"] = true
+	state.AddonsInstalled["csi"] = true
+	state.AddonsInstalled["metrics-server"] = true
+	state.AddonsInstalled["cert-manager"] = true
+	state.AddonsInstalled["traefik"] = true
+	state.AddonsInstalled["cloudflare"] = true
+	state.AddonsInstalled["external-dns"] = true
+	state.AddonsInstalled["argocd"] = true
+
+	t.Log("=== DEPLOYMENT COMPLETE ===")
+
+	// === PHASE 2: VERIFICATION CHECKLIST ===
+	t.Log("=== VERIFICATION CHECKLIST ===")
+
+	// Infrastructure checks
+	t.Run("Checklist_Infrastructure", func(t *testing.T) {
+		checklistInfrastructure(t, state, 1, 1) // 1 CP, 1 worker
+	})
+
+	// Kubernetes cluster checks
+	t.Run("Checklist_Kubernetes", func(t *testing.T) {
+		checklistKubernetes(t, state, 2) // 2 total nodes
+	})
+
+	// Core addon checks
+	t.Run("Checklist_CoreAddons", func(t *testing.T) {
+		checklistCoreAddons(t, state)
+	})
+
+	// Stack addon checks
+	t.Run("Checklist_StackAddons", func(t *testing.T) {
+		checklistStackAddons(t, state)
+	})
+
+	// === PHASE 3: ARGOCD DASHBOARD E2E TEST ===
+	t.Log("=== ARGOCD DASHBOARD E2E TEST ===")
+
+	t.Run("ArgoCDDashboard", func(t *testing.T) {
+		// Verify ArgoCD ingress is configured
+		t.Log("  Step 1: Verifying ArgoCD ingress configuration...")
+		verifyArgoCDIngressConfigured(t, state.KubeconfigPath, argoHost)
+
+		// Wait for DNS record creation
+		// Pass expected worker IPs to ensure we wait for the correct DNS record,
+		// not a stale record from a previous test run
+		t.Logf("  Step 2: Waiting for DNS record creation (expected IPs: %v)...", state.WorkerIPs)
+		waitForDNSRecord(t, argoHost, 8*time.Minute, state.WorkerIPs...)
+
+		// Wait for TLS certificate issuance
+		t.Log("  Step 3: Waiting for TLS certificate issuance...")
+		waitForArgoCDTLSCertificate(t, state.KubeconfigPath, 8*time.Minute)
+
+		// Test HTTPS connectivity to ArgoCD
+		t.Log("  Step 4: Testing HTTPS connectivity to ArgoCD dashboard...")
+		testArgoCDHTTPSAccess(t, argoHost, 3*time.Minute)
+
+		t.Logf("  ✓ ArgoCD Dashboard accessible at https://%s", argoHost)
+	})
+
+	t.Log("=== DEV CLUSTER WITH ARGOCD E2E TEST PASSED ===")
+}
+
+// deployDevClusterWithDomain deploys a dev cluster with domain configuration.
+func deployDevClusterWithDomain(t *testing.T, state *E2EState, token, domain, argoSubdomain string) *config.Config {
+	t.Logf("[Deploy] Deploying Dev cluster with domain %s (ArgoCD at %s.%s)...", domain, argoSubdomain, domain)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Minute)
+	defer cancel()
+
+	// Setup SSH key
+	if err := setupSSHKeyForFullStack(ctx, t, state); err != nil {
+		t.Fatalf("Failed to setup SSH key: %v", err)
+	}
+
+	// Create v2 config (dev mode with domain)
+	v2Cfg := &v2.Config{
+		Name:   state.ClusterName,
+		Region: v2.RegionNuremberg,
+		Mode:   v2.ModeDev,
+		Workers: v2.Worker{
+			Count: 1,
+			Size:  v2.SizeCX22,
+		},
+		Domain:        domain,
+		ArgoSubdomain: argoSubdomain,
+	}
+
+	return deployClusterWithConfig(ctx, t, state, v2Cfg, token)
+}
+
+// deployAllAddonsWithCloudflare installs all addons including Cloudflare DNS/TLS integration.
+func deployAllAddonsWithCloudflare(t *testing.T, state *E2EState, cfg *config.Config, token, cfAPIToken, cfDomain string) {
+	t.Log("[Deploy] Installing all addons with Cloudflare integration...")
+
+	ctx := context.Background()
+
+	// Get network ID for CCM/CSI
+	network, _ := state.Client.GetNetwork(ctx, state.ClusterName)
+	networkID := int64(0)
+	if network != nil {
+		networkID = network.ID
+	}
+
+	// Get ArgoCD host from config (already expanded)
+	argoHost := cfg.Addons.ArgoCD.IngressHost
+
+	// Build full addon config with Cloudflare
+	fullCfg := &config.Config{
+		ClusterName: state.ClusterName,
+		HCloudToken: token,
+		Network: config.NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+		},
+		Addons: config.AddonsConfig{
+			// Core addons
+			Cilium: config.CiliumConfig{
+				Enabled:                     true,
+				EncryptionEnabled:           true,
+				EncryptionType:              "wireguard",
+				RoutingMode:                 "native",
+				KubeProxyReplacementEnabled: true,
+				HubbleEnabled:               true,
+				HubbleRelayEnabled:          true,
+				HubbleUIEnabled:             false,
+			},
+			CCM: config.CCMConfig{
+				Enabled: true,
+			},
+			CSI: config.CSIConfig{
+				Enabled:             true,
+				DefaultStorageClass: true,
+			},
+			MetricsServer: config.MetricsServerConfig{
+				Enabled: true,
+			},
+			// Stack addons
+			CertManager: config.CertManagerConfig{
+				Enabled: true,
+				Cloudflare: config.CertManagerCloudflareConfig{
+					Enabled:    true,
+					Email:      fmt.Sprintf("argocd-test@%s", cfDomain),
+					Production: false, // Use staging to avoid rate limits
+				},
+			},
+			Traefik: config.TraefikConfig{
+				Enabled: true,
+			},
+			// Cloudflare DNS integration
+			Cloudflare: config.CloudflareConfig{
+				Enabled:  true,
+				APIToken: cfAPIToken,
+				Domain:   cfDomain,
+				Proxied:  false, // DNS only for direct IP access
+			},
+			ExternalDNS: config.ExternalDNSConfig{
+				Enabled: true,
+				Policy:  "sync",
+				Sources: []string{"ingress"},
+			},
+			// ArgoCD with ingress
+			ArgoCD: config.ArgoCDConfig{
+				Enabled:          true,
+				IngressEnabled:   true,
+				IngressHost:      argoHost,
+				IngressClassName: "traefik",
+				IngressTLS:       true,
+			},
+		},
+	}
+
+	startTime := time.Now()
+	if err := addons.Apply(ctx, fullCfg, state.Kubeconfig, networkID); err != nil {
+		t.Fatalf("Failed to install addons: %v", err)
+	}
+	duration := time.Since(startTime)
+
+	t.Logf("[Deploy] All addons installed in %v", duration)
+
+	// Mark addons as installed
+	state.AddonsInstalled["cilium"] = true
+	state.AddonsInstalled["ccm"] = true
+	state.AddonsInstalled["csi"] = true
+	state.AddonsInstalled["metrics-server"] = true
+	state.AddonsInstalled["cert-manager"] = true
+	state.AddonsInstalled["traefik"] = true
+	state.AddonsInstalled["cloudflare"] = true
+	state.AddonsInstalled["external-dns"] = true
+	state.AddonsInstalled["argocd"] = true
+}
+
+// verifyArgoCDIngressConfigured verifies the ArgoCD ingress is properly configured.
+func verifyArgoCDIngressConfigured(t *testing.T, kubeconfigPath, expectedHost string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			// Show ingress details for debugging
+			descCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "ingress", "-n", "argocd", "-o", "yaml")
+			if output, _ := descCmd.CombinedOutput(); len(output) > 0 {
+				t.Logf("ArgoCD ingress YAML:\n%s", string(output))
+			}
+			t.Fatalf("Timeout waiting for ArgoCD ingress with host %s", expectedHost)
+		case <-ticker.C:
+			cmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "ingress", "-n", "argocd", "-o", "jsonpath={.items[*].spec.rules[*].host}")
+			output, err := cmd.CombinedOutput()
+			if err == nil && strings.Contains(string(output), expectedHost) {
+				t.Logf("  ✓ ArgoCD ingress configured with host: %s", expectedHost)
+				return
+			}
+		}
+	}
+}
+
+// waitForDNSRecord waits for DNS record to be created and resolvable.
+// If expectedIPs is provided, it waits until DNS resolves to one of those IPs.
+// This handles the case where stale DNS records from previous test runs exist.
+func waitForDNSRecord(t *testing.T, hostname string, timeout time.Duration, expectedIPs ...string) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
+	// Build map of expected IPs for quick lookup
+	expectedIPMap := make(map[string]bool)
+	for _, ip := range expectedIPs {
+		expectedIPMap[ip] = true
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatalf("Timeout waiting for DNS record %s (expected IPs: %v)", hostname, expectedIPs)
+		case <-ticker.C:
+			// Use dig to check DNS resolution
+			cmd := exec.CommandContext(context.Background(), "dig", "+short", hostname)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Logf("  DNS lookup failed: %v", err)
+				continue
+			}
+
+			resolvedIP := strings.TrimSpace(string(output))
+			if resolvedIP == "" {
+				t.Log("  Waiting for DNS propagation...")
+				continue
+			}
+
+			// If expected IPs are specified, validate the resolved IP
+			if len(expectedIPs) > 0 {
+				if !expectedIPMap[resolvedIP] {
+					t.Logf("  Waiting for DNS update (current: %s, expected: %v)...", resolvedIP, expectedIPs)
+					continue
+				}
+			}
+
+			t.Logf("  ✓ DNS record created: %s -> %s", hostname, resolvedIP)
+			return
+		}
+	}
+}
+
+// waitForArgoCDTLSCertificate waits for the ArgoCD TLS certificate to be issued.
+func waitForArgoCDTLSCertificate(t *testing.T, kubeconfigPath string, timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
+	secretName := "argocd-server-tls"
+
+	for {
+		select {
+		case <-ctx.Done():
+			// Get certificate status for debugging
+			descCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"describe", "certificate", "-n", "argocd")
+			if output, _ := descCmd.CombinedOutput(); len(output) > 0 {
+				t.Logf("Certificate status:\n%s", string(output))
+			}
+
+			// Get cert-manager logs
+			logsCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"logs", "-n", "cert-manager", "-l", "app.kubernetes.io/name=cert-manager",
+				"--tail=50")
+			if output, _ := logsCmd.CombinedOutput(); len(output) > 0 {
+				t.Logf("Cert-manager logs:\n%s", string(output))
+			}
+
+			t.Fatalf("Timeout waiting for ArgoCD TLS certificate")
+		case <-ticker.C:
+			// Check if the TLS secret exists and has data
+			cmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "secret", "-n", "argocd", secretName,
+				"-o", "jsonpath={.data.tls\\.crt}")
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Log("  Waiting for TLS certificate to be issued...")
+				continue
+			}
+
+			if len(output) > 0 {
+				t.Log("  ✓ TLS certificate issued (staging)")
+				return
+			}
+		}
+	}
+}
+
+// testArgoCDHTTPSAccess tests HTTPS connectivity to ArgoCD dashboard.
+func testArgoCDHTTPSAccess(t *testing.T, hostname string, timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	// Create HTTP client that accepts staging certs (not trusted by default)
+	httpClient := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true, // Staging certs aren't trusted
+			},
+		},
+		// Don't follow redirects - ArgoCD may redirect to login
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	url := fmt.Sprintf("https://%s/", hostname)
+
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatalf("Timeout waiting for HTTPS connectivity to ArgoCD at %s", hostname)
+		case <-ticker.C:
+			resp, err := httpClient.Get(url)
+			if err != nil {
+				t.Logf("  HTTPS request failed: %v", err)
+				continue
+			}
+			resp.Body.Close()
+
+			// ArgoCD returns 200 for the main page, or 302/307 redirect to login
+			if resp.StatusCode == http.StatusOK ||
+				resp.StatusCode == http.StatusFound ||
+				resp.StatusCode == http.StatusTemporaryRedirect {
+				t.Logf("  ✓ HTTPS connectivity verified (status: %d)", resp.StatusCode)
+				return
+			}
+
+			t.Logf("  HTTPS response: %d, waiting...", resp.StatusCode)
+		}
+	}
 }
 
 // TestE2EHACluster runs the full E2E test for an HA cluster configuration.

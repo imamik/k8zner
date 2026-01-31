@@ -286,10 +286,17 @@ func buildTraefikTopologySpread(workerCount int) []helm.Values {
 }
 
 // createTraefikNamespace returns the traefik namespace manifest.
+// The namespace has privileged PodSecurity labels to allow hostPort binding,
+// which is required when Traefik is deployed with hostNetwork mode.
 func createTraefikNamespace() string {
 	return `apiVersion: v1
 kind: Namespace
 metadata:
   name: traefik
+  labels:
+    # Required for hostNetwork/hostPort to work with PodSecurity admission
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged
 `
 }

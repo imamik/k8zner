@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/imamik/k8zner/internal/config"
@@ -80,11 +81,33 @@ func expandNetwork(cfg *Config) config.NetworkConfig {
 }
 
 func expandFirewall(cfg *Config) config.FirewallConfig {
-	return config.FirewallConfig{
+	fwConfig := config.FirewallConfig{
 		// Auto-detect current IP for API access
 		UseCurrentIPv4: boolPtr(true),
 		UseCurrentIPv6: boolPtr(true),
 	}
+
+	// Add HTTP/HTTPS rules for hostNetwork mode
+	// In hostNetwork mode, Traefik binds directly to ports 80/443 on worker nodes,
+	// so the firewall must allow incoming traffic on these ports from anywhere.
+	fwConfig.ExtraRules = []config.FirewallRule{
+		{
+			Description: "Allow HTTP traffic for ingress (hostNetwork mode)",
+			Direction:   "in",
+			Protocol:    "tcp",
+			Port:        "80",
+			SourceIPs:   []string{"0.0.0.0/0", "::/0"},
+		},
+		{
+			Description: "Allow HTTPS traffic for ingress (hostNetwork mode)",
+			Direction:   "in",
+			Protocol:    "tcp",
+			Port:        "443",
+			SourceIPs:   []string{"0.0.0.0/0", "::/0"},
+		},
+	}
+
+	return fwConfig
 }
 
 func expandControlPlane(cfg *Config) config.ControlPlaneConfig {
@@ -219,6 +242,7 @@ func expandAddons(cfg *Config, vm VersionMatrix) config.AddonsConfig {
 			Enabled: true,
 			Cloudflare: config.CertManagerCloudflareConfig{
 				Enabled:    hasDomain,
+				Email:      fmt.Sprintf("admin@%s", cfg.Domain),
 				Production: true, // Use production Let's Encrypt
 			},
 		},
@@ -248,9 +272,11 @@ func expandAddons(cfg *Config, vm VersionMatrix) config.AddonsConfig {
 		},
 
 		// Cloudflare - enabled only when domain is set
+		// API token is read from CF_API_TOKEN environment variable
 		Cloudflare: config.CloudflareConfig{
-			Enabled: hasDomain,
-			Domain:  cfg.Domain,
+			Enabled:  hasDomain,
+			Domain:   cfg.Domain,
+			APIToken: os.Getenv("CF_API_TOKEN"),
 		},
 
 		// External DNS - enabled only when domain is set

@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log"
 	"text/template"
+	"time"
 
 	"github.com/imamik/k8zner/internal/addons/k8sclient"
 	"github.com/imamik/k8zner/internal/config"
@@ -15,25 +17,148 @@ import (
 func applyCertManagerCloudflare(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	cfCfg := cfg.Addons.CertManager.Cloudflare
 
-	// Create staging ClusterIssuer
+	// Wait for cert-manager CRDs to be ready before creating ClusterIssuer
+	log.Println("Waiting for cert-manager CRDs and webhook to be ready...")
+	if err := waitForCertManagerCRDs(ctx, client); err != nil {
+		return fmt.Errorf("failed waiting for cert-manager CRDs: %w", err)
+	}
+	log.Println("cert-manager CRDs and webhook are ready")
+
+	// Create staging ClusterIssuer with retry logic
 	stagingManifest, err := buildClusterIssuerManifest(cfCfg.Email, false)
 	if err != nil {
 		return fmt.Errorf("failed to build staging ClusterIssuer manifest: %w", err)
 	}
-	if err := applyManifests(ctx, client, "letsencrypt-cloudflare-staging", stagingManifest); err != nil {
+	if err := applyClusterIssuerWithRetry(ctx, client, "letsencrypt-cloudflare-staging", stagingManifest); err != nil {
 		return fmt.Errorf("failed to apply staging ClusterIssuer: %w", err)
 	}
 
-	// Create production ClusterIssuer
+	// Create production ClusterIssuer with retry logic
 	productionManifest, err := buildClusterIssuerManifest(cfCfg.Email, true)
 	if err != nil {
 		return fmt.Errorf("failed to build production ClusterIssuer manifest: %w", err)
 	}
-	if err := applyManifests(ctx, client, "letsencrypt-cloudflare-production", productionManifest); err != nil {
+	if err := applyClusterIssuerWithRetry(ctx, client, "letsencrypt-cloudflare-production", productionManifest); err != nil {
 		return fmt.Errorf("failed to apply production ClusterIssuer: %w", err)
 	}
 
 	return nil
+}
+
+// applyClusterIssuerWithRetry applies a ClusterIssuer manifest with retry logic.
+// This handles transient webhook failures that can occur right after cert-manager is installed.
+func applyClusterIssuerWithRetry(ctx context.Context, client k8sclient.Client, name string, manifest []byte) error {
+	maxRetries := 6
+	retryInterval := 10 * time.Second
+
+	var lastErr error
+	for i := 0; i < maxRetries; i++ {
+		if i > 0 {
+			log.Printf("Retrying ClusterIssuer %s creation (attempt %d/%d)...", name, i+1, maxRetries)
+		}
+
+		err := applyManifests(ctx, client, name, manifest)
+		if err == nil {
+			log.Printf("ClusterIssuer %s created successfully", name)
+			return nil
+		}
+
+		lastErr = err
+		log.Printf("Failed to create ClusterIssuer %s: %v", name, err)
+
+		// Check if this is a webhook-related error that might be transient
+		if i < maxRetries-1 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(retryInterval):
+				// Refresh discovery before retry to pick up any API changes
+				if refreshErr := client.RefreshDiscovery(ctx); refreshErr != nil {
+					log.Printf("Warning: failed to refresh discovery: %v", refreshErr)
+				}
+			}
+		}
+	}
+
+	return fmt.Errorf("failed after %d attempts: %w", maxRetries, lastErr)
+}
+
+// waitForCertManagerCRDs waits for cert-manager CRDs to be available, the webhook to be ready,
+// and refreshes the client's REST mapper.
+// This is necessary because:
+// 1. Helm chart applies CRDs asynchronously - they may not be immediately available
+// 2. The cert-manager webhook validates ClusterIssuer resources and must be running
+// 3. Even after the webhook endpoint exists, it may need a few seconds to be ready
+func waitForCertManagerCRDs(ctx context.Context, client k8sclient.Client) error {
+	timeout := 3 * time.Minute
+	interval := 5 * time.Second
+	// Grace period after webhook endpoint is detected to let the webhook server initialize
+	webhookGracePeriod := 15 * time.Second
+
+	deadline := time.Now().Add(timeout)
+
+	crdReady := false
+	webhookReady := false
+
+	log.Println("[cert-manager] Starting readiness checks...")
+
+	for time.Now().Before(deadline) {
+		// Step 1: Check if the ClusterIssuer CRD is available
+		if !crdReady {
+			hasCRD, err := client.HasCRD(ctx, "cert-manager.io/v1/ClusterIssuer")
+			if err != nil {
+				log.Printf("[cert-manager] Error checking for CRD: %v", err)
+			} else if hasCRD {
+				log.Println("[cert-manager] ClusterIssuer CRD is registered in API")
+				crdReady = true
+				// Refresh the client's REST mapper to pick up the new CRD
+				if err := client.RefreshDiscovery(ctx); err != nil {
+					log.Printf("[cert-manager] Warning: failed to refresh discovery after CRD found: %v", err)
+				}
+			} else {
+				log.Println("[cert-manager] Waiting for ClusterIssuer CRD to be registered...")
+			}
+		}
+
+		// Step 2: Check if the webhook service has endpoints (pod is ready)
+		if crdReady && !webhookReady {
+			ready, err := client.HasReadyEndpoints(ctx, "cert-manager", "cert-manager-webhook")
+			if err != nil {
+				log.Printf("[cert-manager] Error checking webhook endpoints: %v", err)
+			} else if ready {
+				log.Println("[cert-manager] Webhook endpoint detected, waiting for webhook server to initialize...")
+				// Wait for the webhook server inside the pod to fully initialize
+				// This is critical because the endpoint can exist before the HTTPS server is ready
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(webhookGracePeriod):
+					log.Println("[cert-manager] Webhook grace period complete")
+				}
+				webhookReady = true
+			} else {
+				log.Println("[cert-manager] Waiting for webhook endpoint to be ready...")
+			}
+		}
+
+		// If both are ready, we're done
+		if crdReady && webhookReady {
+			log.Println("[cert-manager] CRDs and webhook are fully ready")
+			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(interval):
+			// Continue waiting
+		}
+	}
+
+	if !crdReady {
+		return fmt.Errorf("timeout waiting for cert-manager CRDs to be available after %v", timeout)
+	}
+	return fmt.Errorf("timeout waiting for cert-manager webhook to be ready after %v", timeout)
 }
 
 // buildClusterIssuerManifest creates a ClusterIssuer manifest for Let's Encrypt with Cloudflare DNS01.
