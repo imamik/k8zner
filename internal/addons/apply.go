@@ -124,6 +124,14 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		}
 	}
 
+	// Install kube-prometheus-stack (full monitoring: Prometheus, Grafana, Alertmanager)
+	// Must be installed after ingress controllers and external-dns for subdomain exposure
+	if cfg.Addons.KubePrometheusStack.Enabled {
+		if err := applyKubePrometheusStack(ctx, client, cfg); err != nil {
+			return fmt.Errorf("failed to install kube-prometheus-stack: %w", err)
+		}
+	}
+
 	// Install Talos Backup (etcd backup to S3)
 	if cfg.Addons.TalosBackup.Enabled {
 		if err := applyTalosBackup(ctx, client, cfg); err != nil {
@@ -149,7 +157,7 @@ func hasEnabledAddons(cfg *config.Config) bool {
 		a.TalosCCM.Enabled || a.Cilium.Enabled || a.CCM.Enabled || a.CSI.Enabled ||
 		a.MetricsServer.Enabled || a.CertManager.Enabled || a.Traefik.Enabled ||
 		a.ArgoCD.Enabled || a.Cloudflare.Enabled || a.ExternalDNS.Enabled ||
-		a.TalosBackup.Enabled
+		a.TalosBackup.Enabled || a.KubePrometheusStack.Enabled
 }
 
 // validateAddonConfig performs pre-flight validation of addon configuration.

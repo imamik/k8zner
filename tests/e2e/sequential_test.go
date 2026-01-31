@@ -20,6 +20,7 @@ import (
 //  2. Cluster - Provision infrastructure and bootstrap Kubernetes
 //  3. Addons - Install and test each addon sequentially
 //     3b. Advanced Addons - Test advanced addon configurations (Gateway API, Prometheus CRDs, etc.)
+//     3c. Monitoring - Test kube-prometheus-stack with Grafana dashboard (requires CF_API_TOKEN and CF_DOMAIN)
 //  4. Scale - Scale cluster and verify operation
 //  5. Upgrade - Upgrade Talos and Kubernetes versions
 //
@@ -31,6 +32,7 @@ import (
 //	E2E_SKIP_CLUSTER - Set to "true" to skip cluster provisioning
 //	E2E_SKIP_ADDONS - Set to "true" to skip addon testing
 //	E2E_SKIP_ADDONS_ADVANCED - Set to "true" to skip advanced addon testing
+//	E2E_SKIP_MONITORING - Set to "true" to skip monitoring stack testing
 //	E2E_SKIP_SCALE - Set to "true" to skip scale testing
 //	E2E_SKIP_UPGRADE - Set to "true" to skip upgrade testing
 //	E2E_REUSE_CLUSTER - Set to "true" to reuse existing cluster
@@ -134,6 +136,15 @@ func TestE2ELifecycle(t *testing.T) {
 		})
 	} else {
 		t.Log("Skipping Phase 3b: Advanced Addons (E2E_SKIP_ADDONS_ADVANCED=true)")
+	}
+
+	// Phase 3c: Monitoring Stack (kube-prometheus-stack with Grafana dashboard)
+	if !e2eConfig.SkipMonitoring {
+		t.Run("Phase3c_Monitoring", func(t *testing.T) {
+			phaseMonitoring(t, state)
+		})
+	} else {
+		t.Log("Skipping Phase 3c: Monitoring (E2E_SKIP_MONITORING=true)")
 	}
 
 	// Phase 4: Scale
