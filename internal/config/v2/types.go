@@ -41,7 +41,7 @@ type Config struct {
 	// Let's Encrypt sends expiration warnings to this address.
 	// If not set, defaults to "admin@{domain}".
 	// Required for production use to receive renewal failure alerts.
-	CertEmail string `yaml:"certEmail,omitempty"`
+	CertEmail string `yaml:"cert_email,omitempty"`
 
 	// Backup enables automatic etcd backups to Hetzner Object Storage.
 	// Requires HETZNER_S3_ACCESS_KEY and HETZNER_S3_SECRET_KEY environment variables.

@@ -106,12 +106,12 @@ When set, this automatically enables:
 
 Requires `CF_API_TOKEN` environment variable.
 
-### certEmail (optional)
+### cert_email (optional)
 
 Email address for Let's Encrypt certificate expiration notifications.
 
 ```yaml
-certEmail: ops@example.com
+cert_email: ops@example.com
 ```
 
 Let's Encrypt sends certificate expiration warnings (at 20 days, 10 days, and 1 day before expiry) to this email. **Recommended for production** to catch renewal failures.
