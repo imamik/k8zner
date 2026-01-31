@@ -79,11 +79,15 @@ func main() {
 	}
 
 	// Create the cluster reconciler
-	if err = controller.NewClusterReconciler(
+	reconciler := controller.NewClusterReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-		hcloudToken,
-	).SetupWithManager(mgr); err != nil {
+		mgr.GetEventRecorderFor("k8zner-controller"),
+		controller.WithHCloudToken(hcloudToken),
+		controller.WithMetrics(true),
+		controller.WithMaxConcurrentHeals(1),
+	)
+	if err = reconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "K8znerCluster")
 		os.Exit(1)
 	}

@@ -264,6 +264,9 @@ func expandAddons(cfg *Config, vm VersionMatrix) config.AddonsConfig {
 			Enabled: true,
 		},
 
+		// Kube Prometheus Stack - enabled only when monitoring is set
+		KubePrometheusStack: expandKubePrometheusStack(cfg),
+
 		// Talos CCM - always enabled
 		TalosCCM: config.TalosCCMConfig{
 			Enabled: true,
@@ -325,4 +328,32 @@ func expandArgoCD(cfg *Config) config.ArgoCDConfig {
 	}
 
 	return argoCfg
+}
+
+func expandKubePrometheusStack(cfg *Config) config.KubePrometheusStackConfig {
+	if !cfg.HasMonitoring() {
+		return config.KubePrometheusStackConfig{Enabled: false}
+	}
+
+	promCfg := config.KubePrometheusStackConfig{
+		Enabled: true,
+		Grafana: config.KubePrometheusGrafanaConfig{},
+		Prometheus: config.KubePrometheusPrometheusConfig{
+			Persistence: config.KubePrometheusPersistenceConfig{
+				Enabled: true,
+				Size:    "50Gi",
+			},
+		},
+		Alertmanager: config.KubePrometheusAlertmanagerConfig{},
+	}
+
+	// Enable Grafana ingress with TLS when domain is configured
+	if cfg.HasDomain() {
+		promCfg.Grafana.IngressEnabled = true
+		promCfg.Grafana.IngressHost = cfg.GrafanaHost()
+		promCfg.Grafana.IngressClassName = "traefik"
+		promCfg.Grafana.IngressTLS = true
+	}
+
+	return promCfg
 }

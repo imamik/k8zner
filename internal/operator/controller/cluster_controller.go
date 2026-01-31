@@ -7,11 +7,13 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -24,31 +26,112 @@ import (
 )
 
 const (
-	// Default reconciliation interval
+	// Default reconciliation interval.
 	defaultRequeueAfter = 30 * time.Second
 
-	// Default health check thresholds
-	defaultNodeNotReadyThreshold = 5 * time.Minute
+	// Default health check thresholds.
+	defaultNodeNotReadyThreshold  = 5 * time.Minute
 	defaultEtcdUnhealthyThreshold = 2 * time.Minute
+
+	// Event reasons.
+	EventReasonReconciling        = "Reconciling"
+	EventReasonReconcileSucceeded = "ReconcileSucceeded"
+	EventReasonReconcileFailed    = "ReconcileFailed"
+	EventReasonNodeUnhealthy      = "NodeUnhealthy"
+	EventReasonNodeReplacing      = "NodeReplacing"
+	EventReasonNodeReplaced       = "NodeReplaced"
+	EventReasonQuorumLost         = "QuorumLost"
+	EventReasonScalingUp          = "ScalingUp"
+	EventReasonScalingDown        = "ScalingDown"
 )
 
 // ClusterReconciler reconciles a K8znerCluster object.
 type ClusterReconciler struct {
 	client.Client
-	Scheme      *runtime.Scheme
-	HCloudToken string
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 
-	// Clients (created lazily)
-	hcloudClient *hcloud.RealClient
+	// Dependencies (injected via options).
+	hcloudClient       HCloudClient
+	talosClient        TalosClient
+	talosConfigGen     TalosConfigGenerator
+	hcloudToken        string
+	enableMetrics      bool
+	maxConcurrentHeals int
 }
 
-// NewClusterReconciler creates a new ClusterReconciler.
-func NewClusterReconciler(client client.Client, scheme *runtime.Scheme, hcloudToken string) *ClusterReconciler {
-	return &ClusterReconciler{
-		Client:      client,
-		Scheme:      scheme,
-		HCloudToken: hcloudToken,
+// Option configures a ClusterReconciler.
+type Option func(*ClusterReconciler)
+
+// WithHCloudClient sets a custom HCloud client.
+func WithHCloudClient(c HCloudClient) Option {
+	return func(r *ClusterReconciler) {
+		r.hcloudClient = c
 	}
+}
+
+// WithTalosClient sets a custom Talos client.
+func WithTalosClient(c TalosClient) Option {
+	return func(r *ClusterReconciler) {
+		r.talosClient = c
+	}
+}
+
+// WithTalosConfigGenerator sets a custom Talos config generator.
+func WithTalosConfigGenerator(g TalosConfigGenerator) Option {
+	return func(r *ClusterReconciler) {
+		r.talosConfigGen = g
+	}
+}
+
+// WithHCloudToken sets the Hetzner Cloud API token for lazy client creation.
+func WithHCloudToken(token string) Option {
+	return func(r *ClusterReconciler) {
+		r.hcloudToken = token
+	}
+}
+
+// WithMetrics enables Prometheus metrics.
+func WithMetrics(enable bool) Option {
+	return func(r *ClusterReconciler) {
+		r.enableMetrics = enable
+	}
+}
+
+// WithMaxConcurrentHeals sets the maximum concurrent healing operations.
+func WithMaxConcurrentHeals(maxHeals int) Option {
+	return func(r *ClusterReconciler) {
+		r.maxConcurrentHeals = maxHeals
+	}
+}
+
+// NewClusterReconciler creates a new ClusterReconciler with the given options.
+func NewClusterReconciler(c client.Client, scheme *runtime.Scheme, recorder record.EventRecorder, opts ...Option) *ClusterReconciler {
+	r := &ClusterReconciler{
+		Client:             c,
+		Scheme:             scheme,
+		Recorder:           recorder,
+		enableMetrics:      true,
+		maxConcurrentHeals: 1,
+	}
+
+	for _, opt := range opts {
+		opt(r)
+	}
+
+	return r
+}
+
+// ensureHCloudClient ensures the HCloud client is initialized.
+func (r *ClusterReconciler) ensureHCloudClient() error {
+	if r.hcloudClient != nil {
+		return nil
+	}
+	if r.hcloudToken == "" {
+		return fmt.Errorf("HCloud token not configured")
+	}
+	r.hcloudClient = hcloud.NewRealClient(r.hcloudToken)
+	return nil
 }
 
 // +kubebuilder:rbac:groups=k8zner.io,resources=k8znerclusters,verbs=get;list;watch;create;update;patch;delete
@@ -58,17 +141,27 @@ func NewClusterReconciler(client client.Client, scheme *runtime.Scheme, hcloudTo
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups="",resources=pods/eviction,verbs=create
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;create;update
 
 // Reconcile handles the reconciliation loop for K8znerCluster resources.
 func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
+	logger := log.FromContext(ctx).WithValues("cluster", req.Name)
+	ctx = log.IntoContext(ctx, logger)
+
+	startTime := time.Now()
+	defer func() {
+		if r.enableMetrics {
+			duration := time.Since(startTime).Seconds()
+			RecordReconcile(req.Name, "completed", duration)
+		}
+	}()
 
 	// Fetch the K8znerCluster
 	cluster := &k8znerv1alpha1.K8znerCluster{}
 	if err := r.Get(ctx, req.NamespacedName, cluster); err != nil {
 		if apierrors.IsNotFound(err) {
-			// Object deleted, nothing to do
+			logger.Info("cluster resource not found, likely deleted")
 			return ctrl.Result{}, nil
 		}
 		logger.Error(err, "unable to fetch K8znerCluster")
@@ -81,10 +174,15 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
-	// Initialize Hetzner client if needed
-	if r.hcloudClient == nil {
-		r.hcloudClient = hcloud.NewRealClient(r.HCloudToken)
+	// Ensure HCloud client is initialized
+	if err := r.ensureHCloudClient(); err != nil {
+		logger.Error(err, "failed to initialize HCloud client")
+		r.Recorder.Event(cluster, corev1.EventTypeWarning, EventReasonReconcileFailed, err.Error())
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
+
+	// Record reconciliation start
+	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonReconciling, "Starting reconciliation")
 
 	// Run the reconciliation phases
 	result, err := r.reconcile(ctx, cluster)
@@ -92,11 +190,23 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Update status
 	cluster.Status.LastReconcileTime = &metav1.Time{Time: time.Now()}
 	cluster.Status.ObservedGeneration = cluster.Generation
+
 	if statusErr := r.Status().Update(ctx, cluster); statusErr != nil {
 		logger.Error(statusErr, "failed to update status")
 		if err == nil {
 			err = statusErr
 		}
+	}
+
+	if err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonReconcileFailed,
+			"Reconciliation failed: %v", err)
+		if r.enableMetrics {
+			RecordReconcile(req.Name, "error", time.Since(startTime).Seconds())
+		}
+	} else {
+		r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonReconcileSucceeded,
+			"Reconciliation completed successfully")
 	}
 
 	return result, err
@@ -123,12 +233,6 @@ func (r *ClusterReconciler) reconcile(ctx context.Context, cluster *k8znerv1alph
 	if result, err := r.reconcileWorkers(ctx, cluster); err != nil || result.Requeue {
 		return result, err
 	}
-
-	// Phase 4: Addon Reconciliation (future)
-	// logger.V(1).Info("running addon reconciliation")
-	// if result, err := r.reconcileAddons(ctx, cluster); err != nil || result.Requeue {
-	// 	return result, err
-	// }
 
 	// Update overall phase
 	r.updateClusterPhase(cluster)
@@ -158,10 +262,18 @@ func (r *ClusterReconciler) reconcileHealthCheck(ctx context.Context, cluster *k
 	}
 
 	// Update control plane status
-	cluster.Status.ControlPlanes = r.buildNodeGroupStatus(ctx, cpNodes, cluster.Spec.ControlPlanes.Count)
+	cluster.Status.ControlPlanes = r.buildNodeGroupStatus(ctx, cluster, cpNodes, cluster.Spec.ControlPlanes.Count, "control-plane")
 
 	// Update worker status
-	cluster.Status.Workers = r.buildNodeGroupStatus(ctx, workerNodes, cluster.Spec.Workers.Count)
+	cluster.Status.Workers = r.buildNodeGroupStatus(ctx, cluster, workerNodes, cluster.Spec.Workers.Count, "worker")
+
+	// Record metrics
+	if r.enableMetrics {
+		RecordNodeCounts(cluster.Name, "control-plane",
+			len(cpNodes), cluster.Status.ControlPlanes.Ready, cluster.Spec.ControlPlanes.Count)
+		RecordNodeCounts(cluster.Name, "worker",
+			len(workerNodes), cluster.Status.Workers.Ready, cluster.Spec.Workers.Count)
+	}
 
 	logger.Info("health check complete",
 		"controlPlanes", fmt.Sprintf("%d/%d", cluster.Status.ControlPlanes.Ready, cluster.Status.ControlPlanes.Desired),
@@ -172,7 +284,7 @@ func (r *ClusterReconciler) reconcileHealthCheck(ctx context.Context, cluster *k
 }
 
 // buildNodeGroupStatus builds the status for a group of nodes.
-func (r *ClusterReconciler) buildNodeGroupStatus(ctx context.Context, nodes []corev1.Node, desired int) k8znerv1alpha1.NodeGroupStatus {
+func (r *ClusterReconciler) buildNodeGroupStatus(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, nodes []corev1.Node, desired int, role string) k8znerv1alpha1.NodeGroupStatus {
 	status := k8znerv1alpha1.NodeGroupStatus{
 		Desired: desired,
 		Nodes:   make([]k8znerv1alpha1.NodeStatus, 0, len(nodes)),
@@ -216,6 +328,10 @@ func (r *ClusterReconciler) buildNodeGroupStatus(ctx context.Context, nodes []co
 				}
 			}
 			status.Unhealthy++
+
+			// Record event for newly unhealthy nodes
+			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonNodeUnhealthy,
+				"%s node %s is unhealthy: %s", role, node.Name, nodeStatus.UnhealthyReason)
 		} else {
 			status.Ready++
 		}
@@ -250,7 +366,6 @@ func (r *ClusterReconciler) reconcileControlPlanes(ctx context.Context, cluster 
 	}
 
 	if unhealthyCP == nil {
-		// All control planes healthy
 		return ctrl.Result{}, nil
 	}
 
@@ -264,7 +379,10 @@ func (r *ClusterReconciler) reconcileControlPlanes(ctx context.Context, cluster 
 			"healthy", healthyCPs,
 			"needed", quorumNeeded,
 		)
-		// Update condition
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonQuorumLost,
+			"Cannot replace control plane %s: only %d/%d healthy, need %d for quorum",
+			unhealthyCP.Name, healthyCPs, totalCPs, quorumNeeded)
+
 		meta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
 			Type:    k8znerv1alpha1.ConditionControlPlaneReady,
 			Status:  metav1.ConditionFalse,
@@ -281,13 +399,28 @@ func (r *ClusterReconciler) reconcileControlPlanes(ctx context.Context, cluster 
 		"unhealthySince", unhealthyCP.UnhealthySince,
 	)
 
+	r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonNodeReplacing,
+		"Replacing unhealthy control plane %s (unhealthy since %v)",
+		unhealthyCP.Name, unhealthyCP.UnhealthySince)
+
 	cluster.Status.Phase = k8znerv1alpha1.ClusterPhaseHealing
 
+	startTime := time.Now()
 	if err := r.replaceControlPlane(ctx, cluster, unhealthyCP); err != nil {
+		if r.enableMetrics {
+			RecordNodeReplacement(cluster.Name, "control-plane", unhealthyCP.UnhealthyReason)
+		}
 		return ctrl.Result{}, fmt.Errorf("failed to replace control plane: %w", err)
 	}
 
-	// Requeue immediately to check the new node
+	if r.enableMetrics {
+		RecordNodeReplacement(cluster.Name, "control-plane", unhealthyCP.UnhealthyReason)
+		RecordNodeReplacementDuration(cluster.Name, "control-plane", time.Since(startTime).Seconds())
+	}
+
+	r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonNodeReplaced,
+		"Successfully replaced control plane %s", unhealthyCP.Name)
+
 	return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 }
 
@@ -308,19 +441,39 @@ func (r *ClusterReconciler) reconcileWorkers(ctx context.Context, cluster *k8zne
 		}
 	}
 
-	// Replace unhealthy workers
+	// Replace unhealthy workers (respect maxConcurrentHeals)
+	replaced := 0
 	for _, worker := range unhealthyWorkers {
+		if replaced >= r.maxConcurrentHeals {
+			break
+		}
+
 		logger.Info("replacing unhealthy worker",
 			"node", worker.Name,
 			"serverID", worker.ServerID,
 			"unhealthySince", worker.UnhealthySince,
 		)
 
+		r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonNodeReplacing,
+			"Replacing unhealthy worker %s (unhealthy since %v)",
+			worker.Name, worker.UnhealthySince)
+
 		cluster.Status.Phase = k8znerv1alpha1.ClusterPhaseHealing
 
+		startTime := time.Now()
 		if err := r.replaceWorker(ctx, cluster, worker); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to replace worker %s: %w", worker.Name, err)
+			logger.Error(err, "failed to replace worker", "node", worker.Name)
+			continue
 		}
+
+		if r.enableMetrics {
+			RecordNodeReplacement(cluster.Name, "worker", worker.UnhealthyReason)
+			RecordNodeReplacementDuration(cluster.Name, "worker", time.Since(startTime).Seconds())
+		}
+
+		r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonNodeReplaced,
+			"Successfully replaced worker %s", worker.Name)
+		replaced++
 	}
 
 	// Check if scaling is needed
@@ -329,9 +482,13 @@ func (r *ClusterReconciler) reconcileWorkers(ctx context.Context, cluster *k8zne
 
 	if currentCount < desiredCount {
 		logger.Info("scaling up workers", "current", currentCount, "desired", desiredCount)
+		r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonScalingUp,
+			"Scaling up workers: %d -> %d", currentCount, desiredCount)
 		// TODO: Create new workers
 	} else if currentCount > desiredCount {
 		logger.Info("scaling down workers", "current", currentCount, "desired", desiredCount)
+		r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonScalingDown,
+			"Scaling down workers: %d -> %d", currentCount, desiredCount)
 		// TODO: Remove excess workers (drain and delete)
 	}
 
@@ -347,8 +504,29 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 	logger := log.FromContext(ctx)
 
 	// Step 1: Remove from etcd cluster (via Talos API)
-	// TODO: Implement etcd member removal
-	logger.Info("TODO: Remove from etcd cluster", "node", node.Name)
+	if r.talosClient != nil && node.PrivateIP != "" {
+		// Get etcd members from a healthy control plane
+		healthyIP := r.findHealthyControlPlaneIP(cluster)
+		if healthyIP != "" {
+			members, err := r.talosClient.GetEtcdMembers(ctx, healthyIP)
+			if err != nil {
+				logger.Error(err, "failed to get etcd members")
+			} else {
+				for _, member := range members {
+					if member.Name == node.Name || member.Endpoint == node.PrivateIP {
+						if err := r.talosClient.RemoveEtcdMember(ctx, healthyIP, member.ID); err != nil {
+							logger.Error(err, "failed to remove etcd member", "member", member.Name)
+						} else {
+							logger.Info("removed etcd member", "member", member.Name)
+						}
+						break
+					}
+				}
+			}
+		}
+	} else {
+		logger.Info("skipping etcd member removal (talos client not configured or no IP)")
+	}
 
 	// Step 2: Delete the Kubernetes node
 	k8sNode := &corev1.Node{}
@@ -359,13 +537,20 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 		logger.Info("deleted kubernetes node", "node", node.Name)
 	}
 
-	// Step 3: Delete the Hetzner server (use node name which matches server name)
+	// Step 3: Delete the Hetzner server
 	if node.Name != "" {
+		startTime := time.Now()
 		if err := r.hcloudClient.DeleteServer(ctx, node.Name); err != nil {
 			logger.Error(err, "failed to delete hetzner server", "name", node.Name)
+			if r.enableMetrics {
+				RecordHCloudAPICall("delete_server", "error", time.Since(startTime).Seconds())
+			}
 			// Continue anyway - server might already be gone
 		} else {
 			logger.Info("deleted hetzner server", "name", node.Name, "serverID", node.ServerID)
+			if r.enableMetrics {
+				RecordHCloudAPICall("delete_server", "success", time.Since(startTime).Seconds())
+			}
 		}
 	}
 
@@ -394,8 +579,10 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 	}
 
 	// Step 2: Drain the node (evict pods)
-	// TODO: Implement proper drain with pod eviction
-	logger.Info("TODO: Drain node", "node", node.Name)
+	if err := r.drainNode(ctx, node.Name); err != nil {
+		logger.Error(err, "failed to drain node", "node", node.Name)
+		// Continue with replacement anyway
+	}
 
 	// Step 3: Delete the Kubernetes node
 	if err := r.Get(ctx, types.NamespacedName{Name: node.Name}, k8sNode); err == nil {
@@ -405,13 +592,20 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 		logger.Info("deleted kubernetes node", "node", node.Name)
 	}
 
-	// Step 4: Delete the Hetzner server (use node name which matches server name)
+	// Step 4: Delete the Hetzner server
 	if node.Name != "" {
+		startTime := time.Now()
 		if err := r.hcloudClient.DeleteServer(ctx, node.Name); err != nil {
 			logger.Error(err, "failed to delete hetzner server", "name", node.Name)
+			if r.enableMetrics {
+				RecordHCloudAPICall("delete_server", "error", time.Since(startTime).Seconds())
+			}
 			// Continue anyway - server might already be gone
 		} else {
 			logger.Info("deleted hetzner server", "name", node.Name, "serverID", node.ServerID)
+			if r.enableMetrics {
+				RecordHCloudAPICall("delete_server", "success", time.Since(startTime).Seconds())
+			}
 		}
 	}
 
@@ -422,12 +616,71 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 	return nil
 }
 
+// drainNode evicts all pods from a node.
+func (r *ClusterReconciler) drainNode(ctx context.Context, nodeName string) error {
+	logger := log.FromContext(ctx)
+
+	// List pods on this node
+	podList := &corev1.PodList{}
+	if err := r.List(ctx, podList, client.MatchingFields{"spec.nodeName": nodeName}); err != nil {
+		return fmt.Errorf("failed to list pods on node: %w", err)
+	}
+
+	// Evict each pod (skip DaemonSet pods and mirror pods)
+	for _, pod := range podList.Items {
+		// Skip mirror pods (static pods)
+		if _, isMirror := pod.Annotations[corev1.MirrorPodAnnotationKey]; isMirror {
+			continue
+		}
+
+		// Skip DaemonSet pods
+		isDaemonSet := false
+		for _, ref := range pod.OwnerReferences {
+			if ref.Kind == "DaemonSet" {
+				isDaemonSet = true
+				break
+			}
+		}
+		if isDaemonSet {
+			continue
+		}
+
+		// Create eviction
+		eviction := &policyv1.Eviction{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      pod.Name,
+				Namespace: pod.Namespace,
+			},
+		}
+		if err := r.SubResource("eviction").Create(ctx, &pod, eviction); err != nil {
+			if !apierrors.IsNotFound(err) && !apierrors.IsTooManyRequests(err) {
+				logger.Error(err, "failed to evict pod", "pod", pod.Name, "namespace", pod.Namespace)
+			}
+		} else {
+			logger.V(1).Info("evicted pod", "pod", pod.Name, "namespace", pod.Namespace)
+		}
+	}
+
+	return nil
+}
+
+// findHealthyControlPlaneIP finds the IP of a healthy control plane for API operations.
+func (r *ClusterReconciler) findHealthyControlPlaneIP(cluster *k8znerv1alpha1.K8znerCluster) string {
+	for _, node := range cluster.Status.ControlPlanes.Nodes {
+		if node.Healthy && node.PrivateIP != "" {
+			return node.PrivateIP
+		}
+	}
+	return ""
+}
+
 // updateClusterPhase updates the overall cluster phase based on status.
 func (r *ClusterReconciler) updateClusterPhase(cluster *k8znerv1alpha1.K8znerCluster) {
 	cpReady := cluster.Status.ControlPlanes.Ready == cluster.Status.ControlPlanes.Desired
 	workersReady := cluster.Status.Workers.Ready == cluster.Status.Workers.Desired
 
-	if cpReady && workersReady {
+	switch {
+	case cpReady && workersReady:
 		cluster.Status.Phase = k8znerv1alpha1.ClusterPhaseRunning
 		meta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
 			Type:    k8znerv1alpha1.ConditionReady,
@@ -435,7 +688,7 @@ func (r *ClusterReconciler) updateClusterPhase(cluster *k8znerv1alpha1.K8znerClu
 			Reason:  "AllHealthy",
 			Message: "All nodes are healthy",
 		})
-	} else if cluster.Status.Phase != k8znerv1alpha1.ClusterPhaseHealing {
+	case cluster.Status.Phase != k8znerv1alpha1.ClusterPhaseHealing:
 		cluster.Status.Phase = k8znerv1alpha1.ClusterPhaseDegraded
 		meta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
 			Type:   k8znerv1alpha1.ConditionReady,
@@ -467,9 +720,16 @@ func (r *ClusterReconciler) updateClusterPhase(cluster *k8znerv1alpha1.K8znerClu
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Index pods by node name for efficient drain operations
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &corev1.Pod{}, "spec.nodeName", func(o client.Object) []string {
+		pod := o.(*corev1.Pod)
+		return []string{pod.Spec.NodeName}
+	}); err != nil {
+		return fmt.Errorf("failed to create pod node name index: %w", err)
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&k8znerv1alpha1.K8znerCluster{}).
-		// Watch nodes for changes
 		Watches(&corev1.Node{}, &nodeEventHandler{}).
 		Complete(r)
 }
@@ -487,16 +747,14 @@ func isNodeReady(node *corev1.Node) bool {
 
 func getNodeUnhealthyReason(node *corev1.Node) string {
 	for _, cond := range node.Status.Conditions {
-		if cond.Type == corev1.NodeReady && cond.Status != corev1.ConditionTrue {
+		switch {
+		case cond.Type == corev1.NodeReady && cond.Status != corev1.ConditionTrue:
 			return fmt.Sprintf("NodeNotReady: %s", cond.Message)
-		}
-		if cond.Type == corev1.NodeMemoryPressure && cond.Status == corev1.ConditionTrue {
+		case cond.Type == corev1.NodeMemoryPressure && cond.Status == corev1.ConditionTrue:
 			return "MemoryPressure"
-		}
-		if cond.Type == corev1.NodeDiskPressure && cond.Status == corev1.ConditionTrue {
+		case cond.Type == corev1.NodeDiskPressure && cond.Status == corev1.ConditionTrue:
 			return "DiskPressure"
-		}
-		if cond.Type == corev1.NodePIDPressure && cond.Status == corev1.ConditionTrue {
+		case cond.Type == corev1.NodePIDPressure && cond.Status == corev1.ConditionTrue:
 			return "PIDPressure"
 		}
 	}
@@ -574,7 +832,7 @@ func (h *nodeEventHandler) enqueueCluster(ctx context.Context, q workqueue.Typed
 	q.Add(reconcile.Request{
 		NamespacedName: types.NamespacedName{
 			Namespace: "k8zner-system",
-			Name:      "cluster", // Default cluster name
+			Name:      "cluster",
 		},
 	})
 }
