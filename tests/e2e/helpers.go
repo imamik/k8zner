@@ -72,7 +72,8 @@ func WaitForPort(ctx context.Context, ip string, port int, timeout time.Duration
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	// Create timeout context that respects parent context cancellation
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	// Try immediately first
@@ -84,11 +85,11 @@ func WaitForPort(ctx context.Context, ip string, port int, timeout time.Duration
 
 	for {
 		select {
-		case <-ctx.Done():
-			if ctx.Err() == context.DeadlineExceeded {
+		case <-timeoutCtx.Done():
+			if timeoutCtx.Err() == context.DeadlineExceeded {
 				return fmt.Errorf("timeout waiting for %s", address)
 			}
-			return ctx.Err()
+			return timeoutCtx.Err()
 		case <-ticker.C:
 			conn, err := net.DialTimeout("tcp", address, 2*time.Second)
 			if err == nil {

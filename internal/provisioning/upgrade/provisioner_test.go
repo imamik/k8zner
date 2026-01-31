@@ -60,11 +60,11 @@ func (m *mockTalosClient) HealthCheck(ctx context.Context, endpoint string) erro
 }
 
 // Implement other required TalosConfigProducer methods as stubs.
-func (m *mockTalosClient) GenerateControlPlaneConfig(_ []string, _ string) ([]byte, error) {
+func (m *mockTalosClient) GenerateControlPlaneConfig(_ []string, _ string, _ int64) ([]byte, error) {
 	return nil, nil
 }
 
-func (m *mockTalosClient) GenerateWorkerConfig(_ string) ([]byte, error) {
+func (m *mockTalosClient) GenerateWorkerConfig(_ string, _ int64) ([]byte, error) {
 	return nil, nil
 }
 

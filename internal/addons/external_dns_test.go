@@ -209,14 +209,17 @@ func TestBuildExternalDNSValues_StructureComplete(t *testing.T) {
 	require.Len(t, env, 1)
 	assert.Equal(t, "CF_API_TOKEN", env[0]["name"])
 
-	// Check node selector (should schedule on control plane)
-	nodeSelector := values["nodeSelector"].(helm.Values)
-	_, ok := nodeSelector["node-role.kubernetes.io/control-plane"]
-	assert.True(t, ok)
+	// Check node affinity (should schedule on worker nodes, NOT control plane)
+	affinity, ok := values["affinity"].(helm.Values)
+	require.True(t, ok, "affinity should exist")
+	nodeAffinity, ok := affinity["nodeAffinity"].(helm.Values)
+	require.True(t, ok, "nodeAffinity should exist")
+	_, ok = nodeAffinity["requiredDuringSchedulingIgnoredDuringExecution"]
+	assert.True(t, ok, "requiredDuringSchedulingIgnoredDuringExecution should exist")
 
 	// Check tolerations
 	tolerations := values["tolerations"].([]helm.Values)
-	assert.Len(t, tolerations, 2)
+	assert.Len(t, tolerations, 1) // Only CCM uninitialized toleration
 
 	// Check service account
 	serviceAccount := values["serviceAccount"].(helm.Values)

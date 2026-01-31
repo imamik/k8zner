@@ -29,8 +29,15 @@ type NodePoolSpec struct {
 	RDNSIPv6         string // RDNS template for IPv6
 }
 
+// NodePoolResult holds the results of provisioning a node pool.
+type NodePoolResult struct {
+	IPs       map[string]string // nodeName -> publicIP
+	ServerIDs map[string]int64  // nodeName -> serverID
+}
+
 // reconcileNodePool provisions a pool of servers in parallel.
-func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePoolSpec) (map[string]string, error) {
+// Returns both server IPs and server IDs for use in machine config generation.
+func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePoolSpec) (NodePoolResult, error) {
 	// Pre-calculate all server configurations
 	type serverConfig struct {
 		name      string
@@ -57,7 +64,7 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 			// hostNum offset is +2 instead of +1 to skip the gateway
 			subnet, err = ctx.Config.GetSubnetForRole("control-plane", 0)
 			if err != nil {
-				return nil, err
+				return NodePoolResult{}, err
 			}
 			hostNum = spec.PoolIndex*10 + (j - 1) + 2
 		} else {
@@ -68,14 +75,14 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 			// Note: Hetzner Cloud reserves .1 for the gateway, so we start at .2
 			subnet, err = ctx.Config.GetSubnetForRole("worker", spec.PoolIndex)
 			if err != nil {
-				return nil, err
+				return NodePoolResult{}, err
 			}
 			hostNum = (j - 1) + 2
 		}
 
 		privateIP, err := config.CIDRHost(subnet, hostNum)
 		if err != nil {
-			return nil, fmt.Errorf("failed to calculate private ip: %w", err)
+			return NodePoolResult{}, fmt.Errorf("failed to calculate private ip: %w", err)
 		}
 
 		// Placement Group Sharding for Workers
@@ -102,7 +109,7 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 					Build()
 				pg, err := ctx.Infra.EnsurePlacementGroup(ctx, naming.WorkerPlacementGroupShard(ctx.Config.ClusterName, spec.Name, pgIndex), "spread", pgLabels)
 				if err != nil {
-					return nil, err
+					return NodePoolResult{}, err
 				}
 				currentPGID = &pg.ID
 			}
@@ -120,9 +127,12 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 	// Create all servers in parallel
 	ctx.Logger.Printf("[%s] Creating %d servers for pool %s...", phase, spec.Count, spec.Name)
 
-	// Collect IPs in a thread-safe way
+	// Collect IPs and server IDs in a thread-safe way
 	var mu sync.Mutex
-	ips := make(map[string]string)
+	result := NodePoolResult{
+		IPs:       make(map[string]string),
+		ServerIDs: make(map[string]int64),
+	}
 
 	tasks := make([]async.Task, len(configs))
 	for i, cfg := range configs {
@@ -130,7 +140,7 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 		tasks[i] = async.Task{
 			Name: fmt.Sprintf("server-%s", cfg.name),
 			Func: func(_ context.Context) error {
-				ip, err := p.ensureServer(ctx, ServerSpec{
+				info, err := p.ensureServer(ctx, ServerSpec{
 					Name:           cfg.name,
 					Type:           spec.ServerType,
 					Location:       spec.Location,
@@ -148,7 +158,8 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 					return err
 				}
 				mu.Lock()
-				ips[cfg.name] = ip
+				result.IPs[cfg.name] = info.IP
+				result.ServerIDs[cfg.name] = info.ServerID
 				mu.Unlock()
 				return nil
 			},
@@ -156,9 +167,9 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 	}
 
 	if err := async.RunParallel(ctx, tasks, false); err != nil {
-		return nil, fmt.Errorf("failed to provision pool %s: %w", spec.Name, err)
+		return NodePoolResult{}, fmt.Errorf("failed to provision pool %s: %w", spec.Name, err)
 	}
 
 	ctx.Logger.Printf("[%s] Successfully created %d servers for pool %s", phase, spec.Count, spec.Name)
-	return ips, nil
+	return result, nil
 }

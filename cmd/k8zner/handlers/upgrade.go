@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/imamik/k8zner/internal/config"
 	"github.com/imamik/k8zner/internal/platform/talos"
@@ -39,14 +40,10 @@ type UpgradeOptions struct {
 // 4. Upgrade Kubernetes version (if changed)
 // 5. Health check after completion
 func Upgrade(ctx context.Context, opts UpgradeOptions) error {
-	// Load and validate configuration
-	cfg, err := loadConfigFile(opts.ConfigPath)
+	// Load configuration using v2 loader
+	cfg, err := loadConfig(opts.ConfigPath)
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	if err := cfg.Validate(); err != nil {
-		return fmt.Errorf("invalid configuration: %w", err)
+		return err
 	}
 
 	// Override Kubernetes version if specified
@@ -62,8 +59,9 @@ func Upgrade(ctx context.Context, opts UpgradeOptions) error {
 		log.Printf("[DRY RUN] Would upgrade cluster (no changes will be made)")
 	}
 
-	// Initialize Hetzner Cloud client
-	infraClient := newInfraClient(cfg.HCloudToken)
+	// Initialize Hetzner Cloud client using environment variable
+	token := os.Getenv("HCLOUD_TOKEN")
+	infraClient := newInfraClient(token)
 
 	// Initialize Talos generator
 	// For upgrade, we need to load existing secrets from disk

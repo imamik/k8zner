@@ -26,16 +26,17 @@ func DetectArchitecture(serverType string) Architecture {
 }
 
 // GetDefaultServerType returns a default server type for the given architecture.
-// These are suitable for testing and development.
+// These are used for image building and must have disk sizes compatible with
+// production server types (e.g., cx23 has 40GB disk).
 //
 // For production, users should explicitly specify appropriate server types
 // based on their workload requirements.
 func GetDefaultServerType(arch Architecture) string {
 	switch arch {
 	case ArchARM64:
-		return "cax11" // 2 ARM cores, 4 GB RAM
+		return "cax11" // 2 ARM cores, 4 GB RAM, 40 GB disk
 	default:
-		return "cpx22" // 2 AMD cores, 4 GB RAM
+		return "cx23" // 2 AMD cores, 4 GB RAM, 40 GB disk
 	}
 }
 

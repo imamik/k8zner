@@ -3,6 +3,8 @@ package addons
 import (
 	"context"
 	"fmt"
+	"log"
+	"strings"
 
 	"github.com/imamik/k8zner/internal/addons/helm"
 	"github.com/imamik/k8zner/internal/addons/k8sclient"
@@ -28,8 +30,20 @@ func applyArgoCD(ctx context.Context, client k8sclient.Client, cfg *config.Confi
 		return fmt.Errorf("failed to create argocd namespace: %w", err)
 	}
 
+	// Get worker node external IPs for DNS targeting in hostNetwork mode
+	var workerIPs []string
+	if cfg.Addons.Traefik.HostNetwork != nil && *cfg.Addons.Traefik.HostNetwork {
+		ips, err := client.GetWorkerExternalIPs(ctx)
+		if err != nil {
+			log.Printf("[ArgoCD] Warning: failed to get worker IPs for DNS target: %v", err)
+		} else if len(ips) > 0 {
+			workerIPs = ips
+			log.Printf("[ArgoCD] Using worker IPs for DNS target: %v", workerIPs)
+		}
+	}
+
 	// Build values based on configuration
-	values := buildArgoCDValues(cfg)
+	values := buildArgoCDValues(cfg, workerIPs)
 
 	// Get chart spec with any config overrides
 	spec := helm.GetChartSpec("argo-cd", cfg.Addons.ArgoCD.Helm)
@@ -49,7 +63,8 @@ func applyArgoCD(ctx context.Context, client k8sclient.Client, cfg *config.Confi
 }
 
 // buildArgoCDValues creates helm values for ArgoCD configuration.
-func buildArgoCDValues(cfg *config.Config) helm.Values {
+// workerIPs are the external IPs of worker nodes, used for DNS targeting in hostNetwork mode.
+func buildArgoCDValues(cfg *config.Config, workerIPs []string) helm.Values {
 	argoCDCfg := cfg.Addons.ArgoCD
 
 	values := helm.Values{
@@ -62,10 +77,24 @@ func buildArgoCDValues(cfg *config.Config) helm.Values {
 			"install": true,
 			"keep":    true,
 		},
+		// Configure ArgoCD to run in insecure mode (no TLS on backend)
+		// This allows the ingress controller (Traefik) to handle TLS termination
+		// See: https://argo-cd.readthedocs.io/en/stable/operator-manual/ingress/
+		"configs": helm.Values{
+			"params": helm.Values{
+				"server.insecure": true,
+			},
+		},
+		// Disable the redis secret init job - we don't use password auth
+		// This is a TOP-LEVEL key, not nested under redis
+		// See: https://github.com/argoproj/argo-helm/issues/3057
+		"redisSecretInit": helm.Values{
+			"enabled": false,
+		},
 		// Controller configuration
 		"controller": buildArgoCDController(argoCDCfg),
-		// Server configuration
-		"server": buildArgoCDServer(argoCDCfg),
+		// Server configuration - pass full config and worker IPs for ingress annotations
+		"server": buildArgoCDServer(cfg, workerIPs),
 		// Repo server configuration
 		"repoServer": buildArgoCDRepoServer(argoCDCfg),
 		// Redis configuration
@@ -84,13 +113,21 @@ func buildArgoCDValues(cfg *config.Config) helm.Values {
 		},
 	}
 
-	// Add HA configuration if enabled
+	// Configure HA mode
 	if argoCDCfg.HA {
 		values["redis-ha"] = helm.Values{
 			"enabled": true,
+			// Disable redis-ha auth to avoid secret dependency issues
+			// See: https://github.com/argoproj/argo-helm/issues/3057
+			"auth": false,
 		}
 		// Disable standalone redis when using HA
 		values["redis"] = helm.Values{
+			"enabled": false,
+		}
+	} else {
+		// Explicitly disable redis-ha for non-HA mode
+		values["redis-ha"] = helm.Values{
 			"enabled": false,
 		}
 	}
@@ -129,12 +166,14 @@ func buildArgoCDController(cfg config.ArgoCDConfig) helm.Values {
 }
 
 // buildArgoCDServer creates the ArgoCD server configuration.
-func buildArgoCDServer(cfg config.ArgoCDConfig) helm.Values {
+// workerIPs are the external IPs of worker nodes, used for DNS targeting in hostNetwork mode.
+func buildArgoCDServer(cfg *config.Config, workerIPs []string) helm.Values {
+	argoCDCfg := cfg.Addons.ArgoCD
 	replicas := 1
-	if cfg.HA {
+	if argoCDCfg.HA {
 		replicas = 2
-		if cfg.ServerReplicas != nil {
-			replicas = *cfg.ServerReplicas
+		if argoCDCfg.ServerReplicas != nil {
+			replicas = *argoCDCfg.ServerReplicas
 		}
 	}
 
@@ -160,8 +199,8 @@ func buildArgoCDServer(cfg config.ArgoCDConfig) helm.Values {
 	}
 
 	// Configure ingress if enabled
-	if cfg.IngressEnabled && cfg.IngressHost != "" {
-		server["ingress"] = buildArgoCDIngress(cfg)
+	if argoCDCfg.IngressEnabled && argoCDCfg.IngressHost != "" {
+		server["ingress"] = buildArgoCDIngress(cfg, workerIPs)
 	}
 
 	return server
@@ -231,35 +270,65 @@ func buildArgoCDRedis(cfg config.ArgoCDConfig) helm.Values {
 }
 
 // buildArgoCDIngress creates the ingress configuration for ArgoCD server.
-func buildArgoCDIngress(cfg config.ArgoCDConfig) helm.Values {
+// workerIPs are the external IPs of worker nodes, used for DNS targeting in hostNetwork mode.
+func buildArgoCDIngress(cfg *config.Config, workerIPs []string) helm.Values {
+	argoCDCfg := cfg.Addons.ArgoCD
+
 	ingress := helm.Values{
 		"enabled": true,
 		"hosts": []string{
-			cfg.IngressHost,
+			argoCDCfg.IngressHost,
 		},
-		// ArgoCD server handles TLS termination internally
-		"https": true,
+		// ArgoCD runs in insecure mode - Traefik handles TLS termination
+		// https: false means the ingress talks HTTP to the backend
+		"https": false,
 	}
 
 	// Set ingress class if specified
-	if cfg.IngressClassName != "" {
-		ingress["ingressClassName"] = cfg.IngressClassName
+	if argoCDCfg.IngressClassName != "" {
+		ingress["ingressClassName"] = argoCDCfg.IngressClassName
 	}
 
 	// Configure TLS if enabled
-	if cfg.IngressTLS {
+	if argoCDCfg.IngressTLS {
 		ingress["tls"] = []helm.Values{
 			{
 				"hosts": []string{
-					cfg.IngressHost,
+					argoCDCfg.IngressHost,
 				},
 				"secretName": "argocd-server-tls",
 			},
 		}
-		// Add cert-manager annotation for automatic certificate
-		ingress["annotations"] = helm.Values{
-			"cert-manager.io/cluster-issuer": "letsencrypt-prod",
+
+		// Build annotations for TLS and DNS
+		annotations := helm.Values{}
+
+		// Determine which ClusterIssuer to use based on cert-manager Cloudflare config
+		clusterIssuer := "letsencrypt-prod" // Default fallback
+		if cfg.Addons.CertManager.Cloudflare.Enabled {
+			if cfg.Addons.CertManager.Cloudflare.Production {
+				clusterIssuer = "letsencrypt-cloudflare-production"
+			} else {
+				clusterIssuer = "letsencrypt-cloudflare-staging"
+			}
 		}
+		annotations["cert-manager.io/cluster-issuer"] = clusterIssuer
+
+		// Add external-dns annotations if Cloudflare/external-dns is enabled
+		if cfg.Addons.Cloudflare.Enabled && cfg.Addons.ExternalDNS.Enabled {
+			annotations["external-dns.alpha.kubernetes.io/hostname"] = argoCDCfg.IngressHost
+
+			// When using hostNetwork mode, external-dns can't determine the target IP
+			// from the Ingress status. We need to provide it explicitly via annotation.
+			// See: https://github.com/kubernetes-sigs/external-dns/blob/master/docs/annotations/annotations.md
+			if len(workerIPs) > 0 {
+				// Use the first worker IP as the DNS target
+				// In hostNetwork mode, Traefik binds to host ports on worker nodes
+				annotations["external-dns.alpha.kubernetes.io/target"] = strings.Join(workerIPs, ",")
+			}
+		}
+
+		ingress["annotations"] = annotations
 	}
 
 	return ingress

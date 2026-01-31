@@ -6,6 +6,17 @@ import (
 	"github.com/imamik/k8zner/internal/platform/hcloud"
 )
 
+// SharedTestContext holds shared state across all E2E tests in a test run.
+// This is used to share pre-built resources (like snapshots) across tests.
+type SharedTestContext struct {
+	SnapshotAMD64 string
+	SnapshotARM64 string
+	Client        *hcloud.RealClient
+}
+
+// sharedCtx is the global shared test context, initialized by TestMain.
+var sharedCtx *SharedTestContext
+
 // E2EState holds the cluster state as it progresses through test phases.
 // Each phase reads from and updates this state, building on previous phases.
 type E2EState struct {

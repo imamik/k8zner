@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/imamik/k8zner/internal/provisioning"
 	"github.com/imamik/k8zner/internal/provisioning/destroy"
@@ -30,20 +31,17 @@ var (
 // It loads the cluster configuration and deletes all associated resources
 // from Hetzner Cloud. Resources are deleted in dependency order.
 func Destroy(ctx context.Context, configPath string) error {
-	// Load and validate configuration
-	cfg, err := loadConfigFile(configPath)
+	// Load configuration using v2 loader
+	cfg, err := loadConfig(configPath)
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	if err := cfg.Validate(); err != nil {
-		return fmt.Errorf("invalid configuration: %w", err)
+		return err
 	}
 
 	log.Printf("Destroying cluster: %s", cfg.ClusterName)
 
-	// Initialize Hetzner Cloud client
-	infraClient := newInfraClient(cfg.HCloudToken)
+	// Initialize Hetzner Cloud client using environment variable
+	token := os.Getenv("HCLOUD_TOKEN")
+	infraClient := newInfraClient(token)
 
 	// Create provisioning context (no Talos generator needed for destroy)
 	pCtx := newProvisioningContext(ctx, cfg, infraClient, nil)

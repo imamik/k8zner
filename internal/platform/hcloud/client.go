@@ -10,8 +10,16 @@ import (
 
 // ServerProvisioner defines the interface for provisioning servers.
 type ServerProvisioner interface {
-	CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string) (string, error)
+	// CreateServer creates a new server with the given specifications.
+	// The enablePublicIPv4 and enablePublicIPv6 parameters control public IP assignment:
+	// - enablePublicIPv4=true, enablePublicIPv6=true: dual-stack (default)
+	// - enablePublicIPv4=false, enablePublicIPv6=true: IPv6-only (cost-saving, reduced attack surface)
+	// - enablePublicIPv4=true, enablePublicIPv6=false: IPv4-only
+	// - enablePublicIPv4=false, enablePublicIPv6=false: private network only
+	CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string, enablePublicIPv4, enablePublicIPv6 bool) (string, error)
 	DeleteServer(ctx context.Context, name string) error
+	// GetServerIP returns the public IP of the server.
+	// Prefers IPv4 for backwards compatibility, falls back to IPv6 if no IPv4.
 	GetServerIP(ctx context.Context, name string) (string, error)
 	GetServersByLabel(ctx context.Context, labels map[string]string) ([]*hcloud.Server, error)
 	EnableRescue(ctx context.Context, serverID string, sshKeyIDs []string) (string, error)

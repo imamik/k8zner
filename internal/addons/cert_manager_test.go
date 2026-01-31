@@ -14,7 +14,6 @@ func TestBuildCertManagerValues(t *testing.T) {
 	tests := []struct {
 		name                      string
 		controlPlaneCount         int
-		ingressNginxEnabled       bool
 		traefikEnabled            bool
 		expectedReplicas          int
 		expectedACMEPathTypeExact bool
@@ -22,7 +21,6 @@ func TestBuildCertManagerValues(t *testing.T) {
 		{
 			name:                      "single control plane, no ingress",
 			controlPlaneCount:         1,
-			ingressNginxEnabled:       false,
 			traefikEnabled:            false,
 			expectedReplicas:          1,
 			expectedACMEPathTypeExact: true,
@@ -30,31 +28,13 @@ func TestBuildCertManagerValues(t *testing.T) {
 		{
 			name:                      "HA control plane, no ingress",
 			controlPlaneCount:         3,
-			ingressNginxEnabled:       false,
 			traefikEnabled:            false,
 			expectedReplicas:          2,
 			expectedACMEPathTypeExact: true,
 		},
 		{
-			name:                      "single control plane, with ingress-nginx",
-			controlPlaneCount:         1,
-			ingressNginxEnabled:       true,
-			traefikEnabled:            false,
-			expectedReplicas:          1,
-			expectedACMEPathTypeExact: false,
-		},
-		{
-			name:                      "HA control plane, with ingress-nginx",
-			controlPlaneCount:         3,
-			ingressNginxEnabled:       true,
-			traefikEnabled:            false,
-			expectedReplicas:          2,
-			expectedACMEPathTypeExact: false,
-		},
-		{
 			name:                      "single control plane, with traefik",
 			controlPlaneCount:         1,
-			ingressNginxEnabled:       false,
 			traefikEnabled:            true,
 			expectedReplicas:          1,
 			expectedACMEPathTypeExact: false,
@@ -62,7 +42,6 @@ func TestBuildCertManagerValues(t *testing.T) {
 		{
 			name:                      "HA control plane, with traefik",
 			controlPlaneCount:         3,
-			ingressNginxEnabled:       false,
 			traefikEnabled:            true,
 			expectedReplicas:          2,
 			expectedACMEPathTypeExact: false,
@@ -78,12 +57,7 @@ func TestBuildCertManagerValues(t *testing.T) {
 					},
 				},
 				Addons: config.AddonsConfig{
-					IngressNginx: config.IngressNginxConfig{
-						Enabled: tt.ingressNginxEnabled,
-					},
-					Traefik: config.TraefikConfig{
-						Enabled: tt.traefikEnabled,
-					},
+					Traefik: config.TraefikConfig{Enabled: tt.traefikEnabled},
 				},
 			}
 

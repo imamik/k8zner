@@ -13,35 +13,47 @@ import (
 // ServerSpec defines the configuration for creating a server.
 // All fields are self-documenting - no need to remember parameter order.
 type ServerSpec struct {
-	Name           string
-	Type           string
-	Location       string
-	Image          string // empty or "talos" = auto-detect
-	Role           string // "control-plane" or "worker"
-	Pool           string
-	ExtraLabels    map[string]string
-	UserData       string
-	PlacementGroup *int64
-	PrivateIP      string
-	RDNSIPv4       string // RDNS template for IPv4
-	RDNSIPv6       string // RDNS template for IPv6
+	Name             string
+	Type             string
+	Location         string
+	Image            string // empty or "talos" = auto-detect
+	Role             string // "control-plane" or "worker"
+	Pool             string
+	ExtraLabels      map[string]string
+	UserData         string
+	PlacementGroup   *int64
+	PrivateIP        string
+	RDNSIPv4         string // RDNS template for IPv4
+	RDNSIPv6         string // RDNS template for IPv6
+	EnablePublicIPv4 bool   // Enable public IPv4 (default: true for backwards compatibility)
+	EnablePublicIPv6 bool   // Enable public IPv6 (default: true)
 }
 
-// ensureServer ensures a server exists and returns its IP.
-func (p *Provisioner) ensureServer(ctx *provisioning.Context, spec ServerSpec) (string, error) {
+// ServerInfo holds the result of server creation/lookup.
+type ServerInfo struct {
+	IP       string
+	ServerID int64
+}
+
+// ensureServer ensures a server exists and returns its IP and server ID.
+func (p *Provisioner) ensureServer(ctx *provisioning.Context, spec ServerSpec) (ServerInfo, error) {
 	// Check if exists
-	serverID, err := ctx.Infra.GetServerID(ctx, spec.Name)
+	serverIDStr, err := ctx.Infra.GetServerID(ctx, spec.Name)
 	if err != nil {
-		return "", err
+		return ServerInfo{}, err
 	}
 
-	if serverID != "" {
-		// Server exists, get IP
+	if serverIDStr != "" {
+		// Server exists, get IP and parse server ID
 		ip, err := ctx.Infra.GetServerIP(ctx, spec.Name)
 		if err != nil {
-			return "", err
+			return ServerInfo{}, err
 		}
-		return ip, nil
+		var serverID int64
+		if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
+			return ServerInfo{}, fmt.Errorf("failed to parse server ID: %w", err)
+		}
+		return ServerInfo{IP: ip, ServerID: serverID}, nil
 	}
 
 	// Create
@@ -60,16 +72,25 @@ func (p *Provisioner) ensureServer(ctx *provisioning.Context, spec ServerSpec) (
 	if image == "" || image == "talos" {
 		image, err = p.ensureImage(ctx, spec.Type, spec.Location)
 		if err != nil {
-			return "", fmt.Errorf("failed to ensure Talos image: %w", err)
+			return ServerInfo{}, fmt.Errorf("failed to ensure Talos image: %w", err)
 		}
 		ctx.Logger.Printf("[%s] Using Talos image: %s", phase, image)
 	}
 
 	// Get Network ID
 	if ctx.State == nil || ctx.State.Network == nil {
-		return "", fmt.Errorf("network not initialized in provisioning state")
+		return ServerInfo{}, fmt.Errorf("network not initialized in provisioning state")
 	}
 	networkID := ctx.State.Network.ID
+
+	// Default to dual-stack if not specified (for backwards compatibility)
+	enableIPv4 := spec.EnablePublicIPv4
+	enableIPv6 := spec.EnablePublicIPv6
+	// If neither is explicitly set, default to dual-stack
+	if !enableIPv4 && !enableIPv6 {
+		enableIPv4 = true
+		enableIPv6 = true
+	}
 
 	_, err = ctx.Infra.CreateServer(
 		ctx,
@@ -83,9 +104,11 @@ func (p *Provisioner) ensureServer(ctx *provisioning.Context, spec ServerSpec) (
 		spec.PlacementGroup,
 		networkID,
 		spec.PrivateIP,
+		enableIPv4,
+		enableIPv6,
 	)
 	if err != nil {
-		return "", fmt.Errorf("failed to create server %s: %w", spec.Name, err)
+		return ServerInfo{}, fmt.Errorf("failed to create server %s: %w", spec.Name, err)
 	}
 
 	// Get IP after creation with retry logic and configurable timeout
@@ -106,31 +129,28 @@ func (p *Provisioner) ensureServer(ctx *provisioning.Context, spec ServerSpec) (
 	}, retry.WithMaxRetries(ctx.Timeouts.RetryMaxAttempts), retry.WithInitialDelay(ctx.Timeouts.RetryInitialDelay))
 
 	if err != nil {
-		return "", fmt.Errorf("failed to get server IP for %s: %w", spec.Name, err)
+		return ServerInfo{}, fmt.Errorf("failed to get server IP for %s: %w", spec.Name, err)
+	}
+
+	// Get server ID (reuse serverIDStr from earlier check)
+	serverIDStr, err = ctx.Infra.GetServerID(ctx, spec.Name)
+	if err != nil {
+		return ServerInfo{}, fmt.Errorf("failed to get server ID: %w", err)
+	}
+	var serverID int64
+	if _, err = fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
+		return ServerInfo{}, fmt.Errorf("failed to parse server ID: %w", err)
 	}
 
 	// Apply RDNS if configured
 	if spec.RDNSIPv4 != "" || spec.RDNSIPv6 != "" {
-		// Get server ID
-		serverIDStr, err := ctx.Infra.GetServerID(ctx, spec.Name)
-		if err != nil {
-			return "", fmt.Errorf("failed to get server ID for RDNS: %w", err)
-		}
-
-		// Convert to int64
-		var serverID int64
-		if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
-			return "", fmt.Errorf("failed to parse server ID: %w", err)
-		}
-
-		// Apply RDNS
 		if err := p.applyServerRDNSSimple(ctx, serverID, spec.Name, ip, spec.RDNSIPv4, spec.RDNSIPv6, spec.Role, spec.Pool); err != nil {
 			// Log error but don't fail server creation
 			ctx.Logger.Printf("[%s] Warning: Failed to set RDNS for %s: %v", phase, spec.Name, err)
 		}
 	}
 
-	return ip, nil
+	return ServerInfo{IP: ip, ServerID: serverID}, nil
 }
 
 // ensureImage ensures the required Talos image exists and returns its ID.

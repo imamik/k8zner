@@ -1,505 +1,303 @@
 # Configuration Guide
 
-This document describes all configuration options for k8zner cluster definitions.
+This document describes the simplified configuration format for k8zner clusters.
 
 ## Quick Start
 
-The easiest way to create a configuration is using the interactive wizard:
+Create a configuration using the interactive wizard:
 
 ```bash
 k8zner init
 ```
 
-See [Interactive Wizard](wizard.md) for detailed wizard documentation.
+This generates a `k8zner.yaml` file. See [Interactive Wizard](wizard.md) for details.
 
 ## Configuration File
 
-k8zner uses YAML configuration files. By default, it looks for `cluster.yaml` in the current directory.
-
-```bash
-k8zner apply -c cluster.yaml
-```
-
-## Core Settings
-
-### Required Fields
+k8zner uses YAML configuration with an opinionated, minimal format:
 
 ```yaml
-cluster_name: "my-cluster"    # 1-32 lowercase alphanumeric with hyphens
-location: "nbg1"              # Hetzner datacenter
+name: my-cluster
+region: fsn1
+mode: ha
+workers:
+  count: 3
+  size: cx32
+domain: example.com  # optional
 ```
 
-### Available Locations
+That's it! All other settings use production-ready defaults.
 
-| Location | Description |
-|----------|-------------|
-| `nbg1` | Nuremberg, Germany |
-| `fsn1` | Falkenstein, Germany |
-| `hel1` | Helsinki, Finland |
-| `ash` | Ashburn, USA |
-| `hil` | Hillsboro, USA |
-| `sin` | Singapore |
+## Configuration Fields
 
-### SSH Keys (Optional)
+### name (required)
+
+Cluster name. Must be 1-32 lowercase alphanumeric characters or hyphens.
 
 ```yaml
-ssh_keys:
-  - "my-key"
-  - "another-key"
+name: my-cluster
 ```
 
-If omitted, SSH keys are auto-generated during cluster creation.
+### region (required)
 
-## Control Plane
+Hetzner datacenter region for all resources.
+
+| Region | Code | Location |
+|--------|------|----------|
+| Falkenstein | `fsn1` | Germany |
+| Nuremberg | `nbg1` | Germany |
+| Helsinki | `hel1` | Finland |
 
 ```yaml
-control_plane:
-  nodepools:
-    - name: "control-plane"
-      type: "cpx21"           # Server type
-      count: 3                # 1, 3, or 5 for etcd quorum
+region: fsn1
 ```
 
-### Recommended Control Plane Sizes
+### mode (required)
 
-| Cluster Size | Count | Server Type |
-|--------------|-------|-------------|
-| Development | 1 | cpx21 |
-| Small Production | 3 | cpx31 |
-| Large Production | 3-5 | cpx41+ |
+Cluster mode determines the topology:
 
-## Worker Pools
+| Mode | Control Planes | Load Balancers | Best For |
+|------|----------------|----------------|----------|
+| `dev` | 1 | 1 (shared API/ingress) | Development, testing |
+| `ha` | 3 | 2 (dedicated API + ingress) | Production |
+
+```yaml
+mode: ha
+```
+
+### workers (required)
+
+Worker node configuration:
+
+| Field | Description | Valid Values |
+|-------|-------------|--------------|
+| `count` | Number of worker nodes | 1-5 |
+| `size` | Worker server size | cx22, cx32, cx42, cx52 |
 
 ```yaml
 workers:
-  - name: "workers"
-    type: "cpx31"
-    count: 3
-    labels:
-      node-role: worker
-    taints:
-      - "workload=general:NoSchedule"
+  count: 3
+  size: cx32
 ```
 
-### Worker Pool Options
+**Why 1-5 workers?** The simplified config uses an opinionated limit to keep clusters predictable and cost-effective for initial deployment. For larger clusters, update the config and run `k8zner apply` again to scale workers.
 
-| Field | Description |
-|-------|-------------|
-| `name` | Pool identifier |
-| `type` | Hetzner server type |
-| `count` | Number of nodes |
-| `labels` | Kubernetes node labels |
-| `taints` | Kubernetes node taints |
-| `location` | Override cluster location |
+#### Available Sizes
 
-## Server Types
+| Size | vCPU | RAM | Best For |
+|------|------|-----|----------|
+| `cx22` | 2 | 4GB | Small workloads |
+| `cx32` | 4 | 8GB | Medium workloads |
+| `cx42` | 8 | 16GB | Larger workloads |
+| `cx52` | 16 | 32GB | Heavy workloads |
 
-### x86 Shared (CPX)
+### domain (optional)
 
-| Type | vCPU | RAM | SSD |
-|------|------|-----|-----|
-| cpx11 | 2 | 2GB | 40GB |
-| cpx21 | 3 | 4GB | 80GB |
-| cpx31 | 4 | 8GB | 160GB |
-| cpx41 | 8 | 16GB | 240GB |
-| cpx51 | 16 | 32GB | 360GB |
-
-### x86 Cost-Optimized (CX) — EU Only
-
-| Type | vCPU | RAM | SSD |
-|------|------|-----|-----|
-| cx22 | 2 | 4GB | 40GB |
-| cx32 | 4 | 8GB | 80GB |
-| cx42 | 8 | 16GB | 160GB |
-| cx52 | 16 | 32GB | 320GB |
-
-### x86 Dedicated (CCX)
-
-| Type | vCPU | RAM | SSD |
-|------|------|-----|-----|
-| ccx13 | 2 | 8GB | 80GB |
-| ccx23 | 4 | 16GB | 160GB |
-| ccx33 | 8 | 32GB | 240GB |
-| ccx43 | 16 | 64GB | 360GB |
-| ccx53 | 32 | 128GB | 600GB |
-| ccx63 | 48 | 192GB | 960GB |
-
-### ARM Shared (CAX) — Germany/Finland Only
-
-| Type | vCPU | RAM | SSD |
-|------|------|-----|-----|
-| cax11 | 2 | 4GB | 40GB |
-| cax21 | 4 | 8GB | 80GB |
-| cax31 | 8 | 16GB | 160GB |
-| cax41 | 16 | 32GB | 320GB |
-
-## Talos Configuration
+Cloudflare-managed domain for automatic DNS and TLS certificates.
 
 ```yaml
-talos:
-  version: "v1.9.0"
-  machine:
-    state_encryption: true      # LUKS2 encryption
-    ephemeral_encryption: true
+domain: example.com
 ```
 
-## Kubernetes Configuration
+When set, this automatically enables:
+- **external-dns**: Creates DNS records from Ingress resources
+- **cert-manager Cloudflare DNS01**: Issues Let's Encrypt certificates
+- **ArgoCD ingress**: Dashboard accessible at `argo.{domain}`
+
+Requires `CF_API_TOKEN` environment variable.
+
+### cert_email (optional)
+
+Email address for Let's Encrypt certificate expiration notifications.
 
 ```yaml
-kubernetes:
-  version: "v1.32.0"
-  allow_scheduling_on_control_planes: false
-  domain: "cluster.local"
+cert_email: ops@example.com
 ```
 
-## Addons
+Let's Encrypt sends certificate expiration warnings (at 20 days, 10 days, and 1 day before expiry) to this email. **Recommended for production** to catch renewal failures.
 
-### Cilium (CNI)
+If not set, defaults to `admin@{domain}`.
+
+### argo_subdomain (optional)
+
+Subdomain for the ArgoCD dashboard (default: `argo`).
 
 ```yaml
-addons:
-  cilium:
-    enabled: true
-    encryption_enabled: true
-    encryption_type: "wireguard"  # or "ipsec"
-    hubble_enabled: true
-    hubble_relay_enabled: true
-    gateway_api_enabled: false
+argo_subdomain: argocd
 ```
 
-### Hetzner Cloud Controller Manager
+When `domain` is set, ArgoCD will be accessible at `{argo_subdomain}.{domain}`.
+Example: with `domain: example.com` and `argo_subdomain: argocd`, ArgoCD is at `argocd.example.com`.
+
+### backup (optional)
+
+Enable automatic etcd backups to Hetzner Object Storage.
 
 ```yaml
-addons:
-  ccm:
-    enabled: true
+backup: true
 ```
 
-### Hetzner CSI Driver
+When enabled:
+- Creates S3 bucket: `{cluster-name}-etcd-backups`
+- Schedules hourly etcd snapshots via CronJob
+- Stores compressed backups in Hetzner Object Storage
 
-```yaml
-addons:
-  csi:
-    enabled: true
-    default_storage_class: true
+Requires environment variables:
+```bash
+export HETZNER_S3_ACCESS_KEY="your-access-key"
+export HETZNER_S3_SECRET_KEY="your-secret-key"
 ```
 
-### Metrics Server
+**Note**: Backups are stored unencrypted in the private S3 bucket. The bucket is not publicly accessible. For additional security, enable server-side encryption in the Hetzner Cloud Console.
 
-```yaml
-addons:
-  metrics_server:
-    enabled: true
+**Important - S3 Bucket Cleanup**: When you destroy a cluster with `k8zner destroy`, the S3 backup bucket is **intentionally NOT deleted** to prevent accidental data loss. This ensures your etcd backups remain available for disaster recovery or cluster migration.
+
+To manually delete the bucket after destroying a cluster:
+```bash
+# Using AWS CLI (configured for Hetzner Object Storage)
+aws s3 rb s3://{cluster-name}-etcd-backups --force \
+  --endpoint-url https://{region}.your-objectstorage.com
+
+# Or via Hetzner Cloud Console:
+# 1. Navigate to Object Storage
+# 2. Select the bucket "{cluster-name}-etcd-backups"
+# 3. Delete all objects, then delete the bucket
 ```
 
-### Cert Manager
+## Opinionated Defaults
 
-```yaml
-addons:
-  cert_manager:
-    enabled: true
+The simplified config automatically includes production-ready settings:
+
+### Infrastructure
+- **IPv6-only nodes**: No public IPv4 (saves costs, better security)
+- **Control planes**: cx22 servers (cost-effective for control plane workloads)
+- **Disk encryption**: LUKS2 encryption for state and ephemeral partitions
+
+### Networking
+- **Cilium CNI**: eBPF-based networking with kube-proxy replacement
+- **Native routing**: Direct pod-to-pod communication without tunneling
+- **Hubble**: Network observability and monitoring
+
+### Ingress
+- **Traefik**: Modern ingress controller with Gateway API support
+- **hostNetwork mode**: Direct port binding for efficiency
+- **cert-manager**: Automatic TLS certificate provisioning
+
+### Load Balancers
+- **API LB**: Always provisioned for Kubernetes API access
+- **Ingress LB**: Additional LB in HA mode for HTTP/HTTPS traffic
+
+### Addons (always enabled)
+- Hetzner Cloud Controller Manager (CCM)
+- Hetzner CSI Driver (volumes)
+- Cilium (CNI)
+- Traefik (ingress)
+- cert-manager (TLS)
+- Metrics Server (HPA/VPA)
+- ArgoCD (GitOps)
+- Gateway API CRDs
+- Prometheus Operator CRDs
+
+### Versions
+The config uses a pinned, tested version matrix:
+- Talos Linux: v1.9.0
+- Kubernetes: v1.32.0
+
+## Environment Variables
+
+Required:
+```bash
+export HCLOUD_TOKEN="your-hetzner-api-token"
 ```
 
-### Ingress NGINX
-
-```yaml
-addons:
-  ingress_nginx:
-    enabled: true
-    replicas: 2
-```
-
-### Traefik
-
-Alternative ingress controller to NGINX:
-
-```yaml
-addons:
-  traefik:
-    enabled: true
-    replicas: 2
-```
-
-### ArgoCD
-
-GitOps continuous delivery:
-
-```yaml
-addons:
-  argocd:
-    enabled: true
-    ha: false
-    ingress_enabled: true
-    ingress_host: "argocd.example.com"
-```
-
-## Cloudflare DNS Integration
-
-k8zner integrates with Cloudflare for automatic DNS management and TLS certificate provisioning.
-
-### Prerequisites
-
-1. A Cloudflare account with a domain
-2. A Cloudflare API token with permissions:
-   - **Zone > Zone > Read** (to find zone ID automatically)
-   - **Zone > DNS > Edit** (to manage DNS records)
-
-**Creating an API Token:**
-
-For teams and CI/CD, use **Account Owned Tokens** (recommended):
-1. Go to Cloudflare Dashboard → **Manage Account** → **Account API Tokens**
-2. Click "Create Token"
-3. These tokens persist when team members leave
-
-For personal use, use **User Tokens**:
-1. Go to [Profile API Tokens](https://dash.cloudflare.com/profile/api-tokens)
-2. Click "Create Token"
-
-Token configuration:
-1. Use "Edit zone DNS" template or create custom token
-2. Set Zone Resources to your specific domain (recommended) or all zones
-
-### Environment Variables
-
-Set your Cloudflare credentials (recommended over config file):
-
+Optional (for DNS/TLS):
 ```bash
 export CF_API_TOKEN="your-cloudflare-api-token"
-export CF_DOMAIN="example.com"
 ```
 
-### Cloudflare Base Configuration
-
-```yaml
-addons:
-  cloudflare:
-    enabled: true
-    # api_token: "..."    # Or use CF_API_TOKEN env var (preferred)
-    domain: "example.com" # Or use CF_DOMAIN env var
-    proxied: false        # true = orange cloud (CDN), false = DNS only
+Optional (for backups):
+```bash
+export HETZNER_S3_ACCESS_KEY="your-s3-access-key"
+export HETZNER_S3_SECRET_KEY="your-s3-secret-key"
 ```
 
-### External-DNS
+Get S3 credentials from [Hetzner Cloud Console](https://console.hetzner.cloud/) → Object Storage → Security Credentials.
 
-Automatically creates DNS records from Ingress resources:
+## Cost Estimation
 
-```yaml
-addons:
-  cloudflare:
-    enabled: true
-    domain: "example.com"
+Before applying, estimate your monthly costs:
 
-  external_dns:
-    enabled: true
-    txt_owner_id: "my-cluster"  # Default: cluster_name
-    policy: "sync"              # sync (deletes orphans), upsert-only (never deletes)
-    sources:
-      - ingress               # Watch Ingress resources
-      # - service             # Watch LoadBalancer Services
+```bash
+k8zner cost
 ```
 
-When you create an Ingress, external-dns will automatically create DNS records:
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: my-app
-  annotations:
-    external-dns.alpha.kubernetes.io/hostname: my-app.example.com
-spec:
-  rules:
-    - host: my-app.example.com
-      # ...
-```
-
-### Cert-Manager with Cloudflare DNS01
-
-For TLS certificates via Let's Encrypt DNS01 challenge (supports wildcards):
-
-```yaml
-addons:
-  cloudflare:
-    enabled: true
-    domain: "example.com"
-
-  cert_manager:
-    enabled: true
-    cloudflare:
-      enabled: true
-      email: "admin@example.com"  # Required for Let's Encrypt
-      production: false           # Use staging first to test
-```
-
-This creates ClusterIssuers:
-- `letsencrypt-cloudflare-staging` — For testing (not browser-trusted)
-- `letsencrypt-cloudflare-production` — For production (browser-trusted)
-
-Use in Ingress:
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: my-app
-  annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-cloudflare-production
-spec:
-  tls:
-    - hosts:
-        - my-app.example.com
-      secretName: my-app-tls
-  rules:
-    - host: my-app.example.com
-      # ...
-```
-
-### Full Cloudflare Example
-
-Complete configuration with DNS and TLS:
-
-```yaml
-addons:
-  # Ingress controller (choose one)
-  ingress_nginx:
-    enabled: true
-
-  # Cloudflare integration
-  cloudflare:
-    enabled: true
-    domain: "example.com"
-    proxied: false
-
-  # Automatic DNS records
-  external_dns:
-    enabled: true
-    policy: "sync"
-    sources:
-      - ingress
-
-  # TLS certificates
-  cert_manager:
-    enabled: true
-    cloudflare:
-      enabled: true
-      email: "admin@example.com"
-      production: true
-```
-
-### Longhorn
-
-```yaml
-addons:
-  longhorn:
-    enabled: true
-    default_storage_class: false
-```
-
-## Network Configuration
-
-```yaml
-network:
-  ipv4_cidr: "10.0.0.0/16"
-  pod_ipv4_cidr: "10.244.0.0/16"
-  service_ipv4_cidr: "10.96.0.0/12"
-```
-
-## Cluster Access
-
-```yaml
-cluster_access: "public"  # or "private"
-```
+Output shows:
+- Line-item breakdown (control planes, workers, load balancers)
+- Subtotal, VAT (19% for Germany), and total
+- IPv6 savings (what you save by not using IPv4)
 
 ## Example Configurations
 
-### Minimal Development
+### Development Cluster
+
+Minimal cluster for testing:
 
 ```yaml
-cluster_name: dev
-location: nbg1
-control_plane:
-  nodepools:
-    - name: control-plane
-      type: cpx21
-      count: 1
-kubernetes:
-  allow_scheduling_on_control_planes: true
-talos:
-  version: v1.9.0
-kubernetes:
-  version: v1.32.0
-addons:
-  cilium:
-    enabled: true
+name: dev
+region: fsn1
+mode: dev
+workers:
+  count: 1
+  size: cx22
 ```
 
-### Production HA
+**Cost**: ~€18/month (1 CP + 1 worker + 1 LB)
+
+### Production HA Cluster
+
+High-availability setup for production:
 
 ```yaml
-cluster_name: production
-location: fsn1
-control_plane:
-  nodepools:
-    - name: control-plane
-      type: cpx31
-      count: 3
+name: production
+region: fsn1
+mode: ha
 workers:
-  - name: workers
-    type: cpx41
-    count: 5
-talos:
-  version: v1.9.0
-  machine:
-    state_encryption: true
-    ephemeral_encryption: true
-kubernetes:
-  version: v1.32.0
-addons:
-  cilium:
-    enabled: true
-    encryption_enabled: true
-    encryption_type: wireguard
-    hubble_enabled: true
-  ccm:
-    enabled: true
-  csi:
-    enabled: true
-  metrics_server:
-    enabled: true
-  cert_manager:
-    enabled: true
-  ingress_nginx:
-    enabled: true
+  count: 3
+  size: cx32
+domain: example.com
 ```
 
-### ARM Cost-Effective
+**Cost**: ~€64/month (3 CP + 3 workers + 2 LBs)
+
+### Large Production Cluster
+
+For heavy workloads:
 
 ```yaml
-cluster_name: arm-cluster
-location: nbg1
-control_plane:
-  nodepools:
-    - name: control-plane
-      type: cax21
-      count: 3
+name: large-prod
+region: fsn1
+mode: ha
 workers:
-  - name: workers
-    type: cax31
-    count: 3
-talos:
-  version: v1.9.0
-kubernetes:
-  version: v1.32.0
-addons:
-  cilium:
-    enabled: true
-  ccm:
-    enabled: true
-  csi:
-    enabled: true
+  count: 5
+  size: cx52
+domain: example.com
+```
+
+**Cost**: ~€180/month (3 CP + 5 workers + 2 LBs)
+
+## File Location
+
+k8zner auto-detects configuration in the current directory:
+
+```bash
+# Uses ./k8zner.yaml automatically
+k8zner apply
+
+# Or specify explicitly
+k8zner apply -c /path/to/config.yaml
 ```
 
 ## See Also
 
-- [Interactive Wizard](wizard.md) — Create configurations interactively
-- [Examples](../examples/) — More configuration examples
+- [Interactive Wizard](wizard.md)
+- [Architecture](architecture.md)

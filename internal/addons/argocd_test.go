@@ -69,7 +69,7 @@ func TestBuildArgoCDValues(t *testing.T) {
 				},
 			}
 
-			values := buildArgoCDValues(cfg)
+			values := buildArgoCDValues(cfg, nil)
 
 			// Check CRDs are enabled
 			crds, ok := values["crds"].(helm.Values)
@@ -90,7 +90,19 @@ func TestBuildArgoCDValues(t *testing.T) {
 				redis, ok := values["redis"].(helm.Values)
 				require.True(t, ok)
 				assert.Equal(t, false, redis["enabled"])
+			} else {
+				// Verify redis-ha is explicitly disabled in non-HA mode
+				redisHA, ok := values["redis-ha"].(helm.Values)
+				require.True(t, ok, "redis-ha should be set in non-HA mode")
+				assert.Equal(t, false, redisHA["enabled"], "redis-ha should be disabled in non-HA mode")
 			}
+
+			// Check redisSecretInit is disabled (prevents argocd-redis secret issues)
+			// This is a TOP-LEVEL key, not nested under redis
+			// See: https://github.com/argoproj/argo-helm/issues/3057
+			redisSecretInit, ok := values["redisSecretInit"].(helm.Values)
+			require.True(t, ok, "redisSecretInit should be set")
+			assert.Equal(t, false, redisSecretInit["enabled"], "redisSecretInit.enabled should be false")
 
 			// Check ingress
 			if tt.expectIngress {
@@ -147,29 +159,41 @@ func TestBuildArgoCDController(t *testing.T) {
 func TestBuildArgoCDServer(t *testing.T) {
 	tests := []struct {
 		name             string
-		cfg              config.ArgoCDConfig
+		cfg              *config.Config
 		expectedReplicas int
 		expectIngress    bool
 	}{
 		{
-			name:             "default configuration",
-			cfg:              config.ArgoCDConfig{},
+			name: "default configuration",
+			cfg: &config.Config{
+				Addons: config.AddonsConfig{
+					ArgoCD: config.ArgoCDConfig{},
+				},
+			},
 			expectedReplicas: 1,
 			expectIngress:    false,
 		},
 		{
 			name: "HA mode default replicas",
-			cfg: config.ArgoCDConfig{
-				HA: true,
+			cfg: &config.Config{
+				Addons: config.AddonsConfig{
+					ArgoCD: config.ArgoCDConfig{
+						HA: true,
+					},
+				},
 			},
 			expectedReplicas: 2,
 			expectIngress:    false,
 		},
 		{
 			name: "with ingress",
-			cfg: config.ArgoCDConfig{
-				IngressEnabled: true,
-				IngressHost:    "argocd.example.com",
+			cfg: &config.Config{
+				Addons: config.AddonsConfig{
+					ArgoCD: config.ArgoCDConfig{
+						IngressEnabled: true,
+						IngressHost:    "argocd.example.com",
+					},
+				},
 			},
 			expectedReplicas: 1,
 			expectIngress:    true,
@@ -178,7 +202,7 @@ func TestBuildArgoCDServer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := buildArgoCDServer(tt.cfg)
+			server := buildArgoCDServer(tt.cfg, nil)
 
 			assert.Equal(t, tt.expectedReplicas, server["replicas"])
 
@@ -193,16 +217,21 @@ func TestBuildArgoCDServer(t *testing.T) {
 func TestBuildArgoCDIngress(t *testing.T) {
 	tests := []struct {
 		name              string
-		cfg               config.ArgoCDConfig
+		cfg               *config.Config
 		expectedHost      string
 		expectedClassName string
 		expectTLS         bool
+		expectedIssuer    string
 	}{
 		{
 			name: "basic ingress",
-			cfg: config.ArgoCDConfig{
-				IngressEnabled: true,
-				IngressHost:    "argocd.example.com",
+			cfg: &config.Config{
+				Addons: config.AddonsConfig{
+					ArgoCD: config.ArgoCDConfig{
+						IngressEnabled: true,
+						IngressHost:    "argocd.example.com",
+					},
+				},
 			},
 			expectedHost:      "argocd.example.com",
 			expectedClassName: "",
@@ -210,30 +239,81 @@ func TestBuildArgoCDIngress(t *testing.T) {
 		},
 		{
 			name: "ingress with class name",
-			cfg: config.ArgoCDConfig{
-				IngressEnabled:   true,
-				IngressHost:      "argocd.mycompany.io",
-				IngressClassName: "nginx",
+			cfg: &config.Config{
+				Addons: config.AddonsConfig{
+					ArgoCD: config.ArgoCDConfig{
+						IngressEnabled:   true,
+						IngressHost:      "argocd.mycompany.io",
+						IngressClassName: "nginx",
+					},
+				},
 			},
 			expectedHost:      "argocd.mycompany.io",
 			expectedClassName: "nginx",
 			expectTLS:         false,
 		},
 		{
-			name: "ingress with TLS",
-			cfg: config.ArgoCDConfig{
-				IngressEnabled: true,
-				IngressHost:    "argocd.secure.io",
-				IngressTLS:     true,
+			name: "ingress with TLS and default issuer",
+			cfg: &config.Config{
+				Addons: config.AddonsConfig{
+					ArgoCD: config.ArgoCDConfig{
+						IngressEnabled: true,
+						IngressHost:    "argocd.secure.io",
+						IngressTLS:     true,
+					},
+				},
 			},
-			expectedHost: "argocd.secure.io",
-			expectTLS:    true,
+			expectedHost:   "argocd.secure.io",
+			expectTLS:      true,
+			expectedIssuer: "letsencrypt-prod",
+		},
+		{
+			name: "ingress with TLS and Cloudflare staging issuer",
+			cfg: &config.Config{
+				Addons: config.AddonsConfig{
+					ArgoCD: config.ArgoCDConfig{
+						IngressEnabled: true,
+						IngressHost:    "argocd.cloudflare.io",
+						IngressTLS:     true,
+					},
+					CertManager: config.CertManagerConfig{
+						Cloudflare: config.CertManagerCloudflareConfig{
+							Enabled:    true,
+							Production: false, // Staging
+						},
+					},
+				},
+			},
+			expectedHost:   "argocd.cloudflare.io",
+			expectTLS:      true,
+			expectedIssuer: "letsencrypt-cloudflare-staging",
+		},
+		{
+			name: "ingress with TLS and Cloudflare production issuer",
+			cfg: &config.Config{
+				Addons: config.AddonsConfig{
+					ArgoCD: config.ArgoCDConfig{
+						IngressEnabled: true,
+						IngressHost:    "argocd.prod.io",
+						IngressTLS:     true,
+					},
+					CertManager: config.CertManagerConfig{
+						Cloudflare: config.CertManagerCloudflareConfig{
+							Enabled:    true,
+							Production: true, // Production
+						},
+					},
+				},
+			},
+			expectedHost:   "argocd.prod.io",
+			expectTLS:      true,
+			expectedIssuer: "letsencrypt-cloudflare-production",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ingress := buildArgoCDIngress(tt.cfg)
+			ingress := buildArgoCDIngress(tt.cfg, nil)
 
 			assert.Equal(t, true, ingress["enabled"])
 
@@ -253,6 +333,11 @@ func TestBuildArgoCDIngress(t *testing.T) {
 				tlsHosts, ok := tls[0]["hosts"].([]string)
 				require.True(t, ok)
 				assert.Contains(t, tlsHosts, tt.expectedHost)
+
+				// Check cluster issuer annotation
+				annotations, ok := ingress["annotations"].(helm.Values)
+				require.True(t, ok)
+				assert.Equal(t, tt.expectedIssuer, annotations["cert-manager.io/cluster-issuer"])
 			}
 		})
 	}
@@ -283,6 +368,12 @@ func TestBuildArgoCDRedis(t *testing.T) {
 			redis := buildArgoCDRedis(tt.cfg)
 
 			assert.Equal(t, tt.expectEnabled, redis["enabled"])
+
+			// When enabled, tolerations should be present for CCM
+			if tt.expectEnabled {
+				_, hasTolerations := redis["tolerations"]
+				assert.True(t, hasTolerations, "tolerations should be present")
+			}
 		})
 	}
 }
@@ -309,7 +400,7 @@ func TestBuildArgoCDValuesCustomHelmValues(t *testing.T) {
 		},
 	}
 
-	values := buildArgoCDValues(cfg)
+	values := buildArgoCDValues(cfg, nil)
 
 	// Custom values should be merged
 	assert.Equal(t, "customValue", values["customKey"])

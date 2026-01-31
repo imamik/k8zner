@@ -204,16 +204,15 @@ func getClusterCIDR(cfg *config.Config) string {
 }
 
 // getLBSubnetIPRange returns the IP range for the load balancer subnet.
-// See: terraform/hcloud.tf line 49 - uses hcloud_network_subnet.load_balancer.ip_range
+// This uses the same subnet calculation as the infrastructure provisioner
+// to ensure CCM creates load balancers in the correct subnet.
 func getLBSubnetIPRange(cfg *config.Config) string {
-	// The load balancer subnet is typically the third /24 in the network
-	// For a 10.0.0.0/16 network, this would be 10.0.2.0/24
-	// This matches the Terraform implementation pattern
-	if cfg.Network.IPv4CIDR != "" {
-		// Parse the network CIDR and calculate LB subnet
-		// For simplicity, we use a convention: LB subnet is .2.0/24 in the network
-		// This is consistent with how the infrastructure provisioner allocates subnets
-		return "" // Let CCM use its default - the actual subnet is created by infrastructure
+	// Use the config's subnet allocation to get the LB subnet
+	// This ensures consistency with how infrastructure provisioner creates subnets
+	lbSubnet, err := cfg.GetSubnetForRole("load-balancer", 0)
+	if err != nil {
+		// If we can't calculate, let CCM use its default
+		return ""
 	}
-	return ""
+	return lbSubnet
 }

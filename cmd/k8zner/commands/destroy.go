@@ -32,7 +32,7 @@ This command deletes all resources associated with the cluster including:
 Resources are deleted in dependency order to ensure clean teardown.
 
 Example:
-  k8zner destroy -c cluster.yaml
+  k8zner destroy -c k8zner.yaml
 
 WARNING: This operation is irreversible. All cluster data will be lost.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {

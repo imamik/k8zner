@@ -157,7 +157,7 @@ func TestE2ELifecycle(t *testing.T) {
 	t.Log("✓ E2E Lifecycle Complete")
 	t.Logf("Cluster: %s", clusterName)
 	if !e2eConfig.SkipSnapshots {
-		t.Logf("Snapshots: amd64=%s, arm64=%s", state.SnapshotAMD64, state.SnapshotARM64)
+		t.Logf("Snapshot: amd64=%s", state.SnapshotAMD64)
 	}
 	if !e2eConfig.SkipCluster {
 		t.Logf("Load Balancer: %s", state.LoadBalancerIP)
