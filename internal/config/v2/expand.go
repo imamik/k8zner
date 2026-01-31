@@ -1,7 +1,6 @@
 package v2
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/imamik/k8zner/internal/config"
@@ -242,7 +241,7 @@ func expandAddons(cfg *Config, vm VersionMatrix) config.AddonsConfig {
 			Enabled: true,
 			Cloudflare: config.CertManagerCloudflareConfig{
 				Enabled:    hasDomain,
-				Email:      fmt.Sprintf("admin@%s", cfg.Domain),
+				Email:      cfg.GetCertEmail(),
 				Production: true, // Use production Let's Encrypt
 			},
 		},

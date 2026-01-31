@@ -69,7 +69,7 @@ func TestBuildArgoCDValues(t *testing.T) {
 				},
 			}
 
-			values := buildArgoCDValues(cfg)
+			values := buildArgoCDValues(cfg, nil)
 
 			// Check CRDs are enabled
 			crds, ok := values["crds"].(helm.Values)
@@ -202,7 +202,7 @@ func TestBuildArgoCDServer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := buildArgoCDServer(tt.cfg)
+			server := buildArgoCDServer(tt.cfg, nil)
 
 			assert.Equal(t, tt.expectedReplicas, server["replicas"])
 
@@ -313,7 +313,7 @@ func TestBuildArgoCDIngress(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ingress := buildArgoCDIngress(tt.cfg)
+			ingress := buildArgoCDIngress(tt.cfg, nil)
 
 			assert.Equal(t, true, ingress["enabled"])
 
@@ -400,7 +400,7 @@ func TestBuildArgoCDValuesCustomHelmValues(t *testing.T) {
 		},
 	}
 
-	values := buildArgoCDValues(cfg)
+	values := buildArgoCDValues(cfg, nil)
 
 	// Custom values should be merged
 	assert.Equal(t, "customValue", values["customKey"])

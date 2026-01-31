@@ -122,3 +122,102 @@ func isNotFoundError(err error) bool {
 
 	return false
 }
+
+// ListObjects lists objects in a bucket with an optional prefix filter.
+func (c *Client) ListObjects(ctx context.Context, bucketName, prefix string) ([]string, error) {
+	input := &s3.ListObjectsV2Input{
+		Bucket: aws.String(bucketName),
+	}
+	if prefix != "" {
+		input.Prefix = aws.String(prefix)
+	}
+
+	result, err := c.s3.ListObjectsV2(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list objects in bucket %s: %w", bucketName, err)
+	}
+
+	var keys []string
+	for _, obj := range result.Contents {
+		if obj.Key != nil {
+			keys = append(keys, *obj.Key)
+		}
+	}
+	return keys, nil
+}
+
+// PutObject uploads an object to a bucket.
+func (c *Client) PutObject(ctx context.Context, bucketName, key string, data []byte) error {
+	_, err := c.s3.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(key),
+		Body:   bytesReader(data),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to put object %s in bucket %s: %w", key, bucketName, err)
+	}
+	return nil
+}
+
+// DeleteObject deletes an object from a bucket.
+func (c *Client) DeleteObject(ctx context.Context, bucketName, key string) error {
+	_, err := c.s3.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete object %s from bucket %s: %w", key, bucketName, err)
+	}
+	return nil
+}
+
+// DeleteBucket deletes a bucket. The bucket must be empty.
+func (c *Client) DeleteBucket(ctx context.Context, bucketName string) error {
+	_, err := c.s3.DeleteBucket(ctx, &s3.DeleteBucketInput{
+		Bucket: aws.String(bucketName),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete bucket %s: %w", bucketName, err)
+	}
+	return nil
+}
+
+// bytesReader wraps bytes.Reader for use with S3 PutObject.
+func bytesReader(data []byte) *bytesReaderWrapper {
+	return &bytesReaderWrapper{data: data, pos: 0}
+}
+
+type bytesReaderWrapper struct {
+	data []byte
+	pos  int
+}
+
+func (b *bytesReaderWrapper) Read(p []byte) (n int, err error) {
+	if b.pos >= len(b.data) {
+		return 0, nil // EOF is handled by S3 client based on Content-Length
+	}
+	n = copy(p, b.data[b.pos:])
+	b.pos += n
+	return n, nil
+}
+
+func (b *bytesReaderWrapper) Seek(offset int64, whence int) (int64, error) {
+	var newPos int64
+	switch whence {
+	case 0: // io.SeekStart
+		newPos = offset
+	case 1: // io.SeekCurrent
+		newPos = int64(b.pos) + offset
+	case 2: // io.SeekEnd
+		newPos = int64(len(b.data)) + offset
+	}
+	if newPos < 0 {
+		return 0, errors.New("negative position")
+	}
+	b.pos = int(newPos)
+	return newPos, nil
+}
+
+func (b *bytesReaderWrapper) Len() int {
+	return len(b.data) - b.pos
+}

@@ -37,6 +37,12 @@ type Config struct {
 	// Example: with Domain="example.com" and ArgoSubdomain="argo", ArgoCD is at argo.example.com
 	ArgoSubdomain string `yaml:"argo_subdomain,omitempty"`
 
+	// CertEmail is the email address for Let's Encrypt certificate notifications.
+	// Let's Encrypt sends expiration warnings to this address.
+	// If not set, defaults to "admin@{domain}".
+	// Required for production use to receive renewal failure alerts.
+	CertEmail string `yaml:"certEmail,omitempty"`
+
 	// Backup enables automatic etcd backups to Hetzner Object Storage.
 	// Requires HETZNER_S3_ACCESS_KEY and HETZNER_S3_SECRET_KEY environment variables.
 	// Creates bucket "{cluster-name}-etcd-backups" automatically.
@@ -344,6 +350,18 @@ func (c *Config) ArgoHost() string {
 		return ""
 	}
 	return c.GetArgoSubdomain() + "." + c.Domain
+}
+
+// GetCertEmail returns the email address for Let's Encrypt certificates.
+// If not set, defaults to "admin@{domain}".
+func (c *Config) GetCertEmail() string {
+	if c.CertEmail != "" {
+		return c.CertEmail
+	}
+	if c.Domain != "" {
+		return "admin@" + c.Domain
+	}
+	return ""
 }
 
 // BackupBucketName returns the S3 bucket name for etcd backups.

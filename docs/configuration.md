@@ -102,8 +102,32 @@ domain: example.com
 When set, this automatically enables:
 - **external-dns**: Creates DNS records from Ingress resources
 - **cert-manager Cloudflare DNS01**: Issues Let's Encrypt certificates
+- **ArgoCD ingress**: Dashboard accessible at `argo.{domain}`
 
 Requires `CF_API_TOKEN` environment variable.
+
+### certEmail (optional)
+
+Email address for Let's Encrypt certificate expiration notifications.
+
+```yaml
+certEmail: ops@example.com
+```
+
+Let's Encrypt sends certificate expiration warnings (at 20 days, 10 days, and 1 day before expiry) to this email. **Recommended for production** to catch renewal failures.
+
+If not set, defaults to `admin@{domain}`.
+
+### argo_subdomain (optional)
+
+Subdomain for the ArgoCD dashboard (default: `argo`).
+
+```yaml
+argo_subdomain: argocd
+```
+
+When `domain` is set, ArgoCD will be accessible at `{argo_subdomain}.{domain}`.
+Example: with `domain: example.com` and `argo_subdomain: argocd`, ArgoCD is at `argocd.example.com`.
 
 ### backup (optional)
 

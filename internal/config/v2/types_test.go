@@ -629,6 +629,52 @@ func TestConfig_Validate_Backup(t *testing.T) {
 	}
 }
 
+func TestConfig_GetCertEmail(t *testing.T) {
+	tests := []struct {
+		name      string
+		certEmail string
+		domain    string
+		want      string
+	}{
+		{"explicit email", "ops@company.com", "example.com", "ops@company.com"},
+		{"fallback to admin@domain", "", "example.com", "admin@example.com"},
+		{"no domain no email", "", "", ""},
+		{"explicit email no domain", "ops@company.com", "", "ops@company.com"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := Config{CertEmail: tt.certEmail, Domain: tt.domain}
+			if got := c.GetCertEmail(); got != tt.want {
+				t.Errorf("Config.GetCertEmail() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConfig_ArgoHost(t *testing.T) {
+	tests := []struct {
+		name          string
+		domain        string
+		argoSubdomain string
+		want          string
+	}{
+		{"default subdomain", "example.com", "", "argo.example.com"},
+		{"custom subdomain", "example.com", "argocd", "argocd.example.com"},
+		{"no domain", "", "", ""},
+		{"no domain with subdomain", "", "argocd", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := Config{Domain: tt.domain, ArgoSubdomain: tt.argoSubdomain}
+			if got := c.ArgoHost(); got != tt.want {
+				t.Errorf("Config.ArgoHost() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 // Helper function
 func containsString(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstring(s, substr))
