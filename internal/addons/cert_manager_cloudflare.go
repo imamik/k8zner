@@ -106,16 +106,17 @@ func waitForCertManagerCRDs(ctx context.Context, client k8sclient.Client) error 
 		// Step 1: Check if the ClusterIssuer CRD is available
 		if !crdReady {
 			hasCRD, err := client.HasCRD(ctx, "cert-manager.io/v1/ClusterIssuer")
-			if err != nil {
+			switch {
+			case err != nil:
 				log.Printf("[cert-manager] Error checking for CRD: %v", err)
-			} else if hasCRD {
+			case hasCRD:
 				log.Println("[cert-manager] ClusterIssuer CRD is registered in API")
 				crdReady = true
 				// Refresh the client's REST mapper to pick up the new CRD
 				if err := client.RefreshDiscovery(ctx); err != nil {
 					log.Printf("[cert-manager] Warning: failed to refresh discovery after CRD found: %v", err)
 				}
-			} else {
+			default:
 				log.Println("[cert-manager] Waiting for ClusterIssuer CRD to be registered...")
 			}
 		}
@@ -123,9 +124,10 @@ func waitForCertManagerCRDs(ctx context.Context, client k8sclient.Client) error 
 		// Step 2: Check if the webhook service has endpoints (pod is ready)
 		if crdReady && !webhookReady {
 			ready, err := client.HasReadyEndpoints(ctx, "cert-manager", "cert-manager-webhook")
-			if err != nil {
+			switch {
+			case err != nil:
 				log.Printf("[cert-manager] Error checking webhook endpoints: %v", err)
-			} else if ready {
+			case ready:
 				log.Println("[cert-manager] Webhook endpoint detected, waiting for webhook server to initialize...")
 				// Wait for the webhook server inside the pod to fully initialize
 				// This is critical because the endpoint can exist before the HTTPS server is ready
@@ -136,7 +138,7 @@ func waitForCertManagerCRDs(ctx context.Context, client k8sclient.Client) error 
 					log.Println("[cert-manager] Webhook grace period complete")
 				}
 				webhookReady = true
-			} else {
+			default:
 				log.Println("[cert-manager] Waiting for webhook endpoint to be ready...")
 			}
 		}

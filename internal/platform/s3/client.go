@@ -170,7 +170,9 @@ func (c *Client) GetObject(ctx context.Context, bucketName, key string) ([]byte,
 	if err != nil {
 		return nil, fmt.Errorf("failed to get object %s from bucket %s: %w", key, bucketName, err)
 	}
-	defer result.Body.Close()
+	defer func() {
+		_ = result.Body.Close()
+	}()
 
 	var buf bytes.Buffer
 	if _, err := buf.ReadFrom(result.Body); err != nil {
