@@ -2,6 +2,7 @@
 package s3
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -149,14 +150,34 @@ func (c *Client) ListObjects(ctx context.Context, bucketName, prefix string) ([]
 // PutObject uploads an object to a bucket.
 func (c *Client) PutObject(ctx context.Context, bucketName, key string, data []byte) error {
 	_, err := c.s3.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: aws.String(bucketName),
-		Key:    aws.String(key),
-		Body:   bytesReader(data),
+		Bucket:        aws.String(bucketName),
+		Key:           aws.String(key),
+		Body:          bytes.NewReader(data),
+		ContentLength: aws.Int64(int64(len(data))),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to put object %s in bucket %s: %w", key, bucketName, err)
 	}
 	return nil
+}
+
+// GetObject downloads an object from a bucket.
+func (c *Client) GetObject(ctx context.Context, bucketName, key string) ([]byte, error) {
+	result, err := c.s3.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get object %s from bucket %s: %w", key, bucketName, err)
+	}
+	defer result.Body.Close()
+
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(result.Body); err != nil {
+		return nil, fmt.Errorf("failed to read object body: %w", err)
+	}
+
+	return buf.Bytes(), nil
 }
 
 // DeleteObject deletes an object from a bucket.
@@ -182,42 +203,3 @@ func (c *Client) DeleteBucket(ctx context.Context, bucketName string) error {
 	return nil
 }
 
-// bytesReader wraps bytes.Reader for use with S3 PutObject.
-func bytesReader(data []byte) *bytesReaderWrapper {
-	return &bytesReaderWrapper{data: data, pos: 0}
-}
-
-type bytesReaderWrapper struct {
-	data []byte
-	pos  int
-}
-
-func (b *bytesReaderWrapper) Read(p []byte) (n int, err error) {
-	if b.pos >= len(b.data) {
-		return 0, nil // EOF is handled by S3 client based on Content-Length
-	}
-	n = copy(p, b.data[b.pos:])
-	b.pos += n
-	return n, nil
-}
-
-func (b *bytesReaderWrapper) Seek(offset int64, whence int) (int64, error) {
-	var newPos int64
-	switch whence {
-	case 0: // io.SeekStart
-		newPos = offset
-	case 1: // io.SeekCurrent
-		newPos = int64(b.pos) + offset
-	case 2: // io.SeekEnd
-		newPos = int64(len(b.data)) + offset
-	}
-	if newPos < 0 {
-		return 0, errors.New("negative position")
-	}
-	b.pos = int(newPos)
-	return newPos, nil
-}
-
-func (b *bytesReaderWrapper) Len() int {
-	return len(b.data) - b.pos
-}
