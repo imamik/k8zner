@@ -5,6 +5,8 @@ package e2e
 import (
 	"os"
 	"strings"
+
+	v2 "github.com/imamik/k8zner/internal/config/v2"
 )
 
 // E2EConfig controls which phases of E2E tests to run.
@@ -34,6 +36,9 @@ type E2EConfig struct {
 
 // LoadE2EConfig loads configuration from environment variables.
 func LoadE2EConfig() *E2EConfig {
+	// Use version matrix for defaults to ensure consistency
+	vm := v2.DefaultVersionMatrix()
+
 	return &E2EConfig{
 		// Phase control
 		SkipSnapshots:      getEnvBool("E2E_SKIP_SNAPSHOTS"),
@@ -51,11 +56,11 @@ func LoadE2EConfig() *E2EConfig {
 		// Snapshot management
 		KeepSnapshots: getEnvBool("E2E_KEEP_SNAPSHOTS"),
 
-		// Version control (with defaults)
-		InitialTalosVersion: getEnvOrDefault("E2E_INITIAL_TALOS_VERSION", "v1.8.2"),
-		TargetTalosVersion:  getEnvOrDefault("E2E_TARGET_TALOS_VERSION", "v1.8.3"),
-		InitialK8sVersion:   getEnvOrDefault("E2E_INITIAL_K8S_VERSION", "v1.30.0"),
-		TargetK8sVersion:    getEnvOrDefault("E2E_TARGET_K8S_VERSION", "v1.31.0"),
+		// Version control (defaults from version matrix for consistency)
+		InitialTalosVersion: getEnvOrDefault("E2E_INITIAL_TALOS_VERSION", vm.Talos),
+		TargetTalosVersion:  getEnvOrDefault("E2E_TARGET_TALOS_VERSION", vm.Talos),
+		InitialK8sVersion:   getEnvOrDefault("E2E_INITIAL_K8S_VERSION", "v"+vm.Kubernetes),
+		TargetK8sVersion:    getEnvOrDefault("E2E_TARGET_K8S_VERSION", "v"+vm.Kubernetes),
 	}
 }
 

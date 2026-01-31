@@ -3,6 +3,7 @@ package hcloud
 import (
 	"context"
 	"fmt"
+	"net"
 	"strconv"
 
 	"github.com/imamik/k8zner/internal/util/retry"
@@ -11,7 +12,8 @@ import (
 )
 
 // CreateServer creates a new server with the given specifications.
-func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string) (string, error) {
+// The enablePublicIPv4 and enablePublicIPv6 parameters control public IP assignment.
+func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string, enablePublicIPv4, enablePublicIPv6 bool) (string, error) {
 	// Validate network parameters: both must be provided together or both empty
 	if (networkID != 0) != (privateIP != "") {
 		return "", fmt.Errorf("networkID and privateIP must both be provided or both be empty")
@@ -21,7 +23,7 @@ func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverTy
 	defer cancel()
 
 	// Resolve dependencies and build create options
-	opts, err := c.buildServerCreateOpts(ctx, name, imageType, serverType, location, sshKeys, labels, userData, placementGroupID, networkID, privateIP)
+	opts, err := c.buildServerCreateOpts(ctx, name, imageType, serverType, location, sshKeys, labels, userData, placementGroupID, networkID, privateIP, enablePublicIPv4, enablePublicIPv6)
 	if err != nil {
 		return "", err
 	}
@@ -43,7 +45,7 @@ func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverTy
 }
 
 // buildServerCreateOpts resolves all dependencies and builds server creation options.
-func (c *RealClient) buildServerCreateOpts(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string) (hcloud.ServerCreateOpts, error) {
+func (c *RealClient) buildServerCreateOpts(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string, enablePublicIPv4, enablePublicIPv6 bool) (hcloud.ServerCreateOpts, error) {
 	// Resolve server type
 	serverTypeObj, _, err := c.client.ServerType.Get(ctx, serverType)
 	if err != nil {
@@ -77,6 +79,16 @@ func (c *RealClient) buildServerCreateOpts(ctx context.Context, name, imageType,
 		startAfterCreate = hcloud.Ptr(false)
 	}
 
+	// Configure public network (IPv4/IPv6)
+	// Only set PublicNet if we're not using the defaults (both enabled)
+	var publicNet *hcloud.ServerCreatePublicNet
+	if !enablePublicIPv4 || !enablePublicIPv6 {
+		publicNet = &hcloud.ServerCreatePublicNet{
+			EnableIPv4: enablePublicIPv4,
+			EnableIPv6: enablePublicIPv6,
+		}
+	}
+
 	return hcloud.ServerCreateOpts{
 		Name:             name,
 		ServerType:       serverTypeObj,
@@ -87,6 +99,7 @@ func (c *RealClient) buildServerCreateOpts(ctx context.Context, name, imageType,
 		Location:         locObj,
 		PlacementGroup:   resolvePlacementGroup(placementGroupID),
 		StartAfterCreate: startAfterCreate,
+		PublicNet:        publicNet,
 	}, nil
 }
 
@@ -132,6 +145,7 @@ func (c *RealClient) DeleteServer(ctx context.Context, name string) error {
 }
 
 // GetServerIP returns the public IP of the server.
+// Prefers IPv4 for backwards compatibility, falls back to IPv6 if no IPv4.
 func (c *RealClient) GetServerIP(ctx context.Context, name string) (string, error) {
 	server, _, err := c.client.Server.Get(ctx, name)
 	if err != nil {
@@ -141,11 +155,27 @@ func (c *RealClient) GetServerIP(ctx context.Context, name string) (string, erro
 		return "", fmt.Errorf("server not found: %s", name)
 	}
 
-	if server.PublicNet.IPv4.IP == nil {
-		return "", fmt.Errorf("server has no public IPv4")
+	// Prefer IPv4 for backwards compatibility
+	if server.PublicNet.IPv4.IP != nil {
+		return server.PublicNet.IPv4.IP.String(), nil
 	}
 
-	return server.PublicNet.IPv4.IP.String(), nil
+	// Fall back to IPv6 for IPv6-only servers
+	if server.PublicNet.IPv6.IP != nil {
+		// Hetzner assigns a /64 network to each server.
+		// The server's primary address is the network address with ::1 suffix.
+		// We construct this by taking the network prefix and adding ::1.
+		ipv6Net := server.PublicNet.IPv6.IP.To16()
+		if ipv6Net != nil {
+			// Create a copy and set the host portion to ::1
+			ip := make([]byte, 16)
+			copy(ip, ipv6Net)
+			ip[15] = 1 // Set the last byte to 1 for ::1
+			return net.IP(ip).String(), nil
+		}
+	}
+
+	return "", fmt.Errorf("server has no public IP (neither IPv4 nor IPv6)")
 }
 
 // EnableRescue enables rescue mode for the server.

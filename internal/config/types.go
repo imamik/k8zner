@@ -694,13 +694,19 @@ type TraefikConfig struct {
 	Helm HelmChartConfig `mapstructure:"helm" yaml:"helm"`
 
 	// Kind specifies the Kubernetes controller type: "Deployment" or "DaemonSet".
-	// Default: "Deployment"
+	// Default: "Deployment" (or "DaemonSet" when HostNetwork is true)
 	Kind string `mapstructure:"kind" yaml:"kind"`
 
 	// Replicas specifies the number of controller replicas.
 	// If nil, auto-calculated: 2 for <3 workers, 3 for >=3 workers.
 	// Must be nil when Kind is "DaemonSet".
 	Replicas *int `mapstructure:"replicas" yaml:"replicas"`
+
+	// HostNetwork enables hostNetwork mode for Traefik pods.
+	// When enabled, Traefik binds directly to host ports 80/443 instead of
+	// using a LoadBalancer service. Useful for dev mode to avoid LB costs.
+	// Default: false
+	HostNetwork *bool `mapstructure:"host_network" yaml:"host_network"`
 
 	// ExternalTrafficPolicy controls how external traffic is routed.
 	// Valid values: "Cluster" (cluster-wide) or "Local" (node-local).
@@ -932,6 +938,11 @@ type TalosBackupConfig struct {
 	S3PathStyle        bool   `mapstructure:"s3_path_style" yaml:"s3_path_style"`
 	AGEX25519PublicKey string `mapstructure:"age_x25519_public_key" yaml:"age_x25519_public_key"`
 	EnableCompression  bool   `mapstructure:"enable_compression" yaml:"enable_compression"`
+
+	// EncryptionDisabled disables backup encryption when set to true.
+	// Default: false (encryption enabled). When enabled, backups are encrypted using age encryption.
+	// Warning: Disabling encryption stores etcd data unencrypted in the S3 bucket.
+	EncryptionDisabled bool `mapstructure:"encryption_disabled" yaml:"encryption_disabled,omitempty"`
 
 	// S3HcloudURL is a convenience field for Hetzner Object Storage.
 	// Format: bucket.region.your-objectstorage.com or https://bucket.region.your-objectstorage.com

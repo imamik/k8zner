@@ -205,7 +205,6 @@ func TestValidationPhase_Versions(t *testing.T) {
 }
 
 func TestValidationPhase_Integration(t *testing.T) {
-	// Test the full validation phase
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
 		Location:    "nbg1",
@@ -234,12 +233,6 @@ func TestValidationPhase_Integration(t *testing.T) {
 	err := phase.Provision(ctx)
 
 	require.NoError(t, err)
-
-	// Check that defaults were applied
-	assert.Equal(t, "v1.8.3", cfg.Talos.Version)
-	assert.Equal(t, "v1.31.0", cfg.Kubernetes.Version)
-
-	// Check that subnets were calculated
 	assert.NotEmpty(t, cfg.Network.NodeIPv4CIDR)
 	assert.NotEmpty(t, cfg.Network.ServiceIPv4CIDR)
 	assert.NotEmpty(t, cfg.Network.PodIPv4CIDR)

@@ -1,8 +1,4 @@
 // Package addons provides functionality for installing cluster addons.
-//
-// This package handles the application of Kubernetes manifests for various
-// addons like Cloud Controller Manager (CCM), CSI drivers, and monitoring tools.
-// Manifests are embedded at build time and can use Go templates for configuration.
 package addons
 
 import (
@@ -11,46 +7,22 @@ import (
 
 	"github.com/imamik/k8zner/internal/addons/k8sclient"
 	"github.com/imamik/k8zner/internal/config"
-	"github.com/imamik/k8zner/internal/provisioning"
 )
 
 // Apply installs configured addons to the Kubernetes cluster.
-//
-// This function checks the addon configuration and applies the appropriate
-// manifests to the cluster using the k8s client-go library. Currently supports:
-//   - Gateway API CRDs
-//   - Prometheus Operator CRDs
-//   - Talos Cloud Controller Manager (Talos CCM)
-//   - Cilium CNI
-//   - Hetzner Cloud Controller Manager (CCM)
-//   - Hetzner Cloud CSI Driver
-//   - Metrics Server
-//   - Cert Manager
-//   - Ingress NGINX
-//   - Traefik Proxy
-//   - Longhorn
-//   - Cluster Autoscaler
-//   - RBAC
-//   - OIDC RBAC
-//   - Talos Backup
-//   - ArgoCD
-//
-// The kubeconfig must be valid and the cluster must be accessible.
-// Addon manifests are embedded in the binary and processed as templates
-// with cluster-specific configuration injected at runtime.
-func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID int64, sshKeyName string, firewallID int64, talosGen provisioning.TalosConfigProducer) error {
+func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID int64) error {
 	if len(kubeconfig) == 0 {
 		return fmt.Errorf("kubeconfig is required for addon installation")
-	}
-
-	// Validate that only one ingress controller is enabled
-	if cfg.Addons.IngressNginx.Enabled && cfg.Addons.Traefik.Enabled {
-		return fmt.Errorf("cannot enable both Nginx and Traefik ingress controllers; choose one or the other")
 	}
 
 	// Check if any addons are enabled
 	if !hasEnabledAddons(cfg) {
 		return nil
+	}
+
+	// Pre-flight validation: check addon configuration requirements
+	if err := validateAddonConfig(cfg); err != nil {
+		return fmt.Errorf("addon configuration validation failed: %w", err)
 	}
 
 	// Create k8s client from kubeconfig bytes
@@ -83,13 +55,6 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 	if cfg.Addons.Cilium.Enabled {
 		if err := applyCilium(ctx, client, cfg); err != nil {
 			return fmt.Errorf("failed to install Cilium: %w", err)
-		}
-	}
-
-	// Install Cluster Autoscaler (if enabled)
-	if cfg.Addons.ClusterAutoscaler.Enabled && len(cfg.Autoscaler.NodePools) > 0 {
-		if err := applyClusterAutoscaler(ctx, client, cfg, networkID, sshKeyName, firewallID, talosGen); err != nil {
-			return fmt.Errorf("failed to install Cluster Autoscaler: %w", err)
 		}
 	}
 
@@ -138,20 +103,7 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		}
 	}
 
-	if cfg.Addons.Longhorn.Enabled {
-		if err := applyLonghorn(ctx, client, cfg); err != nil {
-			return fmt.Errorf("failed to install Longhorn: %w", err)
-		}
-	}
-
-	// Install ingress controllers BEFORE external-DNS
-	// External-DNS reads from Ingress status which needs the controller running first
-	if cfg.Addons.IngressNginx.Enabled {
-		if err := applyIngressNginx(ctx, client, cfg); err != nil {
-			return fmt.Errorf("failed to install Ingress NGINX: %w", err)
-		}
-	}
-
+	// Install Traefik before external-DNS (needs ingress controller)
 	if cfg.Addons.Traefik.Enabled {
 		if err := applyTraefik(ctx, client, cfg); err != nil {
 			return fmt.Errorf("failed to install Traefik: %w", err)
@@ -166,27 +118,16 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		}
 	}
 
-	if cfg.Addons.RBAC.Enabled {
-		if err := applyRBAC(ctx, client, cfg); err != nil {
-			return fmt.Errorf("failed to install RBAC: %w", err)
-		}
-	}
-
-	if cfg.Addons.OIDCRBAC.Enabled {
-		if err := applyOIDC(ctx, client, cfg); err != nil {
-			return fmt.Errorf("failed to install OIDC RBAC: %w", err)
-		}
-	}
-
-	if cfg.Addons.TalosBackup.Enabled {
-		if err := applyTalosBackup(ctx, client, cfg); err != nil {
-			return fmt.Errorf("failed to install Talos Backup: %w", err)
-		}
-	}
-
 	if cfg.Addons.ArgoCD.Enabled {
 		if err := applyArgoCD(ctx, client, cfg); err != nil {
 			return fmt.Errorf("failed to install ArgoCD: %w", err)
+		}
+	}
+
+	// Install Talos Backup (etcd backup to S3)
+	if cfg.Addons.TalosBackup.Enabled {
+		if err := applyTalosBackup(ctx, client, cfg); err != nil {
+			return fmt.Errorf("failed to install Talos Backup: %w", err)
 		}
 	}
 
@@ -202,25 +143,56 @@ func getControlPlaneCount(cfg *config.Config) int {
 	return count
 }
 
-// hasEnabledAddons checks if any addon is enabled and needs to be applied.
 func hasEnabledAddons(cfg *config.Config) bool {
-	addons := &cfg.Addons
-	return addons.GatewayAPICRDs.Enabled ||
-		addons.PrometheusOperatorCRDs.Enabled ||
-		addons.TalosCCM.Enabled ||
-		addons.Cilium.Enabled ||
-		(addons.ClusterAutoscaler.Enabled && len(cfg.Autoscaler.NodePools) > 0) ||
-		addons.CCM.Enabled ||
-		addons.CSI.Enabled ||
-		addons.MetricsServer.Enabled ||
-		addons.CertManager.Enabled ||
-		addons.Longhorn.Enabled ||
-		addons.IngressNginx.Enabled ||
-		addons.Traefik.Enabled ||
-		addons.RBAC.Enabled ||
-		addons.OIDCRBAC.Enabled ||
-		addons.TalosBackup.Enabled ||
-		addons.ArgoCD.Enabled ||
-		addons.Cloudflare.Enabled ||
-		addons.ExternalDNS.Enabled
+	a := &cfg.Addons
+	return a.GatewayAPICRDs.Enabled || a.PrometheusOperatorCRDs.Enabled ||
+		a.TalosCCM.Enabled || a.Cilium.Enabled || a.CCM.Enabled || a.CSI.Enabled ||
+		a.MetricsServer.Enabled || a.CertManager.Enabled || a.Traefik.Enabled ||
+		a.ArgoCD.Enabled || a.Cloudflare.Enabled || a.ExternalDNS.Enabled ||
+		a.TalosBackup.Enabled
+}
+
+// validateAddonConfig performs pre-flight validation of addon configuration.
+// Returns an error if required configuration is missing for enabled addons.
+//
+// Note: Some validations (e.g., S3 credentials) are intentionally duplicated
+// from v2/types.go for defense-in-depth. The v2 layer validates at config load
+// time (fail fast), while this validates at addon install time (runtime check).
+func validateAddonConfig(cfg *config.Config) error {
+	a := &cfg.Addons
+
+	// CCM/CSI require HCloud token
+	if (a.CCM.Enabled || a.CSI.Enabled) && cfg.HCloudToken == "" {
+		return fmt.Errorf("ccm/csi addons require hcloud_token to be set")
+	}
+
+	// Cloudflare addons require API token
+	if a.Cloudflare.Enabled && a.Cloudflare.APIToken == "" {
+		return fmt.Errorf("cloudflare addon requires api_token to be set")
+	}
+
+	// ExternalDNS uses Cloudflare as the DNS provider
+	if a.ExternalDNS.Enabled && !a.Cloudflare.Enabled {
+		return fmt.Errorf("external-dns addon requires cloudflare addon to be enabled")
+	}
+
+	// CertManager Cloudflare integration requires Cloudflare addon
+	if a.CertManager.Enabled && a.CertManager.Cloudflare.Enabled && !a.Cloudflare.Enabled {
+		return fmt.Errorf("cert-manager cloudflare integration requires cloudflare addon to be enabled")
+	}
+
+	// TalosBackup requires S3 configuration
+	if a.TalosBackup.Enabled {
+		if a.TalosBackup.S3Bucket == "" {
+			return fmt.Errorf("talos-backup addon requires s3_bucket to be set")
+		}
+		if a.TalosBackup.S3AccessKey == "" || a.TalosBackup.S3SecretKey == "" {
+			return fmt.Errorf("talos-backup addon requires s3_access_key and s3_secret_key to be set")
+		}
+		if a.TalosBackup.S3Endpoint == "" {
+			return fmt.Errorf("talos-backup addon requires s3_endpoint to be set")
+		}
+	}
+
+	return nil
 }

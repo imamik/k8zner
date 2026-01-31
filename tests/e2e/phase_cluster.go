@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/imamik/k8zner/internal/config"
+	v2 "github.com/imamik/k8zner/internal/config/v2"
 	"github.com/imamik/k8zner/internal/orchestration"
 	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/platform/talos"
@@ -26,6 +27,12 @@ import (
 func phaseCluster(t *testing.T, state *E2EState) {
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Minute)
 	defer cancel()
+
+	// Validate that snapshots are available before proceeding
+	if state.SnapshotAMD64 == "" {
+		t.Fatal("No AMD64 snapshot available - run Phase 1 (Snapshots) first")
+	}
+	t.Logf("Using snapshot: amd64=%s", state.SnapshotAMD64)
 
 	t.Log("Provisioning full cluster (infrastructure + nodes + bootstrap)...")
 
@@ -78,12 +85,14 @@ func phaseCluster(t *testing.T, state *E2EState) {
 	state.KubeconfigPath = kubeconfigPath
 
 	// Get cluster IPs for state
+	// Naming convention: {cluster}-{poolName}-{index}
+	// Control plane pool name is "control-plane", worker pool name is "workers" (from v2 config)
 	cpIP, err := state.Client.GetServerIP(ctx, state.ClusterName+"-control-plane-1")
 	if err == nil {
 		state.ControlPlaneIPs = append(state.ControlPlaneIPs, cpIP)
 	}
 
-	workerIP, err := state.Client.GetServerIP(ctx, state.ClusterName+"-worker-1-1")
+	workerIP, err := state.Client.GetServerIP(ctx, state.ClusterName+"-workers-1")
 	if err == nil {
 		state.WorkerIPs = append(state.WorkerIPs, workerIP)
 	}
@@ -138,48 +147,30 @@ func setupSSHKeyForCluster(ctx context.Context, t *testing.T, state *E2EState) e
 }
 
 // createInitialClusterConfig creates the initial cluster config with 1 CP + 1 worker.
+// Uses the simplified v2 config format and expands it to full internal config.
 func createInitialClusterConfig(state *E2EState) *config.Config {
-	cfg := &config.Config{
-		ClusterName: state.ClusterName,
-		TestID:      state.TestID,
-		Location:    "nbg1",
-		Network: config.NetworkConfig{
-			IPv4CIDR: "10.0.0.0/16",
-			Zone:     "eu-central",
+	// Create simplified v2 config (dev mode = 1 CP, 1 worker)
+	v2Cfg := &v2.Config{
+		Name:   state.ClusterName,
+		Region: v2.RegionNuremberg,
+		Mode:   v2.ModeDev,
+		Workers: v2.Worker{
+			Count: 1,
+			Size:  v2.SizeCX22,
 		},
-		Firewall: config.FirewallConfig{
-			UseCurrentIPv4: boolPtr(true),
-		},
-		ControlPlane: config.ControlPlaneConfig{
-			NodePools: []config.ControlPlaneNodePool{
-				{
-					Name:       "control-plane",
-					ServerType: "cpx22",
-					Location:   "nbg1",
-					Count:      1,
-					Image:      "talos",
-				},
-			},
-		},
-		Workers: []config.WorkerNodePool{
-			{
-				Name:       "worker-1",
-				ServerType: "cpx22",
-				Location:   "nbg1",
-				Count:      1,
-				Image:      "talos",
-			},
-		},
-		Talos: config.TalosConfig{
-			Version: talosVersion,
-		},
-		Kubernetes: config.KubernetesConfig{
-			Version: k8sVersion,
-		},
-		SSHKeys: []string{state.SSHKeyName},
 	}
 
-	cfg.CalculateSubnets()
+	// Expand to internal config
+	cfg, err := v2.Expand(v2Cfg)
+	if err != nil {
+		panic(fmt.Sprintf("failed to expand v2 config: %v", err))
+	}
+
+	// Set e2e-specific fields
+	cfg.TestID = state.TestID
+	cfg.SSHKeys = []string{state.SSHKeyName}
+	cfg.HCloudToken = os.Getenv("HCLOUD_TOKEN")
+
 	return cfg
 }
 

@@ -42,10 +42,12 @@ type TalosConfigProducer interface {
 	SetMachineConfigOptions(opts any)
 
 	// GenerateControlPlaneConfig generates machine configuration for a control plane node.
-	GenerateControlPlaneConfig(san []string, hostname string) ([]byte, error)
+	// serverID is the Hetzner server ID, used to set the nodeid label for CCM integration.
+	GenerateControlPlaneConfig(san []string, hostname string, serverID int64) ([]byte, error)
 
 	// GenerateWorkerConfig generates machine configuration for a worker node.
-	GenerateWorkerConfig(hostname string) ([]byte, error)
+	// serverID is the Hetzner server ID, used to set the nodeid label for CCM integration.
+	GenerateWorkerConfig(hostname string, serverID int64) ([]byte, error)
 
 	// GenerateAutoscalerConfig generates machine configuration for an autoscaler node pool.
 	GenerateAutoscalerConfig(poolName string, labels map[string]string, taints []string) ([]byte, error)

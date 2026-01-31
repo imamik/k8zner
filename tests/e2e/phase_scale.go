@@ -5,12 +5,12 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"testing"
 	"time"
 
 	"github.com/imamik/k8zner/internal/config"
+	v2 "github.com/imamik/k8zner/internal/config/v2"
 	"github.com/imamik/k8zner/internal/orchestration"
 	"github.com/imamik/k8zner/internal/platform/talos"
 )
@@ -55,68 +55,42 @@ func phaseScale(t *testing.T, state *E2EState) {
 	t.Log("✓ Phase 4: Scale (cluster scaled successfully)")
 }
 
-// createScaledClusterConfig creates config with 3 CP nodes and 2 worker pools.
+// createScaledClusterConfig creates config with 3 CP nodes (HA mode) and 3 workers.
+// Uses the simplified v2 config format and expands it to full internal config.
 func createScaledClusterConfig(state *E2EState) *config.Config {
-	token := os.Getenv("HCLOUD_TOKEN")
-
-	cfg := &config.Config{
-		ClusterName: state.ClusterName,
-		TestID:      state.TestID, // Required for label-based cleanup
-		HCloudToken: token,
-		Location:    "nbg1",
-		Network: config.NetworkConfig{
-			IPv4CIDR: "10.0.0.0/16",
-			Zone:     "eu-central",
+	// Create simplified v2 config (HA mode = 3 CP)
+	v2Cfg := &v2.Config{
+		Name:   state.ClusterName,
+		Region: v2.RegionNuremberg,
+		Mode:   v2.ModeHA, // Scale to HA mode (3 control planes)
+		Workers: v2.Worker{
+			Count: 3, // Scale workers to 3
+			Size:  v2.SizeCX22,
 		},
-		Firewall: config.FirewallConfig{
-			UseCurrentIPv4: boolPtr(true),
-		},
-		ControlPlane: config.ControlPlaneConfig{
-			NodePools: []config.ControlPlaneNodePool{
-				{
-					Name:       "control-plane",
-					ServerType: "cpx22",
-					Location:   "nbg1",
-					Count:      3, // Scale from 1 to 3
-					Image:      "talos",
-				},
-			},
-		},
-		Workers: []config.WorkerNodePool{
-			{
-				Name:       "worker-1",
-				ServerType: "cpx22",
-				Location:   "nbg1",
-				Count:      1,
-				Image:      "talos",
-			},
-			{
-				Name:       "worker-pool-2", // Add new worker pool
-				ServerType: "cpx22",
-				Location:   "nbg1",
-				Count:      2,
-				Image:      "talos",
-			},
-		},
-		Talos: config.TalosConfig{
-			Version: talosVersion,
-		},
-		Kubernetes: config.KubernetesConfig{
-			Version: k8sVersion,
-		},
-		SSHKeys: []string{state.SSHKeyName},
 	}
 
-	cfg.CalculateSubnets()
+	// Expand to internal config
+	cfg, err := v2.Expand(v2Cfg)
+	if err != nil {
+		panic(fmt.Sprintf("failed to expand v2 config: %v", err))
+	}
+
+	// Set e2e-specific fields
+	cfg.TestID = state.TestID
+	cfg.SSHKeys = []string{state.SSHKeyName}
+
 	return cfg
 }
 
 // verifyScaledCluster verifies the scaled cluster has expected resources.
+// In HA mode: 3 control planes + 3 workers = 6 total nodes
+// Naming convention: {cluster}-{poolName}-{index}
 func verifyScaledCluster(t *testing.T, state *E2EState) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	// Verify control plane nodes exist
+	// Verify control plane nodes exist (HA mode = 3)
+	// Pool name: "control-plane" (from v2 config)
 	for i := 1; i <= 3; i++ {
 		serverName := fmt.Sprintf("%s-control-plane-%d", state.ClusterName, i)
 		if _, err := state.Client.GetServerIP(ctx, serverName); err != nil {
@@ -126,17 +100,18 @@ func verifyScaledCluster(t *testing.T, state *E2EState) {
 		}
 	}
 
-	// Verify worker pool 2 nodes exist
-	for i := 1; i <= 2; i++ {
-		serverName := fmt.Sprintf("%s-worker-pool-2-%d", state.ClusterName, i)
+	// Verify worker nodes exist (scaled to 3)
+	// Pool name: "workers" (from v2 config)
+	for i := 1; i <= 3; i++ {
+		serverName := fmt.Sprintf("%s-workers-%d", state.ClusterName, i)
 		if _, err := state.Client.GetServerIP(ctx, serverName); err != nil {
-			t.Errorf("Worker pool 2 node %d not found: %v", i, err)
+			t.Errorf("Worker node %d not found: %v", i, err)
 		} else {
-			t.Logf("  ✓ Worker pool 2 node %d exists", i)
+			t.Logf("  ✓ Worker node %d exists", i)
 		}
 	}
 
-	// Verify kubectl shows all nodes (3 CP + 1 + 2 workers = 6 total)
+	// Verify kubectl shows all nodes (3 CP + 3 workers = 6 total)
 	t.Log("Verifying all nodes are visible in Kubernetes...")
 	verifyNodeCount(t, state.KubeconfigPath, 6, 5*time.Minute)
 

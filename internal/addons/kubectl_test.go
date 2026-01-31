@@ -34,6 +34,26 @@ func (m *mockK8sClient) DeleteSecret(ctx context.Context, namespace, name string
 	return args.Error(0)
 }
 
+func (m *mockK8sClient) RefreshDiscovery(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
+}
+
+func (m *mockK8sClient) HasCRD(ctx context.Context, crdName string) (bool, error) {
+	args := m.Called(ctx, crdName)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *mockK8sClient) HasReadyEndpoints(ctx context.Context, namespace, serviceName string) (bool, error) {
+	args := m.Called(ctx, namespace, serviceName)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *mockK8sClient) GetWorkerExternalIPs(ctx context.Context) ([]string, error) {
+	args := m.Called(ctx)
+	return args.Get(0).([]string), args.Error(1)
+}
+
 func TestApplyManifests(t *testing.T) {
 	tests := []struct {
 		name        string

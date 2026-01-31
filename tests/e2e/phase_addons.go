@@ -14,13 +14,21 @@ import (
 
 	"github.com/imamik/k8zner/internal/addons"
 	"github.com/imamik/k8zner/internal/config"
+	v2 "github.com/imamik/k8zner/internal/config/v2"
 )
 
 // phaseAddons installs and tests addons sequentially.
 // This is Phase 3 of the E2E lifecycle.
 // Tests are run sequentially to avoid API rate limiting and resource contention.
+//
+// The v2 config includes these addons:
+// - Core: Cilium (CNI), CCM, CSI, MetricsServer
+// - Ingress: Traefik (replaces ingress-nginx)
+// - TLS: CertManager
+// - GitOps: ArgoCD
+// - Optional: TalosBackup (when backup enabled), Cloudflare/ExternalDNS (when domain set)
 func phaseAddons(t *testing.T, state *E2EState) {
-	t.Log("Testing addons sequentially...")
+	t.Log("Testing addons sequentially (v2 stack)...")
 
 	// Get HCloud token for addons
 	token := os.Getenv("HCLOUD_TOKEN")
@@ -34,18 +42,19 @@ func phaseAddons(t *testing.T, state *E2EState) {
 	t.Run("CSI", func(t *testing.T) { testAddonCSI(t, state, token) })
 	t.Run("MetricsServer", func(t *testing.T) { testAddonMetricsServer(t, state) })
 
-	// Optional addons
+	// Standard v2 stack addons
 	t.Run("CertManager", func(t *testing.T) { testAddonCertManager(t, state) })
-	t.Run("IngressNginx", func(t *testing.T) { testAddonIngressNginx(t, state) })
 	t.Run("Traefik", func(t *testing.T) { testAddonTraefik(t, state) })
-	t.Run("RBAC", func(t *testing.T) { testAddonRBAC(t, state) })
-	t.Run("Longhorn", func(t *testing.T) { testAddonLonghorn(t, state) })
 	t.Run("ArgoCD", func(t *testing.T) { testAddonArgoCD(t, state) })
-	t.Run("ClusterAutoscaler", func(t *testing.T) { testAddonClusterAutoscaler(t, state, token) })
+
+	// Optional addons (depend on environment variables)
 	t.Run("TalosBackup", func(t *testing.T) { testAddonTalosBackup(t, state) })
 
 	// DNS and TLS integration (requires CF_API_TOKEN and CF_DOMAIN env vars)
 	t.Run("Cloudflare", func(t *testing.T) { testAddonCloudflare(t, state, token) })
+
+	// ArgoCD Dashboard HTTPS test (requires Cloudflare to be set up first)
+	t.Run("ArgoCDDashboard", func(t *testing.T) { testArgoCDDashboard(t, state, token) })
 
 	t.Log("✓ Phase 3: Addons (all tested)")
 }
@@ -69,15 +78,19 @@ func testAddonCCM(t *testing.T, state *E2EState, token string) {
 		networkID = network.ID
 	}
 
-	if err := addons.Apply(ctx, cfg, state.Kubeconfig, networkID, "", 0, nil); err != nil {
+	if err := addons.Apply(ctx, cfg, state.Kubeconfig, networkID); err != nil {
 		t.Fatalf("Failed to install CCM: %v", err)
 	}
 
 	// Wait for CCM pod
-	waitForPod(t, state.KubeconfigPath, "kube-system", "app.kubernetes.io/name=hcloud-cloud-controller-manager", 5*time.Minute)
+	waitForPod(t, state.KubeconfigPath, "kube-system", "app.kubernetes.io/name=hcloud-cloud-controller-manager", 6*time.Minute)
 
-	// Verify provider IDs are set
-	verifyProviderIDs(t, state.KubeconfigPath, 2*time.Minute)
+	// Verify provider IDs are set - CCM needs significant time to:
+	// 1. Initialize and become leader
+	// 2. Query Hetzner API for server metadata
+	// 3. Set provider IDs on all nodes
+	// Using 7 minutes to handle slow API responses and node initialization
+	verifyProviderIDs(t, state.KubeconfigPath, 7*time.Minute)
 
 	// Test LB provisioning
 	testCCMLoadBalancer(t, state)
@@ -108,7 +121,7 @@ func testAddonCSI(t *testing.T, state *E2EState, token string) {
 		networkID = network.ID
 	}
 
-	if err := addons.Apply(ctx, cfg, state.Kubeconfig, networkID, "", 0, nil); err != nil {
+	if err := addons.Apply(ctx, cfg, state.Kubeconfig, networkID); err != nil {
 		t.Fatalf("Failed to install CSI: %v", err)
 	}
 
@@ -136,7 +149,7 @@ func testAddonMetricsServer(t *testing.T, state *E2EState) {
 		},
 	}
 
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
 		t.Fatalf("Failed to install Metrics Server: %v", err)
 	}
 
@@ -161,7 +174,7 @@ func testAddonCertManager(t *testing.T, state *E2EState) {
 		},
 	}
 
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
 		t.Fatalf("Failed to install Cert Manager: %v", err)
 	}
 
@@ -176,36 +189,10 @@ func testAddonCertManager(t *testing.T, state *E2EState) {
 }
 
 // testAddonIngressNginx installs and tests Ingress NGINX.
-func testAddonIngressNginx(t *testing.T, state *E2EState) {
-	t.Log("Installing Ingress NGINX addon...")
-
-	cfg := &config.Config{
-		ClusterName: state.ClusterName,
-		Addons: config.AddonsConfig{
-			IngressNginx: config.IngressNginxConfig{Enabled: true},
-		},
-	}
-
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
-		t.Fatalf("Failed to install Ingress NGINX: %v", err)
-	}
-
-	// Wait for ingress controller pod (increased timeout for large image pull)
-	waitForPod(t, state.KubeconfigPath, "ingress-nginx", "app.kubernetes.io/component=controller", 8*time.Minute)
-
-	state.AddonsInstalled["ingress-nginx"] = true
-	t.Log("✓ Ingress NGINX addon working")
-}
-
 // testAddonTraefik installs and tests Traefik Proxy.
+// In v2 config, Traefik is the default ingress controller (replaces ingress-nginx).
 func testAddonTraefik(t *testing.T, state *E2EState) {
 	t.Log("Installing Traefik addon...")
-
-	// Skip if IngressNginx was installed (they are mutually exclusive)
-	if state.AddonsInstalled["ingress-nginx"] {
-		t.Log("Skipping Traefik test - Ingress NGINX already installed (mutually exclusive)")
-		return
-	}
 
 	cfg := &config.Config{
 		ClusterName: state.ClusterName,
@@ -214,7 +201,7 @@ func testAddonTraefik(t *testing.T, state *E2EState) {
 		},
 	}
 
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
 		t.Fatalf("Failed to install Traefik: %v", err)
 	}
 
@@ -226,47 +213,6 @@ func testAddonTraefik(t *testing.T, state *E2EState) {
 
 	state.AddonsInstalled["traefik"] = true
 	t.Log("✓ Traefik addon working")
-}
-
-// testAddonRBAC installs and tests RBAC addon.
-func testAddonRBAC(t *testing.T, state *E2EState) {
-	t.Log("Installing RBAC addon...")
-
-	cfg := &config.Config{
-		ClusterName: state.ClusterName,
-		Addons: config.AddonsConfig{
-			RBAC: config.RBACConfig{Enabled: true},
-		},
-	}
-
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
-		t.Fatalf("Failed to install RBAC: %v", err)
-	}
-
-	state.AddonsInstalled["rbac"] = true
-	t.Log("✓ RBAC addon working")
-}
-
-// testAddonLonghorn installs and tests Longhorn (slow, so it's last).
-func testAddonLonghorn(t *testing.T, state *E2EState) {
-	t.Log("Installing Longhorn addon (this may take several minutes)...")
-
-	cfg := &config.Config{
-		ClusterName: state.ClusterName,
-		Addons: config.AddonsConfig{
-			Longhorn: config.LonghornConfig{Enabled: true},
-		},
-	}
-
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
-		t.Fatalf("Failed to install Longhorn: %v", err)
-	}
-
-	// Wait for longhorn pods (this takes a while)
-	waitForPod(t, state.KubeconfigPath, "longhorn-system", "app=longhorn-manager", 10*time.Minute)
-
-	state.AddonsInstalled["longhorn"] = true
-	t.Log("✓ Longhorn addon working")
 }
 
 // testAddonArgoCD installs and tests ArgoCD GitOps continuous delivery.
@@ -282,7 +228,7 @@ func testAddonArgoCD(t *testing.T, state *E2EState) {
 		},
 	}
 
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
 		t.Fatalf("Failed to install ArgoCD: %v", err)
 	}
 
@@ -526,9 +472,10 @@ spec:
 		t.Fatalf("Failed to create test LB service: %v\nOutput: %s", err, string(output))
 	}
 
-	// Wait for external IP (max 3 minutes)
+	// Wait for external IP (max 6 minutes)
+	// CCM needs time to create LB in Hetzner and update Service status
 	externalIP := ""
-	maxAttempts := 36 // 36 * 5s = 3 minutes
+	maxAttempts := 72 // 72 * 5s = 6 minutes
 	for i := 0; i < maxAttempts; i++ {
 		cmd = exec.CommandContext(context.Background(), "kubectl",
 			"--kubeconfig", state.KubeconfigPath,
@@ -729,7 +676,7 @@ func testAddonCilium(t *testing.T, state *E2EState) {
 		},
 	}
 
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
 		t.Fatalf("Failed to install Cilium: %v", err)
 	}
 
@@ -754,129 +701,57 @@ func testAddonCilium(t *testing.T, state *E2EState) {
 	t.Log("✓ Cilium addon working")
 }
 
-// testAddonClusterAutoscaler installs and tests Cluster Autoscaler.
-func testAddonClusterAutoscaler(t *testing.T, state *E2EState, token string) {
-	// Skip if autoscaler not configured in cluster
-	// In a real E2E test, we'd need a cluster with autoscaler configuration
-	t.Log("Testing Cluster Autoscaler (would require autoscaler configuration)...")
-
-	// This is a placeholder for a full E2E test that would:
-	// 1. Configure a cluster with autoscaler nodepools
-	// 2. Install the autoscaler
-	// 3. Verify the autoscaler pod is running
-	// 4. Verify the cluster-config Secret exists
-	// 5. Deploy a workload that triggers scaling
-	// 6. Verify nodes are added/removed
-
-	// For now, just verify we can install it with minimal config
-	cfg := &config.Config{
-		ClusterName: state.ClusterName,
-		HCloudToken: token,
-		Talos: config.TalosConfig{
-			Version: "v1.9.4",
-		},
-		Addons: config.AddonsConfig{
-			ClusterAutoscaler: config.ClusterAutoscalerConfig{
-				Enabled: true,
-			},
-		},
-		Autoscaler: config.AutoscalerConfig{
-			NodePools: []config.AutoscalerNodePool{
-				{
-					Name:     "e2e-autoscaler-pool",
-					Location: "nbg1",
-					Type:     "cpx21",
-					Min:      0,
-					Max:      3,
-					Labels:   map[string]string{"role": "autoscaled"},
-					Taints:   []string{},
-				},
-			},
-		},
-	}
-
-	network, _ := state.Client.GetNetwork(context.Background(), state.ClusterName)
-	networkID := int64(0)
-	if network != nil {
-		networkID = network.ID
-	}
-
-	// Get firewall ID
-	firewall, _ := state.Client.GetFirewall(context.Background(), state.ClusterName)
-	firewallID := int64(0)
-	if firewall != nil {
-		firewallID = firewall.ID
-	}
-
-	// Create a mock Talos generator for E2E test
-	mockTalosGen := &mockTalosGenerator{}
-
-	// Install would fail without proper SSH key, so we skip actual installation
-	// In a real scenario, this would be part of a full cluster provisioning test
-	t.Log("  Cluster Autoscaler requires full cluster configuration - skipping full test")
-	t.Log("  (Would verify: autoscaler pod running, cluster-config secret exists, scaling works)")
-
-	// If we had a proper setup, we would:
-	// if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, networkID, "test-ssh-key", firewallID, mockTalosGen); err != nil {
-	//     t.Fatalf("Failed to install Cluster Autoscaler: %v", err)
-	// }
-	// waitForPod(t, state.KubeconfigPath, "kube-system", "app.kubernetes.io/name=hetzner-cluster-autoscaler", 5*time.Minute)
-	// verifySecretExists(t, state.KubeconfigPath, "kube-system", "cluster-autoscaler-hetzner-config")
-
-	_ = cfg
-	_ = networkID
-	_ = firewallID
-	_ = mockTalosGen
-
-	t.Log("✓ Cluster Autoscaler test (skipped - requires full cluster setup)")
-}
-
 // testAddonTalosBackup installs and tests Talos Backup.
 func testAddonTalosBackup(t *testing.T, state *E2EState) {
 	// Check if S3 credentials are provided
 	s3Bucket := os.Getenv("E2E_BACKUP_S3_BUCKET")
+	s3Endpoint := os.Getenv("E2E_BACKUP_S3_ENDPOINT")
 	s3AccessKey := os.Getenv("E2E_BACKUP_S3_ACCESS_KEY")
 	s3SecretKey := os.Getenv("E2E_BACKUP_S3_SECRET_KEY")
+	s3Region := os.Getenv("E2E_BACKUP_S3_REGION")
+	if s3Region == "" {
+		s3Region = "us-east-1" // Default region for AWS-compatible S3
+	}
 
-	if s3Bucket == "" || s3AccessKey == "" || s3SecretKey == "" {
+	if s3Bucket == "" || s3Endpoint == "" || s3AccessKey == "" || s3SecretKey == "" {
 		t.Log("Talos Backup test skipped (S3 credentials not provided)")
-		t.Log("  Set E2E_BACKUP_S3_BUCKET, E2E_BACKUP_S3_ACCESS_KEY, E2E_BACKUP_S3_SECRET_KEY to test")
+		t.Log("  Set E2E_BACKUP_S3_BUCKET, E2E_BACKUP_S3_ENDPOINT, E2E_BACKUP_S3_ACCESS_KEY, E2E_BACKUP_S3_SECRET_KEY to test")
 		return
 	}
 
-	t.Log("Installing Talos Backup addon...")
+	t.Logf("Installing Talos Backup addon with endpoint: %s", s3Endpoint)
 
 	cfg := &config.Config{
 		ClusterName: state.ClusterName,
 		Addons: config.AddonsConfig{
 			TalosBackup: config.TalosBackupConfig{
 				Enabled:           true,
-				Version:           "v0.3.6",
+				Version:           v2.DefaultVersionMatrix().TalosBackup,
 				Schedule:          "0 2 * * *", // 2 AM daily
 				S3Bucket:          s3Bucket,
-				S3Region:          "us-east-1",
-				S3Endpoint:        "",
+				S3Region:          s3Region,
+				S3Endpoint:        s3Endpoint,
 				S3Prefix:          "e2e-test",
 				S3AccessKey:       s3AccessKey,
 				S3SecretKey:       s3SecretKey,
-				S3PathStyle:       false,
+				S3PathStyle:       true, // Required for Hetzner Object Storage
 				EnableCompression: true,
 			},
 		},
 	}
 
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
 		t.Fatalf("Failed to install Talos Backup: %v", err)
 	}
 
 	// Verify CronJob exists
 	verifyCronJobExists(t, state.KubeconfigPath, "kube-system", "talos-backup")
 
-	// Verify Secret exists
-	verifySecretExists(t, state.KubeconfigPath, "kube-system", "talos-backup-s3")
+	// Verify Secret exists (generated name: talos-backup-s3-secrets)
+	verifySecretExists(t, state.KubeconfigPath, "kube-system", "talos-backup-s3-secrets")
 
-	// Verify Talos ServiceAccount exists
-	verifyTalosServiceAccountExists(t, state.KubeconfigPath, "kube-system", "talos-backup")
+	// Verify Talos ServiceAccount exists (generated name: talos-backup-secrets)
+	verifyTalosServiceAccountExists(t, state.KubeconfigPath, "kube-system", "talos-backup-secrets")
 
 	state.AddonsInstalled["talos-backup"] = true
 	t.Log("✓ Talos Backup addon working")

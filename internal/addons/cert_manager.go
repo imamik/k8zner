@@ -130,23 +130,12 @@ func buildCertManagerTopologySpread(component string) []helm.Values {
 	}
 }
 
-// buildCertManagerConfig creates the config section with feature gates.
 func buildCertManagerConfig(cfg *config.Config) helm.Values {
-	// Check if any standard ingress controller is enabled
-	// Both Nginx and Traefik use standard Kubernetes Ingress
-	ingressEnabled := cfg.Addons.IngressNginx.Enabled || cfg.Addons.Traefik.Enabled
-
 	return helm.Values{
-		// Gateway API support is disabled by default because it requires
-		// Gateway API CRDs to be installed. cert-manager will fail to start
-		// if enableGatewayAPI is true but the CRDs are missing.
-		// Users who need Gateway API support should install the CRDs first
-		// and override this via helm.values in config.
 		"enableGatewayAPI": false,
 		"featureGates": helm.Values{
-			// Workaround for ingress-nginx bug: https://github.com/kubernetes/ingress-nginx/issues/11176
-			// This also applies to Traefik when using standard Ingress resources
-			"ACMEHTTP01IngressPathTypeExact": !ingressEnabled,
+			// Workaround for Traefik ingress path handling
+			"ACMEHTTP01IngressPathTypeExact": !cfg.Addons.Traefik.Enabled,
 		},
 	}
 }

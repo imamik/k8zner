@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Simplified Configuration (v2)** - Opinionated, production-ready defaults in ~12 lines
+  - New `k8zner.yaml` format with only 5 fields: name, region, mode, workers, domain
+  - Two cluster modes: `dev` (1 CP, 1 shared LB) and `ha` (3 CPs, 2 separate LBs)
+  - IPv6-only nodes by default (saves IPv4 costs, better security)
+  - Hardcoded addon stack: Cilium, Traefik, cert-manager, ArgoCD, metrics-server
+  - Pinned, tested version matrix for Talos and Kubernetes
+  - Auto-detection of k8zner.yaml in current directory
+- **Cost Estimator** (`k8zner cost`) - Calculate monthly cluster costs
+  - Fetches live pricing from Hetzner API
+  - Shows line-item breakdown with VAT calculation
+  - JSON and compact output formats
+- **Simplified Wizard** - Only 5-6 questions to create a cluster
+  - Cluster name, region, mode, worker count, worker size, domain (optional)
+  - Shows cost estimate after configuration
+- **Automatic etcd Backups** (`backup: true`) - S3-based etcd snapshots
+  - Backs up etcd to Hetzner Object Storage every hour
+  - Bucket auto-created during provisioning: `{cluster-name}-etcd-backups`
+  - Requires `HETZNER_S3_ACCESS_KEY` and `HETZNER_S3_SECRET_KEY` environment variables
+  - Uses talos-backup with compression enabled
+
+### Changed
+
+- `k8zner init` now creates `k8zner.yaml` (was `cluster.yaml`)
+- `k8zner apply` auto-detects config file in current directory
+- Removed `--advanced` and `--full` flags (config is now always minimal)
+- Traefik now uses DaemonSet with hostNetwork for direct port binding
+- All clusters use Traefik instead of ingress-nginx by default
+
+### Removed
+
+- Legacy complex wizard with 20+ questions
+- Server architecture/category selection (now uses standard cx22 for control planes)
+- Manual addon configuration (all addons are now automatic)
+
 ## [0.5.0] - 2025-01-27
 
 ### Added

@@ -58,7 +58,7 @@ func testAddonCloudflare(t *testing.T, state *E2EState, token string) {
 	// Step 2: Deploy whoami test service with Ingress
 	testHostname := fmt.Sprintf("whoami-%s.%s", state.ClusterName, cfDomain)
 	t.Logf("  Step 2: Deploying whoami test service with hostname: %s", testHostname)
-	deployWhoamiWithIngress(t, state, testHostname)
+	deployWhoamiWithIngress(t, state, testHostname, state.LoadBalancerIP)
 
 	// Step 3: Wait for and verify DNS record
 	t.Log("  Step 3: Waiting for DNS record creation...")
@@ -111,7 +111,7 @@ func installCloudflareAddon(t *testing.T, state *E2EState, hcloudToken, cfAPITok
 		},
 	}
 
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, networkID, "", 0, nil); err != nil {
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, networkID); err != nil {
 		t.Fatalf("Failed to install Cloudflare addon: %v", err)
 	}
 
@@ -128,13 +128,16 @@ func installCloudflareAddon(t *testing.T, state *E2EState, hcloudToken, cfAPITok
 }
 
 // deployWhoamiWithIngress deploys a whoami service with Ingress for testing.
-func deployWhoamiWithIngress(t *testing.T, state *E2EState, hostname string) {
+// targetIP is the IP address that external-dns should use for DNS records (e.g., load balancer IP).
+func deployWhoamiWithIngress(t *testing.T, state *E2EState, hostname string, targetIP string) {
 	// Determine which ingress class to use
 	ingressClass := "nginx"
 	if state.AddonsInstalled["traefik"] {
 		ingressClass = "traefik"
 	}
 
+	// For ingress controllers that don't populate status.loadBalancer (like Traefik with hostPorts),
+	// we need to set the external-dns.alpha.kubernetes.io/target annotation explicitly.
 	manifest := fmt.Sprintf(`
 apiVersion: apps/v1
 kind: Deployment
@@ -185,6 +188,7 @@ metadata:
   namespace: default
   annotations:
     external-dns.alpha.kubernetes.io/hostname: %s
+    external-dns.alpha.kubernetes.io/target: %s
     cert-manager.io/cluster-issuer: letsencrypt-cloudflare-staging
 spec:
   ingressClassName: %s
@@ -203,7 +207,7 @@ spec:
             name: whoami-cloudflare-test
             port:
               number: 80
-`, hostname, ingressClass, hostname, hostname)
+`, hostname, targetIP, ingressClass, hostname, hostname)
 
 	cmd := exec.CommandContext(context.Background(), "kubectl",
 		"--kubeconfig", state.KubeconfigPath,

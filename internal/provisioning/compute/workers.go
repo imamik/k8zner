@@ -37,7 +37,7 @@ func (p *Provisioner) ProvisionWorkers(ctx *provisioning.Context) error {
 				rdnsIPv6 := rdns.ResolveTemplate(pool.RDNSIPv6, ctx.Config.RDNS.ClusterRDNSIPv6, ctx.Config.RDNS.ClusterRDNS)
 
 				// We use the outer ctx (*provisioning.Context)
-				ips, err := p.reconcileNodePool(ctx, NodePoolSpec{
+				poolResult, err := p.reconcileNodePool(ctx, NodePoolSpec{
 					Name:             pool.Name,
 					Count:            pool.Count,
 					ServerType:       pool.ServerType,
@@ -54,10 +54,13 @@ func (p *Provisioner) ProvisionWorkers(ctx *provisioning.Context) error {
 				if err != nil {
 					return err
 				}
-				// Thread-safe merge of IPs
+				// Thread-safe merge of IPs and server IDs
 				mu.Lock()
-				for name, ip := range ips {
+				for name, ip := range poolResult.IPs {
 					ctx.State.WorkerIPs[name] = ip
+				}
+				for name, id := range poolResult.ServerIDs {
+					ctx.State.WorkerServerIDs[name] = id
 				}
 				mu.Unlock()
 				return nil

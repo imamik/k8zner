@@ -34,9 +34,11 @@ type State struct {
 	SSHKeyID int64  // SSH key ID (for autoscaler addon)
 
 	// Compute results (populated by compute provisioner)
-	ControlPlaneIPs map[string]string // nodeName -> publicIP
-	WorkerIPs       map[string]string // nodeName -> publicIP
-	SANs            []string          // Subject Alternative Names for certs
+	ControlPlaneIPs       map[string]string // nodeName -> publicIP
+	WorkerIPs             map[string]string // nodeName -> publicIP
+	ControlPlaneServerIDs map[string]int64  // nodeName -> serverID (for nodeid label)
+	WorkerServerIDs       map[string]int64  // nodeName -> serverID (for nodeid label)
+	SANs                  []string          // Subject Alternative Names for certs
 
 	// Cluster results (populated by cluster bootstrapper)
 	Kubeconfig  []byte
@@ -46,8 +48,10 @@ type State struct {
 // NewState creates an empty provisioning state.
 func NewState() *State {
 	return &State{
-		ControlPlaneIPs: make(map[string]string),
-		WorkerIPs:       make(map[string]string),
+		ControlPlaneIPs:       make(map[string]string),
+		WorkerIPs:             make(map[string]string),
+		ControlPlaneServerIDs: make(map[string]int64),
+		WorkerServerIDs:       make(map[string]int64),
 	}
 }
 

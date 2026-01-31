@@ -13,6 +13,7 @@ import (
 
 	"github.com/imamik/k8zner/internal/addons"
 	"github.com/imamik/k8zner/internal/config"
+	v2 "github.com/imamik/k8zner/internal/config/v2"
 )
 
 // phaseAddonsAdvanced tests advanced addon configurations.
@@ -68,17 +69,20 @@ func phaseAddonsAdvanced(t *testing.T, state *E2EState) {
 func testAddonTalosCCM(t *testing.T, state *E2EState) {
 	t.Log("Installing Talos CCM...")
 
+	// Use version from version matrix
+	vm := v2.DefaultVersionMatrix()
+
 	cfg := &config.Config{
 		ClusterName: state.ClusterName,
 		Addons: config.AddonsConfig{
 			TalosCCM: config.TalosCCMConfig{
 				Enabled: true,
-				Version: "v1.11.0",
+				Version: vm.TalosCCM,
 			},
 		},
 	}
 
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
 		t.Fatalf("Failed to install Talos CCM: %v", err)
 	}
 
@@ -123,7 +127,7 @@ func testAddonMetricsServerAdvanced(t *testing.T, state *E2EState) {
 		},
 	}
 
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
 		t.Fatalf("Failed to install Metrics Server with advanced config: %v", err)
 	}
 
@@ -141,7 +145,7 @@ func testAddonMetricsServerAdvanced(t *testing.T, state *E2EState) {
 	replicas = 2
 	cfg.Addons.MetricsServer.Replicas = &replicas
 
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
 		t.Fatalf("Failed to update Metrics Server replicas: %v", err)
 	}
 
@@ -177,19 +181,19 @@ func verifyMetricsServerNodeSelector(t *testing.T, kubeconfigPath string) {
 func testAddonGatewayAPICRDs(t *testing.T, state *E2EState) {
 	t.Log("Installing Gateway API CRDs...")
 
-	// Test with standard channel
+	// Test with standard channel - use empty version to let addon use its default
 	cfg := &config.Config{
 		ClusterName: state.ClusterName,
 		Addons: config.AddonsConfig{
 			GatewayAPICRDs: config.GatewayAPICRDsConfig{
 				Enabled:        true,
-				Version:        "v1.2.1",
+				Version:        "", // Use addon's default version
 				ReleaseChannel: "standard",
 			},
 		},
 	}
 
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
 		t.Fatalf("Failed to install Gateway API CRDs: %v", err)
 	}
 
@@ -218,12 +222,12 @@ func testAddonPrometheusOperatorCRDs(t *testing.T, state *E2EState) {
 		Addons: config.AddonsConfig{
 			PrometheusOperatorCRDs: config.PrometheusOperatorCRDsConfig{
 				Enabled: true,
-				Version: "v0.79.2",
+				Version: "", // Use addon's default version
 			},
 		},
 	}
 
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
 		t.Fatalf("Failed to install Prometheus Operator CRDs: %v", err)
 	}
 
@@ -285,7 +289,7 @@ func testAddonCiliumAdvanced(t *testing.T, state *E2EState) {
 		},
 	}
 
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
 		t.Fatalf("Failed to install Cilium with advanced config: %v", err)
 	}
 
@@ -335,7 +339,7 @@ func testAddonIngressNginxAdvanced(t *testing.T, state *E2EState) {
 		},
 	}
 
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
 		t.Fatalf("Failed to install Ingress NGINX with Deployment: %v", err)
 	}
 
@@ -365,7 +369,7 @@ func testAddonIngressNginxAdvanced(t *testing.T, state *E2EState) {
 		},
 	}
 
-	if err := addons.Apply(context.Background(), cfgDaemonSet, state.Kubeconfig, 0, "", 0, nil); err != nil {
+	if err := addons.Apply(context.Background(), cfgDaemonSet, state.Kubeconfig, 0); err != nil {
 		t.Fatalf("Failed to install Ingress NGINX as DaemonSet: %v", err)
 	}
 
@@ -407,7 +411,7 @@ func testAddonTraefikAdvanced(t *testing.T, state *E2EState) {
 		},
 	}
 
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
 		t.Fatalf("Failed to install Traefik with Deployment: %v", err)
 	}
 
@@ -434,7 +438,7 @@ func testAddonTraefikAdvanced(t *testing.T, state *E2EState) {
 		},
 	}
 
-	if err := addons.Apply(context.Background(), cfgDaemonSet, state.Kubeconfig, 0, "", 0, nil); err != nil {
+	if err := addons.Apply(context.Background(), cfgDaemonSet, state.Kubeconfig, 0); err != nil {
 		t.Fatalf("Failed to install Traefik as DaemonSet: %v", err)
 	}
 
@@ -509,7 +513,7 @@ func testAddonCCMAdvanced(t *testing.T, state *E2EState) {
 		},
 	}
 
-	if err := addons.Apply(ctx, cfg, state.Kubeconfig, networkID, "", 0, nil); err != nil {
+	if err := addons.Apply(ctx, cfg, state.Kubeconfig, networkID); err != nil {
 		t.Fatalf("Failed to install CCM with advanced config: %v", err)
 	}
 
@@ -563,7 +567,7 @@ func testAddonHelmCustomValues(t *testing.T, state *E2EState) {
 		},
 	}
 
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0, "", 0, nil); err != nil {
+	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
 		t.Fatalf("Failed to install Metrics Server with custom Helm values: %v", err)
 	}
 

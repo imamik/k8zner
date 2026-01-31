@@ -1,6 +1,8 @@
 package talos
 
 import (
+	"fmt"
+
 	"github.com/imamik/k8zner/internal/config"
 )
 
@@ -101,16 +103,6 @@ func NewMachineConfigOptions(cfg *config.Config) *MachineConfigOptions {
 		KubeProxyReplacement: cfg.Addons.Cilium.KubeProxyReplacementEnabled,
 	}
 
-	// Add Longhorn mount if enabled
-	if cfg.Addons.Longhorn.Enabled {
-		opts.KubeletExtraMounts = append(opts.KubeletExtraMounts, config.TalosKubeletMount{
-			Source:      "/var/lib/longhorn",
-			Destination: "/var/lib/longhorn",
-			Type:        "bind",
-			Options:     []string{"bind", "rshared", "rw"},
-		})
-	}
-
 	return opts
 }
 
@@ -124,25 +116,25 @@ func derefBool(b *bool, def bool) bool {
 
 // buildControlPlanePatch builds the full config patch for a control plane node.
 // See: terraform/talos_config.tf local.control_plane_talos_config_patch
-func buildControlPlanePatch(hostname string, opts *MachineConfigOptions, installerImage string, certSANs []string) map[string]any {
+func buildControlPlanePatch(hostname string, serverID int64, opts *MachineConfigOptions, installerImage string, certSANs []string) map[string]any {
 	return map[string]any{
-		"machine": buildMachinePatch(hostname, opts, installerImage, certSANs, true),
+		"machine": buildMachinePatch(hostname, serverID, opts, installerImage, certSANs, true),
 		"cluster": buildClusterPatch(opts, true),
 	}
 }
 
 // buildWorkerPatch builds the full config patch for a worker node.
 // See: terraform/talos_config.tf local.worker_talos_config_patch
-func buildWorkerPatch(hostname string, opts *MachineConfigOptions, installerImage string, certSANs []string) map[string]any {
+func buildWorkerPatch(hostname string, serverID int64, opts *MachineConfigOptions, installerImage string, certSANs []string) map[string]any {
 	return map[string]any{
-		"machine": buildMachinePatch(hostname, opts, installerImage, certSANs, false),
+		"machine": buildMachinePatch(hostname, serverID, opts, installerImage, certSANs, false),
 		"cluster": buildClusterPatch(opts, false),
 	}
 }
 
 // buildMachinePatch builds the machine section of the config patch.
 // See: terraform/talos_config.tf control_plane_talos_config_patch.machine
-func buildMachinePatch(hostname string, opts *MachineConfigOptions, installerImage string, certSANs []string, isControlPlane bool) map[string]any {
+func buildMachinePatch(hostname string, serverID int64, opts *MachineConfigOptions, installerImage string, certSANs []string, isControlPlane bool) map[string]any {
 	machine := map[string]any{}
 
 	// Install section
@@ -159,11 +151,20 @@ func buildMachinePatch(hostname string, opts *MachineConfigOptions, installerIma
 		machine["certSANs"] = certSANs
 	}
 
+	// Node labels - include nodeid for CCM integration
+	// The nodeid label allows the Hetzner CCM to properly identify nodes by their server ID.
+	// See: terraform-hcloud-kubernetes talos_config.tf nodeLabels = { "nodeid" = tostring(node.id) }
+	if serverID > 0 {
+		machine["nodeLabels"] = map[string]any{
+			"nodeid": fmt.Sprintf("%d", serverID),
+		}
+	}
+
 	// Network configuration
 	machine["network"] = buildNetworkPatch(hostname, opts, isControlPlane)
 
 	// Kubelet configuration
-	machine["kubelet"] = buildKubeletPatch(opts, isControlPlane)
+	machine["kubelet"] = buildKubeletPatch(opts, isControlPlane, serverID)
 
 	// Kernel modules
 	if len(opts.KernelModules) > 0 {
@@ -297,13 +298,21 @@ func buildNetworkPatch(hostname string, opts *MachineConfigOptions, _ bool) map[
 
 // buildKubeletPatch builds the kubelet section.
 // See: terraform/talos_config.tf control_plane_talos_config_patch.machine.kubelet
-func buildKubeletPatch(opts *MachineConfigOptions, isControlPlane bool) map[string]any {
+func buildKubeletPatch(opts *MachineConfigOptions, isControlPlane bool, serverID int64) map[string]any {
 	// Base extra args (matching Terraform)
 	// Note: rotate-server-certificates is NOT enabled because it requires a CSR approver.
 	// Without a CSR approver, the kubelet has no serving certificate, causing "tls: internal error".
 	// Talos manages kubelet certificates internally, so this flag is not needed.
 	extraArgs := map[string]any{
 		"cloud-provider": "external",
+	}
+
+	// Set provider-id for Hetzner CCM integration
+	// This tells the kubelet its cloud provider identity, allowing the Hetzner CCM to properly
+	// recognize and manage the node. Format: hcloud://<server-id>
+	// Without this, metal images would use talos://metal/<ip> which the CCM can't recognize.
+	if serverID > 0 {
+		extraArgs["provider-id"] = fmt.Sprintf("hcloud://%d", serverID)
 	}
 
 	// Merge user extra args

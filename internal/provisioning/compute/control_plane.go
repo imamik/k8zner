@@ -16,34 +16,32 @@ import (
 const phase = "compute"
 
 // ProvisionControlPlane provisions control plane servers.
+// Note: When called from Provision(), the endpoint is already set up via prepareControlPlaneEndpoint().
+// This method is kept for backward compatibility and direct invocation in tests.
 func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
 	ctx.Logger.Printf("[%s] Reconciling control plane...", phase)
 
-	// Collect all SANs
-	var sans []string
+	// Setup endpoint if not already done (for backward compatibility when called directly)
+	if len(ctx.State.SANs) == 0 {
+		var sans []string
 
-	// LB IP (Public) - if Ingress enabled or API LB?
-	// The API LB is "kube-api".
-	lb, err := ctx.Infra.GetLoadBalancer(ctx, naming.KubeAPILoadBalancer(ctx.Config.ClusterName))
-	if err != nil {
-		return fmt.Errorf("failed to get load balancer: %w", err)
-	}
-	if lb != nil {
-		// Use LB Public IP as endpoint
-		if lbIP := hcloud.LoadBalancerIPv4(lb); lbIP != "" {
-			sans = append(sans, lbIP)
-
-			// UPDATE TALOS ENDPOINT
-			// We use the LB IP as the control plane endpoint.
-			endpoint := fmt.Sprintf("https://%s:%d", lbIP, config.KubeAPIPort)
-			ctx.Logger.Printf("[%s] Setting Talos endpoint to: %s", phase, endpoint)
-			ctx.Talos.SetEndpoint(endpoint)
+		lb, err := ctx.Infra.GetLoadBalancer(ctx, naming.KubeAPILoadBalancer(ctx.Config.ClusterName))
+		if err != nil {
+			return fmt.Errorf("failed to get load balancer: %w", err)
 		}
+		if lb != nil {
+			if lbIP := hcloud.LoadBalancerIPv4(lb); lbIP != "" {
+				sans = append(sans, lbIP)
+				endpoint := fmt.Sprintf("https://%s:%d", lbIP, config.KubeAPIPort)
+				ctx.Logger.Printf("[%s] Setting Talos endpoint to: %s", phase, endpoint)
+				ctx.Talos.SetEndpoint(endpoint)
+			}
 
-		// Also add private IP of LB
-		for _, net := range lb.PrivateNet {
-			sans = append(sans, net.IP.String())
+			for _, net := range lb.PrivateNet {
+				sans = append(sans, net.IP.String())
+			}
 		}
+		ctx.State.SANs = sans
 	}
 
 	// Provision Servers (configs will be generated per-node in reconciler)
@@ -63,7 +61,7 @@ func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
 		rdnsIPv4 := rdns.ResolveTemplate(pool.RDNSIPv4, ctx.Config.RDNS.ClusterRDNSIPv4, ctx.Config.RDNS.ClusterRDNS)
 		rdnsIPv6 := rdns.ResolveTemplate(pool.RDNSIPv6, ctx.Config.RDNS.ClusterRDNSIPv6, ctx.Config.RDNS.ClusterRDNS)
 
-		poolIPs, err := p.reconcileNodePool(ctx, NodePoolSpec{
+		poolResult, err := p.reconcileNodePool(ctx, NodePoolSpec{
 			Name:             pool.Name,
 			Count:            pool.Count,
 			ServerType:       pool.ServerType,
@@ -80,11 +78,13 @@ func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to reconcile node pool %s: %w", pool.Name, err)
 		}
-		for k, v := range poolIPs {
+		for k, v := range poolResult.IPs {
 			ctx.State.ControlPlaneIPs[k] = v
+		}
+		for k, v := range poolResult.ServerIDs {
+			ctx.State.ControlPlaneServerIDs[k] = v
 		}
 	}
 
-	ctx.State.SANs = sans
 	return nil
 }

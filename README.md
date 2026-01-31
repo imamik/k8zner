@@ -47,21 +47,17 @@ For automatic DNS records and Let's Encrypt certificates, set up Cloudflare:
    - Set Zone Resources to your domain
    - Required permissions: `Zone > Zone > Read` and `Zone > DNS > Edit`
 
-2. **Set environment variables:**
+2. **Set environment variable:**
    ```bash
    export CF_API_TOKEN="your-cloudflare-api-token"
-   export CF_DOMAIN="example.com"
    ```
 
-3. **Enable in wizard** or add to config:
+3. **Enter domain in wizard** or add to config:
    ```yaml
-   addons:
-     cloudflare: { enabled: true }
-     external_dns: { enabled: true }
-     cert_manager: { enabled: true, cloudflare: { enabled: true, email: "you@example.com" } }
+   domain: example.com
    ```
 
-See [Cloudflare DNS Integration](docs/configuration.md#cloudflare-dns-integration) for full setup guide.
+The simplified config automatically enables external-dns and cert-manager with Cloudflare when a domain is specified.
 
 ## Batteries Included
 
@@ -475,12 +471,12 @@ spec:
 
 | Command | Description |
 |---------|-------------|
-| `k8zner init` | Interactive wizard to create cluster.yaml |
-| `k8zner init --advanced` | Wizard with networking/security options |
-| `k8zner apply -c cluster.yaml` | Create or update cluster |
-| `k8zner destroy -c cluster.yaml` | Tear down all resources |
-| `k8zner upgrade -c cluster.yaml` | Upgrade Talos/Kubernetes |
-| `k8zner image build -c cluster.yaml` | Build Talos image snapshot |
+| `k8zner init` | Interactive wizard to create k8zner.yaml |
+| `k8zner cost` | Estimate monthly cluster costs |
+| `k8zner apply` | Create or update cluster |
+| `k8zner destroy` | Tear down all resources |
+| `k8zner upgrade` | Upgrade Talos/Kubernetes |
+| `k8zner image build` | Build Talos image snapshot |
 | `k8zner image delete` | Delete image snapshots |
 | `k8zner version` | Show version information |
 
@@ -489,28 +485,15 @@ spec:
 <details>
 <summary><strong>Upgrading</strong></summary>
 
-### Kubernetes Version
+k8zner uses pinned, tested version combinations. To upgrade:
 
-```bash
-# Edit cluster.yaml
-kubernetes:
-  version: "1.33.0"
+1. Update k8zner to the latest version
+2. Re-apply your cluster:
+   ```bash
+   k8zner apply
+   ```
 
-# Apply upgrade
-k8zner upgrade -c cluster.yaml
-```
-
-### Talos Version
-
-```bash
-# Edit cluster.yaml
-talos:
-  version: "v1.10.0"
-
-# Rebuild image and apply
-k8zner image build -c cluster.yaml
-k8zner upgrade -c cluster.yaml
-```
+Version upgrades are handled automatically with compatible Talos and Kubernetes versions.
 
 </details>
 

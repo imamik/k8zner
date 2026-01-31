@@ -78,27 +78,6 @@ func TestNewMachineConfigOptions(t *testing.T) {
 				assert.True(t, opts.KubeProxyReplacement)
 			},
 		},
-		{
-			name: "longhorn mount added when enabled",
-			cfg: &config.Config{
-				Talos: config.TalosConfig{
-					Machine: config.TalosMachineConfig{},
-				},
-				Kubernetes: config.KubernetesConfig{},
-				Addons: config.AddonsConfig{
-					Longhorn: config.LonghornConfig{
-						Enabled: true,
-					},
-				},
-			},
-			validate: func(t *testing.T, opts *MachineConfigOptions) {
-				require.Len(t, opts.KubeletExtraMounts, 1)
-				mount := opts.KubeletExtraMounts[0]
-				assert.Equal(t, "/var/lib/longhorn", mount.Source)
-				assert.Equal(t, "/var/lib/longhorn", mount.Destination)
-				assert.Equal(t, "bind", mount.Type)
-			},
-		},
 	}
 
 	for _, tt := range tests {
@@ -230,17 +209,21 @@ func TestBuildKubeletPatch(t *testing.T) {
 	tests := []struct {
 		name           string
 		isControlPlane bool
+		serverID       int64
 		opts           *MachineConfigOptions
 		validateFunc   func(t *testing.T, result map[string]any)
 	}{
 		{
-			name:           "control plane with defaults",
+			name:           "control plane with defaults and server ID",
 			isControlPlane: true,
+			serverID:       12345,
 			opts:           &MachineConfigOptions{},
 			validateFunc: func(t *testing.T, result map[string]any) {
 				// Check extra args
 				extraArgs := result["extraArgs"].(map[string]any)
 				assert.Equal(t, "external", extraArgs["cloud-provider"])
+				// Check provider-id is set with server ID
+				assert.Equal(t, "hcloud://12345", extraArgs["provider-id"])
 				// Note: rotate-server-certificates is NOT set because it requires a CSR approver
 
 				// Check control plane reserved resources
@@ -251,10 +234,14 @@ func TestBuildKubeletPatch(t *testing.T) {
 			},
 		},
 		{
-			name:           "worker with defaults",
+			name:           "worker with defaults and server ID",
 			isControlPlane: false,
+			serverID:       67890,
 			opts:           &MachineConfigOptions{},
 			validateFunc: func(t *testing.T, result map[string]any) {
+				// Check provider-id is set with server ID
+				extraArgs := result["extraArgs"].(map[string]any)
+				assert.Equal(t, "hcloud://67890", extraArgs["provider-id"])
 				// Check worker reserved resources (less than control plane)
 				extraConfig := result["extraConfig"].(map[string]any)
 				systemReserved := extraConfig["systemReserved"].(map[string]any)
@@ -263,27 +250,21 @@ func TestBuildKubeletPatch(t *testing.T) {
 			},
 		},
 		{
-			name:           "with extra mounts",
+			name:           "without server ID (provider-id not set)",
 			isControlPlane: false,
-			opts: &MachineConfigOptions{
-				KubeletExtraMounts: []config.TalosKubeletMount{
-					{
-						Source:      "/var/lib/longhorn",
-						Destination: "/var/lib/longhorn",
-						Type:        "bind",
-						Options:     []string{"bind", "rshared", "rw"},
-					},
-				},
-			},
+			serverID:       0,
+			opts:           &MachineConfigOptions{},
 			validateFunc: func(t *testing.T, result map[string]any) {
-				mounts := result["extraMounts"].([]map[string]any)
-				require.Len(t, mounts, 1)
-				assert.Equal(t, "/var/lib/longhorn", mounts[0]["source"])
+				// Check provider-id is NOT set when serverID is 0
+				extraArgs := result["extraArgs"].(map[string]any)
+				_, hasProviderID := extraArgs["provider-id"]
+				assert.False(t, hasProviderID, "provider-id should not be set when serverID is 0")
 			},
 		},
 		{
 			name:           "with nodeIP CIDR",
 			isControlPlane: false,
+			serverID:       12345,
 			opts: &MachineConfigOptions{
 				NodeIPv4CIDR: "10.0.0.0/16",
 			},
@@ -297,7 +278,7 @@ func TestBuildKubeletPatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := buildKubeletPatch(tt.opts, tt.isControlPlane)
+			result := buildKubeletPatch(tt.opts, tt.isControlPlane, tt.serverID)
 			tt.validateFunc(t, result)
 		})
 	}
@@ -606,7 +587,7 @@ func TestBuildControlPlanePatch(t *testing.T) {
 		DiscoveryKubernetesEnabled: false,
 	}
 
-	result := buildControlPlanePatch("cp-1", opts, "factory.talos.dev/installer/test:v1.7.0", []string{"api.example.com"})
+	result := buildControlPlanePatch("cp-1", 12345, opts, "factory.talos.dev/installer/test:v1.7.0", []string{"api.example.com"})
 
 	// Verify top-level structure
 	machine, ok := result["machine"].(map[string]any)
@@ -641,7 +622,7 @@ func TestBuildWorkerPatch(t *testing.T) {
 		DiscoveryServiceEnabled: true,
 	}
 
-	result := buildWorkerPatch("worker-1", opts, "ghcr.io/siderolabs/installer:v1.7.0", nil)
+	result := buildWorkerPatch("worker-1", 12345, opts, "ghcr.io/siderolabs/installer:v1.7.0", nil)
 
 	// Verify top-level structure
 	machine, ok := result["machine"].(map[string]any)

@@ -2,12 +2,70 @@ package hcloud
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud/schema"
 )
+
+func TestCleanupError(t *testing.T) {
+	t.Run("single error", func(t *testing.T) {
+		ce := &CleanupError{}
+		ce.Add(errors.New("test error"))
+
+		if !ce.HasErrors() {
+			t.Error("expected HasErrors() to return true")
+		}
+
+		if ce.Error() != "test error" {
+			t.Errorf("expected 'test error', got %q", ce.Error())
+		}
+	})
+
+	t.Run("multiple errors", func(t *testing.T) {
+		ce := &CleanupError{}
+		ce.Add(errors.New("error 1"))
+		ce.Add(errors.New("error 2"))
+
+		if !ce.HasErrors() {
+			t.Error("expected HasErrors() to return true")
+		}
+
+		errStr := ce.Error()
+		if errStr != "cleanup encountered 2 errors: [error 1 error 2]" {
+			t.Errorf("unexpected error message: %q", errStr)
+		}
+	})
+
+	t.Run("no errors", func(t *testing.T) {
+		ce := &CleanupError{}
+
+		if ce.HasErrors() {
+			t.Error("expected HasErrors() to return false")
+		}
+	})
+
+	t.Run("add nil error", func(t *testing.T) {
+		ce := &CleanupError{}
+		ce.Add(nil)
+
+		if ce.HasErrors() {
+			t.Error("adding nil should not create an error")
+		}
+	})
+
+	t.Run("unwrap single error", func(t *testing.T) {
+		original := errors.New("original error")
+		ce := &CleanupError{}
+		ce.Add(original)
+
+		if !errors.Is(ce.Unwrap(), original) {
+			t.Error("Unwrap should return the original error")
+		}
+	})
+}
 
 // TestBuildLabelSelector is already tested in real_client_test.go
 
@@ -107,6 +165,10 @@ func TestRealClient_CleanupByLabel_WithHTTPMock(t *testing.T) {
 	// Mock all endpoints with empty lists - this tests the happy path with no resources
 	ts.handleFunc("/servers", func(w http.ResponseWriter, _ *http.Request) {
 		jsonResponse(w, http.StatusOK, schema.ServerListResponse{Servers: []schema.Server{}})
+	})
+
+	ts.handleFunc("/volumes", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.VolumeListResponse{Volumes: []schema.Volume{}})
 	})
 
 	ts.handleFunc("/load_balancers", func(w http.ResponseWriter, _ *http.Request) {
@@ -409,6 +471,135 @@ func TestRealClient_DeleteCertificatesByLabel_WithHTTPMock(t *testing.T) {
 	}
 }
 
+func TestRealClient_DeleteVolumesByLabel_WithHTTPMock(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/volumes", func(w http.ResponseWriter, r *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.VolumeListResponse{
+			Volumes: []schema.Volume{
+				{ID: 1, Name: "vol-1", Labels: map[string]string{"cluster": "test"}},
+			},
+		})
+	})
+
+	ts.handleFunc("/volumes/1", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	err := client.deleteVolumesByLabel(ctx, "cluster=test")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRealClient_CountResourcesByLabel_WithHTTPMock(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	// Mock all endpoints with varying counts
+	ts.handleFunc("/servers", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ServerListResponse{
+			Servers: []schema.Server{{ID: 1, Name: "server-1"}},
+		})
+	})
+
+	ts.handleFunc("/volumes", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.VolumeListResponse{
+			Volumes: []schema.Volume{{ID: 1, Name: "vol-1"}, {ID: 2, Name: "vol-2"}},
+		})
+	})
+
+	ts.handleFunc("/load_balancers", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.LoadBalancerListResponse{LoadBalancers: []schema.LoadBalancer{}})
+	})
+
+	ts.handleFunc("/floating_ips", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.FloatingIPListResponse{FloatingIPs: []schema.FloatingIP{}})
+	})
+
+	ts.handleFunc("/firewalls", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.FirewallListResponse{Firewalls: []schema.Firewall{}})
+	})
+
+	ts.handleFunc("/networks", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.NetworkListResponse{Networks: []schema.Network{}})
+	})
+
+	ts.handleFunc("/placement_groups", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.PlacementGroupListResponse{PlacementGroups: []schema.PlacementGroup{}})
+	})
+
+	ts.handleFunc("/ssh_keys", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.SSHKeyListResponse{SSHKeys: []schema.SSHKey{}})
+	})
+
+	ts.handleFunc("/certificates", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.CertificateListResponse{Certificates: []schema.Certificate{}})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	remaining, err := client.CountResourcesByLabel(ctx, map[string]string{"cluster": "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if remaining.Servers != 1 {
+		t.Errorf("expected 1 server, got %d", remaining.Servers)
+	}
+	if remaining.Volumes != 2 {
+		t.Errorf("expected 2 volumes, got %d", remaining.Volumes)
+	}
+	if remaining.Total() != 3 {
+		t.Errorf("expected total 3, got %d", remaining.Total())
+	}
+
+	expectedStr := "[1 servers 2 volumes]"
+	if remaining.String() != expectedStr {
+		t.Errorf("expected %q, got %q", expectedStr, remaining.String())
+	}
+}
+
+func TestRemainingResources_String(t *testing.T) {
+	tests := []struct {
+		name     string
+		r        RemainingResources
+		expected string
+	}{
+		{
+			name:     "no resources",
+			r:        RemainingResources{},
+			expected: "no resources",
+		},
+		{
+			name:     "single type",
+			r:        RemainingResources{Servers: 2},
+			expected: "[2 servers]",
+		},
+		{
+			name:     "multiple types",
+			r:        RemainingResources{Servers: 1, Volumes: 2, SSHKeys: 3},
+			expected: "[1 servers 2 volumes 3 SSH keys]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.r.String(); got != tt.expected {
+				t.Errorf("String() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestDeleteResourcesByLabel(t *testing.T) {
 	// Test the generic deleteResourcesByLabel function
 	t.Run("handles list error", func(t *testing.T) {
@@ -426,9 +617,9 @@ func TestDeleteResourcesByLabel(t *testing.T) {
 		}
 	})
 
-	t.Run("handles delete error gracefully", func(t *testing.T) {
+	t.Run("returns delete errors", func(t *testing.T) {
 		ctx := context.Background()
-		// deleteResourcesByLabel should log errors but not return them
+		// deleteResourcesByLabel now returns errors for failed deletions
 		err := deleteResourcesByLabel(ctx, "test",
 			func(ctx context.Context) ([]*hcloud.Server, error) {
 				return []*hcloud.Server{{ID: 1, Name: "test-server"}}, nil
@@ -437,9 +628,9 @@ func TestDeleteResourcesByLabel(t *testing.T) {
 				return context.DeadlineExceeded
 			},
 		)
-		// Should not return error even if delete fails (just logs warning)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+		// Should return error when delete fails
+		if err == nil {
+			t.Fatal("expected error from delete function")
 		}
 	})
 

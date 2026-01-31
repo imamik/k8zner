@@ -146,7 +146,8 @@ func (p *Provisioner) configureNewNodes(ctx *provisioning.Context) error {
 	if len(newCPNodes) > 0 {
 		ctx.Logger.Printf("[%s] Found %d new control plane nodes to configure", phase, len(newCPNodes))
 		for nodeName, nodeIP := range newCPNodes {
-			machineConfig, err := ctx.Talos.GenerateControlPlaneConfig(ctx.State.SANs, nodeName)
+			serverID := ctx.State.ControlPlaneServerIDs[nodeName]
+			machineConfig, err := ctx.Talos.GenerateControlPlaneConfig(ctx.State.SANs, nodeName, serverID)
 			if err != nil {
 				return fmt.Errorf("failed to generate machine config for new CP node %s: %w", nodeName, err)
 			}
@@ -169,7 +170,8 @@ func (p *Provisioner) configureNewNodes(ctx *provisioning.Context) error {
 	if len(newWorkerNodes) > 0 {
 		ctx.Logger.Printf("[%s] Found %d new worker nodes to configure", phase, len(newWorkerNodes))
 		for nodeName, nodeIP := range newWorkerNodes {
-			nodeConfig, err := ctx.Talos.GenerateWorkerConfig(nodeName)
+			serverID := ctx.State.WorkerServerIDs[nodeName]
+			nodeConfig, err := ctx.Talos.GenerateWorkerConfig(nodeName, serverID)
 			if err != nil {
 				return fmt.Errorf("failed to generate worker config for new node %s: %w", nodeName, err)
 			}
@@ -282,7 +284,8 @@ func (p *Provisioner) isNodeInMaintenanceMode(ctx *provisioning.Context, nodeIP 
 func (p *Provisioner) applyControlPlaneConfigs(ctx *provisioning.Context) error {
 	ctx.Logger.Printf("[%s] Applying machine configurations to control plane nodes...", phase)
 	for nodeName, nodeIP := range ctx.State.ControlPlaneIPs {
-		machineConfig, err := ctx.Talos.GenerateControlPlaneConfig(ctx.State.SANs, nodeName)
+		serverID := ctx.State.ControlPlaneServerIDs[nodeName]
+		machineConfig, err := ctx.Talos.GenerateControlPlaneConfig(ctx.State.SANs, nodeName, serverID)
 		if err != nil {
 			return fmt.Errorf("failed to generate machine config for node %s: %w", nodeName, err)
 		}
@@ -547,7 +550,8 @@ func (p *Provisioner) ApplyWorkerConfigs(ctx *provisioning.Context) error {
 	ctx.Logger.Printf("[%s] Applying machine configurations to %d worker nodes...", phase, len(workerNodes))
 
 	for nodeName, nodeIP := range workerNodes {
-		nodeConfig, err := ctx.Talos.GenerateWorkerConfig(nodeName)
+		serverID := ctx.State.WorkerServerIDs[nodeName]
+		nodeConfig, err := ctx.Talos.GenerateWorkerConfig(nodeName, serverID)
 		if err != nil {
 			return fmt.Errorf("failed to generate worker config for %s: %w", nodeName, err)
 		}

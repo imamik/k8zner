@@ -18,7 +18,7 @@ func TestMockClient_CreateServer_Default(t *testing.T) {
 	m := &MockClient{}
 	ctx := context.Background()
 
-	id, err := m.CreateServer(ctx, "test", "image", "type", "loc", nil, nil, "", nil, 1, "")
+	id, err := m.CreateServer(ctx, "test", "image", "type", "loc", nil, nil, "", nil, 1, "", true, true)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -30,7 +30,7 @@ func TestMockClient_CreateServer_Default(t *testing.T) {
 func TestMockClient_CreateServer_CustomFunc(t *testing.T) {
 	expectedErr := errors.New("custom error")
 	m := &MockClient{
-		CreateServerFunc: func(_ context.Context, name, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string) (string, error) {
+		CreateServerFunc: func(_ context.Context, name, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string, _, _ bool) (string, error) {
 			if name != "test-server" {
 				t.Errorf("expected name 'test-server', got %q", name)
 			}
@@ -39,7 +39,7 @@ func TestMockClient_CreateServer_CustomFunc(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	_, err := m.CreateServer(ctx, "test-server", "image", "type", "loc", nil, nil, "", nil, 1, "")
+	_, err := m.CreateServer(ctx, "test-server", "image", "type", "loc", nil, nil, "", nil, 1, "", true, true)
 	if !errors.Is(err, expectedErr) {
 		t.Errorf("expected error %v, got %v", expectedErr, err)
 	}

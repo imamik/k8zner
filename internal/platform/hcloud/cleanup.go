@@ -2,6 +2,7 @@ package hcloud
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -9,10 +10,39 @@ import (
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
+// CleanupError represents accumulated errors from cleanup operations.
+type CleanupError struct {
+	Errors []error
+}
+
+func (e *CleanupError) Error() string {
+	if len(e.Errors) == 1 {
+		return e.Errors[0].Error()
+	}
+	return fmt.Sprintf("cleanup encountered %d errors: %v", len(e.Errors), e.Errors)
+}
+
+func (e *CleanupError) Unwrap() error {
+	if len(e.Errors) == 1 {
+		return e.Errors[0]
+	}
+	return errors.Join(e.Errors...)
+}
+
+func (e *CleanupError) Add(err error) {
+	if err != nil {
+		e.Errors = append(e.Errors, err)
+	}
+}
+
+func (e *CleanupError) HasErrors() bool {
+	return len(e.Errors) > 0
+}
+
 // resource is a constraint for Hetzner Cloud resources that have Name and ID fields.
 type resource interface {
 	*hcloud.Server | *hcloud.LoadBalancer | *hcloud.FloatingIP | *hcloud.Firewall |
-		*hcloud.Network | *hcloud.PlacementGroup | *hcloud.SSHKey | *hcloud.Certificate
+		*hcloud.Network | *hcloud.PlacementGroup | *hcloud.SSHKey | *hcloud.Certificate | *hcloud.Volume
 }
 
 // resourceInfo extracts common fields from a resource for logging.
@@ -40,12 +70,15 @@ func getResourceInfo[T resource](r T) resourceInfo {
 		return resourceInfo{Name: v.Name, ID: v.ID}
 	case *hcloud.Certificate:
 		return resourceInfo{Name: v.Name, ID: v.ID}
+	case *hcloud.Volume:
+		return resourceInfo{Name: v.Name, ID: v.ID}
 	default:
 		return resourceInfo{}
 	}
 }
 
 // deleteResourcesByLabel is a generic helper for deleting resources by label selector.
+// Returns an error if listing fails, or a combined error of all deletion failures.
 func deleteResourcesByLabel[T resource](
 	ctx context.Context,
 	resourceType string,
@@ -57,65 +90,92 @@ func deleteResourcesByLabel[T resource](
 		return fmt.Errorf("failed to list %s: %w", resourceType, err)
 	}
 
+	var deleteErrs []error
 	for _, r := range resources {
 		info := getResourceInfo(r)
 		log.Printf("[Cleanup] Deleting %s: %s (ID: %d)", resourceType, info.Name, info.ID)
 		if err := deleteFn(ctx, r); err != nil {
 			log.Printf("[Cleanup] Warning: Failed to delete %s %s: %v", resourceType, info.Name, err)
+			deleteErrs = append(deleteErrs, fmt.Errorf("%s %q: %w", resourceType, info.Name, err))
 		}
 	}
 
+	if len(deleteErrs) > 0 {
+		return errors.Join(deleteErrs...)
+	}
 	return nil
 }
 
 // CleanupByLabel deletes all Hetzner Cloud resources matching the given label selector.
 // This is useful for cleaning up E2E test resources or orphaned resources.
+// Returns a CleanupError containing all errors encountered during cleanup.
+// The function attempts to delete all resource types even if some deletions fail.
 func (c *RealClient) CleanupByLabel(ctx context.Context, labelSelector map[string]string) error {
 	log.Printf("[Cleanup] Starting cleanup for resources with labels: %v", labelSelector)
 
 	// Build label selector string
 	labelString := buildLabelSelector(labelSelector)
+	cleanupErrs := &CleanupError{}
 
 	// Delete in order to respect dependencies:
 	// 1. Servers (must be deleted before networks, load balancers)
-	// 2. Load Balancers
-	// 3. Floating IPs
-	// 4. Firewalls
-	// 5. Networks
-	// 6. Placement Groups
-	// 7. SSH Keys
-	// 8. Certificates
+	// 2. Volumes (must be deleted after servers detach them)
+	// 3. Load Balancers
+	// 4. Floating IPs
+	// 5. Firewalls
+	// 6. Networks
+	// 7. Placement Groups
+	// 8. SSH Keys
+	// 9. Certificates
 
 	if err := c.deleteServersByLabel(ctx, labelString); err != nil {
 		log.Printf("[Cleanup] Warning: Failed to delete servers: %v", err)
+		cleanupErrs.Add(fmt.Errorf("servers: %w", err))
+	}
+
+	if err := c.deleteVolumesByLabel(ctx, labelString); err != nil {
+		log.Printf("[Cleanup] Warning: Failed to delete volumes: %v", err)
+		cleanupErrs.Add(fmt.Errorf("volumes: %w", err))
 	}
 
 	if err := c.deleteLoadBalancersByLabel(ctx, labelString); err != nil {
 		log.Printf("[Cleanup] Warning: Failed to delete load balancers: %v", err)
+		cleanupErrs.Add(fmt.Errorf("load balancers: %w", err))
 	}
 
 	if err := c.deleteFloatingIPsByLabel(ctx, labelString); err != nil {
 		log.Printf("[Cleanup] Warning: Failed to delete floating IPs: %v", err)
+		cleanupErrs.Add(fmt.Errorf("floating IPs: %w", err))
 	}
 
 	if err := c.deleteFirewallsByLabel(ctx, labelString); err != nil {
 		log.Printf("[Cleanup] Warning: Failed to delete firewalls: %v", err)
+		cleanupErrs.Add(fmt.Errorf("firewalls: %w", err))
 	}
 
 	if err := c.deleteNetworksByLabel(ctx, labelString); err != nil {
 		log.Printf("[Cleanup] Warning: Failed to delete networks: %v", err)
+		cleanupErrs.Add(fmt.Errorf("networks: %w", err))
 	}
 
 	if err := c.deletePlacementGroupsByLabel(ctx, labelString); err != nil {
 		log.Printf("[Cleanup] Warning: Failed to delete placement groups: %v", err)
+		cleanupErrs.Add(fmt.Errorf("placement groups: %w", err))
 	}
 
 	if err := c.deleteSSHKeysByLabel(ctx, labelString); err != nil {
 		log.Printf("[Cleanup] Warning: Failed to delete SSH keys: %v", err)
+		cleanupErrs.Add(fmt.Errorf("SSH keys: %w", err))
 	}
 
 	if err := c.deleteCertificatesByLabel(ctx, labelString); err != nil {
 		log.Printf("[Cleanup] Warning: Failed to delete certificates: %v", err)
+		cleanupErrs.Add(fmt.Errorf("certificates: %w", err))
+	}
+
+	if cleanupErrs.HasErrors() {
+		log.Printf("[Cleanup] Cleanup completed with %d errors", len(cleanupErrs.Errors))
+		return cleanupErrs
 	}
 
 	log.Printf("[Cleanup] Cleanup complete")
@@ -316,4 +376,193 @@ func (c *RealClient) deleteCertificatesByLabel(ctx context.Context, labelSelecto
 			return err
 		},
 	)
+}
+
+// deleteVolumesByLabel deletes all volumes matching the label selector.
+// Volumes need to be detached from servers before deletion, so this should be called
+// after deleteServersByLabel.
+func (c *RealClient) deleteVolumesByLabel(ctx context.Context, labelSelector string) error {
+	volumes, err := c.client.Volume.AllWithOpts(ctx, hcloud.VolumeListOpts{
+		ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list volumes: %w", err)
+	}
+
+	for _, vol := range volumes {
+		log.Printf("[Cleanup] Deleting volume: %s (ID: %d)", vol.Name, vol.ID)
+
+		// Retry up to 30 times (2.5 minutes) in case volume is still attached
+		for i := 0; i < 30; i++ {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+
+			_, err := c.client.Volume.Delete(ctx, vol)
+			if err == nil {
+				break
+			}
+
+			// Check if volume is still attached
+			if hcloud.IsError(err, hcloud.ErrorCodeLocked) || hcloud.IsError(err, hcloud.ErrorCodeConflict) {
+				if i < 29 {
+					log.Printf("[Cleanup] Volume %s still locked/attached, waiting...", vol.Name)
+					time.Sleep(5 * time.Second)
+					continue
+				}
+			}
+
+			log.Printf("[Cleanup] Warning: Failed to delete volume %s: %v", vol.Name, err)
+			break
+		}
+	}
+
+	return nil
+}
+
+// RemainingResources contains counts of resources still present after cleanup.
+type RemainingResources struct {
+	Servers         int
+	Volumes         int
+	LoadBalancers   int
+	FloatingIPs     int
+	Firewalls       int
+	Networks        int
+	PlacementGroups int
+	SSHKeys         int
+	Certificates    int
+}
+
+// Total returns the total count of remaining resources.
+func (r RemainingResources) Total() int {
+	return r.Servers + r.Volumes + r.LoadBalancers + r.FloatingIPs +
+		r.Firewalls + r.Networks + r.PlacementGroups + r.SSHKeys + r.Certificates
+}
+
+// String returns a human-readable summary of remaining resources.
+func (r RemainingResources) String() string {
+	parts := []string{}
+	if r.Servers > 0 {
+		parts = append(parts, fmt.Sprintf("%d servers", r.Servers))
+	}
+	if r.Volumes > 0 {
+		parts = append(parts, fmt.Sprintf("%d volumes", r.Volumes))
+	}
+	if r.LoadBalancers > 0 {
+		parts = append(parts, fmt.Sprintf("%d load balancers", r.LoadBalancers))
+	}
+	if r.FloatingIPs > 0 {
+		parts = append(parts, fmt.Sprintf("%d floating IPs", r.FloatingIPs))
+	}
+	if r.Firewalls > 0 {
+		parts = append(parts, fmt.Sprintf("%d firewalls", r.Firewalls))
+	}
+	if r.Networks > 0 {
+		parts = append(parts, fmt.Sprintf("%d networks", r.Networks))
+	}
+	if r.PlacementGroups > 0 {
+		parts = append(parts, fmt.Sprintf("%d placement groups", r.PlacementGroups))
+	}
+	if r.SSHKeys > 0 {
+		parts = append(parts, fmt.Sprintf("%d SSH keys", r.SSHKeys))
+	}
+	if r.Certificates > 0 {
+		parts = append(parts, fmt.Sprintf("%d certificates", r.Certificates))
+	}
+	if len(parts) == 0 {
+		return "no resources"
+	}
+	return fmt.Sprintf("%s", parts)
+}
+
+// CountResourcesByLabel counts all resources matching the given label selector.
+// This is useful for verifying that cleanup has completed successfully.
+func (c *RealClient) CountResourcesByLabel(ctx context.Context, labelSelector map[string]string) (RemainingResources, error) {
+	labelString := buildLabelSelector(labelSelector)
+	var result RemainingResources
+
+	// Count servers
+	servers, err := c.client.Server.AllWithOpts(ctx, hcloud.ServerListOpts{
+		ListOpts: hcloud.ListOpts{LabelSelector: labelString},
+	})
+	if err != nil {
+		return result, fmt.Errorf("failed to list servers: %w", err)
+	}
+	result.Servers = len(servers)
+
+	// Count volumes
+	volumes, err := c.client.Volume.AllWithOpts(ctx, hcloud.VolumeListOpts{
+		ListOpts: hcloud.ListOpts{LabelSelector: labelString},
+	})
+	if err != nil {
+		return result, fmt.Errorf("failed to list volumes: %w", err)
+	}
+	result.Volumes = len(volumes)
+
+	// Count load balancers
+	loadBalancers, err := c.client.LoadBalancer.AllWithOpts(ctx, hcloud.LoadBalancerListOpts{
+		ListOpts: hcloud.ListOpts{LabelSelector: labelString},
+	})
+	if err != nil {
+		return result, fmt.Errorf("failed to list load balancers: %w", err)
+	}
+	result.LoadBalancers = len(loadBalancers)
+
+	// Count floating IPs
+	floatingIPs, err := c.client.FloatingIP.AllWithOpts(ctx, hcloud.FloatingIPListOpts{
+		ListOpts: hcloud.ListOpts{LabelSelector: labelString},
+	})
+	if err != nil {
+		return result, fmt.Errorf("failed to list floating IPs: %w", err)
+	}
+	result.FloatingIPs = len(floatingIPs)
+
+	// Count firewalls
+	firewalls, err := c.client.Firewall.AllWithOpts(ctx, hcloud.FirewallListOpts{
+		ListOpts: hcloud.ListOpts{LabelSelector: labelString},
+	})
+	if err != nil {
+		return result, fmt.Errorf("failed to list firewalls: %w", err)
+	}
+	result.Firewalls = len(firewalls)
+
+	// Count networks
+	networks, err := c.client.Network.AllWithOpts(ctx, hcloud.NetworkListOpts{
+		ListOpts: hcloud.ListOpts{LabelSelector: labelString},
+	})
+	if err != nil {
+		return result, fmt.Errorf("failed to list networks: %w", err)
+	}
+	result.Networks = len(networks)
+
+	// Count placement groups
+	placementGroups, err := c.client.PlacementGroup.AllWithOpts(ctx, hcloud.PlacementGroupListOpts{
+		ListOpts: hcloud.ListOpts{LabelSelector: labelString},
+	})
+	if err != nil {
+		return result, fmt.Errorf("failed to list placement groups: %w", err)
+	}
+	result.PlacementGroups = len(placementGroups)
+
+	// Count SSH keys
+	sshKeys, err := c.client.SSHKey.AllWithOpts(ctx, hcloud.SSHKeyListOpts{
+		ListOpts: hcloud.ListOpts{LabelSelector: labelString},
+	})
+	if err != nil {
+		return result, fmt.Errorf("failed to list SSH keys: %w", err)
+	}
+	result.SSHKeys = len(sshKeys)
+
+	// Count certificates
+	certificates, err := c.client.Certificate.AllWithOpts(ctx, hcloud.CertificateListOpts{
+		ListOpts: hcloud.ListOpts{LabelSelector: labelString},
+	})
+	if err != nil {
+		return result, fmt.Errorf("failed to list certificates: %w", err)
+	}
+	result.Certificates = len(certificates)
+
+	return result, nil
 }
