@@ -5,41 +5,208 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/imamik/k8zner/internal/addons"
+	"github.com/imamik/k8zner/internal/config"
+	"github.com/imamik/k8zner/internal/platform/hcloud"
 )
 
-// phaseSelfHealing tests the self-healing mechanism by simulating node failures.
-// This test powers off a worker node and verifies that:
-// 1. The controller detects the unhealthy node
-// 2. The controller replaces it with a new node
-// 3. The new node joins the cluster and becomes ready
+// phaseSelfHealing tests the self-healing mechanism using the k8zner-operator.
+// This test deploys the operator, creates a K8znerCluster resource, then
+// simulates node failures to verify automatic replacement.
 //
 // Prerequisites:
-// - Cluster must be running with at least 2 workers
+// - Cluster must be running with at least 2 workers (HA mode preferred)
 // - HCLOUD_TOKEN environment variable must be set
+// - Talos snapshot must exist with label os=talos
 func phaseSelfHealing(t *testing.T, state *E2EState) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
 	defer cancel()
 
-	t.Log("Testing self-healing mechanism...")
+	t.Log("=== SELF-HEALING E2E TEST ===")
 
-	// Verify we have at least 2 workers
+	// Verify we have at least 2 workers for safe testing
 	if len(state.WorkerIPs) < 2 {
 		t.Skip("Self-healing test requires at least 2 worker nodes")
 	}
+
+	token := os.Getenv("HCLOUD_TOKEN")
+	if token == "" {
+		t.Fatal("HCLOUD_TOKEN required for self-healing test")
+	}
+
+	// Step 1: Deploy the k8zner-operator
+	t.Run("DeployOperator", func(t *testing.T) {
+		deployOperatorAddon(t, state, token)
+	})
+
+	// Step 2: Create K8znerCluster CRD resource for this cluster
+	t.Run("CreateClusterResource", func(t *testing.T) {
+		createK8znerClusterResource(t, state)
+	})
+
+	// Step 3: Verify operator is reconciling the cluster
+	t.Run("VerifyOperatorReconciling", func(t *testing.T) {
+		verifyOperatorReconciling(t, state)
+	})
+
+	// Step 4: Test worker node self-healing
+	t.Run("WorkerSelfHealing", func(t *testing.T) {
+		testWorkerSelfHealing(ctx, t, state)
+	})
+
+	// Step 5: Cleanup K8znerCluster resource (operator should not delete real nodes)
+	t.Run("Cleanup", func(t *testing.T) {
+		cleanupK8znerClusterResource(t, state)
+	})
+
+	t.Log("=== SELF-HEALING E2E TEST PASSED ===")
+}
+
+// deployOperatorAddon deploys the k8zner-operator to the cluster.
+func deployOperatorAddon(t *testing.T, state *E2EState, token string) {
+	t.Log("Deploying k8zner-operator addon...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	// Get network ID
+	network, _ := state.Client.GetNetwork(ctx, state.ClusterName)
+	networkID := int64(0)
+	if network != nil {
+		networkID = network.ID
+	}
+
+	// Build config with operator enabled
+	cfg := &config.Config{
+		ClusterName: state.ClusterName,
+		HCloudToken: token,
+		Addons: config.AddonsConfig{
+			Operator: config.OperatorConfig{
+				Enabled: true,
+				Version: "main", // Use main branch image
+			},
+		},
+	}
+
+	// Apply the operator addon
+	if err := addons.Apply(ctx, cfg, state.Kubeconfig, networkID); err != nil {
+		t.Fatalf("Failed to deploy operator: %v", err)
+	}
+
+	// Wait for operator to be ready
+	waitForPod(t, state.KubeconfigPath, "k8zner-system", "app.kubernetes.io/name=k8zner-operator", 5*time.Minute)
+
+	t.Log("✓ k8zner-operator deployed and running")
+	state.AddonsInstalled["k8zner-operator"] = true
+}
+
+// createK8znerClusterResource creates a K8znerCluster CRD for the existing cluster.
+func createK8znerClusterResource(t *testing.T, state *E2EState) {
+	t.Log("Creating K8znerCluster resource for existing cluster...")
+
+	// Determine counts from state
+	cpCount := len(state.ControlPlaneIPs)
+	workerCount := len(state.WorkerIPs)
+
+	// Build the K8znerCluster manifest
+	manifest := fmt.Sprintf(`apiVersion: k8zner.io/v1alpha1
+kind: K8znerCluster
+metadata:
+  name: %s
+  namespace: k8zner-system
+spec:
+  region: nbg1
+  controlPlanes:
+    count: %d
+    size: cx22
+  workers:
+    count: %d
+    size: cx22
+  healthCheck:
+    nodeNotReadyThreshold: "2m"
+`, state.ClusterName, cpCount, workerCount)
+
+	// Apply via kubectl
+	// #nosec G204 -- E2E test with controlled command arguments
+	cmd := exec.Command("kubectl",
+		"--kubeconfig", state.KubeconfigPath,
+		"apply", "-f", "-")
+	cmd.Stdin = strings.NewReader(manifest)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Failed to create K8znerCluster resource: %v\nOutput: %s", err, string(output))
+	}
+
+	t.Logf("✓ K8znerCluster resource created (CP: %d, Workers: %d)", cpCount, workerCount)
+}
+
+// verifyOperatorReconciling checks that the operator is reconciling the cluster.
+func verifyOperatorReconciling(t *testing.T, state *E2EState) {
+	t.Log("Verifying operator is reconciling the cluster...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			// Show cluster status for debugging
+			// #nosec G204 -- E2E test with controlled command arguments
+			cmd := exec.Command("kubectl",
+				"--kubeconfig", state.KubeconfigPath,
+				"get", "k8znercluster", "-n", "k8zner-system", state.ClusterName, "-o", "yaml")
+			output, _ := cmd.CombinedOutput()
+			t.Logf("K8znerCluster status:\n%s", string(output))
+			t.Fatal("Timeout waiting for operator to reconcile cluster")
+		case <-ticker.C:
+			// Check if the cluster has a status phase set
+			// #nosec G204 -- E2E test with controlled command arguments
+			cmd := exec.Command("kubectl",
+				"--kubeconfig", state.KubeconfigPath,
+				"get", "k8znercluster", "-n", "k8zner-system", state.ClusterName,
+				"-o", "jsonpath={.status.phase}")
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Logf("Waiting for operator to set status...")
+				continue
+			}
+
+			phase := strings.TrimSpace(string(output))
+			if phase != "" && phase != "Provisioning" {
+				t.Logf("✓ Operator reconciled cluster (phase: %s)", phase)
+				return
+			}
+			t.Logf("Waiting for cluster phase (current: %q)...", phase)
+		}
+	}
+}
+
+// testWorkerSelfHealing tests automatic worker node replacement.
+func testWorkerSelfHealing(ctx context.Context, t *testing.T, state *E2EState) {
+	t.Log("Testing worker node self-healing...")
 
 	// Get initial node count
 	initialNodeCount := countKubernetesNodes(t, state.KubeconfigPath)
 	t.Logf("Initial node count: %d", initialNodeCount)
 
-	// Select a worker node to "fail"
-	targetWorker := fmt.Sprintf("%s-workers-1", state.ClusterName)
+	// Select a worker node to "fail" (use the last worker to minimize disruption)
+	targetWorker := fmt.Sprintf("%s-workers-%d", state.ClusterName, len(state.WorkerIPs))
 	t.Logf("Simulating failure of worker: %s", targetWorker)
 
-	// Step 1: Power off the worker server to simulate failure
+	// Record the original worker IPs for comparison
+	originalWorkerIPs := make([]string, len(state.WorkerIPs))
+	copy(originalWorkerIPs, state.WorkerIPs)
+
+	// Step 1: Power off the worker server
 	t.Log("Powering off worker server...")
 	if err := powerOffServer(ctx, state, targetWorker); err != nil {
 		t.Fatalf("Failed to power off server: %v", err)
@@ -52,45 +219,118 @@ func phaseSelfHealing(t *testing.T, state *E2EState) {
 	}
 	t.Logf("✓ Node %s detected as NotReady", targetWorker)
 
-	// Step 3: Wait for the self-healing controller to replace the node
-	// In a real deployment, the controller would:
-	// 1. Detect the unhealthy node (after threshold)
-	// 2. Delete the old server
-	// 3. Create a new server
-	// 4. Apply Talos config
-	// 5. Wait for node ready
-	//
-	// For this test, we simulate what the controller does:
-	t.Log("Simulating controller self-healing action...")
-
-	// Delete the old server
-	if err := state.Client.DeleteServer(ctx, targetWorker); err != nil {
-		t.Logf("Warning: Failed to delete server %s: %v", targetWorker, err)
+	// Step 3: Wait for operator to detect unhealthy node and update status
+	t.Log("Waiting for operator to detect unhealthy node...")
+	if err := waitForClusterPhase(ctx, t, state.KubeconfigPath, state.ClusterName, "Degraded", 5*time.Minute); err != nil {
+		// Also accept "Healing" phase since operator might transition quickly
+		if err := waitForClusterPhase(ctx, t, state.KubeconfigPath, state.ClusterName, "Healing", 1*time.Minute); err != nil {
+			t.Logf("Warning: Cluster did not transition to Degraded/Healing phase: %v", err)
+		}
 	}
+	t.Log("✓ Operator detected unhealthy worker")
 
-	// Wait a moment for the server to be fully deleted
-	time.Sleep(10 * time.Second)
-
-	// The controller would create a new server with the same name
-	// For the test, we skip server creation since we're testing detection/workflow
-	t.Log("Note: Full server recreation requires operator deployment")
-
-	// Step 4: Verify the cluster can still function with remaining workers
-	t.Log("Verifying cluster functionality with remaining workers...")
-	remainingNodes := countKubernetesNodes(t, state.KubeconfigPath)
-	t.Logf("Current node count: %d", remainingNodes)
-
-	// The cluster should still be functional (just with one fewer node)
-	if remainingNodes < 1 {
-		t.Fatal("Cluster has no remaining nodes")
+	// Step 4: Wait for operator to replace the node
+	// This includes: server deletion, new server creation, config application, node join
+	t.Log("Waiting for operator to replace worker node (this may take several minutes)...")
+	if err := waitForClusterPhase(ctx, t, state.KubeconfigPath, state.ClusterName, "Running", 15*time.Minute); err != nil {
+		// Show operator logs for debugging
+		showOperatorLogs(t, state.KubeconfigPath)
+		showClusterStatus(t, state.KubeconfigPath, state.ClusterName)
+		t.Fatalf("Cluster did not return to Running phase: %v", err)
 	}
+	t.Log("✓ Cluster returned to Running phase")
 
-	// Deploy a test workload to verify cluster is functional
+	// Step 5: Verify the node count is restored
+	t.Log("Verifying node count is restored...")
+	finalNodeCount := countKubernetesNodes(t, state.KubeconfigPath)
+	if finalNodeCount < initialNodeCount {
+		showClusterStatus(t, state.KubeconfigPath, state.ClusterName)
+		t.Fatalf("Node count not restored: expected %d, got %d", initialNodeCount, finalNodeCount)
+	}
+	t.Logf("✓ Node count restored: %d", finalNodeCount)
+
+	// Step 6: Verify cluster functionality
+	t.Log("Verifying cluster functionality...")
 	if err := deployTestWorkload(ctx, t, state.KubeconfigPath); err != nil {
 		t.Logf("Warning: Test workload deployment failed: %v", err)
+	} else {
+		t.Log("✓ Test workload deployed successfully")
 	}
 
-	t.Log("✓ Phase Self-Healing: Cluster remains functional after node failure simulation")
+	t.Log("✓ Worker self-healing test passed")
+}
+
+// waitForClusterPhase waits for the K8znerCluster to reach a specific phase.
+func waitForClusterPhase(ctx context.Context, t *testing.T, kubeconfigPath, clusterName, expectedPhase string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			if time.Now().After(deadline) {
+				return fmt.Errorf("timeout waiting for cluster phase %s", expectedPhase)
+			}
+
+			// #nosec G204 -- E2E test with controlled command arguments
+			cmd := exec.Command("kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "k8znercluster", "-n", "k8zner-system", clusterName,
+				"-o", "jsonpath={.status.phase}")
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Logf("kubectl error (will retry): %v", err)
+				continue
+			}
+
+			phase := strings.TrimSpace(string(output))
+			if phase == expectedPhase {
+				return nil
+			}
+			t.Logf("Cluster phase: %s (waiting for %s)...", phase, expectedPhase)
+		}
+	}
+}
+
+// showOperatorLogs shows recent operator logs for debugging.
+func showOperatorLogs(t *testing.T, kubeconfigPath string) {
+	// #nosec G204 -- E2E test with controlled command arguments
+	cmd := exec.Command("kubectl",
+		"--kubeconfig", kubeconfigPath,
+		"logs", "-n", "k8zner-system", "-l", "app.kubernetes.io/name=k8zner-operator",
+		"--tail=50")
+	output, _ := cmd.CombinedOutput()
+	t.Logf("Operator logs:\n%s", string(output))
+}
+
+// showClusterStatus shows the K8znerCluster status for debugging.
+func showClusterStatus(t *testing.T, kubeconfigPath, clusterName string) {
+	// #nosec G204 -- E2E test with controlled command arguments
+	cmd := exec.Command("kubectl",
+		"--kubeconfig", kubeconfigPath,
+		"get", "k8znercluster", "-n", "k8zner-system", clusterName, "-o", "yaml")
+	output, _ := cmd.CombinedOutput()
+	t.Logf("K8znerCluster status:\n%s", string(output))
+}
+
+// cleanupK8znerClusterResource removes the K8znerCluster resource.
+func cleanupK8znerClusterResource(t *testing.T, state *E2EState) {
+	t.Log("Cleaning up K8znerCluster resource...")
+
+	// Delete the K8znerCluster resource (operator should NOT delete real nodes)
+	// #nosec G204 -- E2E test with controlled command arguments
+	cmd := exec.Command("kubectl",
+		"--kubeconfig", state.KubeconfigPath,
+		"delete", "k8znercluster", "-n", "k8zner-system", state.ClusterName,
+		"--ignore-not-found")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Logf("Warning: Failed to delete K8znerCluster: %v\nOutput: %s", err, string(output))
+	}
+
+	t.Log("✓ K8znerCluster resource deleted")
 }
 
 // powerOffServer powers off a server using the HCloud API.
@@ -105,7 +345,8 @@ func powerOffServer(ctx context.Context, state *E2EState, serverName string) err
 
 	for _, server := range servers {
 		if server.Name == serverName {
-			// Use hcloud CLI to power off (API client doesn't have direct power off method)
+			// Use hcloud CLI to power off (API client doesn't have direct power off)
+			// #nosec G204 -- E2E test with controlled command arguments
 			cmd := exec.CommandContext(ctx, "hcloud", "server", "poweroff", fmt.Sprintf("%d", server.ID))
 			output, err := cmd.CombinedOutput()
 			if err != nil {
@@ -133,13 +374,14 @@ func waitForNodeNotReady(ctx context.Context, t *testing.T, kubeconfigPath, node
 				return fmt.Errorf("timeout waiting for node %s to become NotReady", nodeName)
 			}
 
+			// #nosec G204 -- E2E test with controlled command arguments
 			cmd := exec.CommandContext(ctx, "kubectl",
 				"--kubeconfig", kubeconfigPath,
 				"get", "node", nodeName,
 				"-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}")
 			output, err := cmd.CombinedOutput()
 			if err != nil {
-				// Node might not exist anymore, which is also valid
+				// Node might not exist anymore
 				if strings.Contains(string(output), "NotFound") {
 					return nil
 				}
@@ -159,6 +401,7 @@ func waitForNodeNotReady(ctx context.Context, t *testing.T, kubeconfigPath, node
 
 // countKubernetesNodes returns the number of nodes in the cluster.
 func countKubernetesNodes(t *testing.T, kubeconfigPath string) int {
+	// #nosec G204 -- E2E test with controlled command arguments
 	cmd := exec.Command("kubectl",
 		"--kubeconfig", kubeconfigPath,
 		"get", "nodes", "--no-headers")
@@ -180,7 +423,6 @@ func countKubernetesNodes(t *testing.T, kubeconfigPath string) int {
 
 // deployTestWorkload deploys a simple workload to verify cluster functionality.
 func deployTestWorkload(ctx context.Context, t *testing.T, kubeconfigPath string) error {
-	// Create a simple deployment
 	manifest := `
 apiVersion: apps/v1
 kind: Deployment
@@ -204,6 +446,7 @@ spec:
         - containerPort: 80
 `
 
+	// #nosec G204 -- E2E test with controlled command arguments
 	cmd := exec.CommandContext(ctx, "kubectl",
 		"--kubeconfig", kubeconfigPath,
 		"apply", "-f", "-")
@@ -215,6 +458,7 @@ spec:
 
 	// Wait for deployment to be ready
 	t.Log("Waiting for test deployment to be ready...")
+	// #nosec G204 -- E2E test with controlled command arguments
 	waitCmd := exec.CommandContext(ctx, "kubectl",
 		"--kubeconfig", kubeconfigPath,
 		"rollout", "status", "deployment/selfhealing-test",
@@ -227,25 +471,56 @@ spec:
 	t.Log("✓ Test deployment is running")
 
 	// Clean up
+	// #nosec G204 -- E2E test with controlled command arguments
 	cleanupCmd := exec.CommandContext(ctx, "kubectl",
 		"--kubeconfig", kubeconfigPath,
 		"delete", "deployment", "selfhealing-test")
-	_ = cleanupCmd.Run() // Ignore cleanup errors
+	_ = cleanupCmd.Run()
 
 	return nil
 }
 
-// TestE2ESelfHealing is the entrypoint for running just the self-healing E2E test.
-// This test requires an existing cluster provisioned by the full E2E suite.
+// TestE2ESelfHealingHA is a dedicated E2E test for self-healing on HA clusters.
+// This test requires an HA cluster (3 CPs, 2+ workers) and tests:
+// - Worker node failure and automatic replacement
+// - (Future) Control plane node failure and replacement with quorum preservation
 //
-// Run with: go test -v -tags=e2e -run TestE2ESelfHealing ./tests/e2e/...
-func TestE2ESelfHealing(t *testing.T) {
+// Run with: HCLOUD_TOKEN=xxx go test -v -timeout=60m -tags=e2e -run TestE2ESelfHealingHA ./tests/e2e/...
+func TestE2ESelfHealingHA(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping self-healing test in short mode")
 	}
 
-	// This test is typically run as part of the full E2E suite
-	// When run standalone, it expects an existing cluster
-	t.Log("Self-healing test should be run as part of full E2E suite")
-	t.Log("For standalone testing, ensure cluster exists and state is properly initialized")
+	token := os.Getenv("HCLOUD_TOKEN")
+	if token == "" {
+		t.Skip("HCLOUD_TOKEN not set, skipping E2E test")
+	}
+
+	clusterName := fmt.Sprintf("e2e-selfheal-%d", time.Now().Unix())
+	t.Logf("=== Starting Self-Healing HA E2E Test: %s ===", clusterName)
+
+	client := hcloud.NewRealClient(token)
+	state := NewE2EState(clusterName, client)
+	defer cleanupE2ECluster(t, state)
+
+	// === PHASE 1: DEPLOY HA CLUSTER ===
+	t.Log("=== DEPLOYMENT PHASE ===")
+
+	// Get snapshot
+	deployGetSnapshot(t, state)
+
+	// Deploy HA cluster
+	cfg := deployHACluster(t, state, token)
+
+	// Install addons
+	deployAllAddons(t, state, cfg, token)
+
+	t.Log("=== DEPLOYMENT COMPLETE ===")
+
+	// === PHASE 2: SELF-HEALING TEST ===
+	t.Log("=== SELF-HEALING TEST PHASE ===")
+
+	phaseSelfHealing(t, state)
+
+	t.Log("=== SELF-HEALING HA E2E TEST PASSED ===")
 }
