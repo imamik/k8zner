@@ -387,14 +387,16 @@ func testHTTPSConnectivity(t *testing.T, hostname string, timeout time.Duration)
 				t.Logf("    HTTPS request failed: %v", err)
 				continue
 			}
-			defer resp.Body.Close()
 
-			if resp.StatusCode == http.StatusOK {
-				t.Logf("    ✓ HTTPS connectivity verified (status: %d)", resp.StatusCode)
+			statusCode := resp.StatusCode
+			_ = resp.Body.Close()
+
+			if statusCode == http.StatusOK {
+				t.Logf("    ✓ HTTPS connectivity verified (status: %d)", statusCode)
 				return
 			}
 
-			t.Logf("    HTTPS response: %d, waiting...", resp.StatusCode)
+			t.Logf("    HTTPS response: %d, waiting...", statusCode)
 		}
 	}
 }
@@ -402,7 +404,7 @@ func testHTTPSConnectivity(t *testing.T, hostname string, timeout time.Duration)
 // cleanupCloudflareTest removes test resources.
 func cleanupCloudflareTest(t *testing.T, state *E2EState, hostname string) {
 	// Delete the Ingress first (this should trigger external-dns to clean up DNS)
-	exec.CommandContext(context.Background(), "kubectl",
+	_ = exec.CommandContext(context.Background(), "kubectl",
 		"--kubeconfig", state.KubeconfigPath,
 		"delete", "ingress", "whoami-cloudflare-test", "-n", "default", "--ignore-not-found").Run()
 
@@ -410,15 +412,15 @@ func cleanupCloudflareTest(t *testing.T, state *E2EState, hostname string) {
 	time.Sleep(30 * time.Second)
 
 	// Delete other resources
-	exec.CommandContext(context.Background(), "kubectl",
+	_ = exec.CommandContext(context.Background(), "kubectl",
 		"--kubeconfig", state.KubeconfigPath,
 		"delete", "service", "whoami-cloudflare-test", "-n", "default", "--ignore-not-found").Run()
 
-	exec.CommandContext(context.Background(), "kubectl",
+	_ = exec.CommandContext(context.Background(), "kubectl",
 		"--kubeconfig", state.KubeconfigPath,
 		"delete", "deployment", "whoami-cloudflare-test", "-n", "default", "--ignore-not-found").Run()
 
-	exec.CommandContext(context.Background(), "kubectl",
+	_ = exec.CommandContext(context.Background(), "kubectl",
 		"--kubeconfig", state.KubeconfigPath,
 		"delete", "secret", "whoami-tls", "-n", "default", "--ignore-not-found").Run()
 

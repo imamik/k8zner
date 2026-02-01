@@ -13,6 +13,7 @@ import (
 // Kubectl executes a kubectl command and returns output.
 func (f *Framework) Kubectl(args ...string) (string, error) {
 	fullArgs := append([]string{"--kubeconfig", f.KubeconfigPath()}, args...)
+	// #nosec G204 -- test code with controlled command arguments
 	cmd := exec.Command("kubectl", fullArgs...)
 
 	var stdout, stderr bytes.Buffer
@@ -39,6 +40,7 @@ func (f *Framework) KubectlMust(t *testing.T, args ...string) string {
 func (f *Framework) KubectlApply(t *testing.T, manifest string) {
 	t.Helper()
 
+	// #nosec G204 -- test code with controlled command arguments
 	cmd := exec.Command("kubectl", "--kubeconfig", f.KubeconfigPath(), "apply", "-f", "-")
 	cmd.Stdin = strings.NewReader(manifest)
 

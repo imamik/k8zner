@@ -4,6 +4,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -33,16 +35,24 @@ const (
 	defaultNodeNotReadyThreshold  = 5 * time.Minute
 	defaultEtcdUnhealthyThreshold = 2 * time.Minute
 
+	// Server creation timeouts.
+	serverIPTimeout    = 2 * time.Minute
+	nodeReadyTimeout   = 5 * time.Minute
+	serverIPRetryDelay = 5 * time.Second
+
 	// Event reasons.
-	EventReasonReconciling        = "Reconciling"
-	EventReasonReconcileSucceeded = "ReconcileSucceeded"
-	EventReasonReconcileFailed    = "ReconcileFailed"
-	EventReasonNodeUnhealthy      = "NodeUnhealthy"
-	EventReasonNodeReplacing      = "NodeReplacing"
-	EventReasonNodeReplaced       = "NodeReplaced"
-	EventReasonQuorumLost         = "QuorumLost"
-	EventReasonScalingUp          = "ScalingUp"
-	EventReasonScalingDown        = "ScalingDown"
+	EventReasonReconciling         = "Reconciling"
+	EventReasonReconcileSucceeded  = "ReconcileSucceeded"
+	EventReasonReconcileFailed     = "ReconcileFailed"
+	EventReasonNodeUnhealthy       = "NodeUnhealthy"
+	EventReasonNodeReplacing       = "NodeReplacing"
+	EventReasonNodeReplaced        = "NodeReplaced"
+	EventReasonQuorumLost          = "QuorumLost"
+	EventReasonScalingUp           = "ScalingUp"
+	EventReasonScalingDown         = "ScalingDown"
+	EventReasonServerCreationError = "ServerCreationError"
+	EventReasonConfigApplyError    = "ConfigApplyError"
+	EventReasonNodeReadyTimeout    = "NodeReadyTimeout"
 )
 
 // ClusterReconciler reconciles a K8znerCluster object.
@@ -554,9 +564,132 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 		}
 	}
 
-	// Step 4: Create new server
-	// TODO: Implement server creation with proper Talos config
-	logger.Info("TODO: Create replacement control plane server")
+	// Step 4: Build cluster state for server creation
+	clusterState, err := r.buildClusterState(ctx, cluster)
+	if err != nil {
+		logger.Error(err, "failed to build cluster state")
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
+			"Failed to build cluster state for control plane replacement: %v", err)
+		return fmt.Errorf("failed to build cluster state: %w", err)
+	}
+
+	// Step 5: Get Talos snapshot for server creation
+	snapshotLabels := map[string]string{"os": "talos"}
+	snapshot, err := r.hcloudClient.GetSnapshotByLabels(ctx, snapshotLabels)
+	if err != nil {
+		logger.Error(err, "failed to get Talos snapshot")
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
+			"Failed to get Talos snapshot: %v", err)
+		return fmt.Errorf("failed to get Talos snapshot: %w", err)
+	}
+	if snapshot == nil {
+		err := fmt.Errorf("no Talos snapshot found with labels %v", snapshotLabels)
+		logger.Error(err, "Talos snapshot not found")
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
+			"Talos snapshot not found for control plane replacement")
+		return err
+	}
+
+	// Step 6: Create new server
+	newServerName := r.generateReplacementServerName(cluster, "control-plane", node.Name)
+	serverLabels := map[string]string{
+		"cluster": cluster.Name,
+		"role":    "control-plane",
+		"pool":    "control-plane",
+	}
+
+	logger.Info("creating replacement control plane server",
+		"name", newServerName,
+		"snapshot", snapshot.ID,
+		"serverType", cluster.Spec.ControlPlanes.Size,
+	)
+
+	startTime := time.Now()
+	_, err = r.hcloudClient.CreateServer(
+		ctx,
+		newServerName,
+		fmt.Sprintf("%d", snapshot.ID), // image ID as string
+		cluster.Spec.ControlPlanes.Size,
+		cluster.Spec.Region,
+		clusterState.SSHKeyIDs,
+		serverLabels,
+		"",  // userData
+		nil, // placementGroupID
+		clusterState.NetworkID,
+		"",   // privateIP - let HCloud assign
+		true, // enablePublicIPv4
+		true, // enablePublicIPv6
+	)
+	if err != nil {
+		if r.enableMetrics {
+			RecordHCloudAPICall("create_server", "error", time.Since(startTime).Seconds())
+		}
+		logger.Error(err, "failed to create replacement control plane server", "name", newServerName)
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
+			"Failed to create replacement control plane server %s: %v", newServerName, err)
+		return fmt.Errorf("failed to create server: %w", err)
+	}
+	if r.enableMetrics {
+		RecordHCloudAPICall("create_server", "success", time.Since(startTime).Seconds())
+	}
+	logger.Info("created replacement control plane server", "name", newServerName)
+
+	// Step 7: Wait for server IP assignment
+	serverIP, err := r.waitForServerIP(ctx, newServerName, serverIPTimeout)
+	if err != nil {
+		logger.Error(err, "failed to get server IP", "name", newServerName)
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
+			"Failed to get IP for replacement control plane server %s: %v", newServerName, err)
+		return fmt.Errorf("failed to get server IP: %w", err)
+	}
+	logger.Info("server IP assigned", "name", newServerName, "ip", serverIP)
+
+	// Step 8: Get server ID for config generation
+	serverIDStr, err := r.hcloudClient.GetServerID(ctx, newServerName)
+	if err != nil {
+		logger.Error(err, "failed to get server ID", "name", newServerName)
+		return fmt.Errorf("failed to get server ID: %w", err)
+	}
+	var serverID int64
+	if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
+		return fmt.Errorf("failed to parse server ID: %w", err)
+	}
+
+	// Step 9: Generate and apply Talos config (if talos clients are available)
+	if r.talosConfigGen != nil && r.talosClient != nil {
+		// Update SANs with new server IP
+		sans := append([]string{}, clusterState.SANs...)
+		sans = append(sans, serverIP)
+
+		config, err := r.talosConfigGen.GenerateControlPlaneConfig(sans, newServerName, serverID)
+		if err != nil {
+			logger.Error(err, "failed to generate control plane config", "name", newServerName)
+			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
+				"Failed to generate config for control plane %s: %v", newServerName, err)
+			return fmt.Errorf("failed to generate config: %w", err)
+		}
+
+		logger.Info("applying Talos config to control plane", "name", newServerName, "ip", serverIP)
+		if err := r.talosClient.ApplyConfig(ctx, serverIP, config); err != nil {
+			logger.Error(err, "failed to apply Talos config", "name", newServerName)
+			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
+				"Failed to apply config to control plane %s: %v", newServerName, err)
+			return fmt.Errorf("failed to apply config: %w", err)
+		}
+
+		// Step 10: Wait for node to become ready
+		logger.Info("waiting for control plane node to become ready", "name", newServerName, "ip", serverIP)
+		if err := r.talosClient.WaitForNodeReady(ctx, serverIP, int(nodeReadyTimeout.Seconds())); err != nil {
+			logger.Error(err, "control plane node failed to become ready", "name", newServerName)
+			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonNodeReadyTimeout,
+				"Control plane %s failed to become ready: %v", newServerName, err)
+			return fmt.Errorf("node failed to become ready: %w", err)
+		}
+
+		logger.Info("control plane node is ready", "name", newServerName)
+	} else {
+		logger.Info("skipping Talos config application (talos clients not configured)")
+	}
 
 	return nil
 }
@@ -609,9 +742,128 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 		}
 	}
 
-	// Step 5: Create new server
-	// TODO: Implement server creation with proper Talos config
-	logger.Info("TODO: Create replacement worker server")
+	// Step 5: Build cluster state for server creation
+	clusterState, err := r.buildClusterState(ctx, cluster)
+	if err != nil {
+		logger.Error(err, "failed to build cluster state")
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
+			"Failed to build cluster state for worker replacement: %v", err)
+		return fmt.Errorf("failed to build cluster state: %w", err)
+	}
+
+	// Step 6: Get Talos snapshot for server creation
+	snapshotLabels := map[string]string{"os": "talos"}
+	snapshot, err := r.hcloudClient.GetSnapshotByLabels(ctx, snapshotLabels)
+	if err != nil {
+		logger.Error(err, "failed to get Talos snapshot")
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
+			"Failed to get Talos snapshot: %v", err)
+		return fmt.Errorf("failed to get Talos snapshot: %w", err)
+	}
+	if snapshot == nil {
+		err := fmt.Errorf("no Talos snapshot found with labels %v", snapshotLabels)
+		logger.Error(err, "Talos snapshot not found")
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
+			"Talos snapshot not found for worker replacement")
+		return err
+	}
+
+	// Step 7: Create new server
+	newServerName := r.generateReplacementServerName(cluster, "worker", node.Name)
+	serverLabels := map[string]string{
+		"cluster": cluster.Name,
+		"role":    "worker",
+		"pool":    "workers",
+	}
+
+	logger.Info("creating replacement worker server",
+		"name", newServerName,
+		"snapshot", snapshot.ID,
+		"serverType", cluster.Spec.Workers.Size,
+	)
+
+	startTime := time.Now()
+	_, err = r.hcloudClient.CreateServer(
+		ctx,
+		newServerName,
+		fmt.Sprintf("%d", snapshot.ID), // image ID as string
+		cluster.Spec.Workers.Size,
+		cluster.Spec.Region,
+		clusterState.SSHKeyIDs,
+		serverLabels,
+		"",  // userData
+		nil, // placementGroupID
+		clusterState.NetworkID,
+		"",   // privateIP - let HCloud assign
+		true, // enablePublicIPv4
+		true, // enablePublicIPv6
+	)
+	if err != nil {
+		if r.enableMetrics {
+			RecordHCloudAPICall("create_server", "error", time.Since(startTime).Seconds())
+		}
+		logger.Error(err, "failed to create replacement worker server", "name", newServerName)
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
+			"Failed to create replacement worker server %s: %v", newServerName, err)
+		return fmt.Errorf("failed to create server: %w", err)
+	}
+	if r.enableMetrics {
+		RecordHCloudAPICall("create_server", "success", time.Since(startTime).Seconds())
+	}
+	logger.Info("created replacement worker server", "name", newServerName)
+
+	// Step 8: Wait for server IP assignment
+	serverIP, err := r.waitForServerIP(ctx, newServerName, serverIPTimeout)
+	if err != nil {
+		logger.Error(err, "failed to get server IP", "name", newServerName)
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
+			"Failed to get IP for replacement worker server %s: %v", newServerName, err)
+		return fmt.Errorf("failed to get server IP: %w", err)
+	}
+	logger.Info("server IP assigned", "name", newServerName, "ip", serverIP)
+
+	// Step 9: Get server ID for config generation
+	serverIDStr, err := r.hcloudClient.GetServerID(ctx, newServerName)
+	if err != nil {
+		logger.Error(err, "failed to get server ID", "name", newServerName)
+		return fmt.Errorf("failed to get server ID: %w", err)
+	}
+	var serverID int64
+	if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
+		return fmt.Errorf("failed to parse server ID: %w", err)
+	}
+
+	// Step 10: Generate and apply Talos config (if talos clients are available)
+	if r.talosConfigGen != nil && r.talosClient != nil {
+		config, err := r.talosConfigGen.GenerateWorkerConfig(newServerName, serverID)
+		if err != nil {
+			logger.Error(err, "failed to generate worker config", "name", newServerName)
+			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
+				"Failed to generate config for worker %s: %v", newServerName, err)
+			return fmt.Errorf("failed to generate config: %w", err)
+		}
+
+		logger.Info("applying Talos config to worker", "name", newServerName, "ip", serverIP)
+		if err := r.talosClient.ApplyConfig(ctx, serverIP, config); err != nil {
+			logger.Error(err, "failed to apply Talos config", "name", newServerName)
+			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
+				"Failed to apply config to worker %s: %v", newServerName, err)
+			return fmt.Errorf("failed to apply config: %w", err)
+		}
+
+		// Step 11: Wait for node to become ready
+		logger.Info("waiting for worker node to become ready", "name", newServerName, "ip", serverIP)
+		if err := r.talosClient.WaitForNodeReady(ctx, serverIP, int(nodeReadyTimeout.Seconds())); err != nil {
+			logger.Error(err, "worker node failed to become ready", "name", newServerName)
+			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonNodeReadyTimeout,
+				"Worker %s failed to become ready: %v", newServerName, err)
+			return fmt.Errorf("node failed to become ready: %w", err)
+		}
+
+		logger.Info("worker node is ready", "name", newServerName)
+	} else {
+		logger.Info("skipping Talos config application (talos clients not configured)")
+	}
 
 	return nil
 }
@@ -672,6 +924,117 @@ func (r *ClusterReconciler) findHealthyControlPlaneIP(cluster *k8znerv1alpha1.K8
 		}
 	}
 	return ""
+}
+
+// buildClusterState extracts cluster metadata needed for server creation.
+func (r *ClusterReconciler) buildClusterState(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (*ClusterState, error) {
+	logger := log.FromContext(ctx)
+
+	state := &ClusterState{
+		Name:   cluster.Name,
+		Region: cluster.Spec.Region,
+		Labels: map[string]string{
+			"cluster": cluster.Name,
+		},
+	}
+
+	// Get network by cluster name convention
+	networkName := fmt.Sprintf("%s-network", cluster.Name)
+	network, err := r.hcloudClient.GetNetwork(ctx, networkName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get network %s: %w", networkName, err)
+	}
+	if network != nil {
+		state.NetworkID = network.ID
+	}
+
+	// Build SANs from existing healthy control plane IPs
+	var sans []string
+	for _, node := range cluster.Status.ControlPlanes.Nodes {
+		if node.PrivateIP != "" {
+			sans = append(sans, node.PrivateIP)
+		}
+		if node.PublicIP != "" {
+			sans = append(sans, node.PublicIP)
+		}
+	}
+	state.SANs = sans
+
+	// Get SSH keys from cluster annotations or use default naming convention
+	if cluster.Annotations != nil {
+		if sshKeys, ok := cluster.Annotations["k8zner.io/ssh-keys"]; ok {
+			state.SSHKeyIDs = strings.Split(sshKeys, ",")
+		}
+	}
+	if len(state.SSHKeyIDs) == 0 {
+		// Use default SSH key naming convention
+		state.SSHKeyIDs = []string{fmt.Sprintf("%s-key", cluster.Name)}
+	}
+
+	// Get control plane endpoint (load balancer IP) from annotations or find healthy CP
+	if cluster.Annotations != nil {
+		if endpoint, ok := cluster.Annotations["k8zner.io/control-plane-endpoint"]; ok {
+			state.ControlPlaneIP = endpoint
+		}
+	}
+	if state.ControlPlaneIP == "" {
+		// Fall back to first healthy control plane IP
+		state.ControlPlaneIP = r.findHealthyControlPlaneIP(cluster)
+	}
+
+	logger.V(1).Info("built cluster state",
+		"networkID", state.NetworkID,
+		"sans", len(state.SANs),
+		"sshKeys", len(state.SSHKeyIDs),
+		"controlPlaneIP", state.ControlPlaneIP,
+	)
+
+	return state, nil
+}
+
+// generateReplacementServerName generates a new server name for a replacement node.
+func (r *ClusterReconciler) generateReplacementServerName(cluster *k8znerv1alpha1.K8znerCluster, role string, oldName string) string {
+	// Extract the pool and index from the old name if possible
+	// Format: {cluster}-{pool}-{index}
+	// If the old name follows the expected pattern, reuse it directly
+	if strings.HasPrefix(oldName, cluster.Name+"-") {
+		parts := strings.Split(oldName, "-")
+		if len(parts) >= 3 {
+			// Check if last part is a number (index)
+			if _, err := strconv.Atoi(parts[len(parts)-1]); err == nil {
+				// Reuse the same name for replacement (same pool and index)
+				return oldName
+			}
+		}
+	}
+
+	// Fallback: generate new name with timestamp suffix
+	timestamp := time.Now().Unix()
+	return fmt.Sprintf("%s-%s-%d", cluster.Name, role, timestamp)
+}
+
+// waitForServerIP waits for a server to have an IP assigned.
+func (r *ClusterReconciler) waitForServerIP(ctx context.Context, serverName string, timeout time.Duration) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(serverIPRetryDelay)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return "", fmt.Errorf("timeout waiting for server IP: %w", ctx.Err())
+		case <-ticker.C:
+			ip, err := r.hcloudClient.GetServerIP(ctx, serverName)
+			if err != nil {
+				continue
+			}
+			if ip != "" {
+				return ip, nil
+			}
+		}
+	}
 }
 
 // updateClusterPhase updates the overall cluster phase based on status.
