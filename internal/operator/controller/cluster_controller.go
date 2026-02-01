@@ -237,13 +237,13 @@ func (r *ClusterReconciler) reconcile(ctx context.Context, cluster *k8znerv1alph
 
 	// Phase 2: Control Plane Reconciliation
 	logger.V(1).Info("running control plane reconciliation")
-	if result, err := r.reconcileControlPlanes(ctx, cluster); err != nil || result.Requeue {
+	if result, err := r.reconcileControlPlanes(ctx, cluster); err != nil || result.Requeue || result.RequeueAfter > 0 {
 		return result, err
 	}
 
 	// Phase 3: Worker Reconciliation
 	logger.V(1).Info("running worker reconciliation")
-	if result, err := r.reconcileWorkers(ctx, cluster); err != nil || result.Requeue {
+	if result, err := r.reconcileWorkers(ctx, cluster); err != nil || result.Requeue || result.RequeueAfter > 0 {
 		return result, err
 	}
 
