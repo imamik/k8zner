@@ -226,6 +226,9 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 func (r *ClusterReconciler) reconcile(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
+	// Always update the cluster phase before returning
+	defer r.updateClusterPhase(cluster)
+
 	// Phase 1: Health Check
 	logger.V(1).Info("running health check phase")
 	if err := r.reconcileHealthCheck(ctx, cluster); err != nil {
@@ -243,9 +246,6 @@ func (r *ClusterReconciler) reconcile(ctx context.Context, cluster *k8znerv1alph
 	if result, err := r.reconcileWorkers(ctx, cluster); err != nil || result.Requeue {
 		return result, err
 	}
-
-	// Update overall phase
-	r.updateClusterPhase(cluster)
 
 	// Requeue for continuous monitoring
 	return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
@@ -495,11 +495,14 @@ func (r *ClusterReconciler) reconcileWorkers(ctx context.Context, cluster *k8zne
 		r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonScalingUp,
 			"Scaling up workers: %d -> %d", currentCount, desiredCount)
 
-		cluster.Status.Phase = k8znerv1alpha1.ClusterPhaseHealing
-		toCreate := desiredCount - currentCount
-		if err := r.scaleUpWorkers(ctx, cluster, toCreate); err != nil {
-			logger.Error(err, "failed to scale up workers")
-			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		// Only attempt scaling if HCloud client is configured
+		if r.hcloudClient != nil {
+			cluster.Status.Phase = k8znerv1alpha1.ClusterPhaseHealing
+			toCreate := desiredCount - currentCount
+			if err := r.scaleUpWorkers(ctx, cluster, toCreate); err != nil {
+				logger.Error(err, "failed to scale up workers")
+				// Continue to allow status update, will retry on next reconcile
+			}
 		}
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	} else if currentCount > desiredCount {
