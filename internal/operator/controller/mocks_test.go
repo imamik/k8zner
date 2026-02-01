@@ -21,10 +21,12 @@ type MockHCloudClient struct {
 	GetSnapshotByLabelsFunc func(ctx context.Context, labels map[string]string) (*hcloudgo.Image, error)
 
 	// Call tracking
-	CreateServerCalls []CreateServerCall
-	DeleteServerCalls []string
-	GetServerIPCalls  []string
-	GetServerIDCalls  []string
+	CreateServerCalls        []CreateServerCall
+	DeleteServerCalls        []string
+	GetServerIPCalls         []string
+	GetServerIDCalls         []string
+	GetNetworkCalls          []string
+	GetSnapshotByLabelsCalls []map[string]string
 }
 
 // CreateServerCall tracks arguments to CreateServer.
@@ -108,6 +110,10 @@ func (m *MockHCloudClient) GetServersByLabel(ctx context.Context, labels map[str
 }
 
 func (m *MockHCloudClient) GetNetwork(ctx context.Context, name string) (*hcloudgo.Network, error) {
+	m.mu.Lock()
+	m.GetNetworkCalls = append(m.GetNetworkCalls, name)
+	m.mu.Unlock()
+
 	if m.GetNetworkFunc != nil {
 		return m.GetNetworkFunc(ctx, name)
 	}
@@ -115,6 +121,15 @@ func (m *MockHCloudClient) GetNetwork(ctx context.Context, name string) (*hcloud
 }
 
 func (m *MockHCloudClient) GetSnapshotByLabels(ctx context.Context, labels map[string]string) (*hcloudgo.Image, error) {
+	m.mu.Lock()
+	// Make a copy of labels for tracking
+	labelsCopy := make(map[string]string, len(labels))
+	for k, v := range labels {
+		labelsCopy[k] = v
+	}
+	m.GetSnapshotByLabelsCalls = append(m.GetSnapshotByLabelsCalls, labelsCopy)
+	m.mu.Unlock()
+
 	if m.GetSnapshotByLabelsFunc != nil {
 		return m.GetSnapshotByLabelsFunc(ctx, labels)
 	}
@@ -136,6 +151,13 @@ type MockTalosClient struct {
 	ApplyConfigCalls      []ApplyConfigCall
 	GetEtcdMembersCalls   []string
 	RemoveEtcdMemberCalls []RemoveEtcdMemberCall
+	WaitForNodeReadyCalls []WaitForNodeReadyCall
+}
+
+// WaitForNodeReadyCall tracks arguments to WaitForNodeReady.
+type WaitForNodeReadyCall struct {
+	NodeIP  string
+	Timeout int
 }
 
 // ApplyConfigCall tracks arguments to ApplyConfig.
@@ -201,6 +223,13 @@ func (m *MockTalosClient) RemoveEtcdMember(ctx context.Context, nodeIP string, m
 }
 
 func (m *MockTalosClient) WaitForNodeReady(ctx context.Context, nodeIP string, timeout int) error {
+	m.mu.Lock()
+	m.WaitForNodeReadyCalls = append(m.WaitForNodeReadyCalls, WaitForNodeReadyCall{
+		NodeIP:  nodeIP,
+		Timeout: timeout,
+	})
+	m.mu.Unlock()
+
 	if m.WaitForNodeReadyFunc != nil {
 		return m.WaitForNodeReadyFunc(ctx, nodeIP, timeout)
 	}
