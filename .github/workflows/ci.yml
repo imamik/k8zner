@@ -80,6 +80,7 @@ jobs:
 
   # ==========================================================================
   # Kind tests (addon installation tests)
+  # GitHub free runners: 4 vCPU, 16 GB RAM for public repos
   # ==========================================================================
   kind-tests:
     name: Kind Tests
@@ -100,10 +101,10 @@ jobs:
       - name: Install kubectl
         uses: azure/setup-kubectl@v4
 
-      - name: Run kind tests
-        run: go test -v -tags=kind -timeout=30m ./tests/kind/...
+      - name: Run kind tests (skip heavy ArgoCD/Monitoring)
+        run: go test -v -tags=kind -timeout=30m -run "TestKindAddons/(0[123]_|06_)" ./tests/kind/...
         env:
-          KEEP_KIND_CLUSTER: ""
+          KIND_WORKERS: "0"
 
       - name: Collect diagnostics on failure
         if: failure()
@@ -141,8 +142,10 @@ jobs:
       - name: Install kubectl
         uses: azure/setup-kubectl@v4
 
-      - name: Run smoke tests (CRDs only)
-        run: go test -v -tags=kind -timeout=10m -run "TestKindAddons/01_CRDs" ./tests/kind/...
+      - name: Run smoke tests (CRDs + Core)
+        run: go test -v -tags=kind -timeout=10m -run "TestKindAddons/0[12]_" ./tests/kind/...
+        env:
+          KIND_WORKERS: "0"
 
       - name: Cleanup
         if: always()

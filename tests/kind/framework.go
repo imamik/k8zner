@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -99,7 +100,16 @@ func (f *Framework) clusterExists() bool {
 }
 
 func (f *Framework) createCluster() error {
-	config := `kind: Cluster
+	// KIND_WORKERS controls number of worker nodes (default: 2, set to 0 for single-node CI)
+	numWorkers := 2
+	if w := os.Getenv("KIND_WORKERS"); w != "" {
+		if n, err := strconv.Atoi(w); err == nil && n >= 0 {
+			numWorkers = n
+		}
+	}
+
+	var config strings.Builder
+	config.WriteString(`kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
 - role: control-plane
@@ -114,16 +124,18 @@ nodes:
     hostPort: 8080
   - containerPort: 443
     hostPort: 8443
-- role: worker
-- role: worker
-`
+`)
+	for i := 0; i < numWorkers; i++ {
+		config.WriteString("- role: worker\n")
+	}
+	configStr := config.String()
 	configFile, err := os.CreateTemp("", "kind-config-*.yaml")
 	if err != nil {
 		return err
 	}
 	defer os.Remove(configFile.Name())
 
-	if _, err := configFile.WriteString(config); err != nil {
+	if _, err := configFile.WriteString(configStr); err != nil {
 		return err
 	}
 	configFile.Close()
