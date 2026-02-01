@@ -259,6 +259,15 @@ func (c *RealClient) GetServerID(ctx context.Context, name string) (string, erro
 	return fmt.Sprintf("%d", server.ID), nil
 }
 
+// GetServerByName returns the full server object by name, or nil if not found.
+func (c *RealClient) GetServerByName(ctx context.Context, name string) (*hcloud.Server, error) {
+	server, _, err := c.client.Server.Get(ctx, name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get server: %w", err)
+	}
+	return server, nil
+}
+
 // GetServersByLabel returns all servers matching the given labels.
 func (c *RealClient) GetServersByLabel(ctx context.Context, labels map[string]string) ([]*hcloud.Server, error) {
 	labelSelector := buildLabelSelector(labels)

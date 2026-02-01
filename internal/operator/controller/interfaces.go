@@ -18,6 +18,7 @@ type HCloudClient interface {
 	DeleteServer(ctx context.Context, name string) error
 	GetServerIP(ctx context.Context, name string) (string, error)
 	GetServerID(ctx context.Context, name string) (string, error)
+	GetServerByName(ctx context.Context, name string) (*hcloudgo.Server, error)
 	GetServersByLabel(ctx context.Context, labels map[string]string) ([]*hcloudgo.Server, error)
 
 	// Network operations

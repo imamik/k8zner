@@ -16,6 +16,7 @@ type MockHCloudClient struct {
 	DeleteServerFunc        func(ctx context.Context, name string) error
 	GetServerIPFunc         func(ctx context.Context, name string) (string, error)
 	GetServerIDFunc         func(ctx context.Context, name string) (string, error)
+	GetServerByNameFunc     func(ctx context.Context, name string) (*hcloudgo.Server, error)
 	GetServersByLabelFunc   func(ctx context.Context, labels map[string]string) ([]*hcloudgo.Server, error)
 	GetNetworkFunc          func(ctx context.Context, name string) (*hcloudgo.Network, error)
 	GetSnapshotByLabelsFunc func(ctx context.Context, labels map[string]string) (*hcloudgo.Image, error)
@@ -25,6 +26,7 @@ type MockHCloudClient struct {
 	DeleteServerCalls        []string
 	GetServerIPCalls         []string
 	GetServerIDCalls         []string
+	GetServerByNameCalls     []string
 	GetNetworkCalls          []string
 	GetSnapshotByLabelsCalls []map[string]string
 }
@@ -100,6 +102,17 @@ func (m *MockHCloudClient) GetServerID(ctx context.Context, name string) (string
 		return m.GetServerIDFunc(ctx, name)
 	}
 	return "12345", nil
+}
+
+func (m *MockHCloudClient) GetServerByName(ctx context.Context, name string) (*hcloudgo.Server, error) {
+	m.mu.Lock()
+	m.GetServerByNameCalls = append(m.GetServerByNameCalls, name)
+	m.mu.Unlock()
+
+	if m.GetServerByNameFunc != nil {
+		return m.GetServerByNameFunc(ctx, name)
+	}
+	return nil, nil // Default: server not found
 }
 
 func (m *MockHCloudClient) GetServersByLabel(ctx context.Context, labels map[string]string) ([]*hcloudgo.Server, error) {

@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	hcloudgo "github.com/hetznercloud/hcloud-go/v2/hcloud"
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	configv2 "github.com/imamik/k8zner/internal/config/v2"
 	"github.com/imamik/k8zner/internal/platform/hcloud"
@@ -565,16 +566,42 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 		workerIndex := nextIndex + i
 		newServerName := fmt.Sprintf("%s-workers-%d", cluster.Name, workerIndex)
 
-		// Check if a server with this name already exists (e.g., powered off but not deleted)
-		// If so, delete it first to avoid "server name already used" error
-		if existingServerID, err := r.hcloudClient.GetServerID(ctx, newServerName); err == nil && existingServerID != "" {
-			logger.Info("deleting existing server with same name before creating new one",
-				"name", newServerName,
-				"serverID", existingServerID,
-			)
-			if err := r.hcloudClient.DeleteServer(ctx, newServerName); err != nil {
-				logger.Error(err, "failed to delete existing server", "name", newServerName)
-				// Continue anyway - will fail on create if server still exists
+		// Check if a server with this name already exists
+		existingServer, err := r.hcloudClient.GetServerByName(ctx, newServerName)
+		if err != nil {
+			logger.Error(err, "failed to check for existing server", "name", newServerName)
+			// Continue with creation attempt
+		} else if existingServer != nil {
+			// Server exists - check its status
+			switch existingServer.Status {
+			case hcloudgo.ServerStatusRunning, hcloudgo.ServerStatusInitializing, hcloudgo.ServerStatusStarting:
+				// Server is running/starting - wait for it to join Kubernetes cluster
+				// Skip creating a new one (it will join soon)
+				logger.Info("server already exists and is running/initializing, waiting for it to join Kubernetes",
+					"name", newServerName,
+					"serverID", existingServer.ID,
+					"status", existingServer.Status,
+				)
+				created++ // Count as created so we don't try another index
+				continue
+			case hcloudgo.ServerStatusOff:
+				// Server is powered off (e.g., simulated failure) - delete it before creating new one
+				logger.Info("deleting powered-off server before creating new one",
+					"name", newServerName,
+					"serverID", existingServer.ID,
+				)
+				if err := r.hcloudClient.DeleteServer(ctx, newServerName); err != nil {
+					logger.Error(err, "failed to delete powered-off server", "name", newServerName)
+					// Continue anyway - will fail on create if server still exists
+				}
+			default:
+				// Other states (stopping, migrating, etc.) - wait
+				logger.Info("server exists in transitional state, will retry later",
+					"name", newServerName,
+					"serverID", existingServer.ID,
+					"status", existingServer.Status,
+				)
+				continue
 			}
 		}
 
