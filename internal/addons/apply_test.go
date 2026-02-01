@@ -118,7 +118,7 @@ func TestValidateAddonConfig(t *testing.T) {
 					CCM: config.CCMConfig{Enabled: true},
 				},
 			},
-			wantErr: "ccm/csi addons require hcloud_token",
+			wantErr: "ccm/csi/operator addons require hcloud_token",
 		},
 		{
 			name: "CCM enabled with token",
