@@ -768,7 +768,7 @@ func TestSelfHealingControlPlaneReplacement(t *testing.T) {
 		// Verify new server was created
 		assert.Len(t, mockHCloud.CreateServerCalls, 1)
 		createCall := mockHCloud.CreateServerCalls[0]
-		assert.Equal(t, "cx22", createCall.ServerType)
+		assert.Equal(t, "cx23", createCall.ServerType) // cx22 normalized to cx23
 		assert.Equal(t, "nbg1", createCall.Location)
 		assert.Equal(t, "control-plane", createCall.Labels["role"])
 
@@ -1002,7 +1002,7 @@ func TestSelfHealingWorkerReplacement(t *testing.T) {
 		// Verify new server was created with correct type
 		assert.Len(t, mockHCloud.CreateServerCalls, 1)
 		createCall := mockHCloud.CreateServerCalls[0]
-		assert.Equal(t, "cx32", createCall.ServerType) // Worker size
+		assert.Equal(t, "cx33", createCall.ServerType) // Worker size (cx32 normalized to cx33)
 		assert.Equal(t, "nbg1", createCall.Location)
 		assert.Equal(t, "worker", createCall.Labels["role"])
 		assert.Equal(t, "workers", createCall.Labels["pool"])
@@ -1265,7 +1265,7 @@ func TestScaleUpWorkers(t *testing.T) {
 
 		// Verify first server has correct naming (index 2, since 1 exists)
 		assert.Equal(t, "test-cluster-workers-2", mockHCloud.CreateServerCalls[0].Name)
-		assert.Equal(t, "cx22", mockHCloud.CreateServerCalls[0].ServerType)
+		assert.Equal(t, "cx23", mockHCloud.CreateServerCalls[0].ServerType) // cx22 normalized to cx23
 		assert.Equal(t, "nbg1", mockHCloud.CreateServerCalls[0].Location)
 		assert.Equal(t, "worker", mockHCloud.CreateServerCalls[0].Labels["role"])
 
