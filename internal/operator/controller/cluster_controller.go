@@ -494,7 +494,14 @@ func (r *ClusterReconciler) reconcileWorkers(ctx context.Context, cluster *k8zne
 		logger.Info("scaling up workers", "current", currentCount, "desired", desiredCount)
 		r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonScalingUp,
 			"Scaling up workers: %d -> %d", currentCount, desiredCount)
-		// TODO: Create new workers
+
+		cluster.Status.Phase = k8znerv1alpha1.ClusterPhaseHealing
+		toCreate := desiredCount - currentCount
+		if err := r.scaleUpWorkers(ctx, cluster, toCreate); err != nil {
+			logger.Error(err, "failed to scale up workers")
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		}
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	} else if currentCount > desiredCount {
 		logger.Info("scaling down workers", "current", currentCount, "desired", desiredCount)
 		r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonScalingDown,
@@ -507,6 +514,177 @@ func (r *ClusterReconciler) reconcileWorkers(ctx context.Context, cluster *k8zne
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// scaleUpWorkers creates new worker nodes to reach the desired count.
+func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, count int) error {
+	logger := log.FromContext(ctx)
+
+	// Step 1: Build cluster state for server creation
+	clusterState, err := r.buildClusterState(ctx, cluster)
+	if err != nil {
+		logger.Error(err, "failed to build cluster state")
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
+			"Failed to build cluster state for worker scaling: %v", err)
+		return fmt.Errorf("failed to build cluster state: %w", err)
+	}
+
+	// Step 2: Get Talos snapshot for server creation
+	snapshotLabels := map[string]string{"os": "talos"}
+	snapshot, err := r.hcloudClient.GetSnapshotByLabels(ctx, snapshotLabels)
+	if err != nil {
+		logger.Error(err, "failed to get Talos snapshot")
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
+			"Failed to get Talos snapshot: %v", err)
+		return fmt.Errorf("failed to get Talos snapshot: %w", err)
+	}
+	if snapshot == nil {
+		err := fmt.Errorf("no Talos snapshot found with labels %v", snapshotLabels)
+		logger.Error(err, "Talos snapshot not found")
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
+			"Talos snapshot not found for worker scaling")
+		return err
+	}
+
+	// Step 3: Find the next available worker index
+	nextIndex := r.findNextWorkerIndex(cluster)
+
+	// Step 4: Create workers (respect maxConcurrentHeals)
+	created := 0
+	for i := 0; i < count && created < r.maxConcurrentHeals; i++ {
+		workerIndex := nextIndex + i
+		newServerName := fmt.Sprintf("%s-workers-%d", cluster.Name, workerIndex)
+
+		serverLabels := map[string]string{
+			"cluster": cluster.Name,
+			"role":    "worker",
+			"pool":    "workers",
+		}
+
+		logger.Info("creating new worker server",
+			"name", newServerName,
+			"snapshot", snapshot.ID,
+			"serverType", cluster.Spec.Workers.Size,
+			"index", workerIndex,
+		)
+
+		startTime := time.Now()
+		_, err = r.hcloudClient.CreateServer(
+			ctx,
+			newServerName,
+			fmt.Sprintf("%d", snapshot.ID),
+			cluster.Spec.Workers.Size,
+			cluster.Spec.Region,
+			clusterState.SSHKeyIDs,
+			serverLabels,
+			"",  // userData
+			nil, // placementGroupID
+			clusterState.NetworkID,
+			"",   // privateIP - let HCloud assign
+			true, // enablePublicIPv4
+			true, // enablePublicIPv6
+		)
+		if err != nil {
+			if r.enableMetrics {
+				RecordHCloudAPICall("create_server", "error", time.Since(startTime).Seconds())
+			}
+			logger.Error(err, "failed to create worker server", "name", newServerName)
+			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
+				"Failed to create worker server %s: %v", newServerName, err)
+			// Continue trying to create remaining workers
+			continue
+		}
+		if r.enableMetrics {
+			RecordHCloudAPICall("create_server", "success", time.Since(startTime).Seconds())
+		}
+		logger.Info("created worker server", "name", newServerName)
+
+		// Step 5: Wait for server IP assignment
+		serverIP, err := r.waitForServerIP(ctx, newServerName, serverIPTimeout)
+		if err != nil {
+			logger.Error(err, "failed to get server IP", "name", newServerName)
+			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
+				"Failed to get IP for worker server %s: %v", newServerName, err)
+			continue
+		}
+		logger.Info("server IP assigned", "name", newServerName, "ip", serverIP)
+
+		// Step 6: Get server ID for config generation
+		serverIDStr, err := r.hcloudClient.GetServerID(ctx, newServerName)
+		if err != nil {
+			logger.Error(err, "failed to get server ID", "name", newServerName)
+			continue
+		}
+		var serverID int64
+		if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
+			logger.Error(err, "failed to parse server ID", "name", newServerName)
+			continue
+		}
+
+		// Step 7: Generate and apply Talos config (if talos clients are available)
+		if r.talosConfigGen != nil && r.talosClient != nil {
+			config, err := r.talosConfigGen.GenerateWorkerConfig(newServerName, serverID)
+			if err != nil {
+				logger.Error(err, "failed to generate worker config", "name", newServerName)
+				r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
+					"Failed to generate config for worker %s: %v", newServerName, err)
+				continue
+			}
+
+			logger.Info("applying Talos config to worker", "name", newServerName, "ip", serverIP)
+			if err := r.talosClient.ApplyConfig(ctx, serverIP, config); err != nil {
+				logger.Error(err, "failed to apply Talos config", "name", newServerName)
+				r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
+					"Failed to apply config to worker %s: %v", newServerName, err)
+				continue
+			}
+
+			// Step 8: Wait for node to be ready
+			logger.Info("waiting for worker node to become ready", "name", newServerName)
+			if err := r.talosClient.WaitForNodeReady(ctx, serverIP, int(nodeReadyTimeout.Seconds())); err != nil {
+				logger.Error(err, "worker node not ready in time", "name", newServerName)
+				r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonNodeReadyTimeout,
+					"Worker node %s not ready in time: %v", newServerName, err)
+				continue
+			}
+		}
+
+		r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonScalingUp,
+			"Successfully created worker %s", newServerName)
+		created++
+
+		if r.enableMetrics {
+			RecordNodeReplacement(cluster.Name, "worker", "scale-up")
+			RecordNodeReplacementDuration(cluster.Name, "worker", time.Since(startTime).Seconds())
+		}
+	}
+
+	if created < count {
+		return fmt.Errorf("only created %d of %d requested workers", created, count)
+	}
+
+	return nil
+}
+
+// findNextWorkerIndex finds the next available worker index for the cluster.
+func (r *ClusterReconciler) findNextWorkerIndex(cluster *k8znerv1alpha1.K8znerCluster) int {
+	maxIndex := 0
+	for _, node := range cluster.Status.Workers.Nodes {
+		// Extract index from name like "{cluster}-workers-{index}"
+		parts := strings.Split(node.Name, "-")
+		if len(parts) >= 1 {
+			if idx, err := strconv.Atoi(parts[len(parts)-1]); err == nil {
+				if idx >= maxIndex {
+					maxIndex = idx + 1
+				}
+			}
+		}
+	}
+	// If no workers exist, start at 1
+	if maxIndex == 0 {
+		maxIndex = 1
+	}
+	return maxIndex
 }
 
 // replaceControlPlane replaces an unhealthy control plane node.
