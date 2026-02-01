@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	configv2 "github.com/imamik/k8zner/internal/config/v2"
 	"github.com/imamik/k8zner/internal/platform/hcloud"
 )
 
@@ -54,6 +55,12 @@ const (
 	EventReasonConfigApplyError    = "ConfigApplyError"
 	EventReasonNodeReadyTimeout    = "NodeReadyTimeout"
 )
+
+// normalizeServerSize converts legacy server type names to current Hetzner names.
+// For example, cx22 → cx23 (Hetzner renamed types in 2024).
+func normalizeServerSize(size string) string {
+	return string(configv2.ServerSize(size).Normalize())
+}
 
 // ClusterReconciler reconciles a K8znerCluster object.
 type ClusterReconciler struct {
@@ -564,10 +571,11 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 			"pool":    "workers",
 		}
 
+		serverType := normalizeServerSize(cluster.Spec.Workers.Size)
 		logger.Info("creating new worker server",
 			"name", newServerName,
 			"snapshot", snapshot.ID,
-			"serverType", cluster.Spec.Workers.Size,
+			"serverType", serverType,
 			"index", workerIndex,
 		)
 
@@ -576,7 +584,7 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 			ctx,
 			newServerName,
 			fmt.Sprintf("%d", snapshot.ID),
-			cluster.Spec.Workers.Size,
+			serverType,
 			cluster.Spec.Region,
 			clusterState.SSHKeyIDs,
 			serverLabels,
@@ -779,10 +787,11 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 		"pool":    "control-plane",
 	}
 
+	serverType := normalizeServerSize(cluster.Spec.ControlPlanes.Size)
 	logger.Info("creating replacement control plane server",
 		"name", newServerName,
 		"snapshot", snapshot.ID,
-		"serverType", cluster.Spec.ControlPlanes.Size,
+		"serverType", serverType,
 	)
 
 	startTime := time.Now()
@@ -790,7 +799,7 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 		ctx,
 		newServerName,
 		fmt.Sprintf("%d", snapshot.ID), // image ID as string
-		cluster.Spec.ControlPlanes.Size,
+		serverType,
 		cluster.Spec.Region,
 		clusterState.SSHKeyIDs,
 		serverLabels,
@@ -957,10 +966,11 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 		"pool":    "workers",
 	}
 
+	serverType := normalizeServerSize(cluster.Spec.Workers.Size)
 	logger.Info("creating replacement worker server",
 		"name", newServerName,
 		"snapshot", snapshot.ID,
-		"serverType", cluster.Spec.Workers.Size,
+		"serverType", serverType,
 	)
 
 	startTime := time.Now()
@@ -968,7 +978,7 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 		ctx,
 		newServerName,
 		fmt.Sprintf("%d", snapshot.ID), // image ID as string
-		cluster.Spec.Workers.Size,
+		serverType,
 		cluster.Spec.Region,
 		clusterState.SSHKeyIDs,
 		serverLabels,
