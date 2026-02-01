@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	hcloudgo "github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -1192,5 +1193,333 @@ func TestGenerateReplacementServerName(t *testing.T) {
 	t.Run("generates new name with timestamp for invalid old name", func(t *testing.T) {
 		name := r.generateReplacementServerName(cluster, "worker", "invalid-name")
 		assert.Contains(t, name, "my-cluster-worker-")
+	})
+}
+
+// TestScaleUpWorkers tests the worker scale up functionality.
+func TestScaleUpWorkers(t *testing.T) {
+	scheme := setupTestScheme(t)
+
+	t.Run("creates new workers successfully", func(t *testing.T) {
+		cluster := &k8znerv1alpha1.K8znerCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-cluster",
+				Namespace: "default",
+			},
+			Spec: k8znerv1alpha1.K8znerClusterSpec{
+				Region: "nbg1",
+				Workers: k8znerv1alpha1.WorkerSpec{
+					Count: 3,
+					Size:  "cx22",
+				},
+			},
+			Status: k8znerv1alpha1.K8znerClusterStatus{
+				Workers: k8znerv1alpha1.NodeGroupStatus{
+					Desired: 3,
+					Ready:   1,
+					Nodes: []k8znerv1alpha1.NodeStatus{
+						{Name: "test-cluster-workers-1", Healthy: true},
+					},
+				},
+			},
+		}
+
+		client := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(cluster).
+			WithStatusSubresource(cluster).
+			Build()
+		recorder := record.NewFakeRecorder(20)
+
+		mockHCloud := &MockHCloudClient{
+			GetNetworkFunc: func(ctx context.Context, name string) (*hcloudgo.Network, error) {
+				return &hcloudgo.Network{ID: 123}, nil
+			},
+			GetSnapshotByLabelsFunc: func(ctx context.Context, labels map[string]string) (*hcloudgo.Image, error) {
+				return &hcloudgo.Image{ID: 456}, nil
+			},
+			GetServerIPFunc: func(ctx context.Context, name string) (string, error) {
+				return "10.0.0.12", nil
+			},
+			GetServerIDFunc: func(ctx context.Context, name string) (string, error) {
+				return "12345", nil
+			},
+		}
+
+		mockTalos := &MockTalosClient{}
+		mockTalosGen := &MockTalosConfigGenerator{}
+
+		r := NewClusterReconciler(client, scheme, recorder,
+			WithHCloudClient(mockHCloud),
+			WithTalosClient(mockTalos),
+			WithTalosConfigGenerator(mockTalosGen),
+			WithMaxConcurrentHeals(5),
+			WithMetrics(false),
+		)
+
+		err := r.scaleUpWorkers(context.Background(), cluster, 2)
+		require.NoError(t, err)
+
+		// Verify two servers were created
+		assert.Len(t, mockHCloud.CreateServerCalls, 2)
+
+		// Verify first server has correct naming (index 2, since 1 exists)
+		assert.Equal(t, "test-cluster-workers-2", mockHCloud.CreateServerCalls[0].Name)
+		assert.Equal(t, "cx22", mockHCloud.CreateServerCalls[0].ServerType)
+		assert.Equal(t, "nbg1", mockHCloud.CreateServerCalls[0].Location)
+		assert.Equal(t, "worker", mockHCloud.CreateServerCalls[0].Labels["role"])
+
+		// Verify second server has correct naming (index 3)
+		assert.Equal(t, "test-cluster-workers-3", mockHCloud.CreateServerCalls[1].Name)
+
+		// Verify talos configs were generated
+		assert.Len(t, mockTalosGen.GenerateWorkerConfigCalls, 2)
+
+		// Verify configs were applied
+		assert.Len(t, mockTalos.ApplyConfigCalls, 2)
+
+		// Verify wait for node ready was called
+		assert.Len(t, mockTalos.WaitForNodeReadyCalls, 2)
+	})
+
+	t.Run("respects maxConcurrentHeals limit", func(t *testing.T) {
+		cluster := &k8znerv1alpha1.K8znerCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-cluster",
+				Namespace: "default",
+			},
+			Spec: k8znerv1alpha1.K8znerClusterSpec{
+				Region: "nbg1",
+				Workers: k8znerv1alpha1.WorkerSpec{
+					Count: 5,
+					Size:  "cx22",
+				},
+			},
+			Status: k8znerv1alpha1.K8znerClusterStatus{
+				Workers: k8znerv1alpha1.NodeGroupStatus{
+					Desired: 5,
+					Ready:   0,
+					Nodes:   []k8znerv1alpha1.NodeStatus{},
+				},
+			},
+		}
+
+		client := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(cluster).
+			WithStatusSubresource(cluster).
+			Build()
+		recorder := record.NewFakeRecorder(20)
+
+		mockHCloud := &MockHCloudClient{
+			GetNetworkFunc: func(ctx context.Context, name string) (*hcloudgo.Network, error) {
+				return &hcloudgo.Network{ID: 123}, nil
+			},
+			GetSnapshotByLabelsFunc: func(ctx context.Context, labels map[string]string) (*hcloudgo.Image, error) {
+				return &hcloudgo.Image{ID: 456}, nil
+			},
+			GetServerIPFunc: func(ctx context.Context, name string) (string, error) {
+				return "10.0.0.12", nil
+			},
+			GetServerIDFunc: func(ctx context.Context, name string) (string, error) {
+				return "12345", nil
+			},
+		}
+
+		// maxConcurrentHeals defaults to 1
+		r := NewClusterReconciler(client, scheme, recorder,
+			WithHCloudClient(mockHCloud),
+			WithMetrics(false),
+		)
+
+		// Request 5 workers but only 1 should be created due to maxConcurrentHeals
+		err := r.scaleUpWorkers(context.Background(), cluster, 5)
+		// Should return error since we created less than requested
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "only created 1 of 5")
+
+		// Only one server should be created
+		assert.Len(t, mockHCloud.CreateServerCalls, 1)
+	})
+
+	t.Run("handles missing snapshot", func(t *testing.T) {
+		cluster := &k8znerv1alpha1.K8znerCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-cluster",
+				Namespace: "default",
+			},
+			Spec: k8znerv1alpha1.K8znerClusterSpec{
+				Region: "nbg1",
+				Workers: k8znerv1alpha1.WorkerSpec{
+					Count: 2,
+					Size:  "cx22",
+				},
+			},
+		}
+
+		client := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(cluster).
+			WithStatusSubresource(cluster).
+			Build()
+		recorder := record.NewFakeRecorder(20)
+
+		mockHCloud := &MockHCloudClient{
+			GetNetworkFunc: func(ctx context.Context, name string) (*hcloudgo.Network, error) {
+				return &hcloudgo.Network{ID: 123}, nil
+			},
+			GetSnapshotByLabelsFunc: func(ctx context.Context, labels map[string]string) (*hcloudgo.Image, error) {
+				return nil, nil // No snapshot found
+			},
+		}
+
+		r := NewClusterReconciler(client, scheme, recorder,
+			WithHCloudClient(mockHCloud),
+			WithMetrics(false),
+		)
+
+		err := r.scaleUpWorkers(context.Background(), cluster, 1)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "no Talos snapshot found")
+
+		// No servers should be created
+		assert.Len(t, mockHCloud.CreateServerCalls, 0)
+	})
+
+	t.Run("works without talos clients", func(t *testing.T) {
+		cluster := &k8znerv1alpha1.K8znerCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-cluster",
+				Namespace: "default",
+			},
+			Spec: k8znerv1alpha1.K8znerClusterSpec{
+				Region: "nbg1",
+				Workers: k8znerv1alpha1.WorkerSpec{
+					Count: 2,
+					Size:  "cx22",
+				},
+			},
+			Status: k8znerv1alpha1.K8znerClusterStatus{
+				Workers: k8znerv1alpha1.NodeGroupStatus{
+					Desired: 2,
+					Ready:   0,
+					Nodes:   []k8znerv1alpha1.NodeStatus{},
+				},
+			},
+		}
+
+		client := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(cluster).
+			WithStatusSubresource(cluster).
+			Build()
+		recorder := record.NewFakeRecorder(20)
+
+		mockHCloud := &MockHCloudClient{
+			GetNetworkFunc: func(ctx context.Context, name string) (*hcloudgo.Network, error) {
+				return &hcloudgo.Network{ID: 123}, nil
+			},
+			GetSnapshotByLabelsFunc: func(ctx context.Context, labels map[string]string) (*hcloudgo.Image, error) {
+				return &hcloudgo.Image{ID: 456}, nil
+			},
+			GetServerIPFunc: func(ctx context.Context, name string) (string, error) {
+				return "10.0.0.12", nil
+			},
+			GetServerIDFunc: func(ctx context.Context, name string) (string, error) {
+				return "12345", nil
+			},
+		}
+
+		// No talos clients
+		r := NewClusterReconciler(client, scheme, recorder,
+			WithHCloudClient(mockHCloud),
+			WithMaxConcurrentHeals(5),
+			WithMetrics(false),
+		)
+
+		err := r.scaleUpWorkers(context.Background(), cluster, 2)
+		require.NoError(t, err)
+
+		// Servers should still be created
+		assert.Len(t, mockHCloud.CreateServerCalls, 2)
+	})
+}
+
+// TestFindNextWorkerIndex tests the worker index finding logic.
+func TestFindNextWorkerIndex(t *testing.T) {
+	scheme := setupTestScheme(t)
+
+	t.Run("returns 1 for empty worker list", func(t *testing.T) {
+		cluster := &k8znerv1alpha1.K8znerCluster{
+			Status: k8znerv1alpha1.K8znerClusterStatus{
+				Workers: k8znerv1alpha1.NodeGroupStatus{
+					Nodes: []k8znerv1alpha1.NodeStatus{},
+				},
+			},
+		}
+
+		client := fake.NewClientBuilder().WithScheme(scheme).Build()
+		r := NewClusterReconciler(client, scheme, nil)
+
+		idx := r.findNextWorkerIndex(cluster)
+		assert.Equal(t, 1, idx)
+	})
+
+	t.Run("finds next index after existing workers", func(t *testing.T) {
+		cluster := &k8znerv1alpha1.K8znerCluster{
+			Status: k8znerv1alpha1.K8znerClusterStatus{
+				Workers: k8znerv1alpha1.NodeGroupStatus{
+					Nodes: []k8znerv1alpha1.NodeStatus{
+						{Name: "cluster-workers-1"},
+						{Name: "cluster-workers-2"},
+						{Name: "cluster-workers-3"},
+					},
+				},
+			},
+		}
+
+		client := fake.NewClientBuilder().WithScheme(scheme).Build()
+		r := NewClusterReconciler(client, scheme, nil)
+
+		idx := r.findNextWorkerIndex(cluster)
+		assert.Equal(t, 4, idx)
+	})
+
+	t.Run("handles gaps in worker indices", func(t *testing.T) {
+		cluster := &k8znerv1alpha1.K8znerCluster{
+			Status: k8znerv1alpha1.K8znerClusterStatus{
+				Workers: k8znerv1alpha1.NodeGroupStatus{
+					Nodes: []k8znerv1alpha1.NodeStatus{
+						{Name: "cluster-workers-1"},
+						{Name: "cluster-workers-5"}, // Gap: 2, 3, 4 missing
+					},
+				},
+			},
+		}
+
+		client := fake.NewClientBuilder().WithScheme(scheme).Build()
+		r := NewClusterReconciler(client, scheme, nil)
+
+		idx := r.findNextWorkerIndex(cluster)
+		assert.Equal(t, 6, idx) // Should be max+1
+	})
+
+	t.Run("handles non-numeric suffix", func(t *testing.T) {
+		cluster := &k8znerv1alpha1.K8znerCluster{
+			Status: k8znerv1alpha1.K8znerClusterStatus{
+				Workers: k8znerv1alpha1.NodeGroupStatus{
+					Nodes: []k8znerv1alpha1.NodeStatus{
+						{Name: "cluster-workers-abc"}, // Non-numeric
+						{Name: "cluster-workers-2"},
+					},
+				},
+			},
+		}
+
+		client := fake.NewClientBuilder().WithScheme(scheme).Build()
+		r := NewClusterReconciler(client, scheme, nil)
+
+		idx := r.findNextWorkerIndex(cluster)
+		assert.Equal(t, 3, idx)
 	})
 }
