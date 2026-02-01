@@ -167,10 +167,10 @@ func buildOperatorValues(cfg *config.Config) helm.Values {
 				"memory": "128Mi",
 			},
 		},
-		// Override nodeSelector to allow scheduling on any node
-		// Talos nodes may not have the control-plane label set
-		"nodeSelector": helm.Values{},
-		"tolerations":  []interface{}{},
+		// Use chart defaults for nodeSelector and tolerations:
+		// - nodeSelector: node-role.kubernetes.io/control-plane: ""
+		// - tolerations: control-plane NoSchedule taint
+		// Talos control plane nodes have both the label and taint
 	}
 
 	// Enable ServiceMonitor if monitoring is enabled
