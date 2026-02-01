@@ -70,14 +70,14 @@ func (f *Framework) Teardown() {
 	}
 
 	if f.kubeconfigPath != "" {
-		os.Remove(f.kubeconfigPath)
+		_ = os.Remove(f.kubeconfigPath)
 	}
 
 	if f.clusterReady {
 		fmt.Printf("Deleting kind cluster: %s\n", clusterName)
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
-		exec.CommandContext(ctx, "kind", "delete", "cluster", "--name", clusterName).Run()
+		_ = exec.CommandContext(ctx, "kind", "delete", "cluster", "--name", clusterName).Run()
 	}
 }
 
@@ -133,16 +133,19 @@ nodes:
 	if err != nil {
 		return err
 	}
-	defer os.Remove(configFile.Name())
+	defer func() { _ = os.Remove(configFile.Name()) }()
 
 	if _, err := configFile.WriteString(configStr); err != nil {
 		return err
 	}
-	configFile.Close()
+	if err := configFile.Close(); err != nil {
+		return err
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
+	// #nosec G204 -- test code with controlled command arguments
 	cmd := exec.CommandContext(ctx, "kind", "create", "cluster",
 		"--name", clusterName,
 		"--config", configFile.Name(),
@@ -167,7 +170,9 @@ func (f *Framework) loadKubeconfig() error {
 	if _, err := kubeconfigFile.Write(output); err != nil {
 		return err
 	}
-	kubeconfigFile.Close()
+	if err := kubeconfigFile.Close(); err != nil {
+		return err
+	}
 	f.kubeconfigPath = kubeconfigFile.Name()
 	return nil
 }
