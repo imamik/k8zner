@@ -1,0 +1,202 @@
+name: CI
+
+on:
+  push:
+    branches: [main, feat/*]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: '1.25'
+
+jobs:
+  # ==========================================================================
+  # Fast checks (run first, fail fast)
+  # ==========================================================================
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Install golangci-lint v2 from source
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+
+      - name: Run golangci-lint
+        run: golangci-lint run --timeout=5m
+
+  # ==========================================================================
+  # Unit tests (fast, no external dependencies)
+  # ==========================================================================
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run unit tests
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.out
+          fail_ci_if_error: false
+
+  # ==========================================================================
+  # Integration tests with envtest (controller tests)
+  # ==========================================================================
+  integration-tests:
+    name: Integration Tests (envtest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Install setup-envtest
+        run: go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+
+      - name: Run integration tests
+        run: |
+          export KUBEBUILDER_ASSETS="$(setup-envtest use -p path)"
+          go test -v -race -tags=integration ./internal/operator/controller/...
+
+  # ==========================================================================
+  # Kind tests (addon installation tests)
+  # GitHub free runners: 4 vCPU, 16 GB RAM for public repos
+  # ==========================================================================
+  kind-tests:
+    name: Kind Tests
+    runs-on: ubuntu-latest
+    # Only run on main branch or if explicitly requested
+    if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'run-kind-tests')
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Install kind
+        run: go install sigs.k8s.io/kind@latest
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Run kind tests (skip heavy ArgoCD/Monitoring)
+        run: go test -v -tags=kind -timeout=30m -run "TestKindAddons/(0[123]_|06_)" ./tests/kind/...
+        env:
+          KIND_WORKERS: "0"
+
+      - name: Collect diagnostics on failure
+        if: failure()
+        run: |
+          echo "=== Cluster Info ==="
+          kind get clusters || true
+          echo "=== Nodes ==="
+          kubectl get nodes -o wide 2>/dev/null || true
+          echo "=== All Pods ==="
+          kubectl get pods -A 2>/dev/null || true
+          echo "=== Events ==="
+          kubectl get events -A --sort-by=.lastTimestamp 2>/dev/null | tail -50 || true
+
+      - name: Cleanup kind cluster
+        if: always()
+        run: kind delete cluster --name k8zner-test 2>/dev/null || true
+
+  # ==========================================================================
+  # Kind smoke tests (quick validation for PRs)
+  # ==========================================================================
+  kind-smoke:
+    name: Kind Smoke Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Install kind
+        run: go install sigs.k8s.io/kind@latest
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Run smoke tests (CRDs + Core)
+        run: go test -v -tags=kind -timeout=10m -run "TestKindAddons/0[12]_" ./tests/kind/...
+        env:
+          KIND_WORKERS: "0"
+
+      - name: Cleanup
+        if: always()
+        run: kind delete cluster --name k8zner-test 2>/dev/null || true
+
+  # ==========================================================================
+  # Build verification
+  # ==========================================================================
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, darwin]
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Build
+        run: |
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o k8zner-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/k8zner
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: k8zner-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: k8zner-${{ matrix.goos }}-${{ matrix.goarch }}
+
+  # ==========================================================================
+  # Security scanning
+  # ==========================================================================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

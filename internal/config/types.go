@@ -509,6 +509,7 @@ type AddonsConfig struct {
 	TalosBackup            TalosBackupConfig            `mapstructure:"talos_backup" yaml:"talos_backup"`
 	GatewayAPICRDs         GatewayAPICRDsConfig         `mapstructure:"gateway_api_crds" yaml:"gateway_api_crds"`
 	PrometheusOperatorCRDs PrometheusOperatorCRDsConfig `mapstructure:"prometheus_operator_crds" yaml:"prometheus_operator_crds"`
+	KubePrometheusStack    KubePrometheusStackConfig    `mapstructure:"kube_prometheus_stack" yaml:"kube_prometheus_stack"`
 	TalosCCM               TalosCCMConfig               `mapstructure:"talos_ccm" yaml:"talos_ccm"`
 	Cloudflare             CloudflareConfig             `mapstructure:"cloudflare" yaml:"cloudflare"`
 	ExternalDNS            ExternalDNSConfig            `mapstructure:"external_dns" yaml:"external_dns"`
@@ -989,6 +990,146 @@ type PrometheusOperatorCRDsConfig struct {
 	// Version specifies the Prometheus Operator CRDs version.
 	// Default: "v0.87.1"
 	Version string `mapstructure:"version" yaml:"version"`
+}
+
+// KubePrometheusStackConfig defines the kube-prometheus-stack configuration.
+// This deploys a full monitoring stack including Prometheus, Grafana, and Alertmanager.
+// See: https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack
+type KubePrometheusStackConfig struct {
+	// Enabled enables the kube-prometheus-stack deployment.
+	// Default: false
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Helm allows customizing the Helm chart repository, version, and values.
+	Helm HelmChartConfig `mapstructure:"helm" yaml:"helm"`
+
+	// Grafana configuration
+	Grafana KubePrometheusGrafanaConfig `mapstructure:"grafana" yaml:"grafana"`
+
+	// Prometheus configuration
+	Prometheus KubePrometheusPrometheusConfig `mapstructure:"prometheus" yaml:"prometheus"`
+
+	// Alertmanager configuration
+	Alertmanager KubePrometheusAlertmanagerConfig `mapstructure:"alertmanager" yaml:"alertmanager"`
+
+	// DefaultRules enables the default PrometheusRule resources.
+	// Default: true
+	DefaultRules *bool `mapstructure:"default_rules" yaml:"default_rules"`
+
+	// NodeExporter enables the node-exporter DaemonSet.
+	// Default: true
+	NodeExporter *bool `mapstructure:"node_exporter" yaml:"node_exporter"`
+
+	// KubeStateMetrics enables the kube-state-metrics deployment.
+	// Default: true
+	KubeStateMetrics *bool `mapstructure:"kube_state_metrics" yaml:"kube_state_metrics"`
+}
+
+// KubePrometheusGrafanaConfig defines Grafana configuration.
+type KubePrometheusGrafanaConfig struct {
+	// Enabled enables Grafana deployment.
+	// Default: true
+	Enabled *bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// AdminPassword sets the initial Grafana admin password.
+	// If empty, a random password is generated.
+	AdminPassword string `mapstructure:"admin_password" yaml:"admin_password"`
+
+	// IngressEnabled enables Ingress for Grafana.
+	IngressEnabled bool `mapstructure:"ingress_enabled" yaml:"ingress_enabled"`
+
+	// IngressHost is the hostname for the Grafana Ingress.
+	// Required when IngressEnabled is true.
+	IngressHost string `mapstructure:"ingress_host" yaml:"ingress_host"`
+
+	// IngressClassName specifies the IngressClass to use.
+	// Default: "traefik"
+	IngressClassName string `mapstructure:"ingress_class_name" yaml:"ingress_class_name"`
+
+	// IngressTLS enables TLS for the Ingress with cert-manager.
+	// Requires cert-manager to be installed.
+	IngressTLS bool `mapstructure:"ingress_tls" yaml:"ingress_tls"`
+
+	// Persistence enables persistent storage for Grafana.
+	Persistence KubePrometheusPersistenceConfig `mapstructure:"persistence" yaml:"persistence"`
+}
+
+// KubePrometheusPrometheusConfig defines Prometheus server configuration.
+type KubePrometheusPrometheusConfig struct {
+	// Enabled enables Prometheus deployment.
+	// Default: true
+	Enabled *bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// RetentionDays specifies how many days to retain Prometheus data.
+	// Default: 15
+	RetentionDays *int `mapstructure:"retention_days" yaml:"retention_days"`
+
+	// IngressEnabled enables Ingress for Prometheus.
+	IngressEnabled bool `mapstructure:"ingress_enabled" yaml:"ingress_enabled"`
+
+	// IngressHost is the hostname for the Prometheus Ingress.
+	IngressHost string `mapstructure:"ingress_host" yaml:"ingress_host"`
+
+	// IngressClassName specifies the IngressClass to use.
+	IngressClassName string `mapstructure:"ingress_class_name" yaml:"ingress_class_name"`
+
+	// IngressTLS enables TLS for the Ingress.
+	IngressTLS bool `mapstructure:"ingress_tls" yaml:"ingress_tls"`
+
+	// Persistence enables persistent storage for Prometheus.
+	Persistence KubePrometheusPersistenceConfig `mapstructure:"persistence" yaml:"persistence"`
+
+	// Resources defines resource requests and limits.
+	Resources KubePrometheusResourcesConfig `mapstructure:"resources" yaml:"resources"`
+}
+
+// KubePrometheusAlertmanagerConfig defines Alertmanager configuration.
+type KubePrometheusAlertmanagerConfig struct {
+	// Enabled enables Alertmanager deployment.
+	// Default: true
+	Enabled *bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// IngressEnabled enables Ingress for Alertmanager.
+	IngressEnabled bool `mapstructure:"ingress_enabled" yaml:"ingress_enabled"`
+
+	// IngressHost is the hostname for the Alertmanager Ingress.
+	IngressHost string `mapstructure:"ingress_host" yaml:"ingress_host"`
+
+	// IngressClassName specifies the IngressClass to use.
+	IngressClassName string `mapstructure:"ingress_class_name" yaml:"ingress_class_name"`
+
+	// IngressTLS enables TLS for the Ingress.
+	IngressTLS bool `mapstructure:"ingress_tls" yaml:"ingress_tls"`
+}
+
+// KubePrometheusPersistenceConfig defines storage persistence settings.
+type KubePrometheusPersistenceConfig struct {
+	// Enabled enables persistent storage.
+	// Default: false
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Size specifies the volume size (e.g., "10Gi", "50Gi").
+	// Default: "10Gi"
+	Size string `mapstructure:"size" yaml:"size"`
+
+	// StorageClass specifies the StorageClass to use.
+	// If empty, uses the default StorageClass.
+	StorageClass string `mapstructure:"storage_class" yaml:"storage_class"`
+}
+
+// KubePrometheusResourcesConfig defines resource requests and limits.
+type KubePrometheusResourcesConfig struct {
+	// Requests defines resource requests.
+	Requests KubePrometheusResourceSpec `mapstructure:"requests" yaml:"requests"`
+
+	// Limits defines resource limits.
+	Limits KubePrometheusResourceSpec `mapstructure:"limits" yaml:"limits"`
+}
+
+// KubePrometheusResourceSpec defines CPU and memory specifications.
+type KubePrometheusResourceSpec struct {
+	CPU    string `mapstructure:"cpu" yaml:"cpu"`
+	Memory string `mapstructure:"memory" yaml:"memory"`
 }
 
 // TalosCCMConfig defines the Talos Cloud Controller Manager configuration.
