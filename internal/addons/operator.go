@@ -167,6 +167,10 @@ func buildOperatorValues(cfg *config.Config) helm.Values {
 				"memory": "128Mi",
 			},
 		},
+		// Override nodeSelector to allow scheduling on any node
+		// Talos nodes may not have the control-plane label set
+		"nodeSelector": helm.Values{},
+		"tolerations":  []interface{}{},
 	}
 
 	// Enable ServiceMonitor if monitoring is enabled
