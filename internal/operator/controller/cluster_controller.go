@@ -565,6 +565,19 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 		workerIndex := nextIndex + i
 		newServerName := fmt.Sprintf("%s-workers-%d", cluster.Name, workerIndex)
 
+		// Check if a server with this name already exists (e.g., powered off but not deleted)
+		// If so, delete it first to avoid "server name already used" error
+		if existingServerID, err := r.hcloudClient.GetServerID(ctx, newServerName); err == nil && existingServerID != "" {
+			logger.Info("deleting existing server with same name before creating new one",
+				"name", newServerName,
+				"serverID", existingServerID,
+			)
+			if err := r.hcloudClient.DeleteServer(ctx, newServerName); err != nil {
+				logger.Error(err, "failed to delete existing server", "name", newServerName)
+				// Continue anyway - will fail on create if server still exists
+			}
+		}
+
 		serverLabels := map[string]string{
 			"cluster": cluster.Name,
 			"role":    "worker",
