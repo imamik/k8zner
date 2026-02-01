@@ -491,17 +491,19 @@ func testGrafanaHTTPSConnectivity(t *testing.T, hostname string, timeout time.Du
 				t.Logf("      HTTPS request failed: %v", err)
 				continue
 			}
-			defer resp.Body.Close()
+
+			statusCode := resp.StatusCode
+			_ = resp.Body.Close()
 
 			// Grafana returns 200 for the main page, or 302/307 redirect to login
-			if resp.StatusCode == http.StatusOK ||
-				resp.StatusCode == http.StatusFound ||
-				resp.StatusCode == http.StatusTemporaryRedirect {
-				t.Logf("      HTTPS connectivity verified (status: %d)", resp.StatusCode)
+			if statusCode == http.StatusOK ||
+				statusCode == http.StatusFound ||
+				statusCode == http.StatusTemporaryRedirect {
+				t.Logf("      HTTPS connectivity verified (status: %d)", statusCode)
 				return
 			}
 
-			t.Logf("      HTTPS response: %d, waiting...", resp.StatusCode)
+			t.Logf("      HTTPS response: %d, waiting...", statusCode)
 		}
 	}
 }
@@ -524,7 +526,7 @@ func verifyPrometheusTargets(t *testing.T, kubeconfigPath string) {
 		t.Logf("      Warning: Could not start port-forward: %v", err)
 		return
 	}
-	defer pfCmd.Process.Kill()
+	defer func() { _ = pfCmd.Process.Kill() }()
 
 	// Wait for port-forward to be ready
 	time.Sleep(3 * time.Second)
@@ -536,7 +538,7 @@ func verifyPrometheusTargets(t *testing.T, kubeconfigPath string) {
 		t.Logf("      Warning: Could not query Prometheus targets: %v", err)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusOK {
 		t.Log("      Prometheus targets API is accessible")

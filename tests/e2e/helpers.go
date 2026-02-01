@@ -200,7 +200,7 @@ func (d *ClusterDiagnostics) checkLoadBalancerHealth(ctx context.Context) {
 		d.t.Logf("  ✗ LB health check (/version): %v", err)
 	} else {
 		d.t.Logf("  ✓ LB health check (/version): status=%d", resp.StatusCode)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}
 }
 
@@ -217,7 +217,7 @@ func (d *ClusterDiagnostics) checkTalosAPIStatus(ctx context.Context) {
 	if err != nil {
 		d.t.Logf("  ✗ Failed to create insecure client: %v", err)
 	} else {
-		defer insecureClient.Close()
+		defer func() { _ = insecureClient.Close() }()
 
 		ctxTimeout, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
@@ -244,7 +244,7 @@ func (d *ClusterDiagnostics) checkTalosAPIStatus(ctx context.Context) {
 			d.t.Logf("  ✗ Failed to create authenticated client: %v", err)
 			return
 		}
-		defer authClient.Close()
+		defer func() { _ = authClient.Close() }()
 
 		ctxTimeout, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
@@ -278,7 +278,7 @@ func (d *ClusterDiagnostics) checkTalosServices(ctx context.Context) {
 		d.t.Logf("  ✗ Failed to create talos client: %v", err)
 		return
 	}
-	defer talosClient.Close()
+	defer func() { _ = talosClient.Close() }()
 
 	ctxTimeout, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -337,7 +337,7 @@ func (d *ClusterDiagnostics) checkEtcdStatus(ctx context.Context) {
 		d.t.Logf("  ✗ Failed to create talos client: %v", err)
 		return
 	}
-	defer talosClient.Close()
+	defer func() { _ = talosClient.Close() }()
 
 	ctxTimeout, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -364,7 +364,7 @@ func quickPortCheck(ip string, port int) error {
 	if err != nil {
 		return err
 	}
-	conn.Close()
+	_ = conn.Close()
 	return nil
 }
 
