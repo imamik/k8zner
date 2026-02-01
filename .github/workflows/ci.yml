@@ -101,8 +101,8 @@ jobs:
       - name: Install kubectl
         uses: azure/setup-kubectl@v4
 
-      - name: Run kind tests (skip heavy ArgoCD/Monitoring)
-        run: go test -v -tags=kind -timeout=30m -run "TestKindAddons/(0[123]_|06_)" ./tests/kind/...
+      - name: Run kind tests (addons + operator, skip heavy ArgoCD/Monitoring)
+        run: go test -v -tags=kind -timeout=30m -run "TestKind(Addons/(0[123]_|06_)|Operator)" ./tests/kind/...
         env:
           KIND_WORKERS: "0"
 
