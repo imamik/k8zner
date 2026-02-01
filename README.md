@@ -29,9 +29,8 @@ brew install imamik/tap/k8zner   # or: go install github.com/imamik/k8zner/cmd/k
 export HCLOUD_TOKEN="your-token"
 
 # 3. Create and deploy
-k8zner init              # Interactive wizard guides you through setup
-k8zner image build       # Build Talos Linux image (one-time)
-k8zner apply             # Deploy your cluster
+k8zner init              # Interactive wizard creates k8zner.yaml
+k8zner apply             # Deploy your cluster (builds image automatically)
 
 # 4. Access
 export KUBECONFIG=./secrets/my-cluster/kubeconfig
@@ -61,18 +60,24 @@ The simplified config automatically enables external-dns and cert-manager with C
 
 ## Batteries Included
 
-k8zner comes with pre-configured integrations — enable what you need:
+Every k8zner cluster includes production-ready components — no configuration needed:
 
-| Category | Integrations |
-|----------|-------------|
-| **Networking** | [Cilium](https://cilium.io/) (eBPF CNI with WireGuard/IPsec encryption), [Gateway API](https://gateway-api.sigs.k8s.io/), [ingress-nginx](https://kubernetes.github.io/ingress-nginx/), [Traefik](https://traefik.io/) |
-| **Cloud** | [Hetzner CCM](https://github.com/hetznercloud/hcloud-cloud-controller-manager) (load balancers, node lifecycle), [Hetzner CSI](https://github.com/hetznercloud/csi-driver) (volumes) |
-| **DNS & TLS** | [Cloudflare](https://www.cloudflare.com/) integration, [external-dns](https://github.com/kubernetes-sigs/external-dns), [cert-manager](https://cert-manager.io/) with Let's Encrypt |
+| Category | Always Included |
+|----------|-----------------|
+| **Networking** | [Cilium](https://cilium.io/) (eBPF CNI, native routing, Hubble observability) |
+| **Ingress** | [Traefik](https://traefik.io/) with [Gateway API](https://gateway-api.sigs.k8s.io/) support |
+| **Cloud** | [Hetzner CCM](https://github.com/hetznercloud/hcloud-cloud-controller-manager) + [CSI](https://github.com/hetznercloud/csi-driver) (load balancers, volumes) |
+| **TLS** | [cert-manager](https://cert-manager.io/) with Let's Encrypt |
 | **GitOps** | [ArgoCD](https://argo-cd.readthedocs.io/) |
-| **Storage** | [Longhorn](https://longhorn.io/) distributed storage |
-| **Scaling** | [Cluster Autoscaler](https://github.com/kubernetes/autoscaler) |
-| **Monitoring** | [Metrics Server](https://github.com/kubernetes-sigs/metrics-server), [Prometheus Operator](https://prometheus-operator.dev/) CRDs, [Hubble](https://docs.cilium.io/en/stable/observability/hubble/) |
-| **Auth** | OIDC integration |
+| **Metrics** | [Metrics Server](https://github.com/kubernetes-sigs/metrics-server) for HPA/VPA |
+
+**Optional** (enabled via config):
+
+| Feature | How to Enable |
+|---------|---------------|
+| **DNS automation** | Set `domain: example.com` + `CF_API_TOKEN` |
+| **Monitoring stack** | Set `monitoring: true` (Prometheus, Grafana, Alertmanager) |
+| **etcd backups** | Set `backup: true` + S3 credentials |
 
 ## Origin & Vision
 
@@ -124,9 +129,9 @@ Full documentation: **[docs/architecture.md](docs/architecture.md)**
 │                              Hetzner Cloud                                   │
 │  ┌────────────────────────────────────────────────────────────────────────┐ │
 │  │                         Private Network                                 │ │
-│  │   10.0.0.0/8 (configurable)                                            │ │
+│  │   10.0.0.0/16                                                          │ │
 │  │  ┌─────────────────────────────────────────────────────────────────┐   │ │
-│  │  │                     Node Subnet (10.0.1.0/24)                    │   │ │
+│  │  │                     Node Subnet (10.0.0.0/17)                    │   │ │
 │  │  │                                                                   │   │ │
 │  │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │   │ │
 │  │  │  │Control Plane│  │Control Plane│  │Control Plane│              │   │ │
@@ -229,16 +234,9 @@ All operations are **idempotent** — re-running `apply` safely skips existing r
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Enable Network Encryption
+### Network Encryption
 
-```yaml
-addons:
-  cilium:
-    enabled: true
-    encryption:
-      enabled: true
-      type: "wireguard"  # or "ipsec"
-```
+Cilium with WireGuard encryption is enabled by default for all pod-to-pod traffic.
 
 </details>
 
@@ -247,195 +245,131 @@ addons:
 
 Full documentation: **[docs/configuration.md](docs/configuration.md)** | Interactive setup: **[docs/wizard.md](docs/wizard.md)**
 
+k8zner uses a **simplified, opinionated configuration** — just 4-5 fields for a production-ready cluster:
+
 ### Minimal Configuration
 
 ```yaml
-cluster_name: "my-cluster"
-location: "nbg1"
-
-control_plane:
-  nodepools:
-    - name: "control"
-      type: "cpx21"
-      count: 3
-
+name: my-cluster
+region: nbg1
+mode: dev
 workers:
-  - name: "general"
-    type: "cpx31"
-    count: 2
+  count: 1
+  size: cx23
 ```
 
-### Full Configuration Example
+### Production HA Configuration
 
 ```yaml
-cluster_name: "production"
-location: "nbg1"
-ssh_keys: ["my-ssh-key"]
-
-talos:
-  version: "v1.9.0"
-kubernetes:
-  version: "1.32.0"
-
-# Network
-network:
-  ipv4_cidr: "10.0.0.0/8"
-  node_ipv4_cidr: "10.0.1.0/24"
-  pod_ipv4_cidr: "10.244.0.0/16"
-  service_ipv4_cidr: "10.96.0.0/12"
-
-# Firewall
-firewall:
-  kube_api_allowed_sources: ["0.0.0.0/0"]
-  talos_api_allowed_sources: ["1.2.3.4/32"]
-
-# Control plane (HA)
-control_plane:
-  nodepools:
-    - name: "control"
-      type: "cpx21"
-      count: 3
-      location: "nbg1"
-
-# Workers
+name: production
+region: fsn1
+mode: ha
 workers:
-  - name: "general"
-    type: "cpx31"
-    count: 3
-    location: "nbg1"
-  - name: "memory"
-    type: "cpx41"
-    count: 2
-    location: "fsn1"
-    taints:
-      - key: "workload"
-        value: "memory"
-        effect: "NoSchedule"
-
-# Auto-scaling
-autoscaler:
-  enabled: true
-  nodepools:
-    - name: "general"
-      min: 2
-      max: 10
-
-# Load balancers
-load_balancer:
-  enabled: true
-  type: "lb11"
-ingress_load_balancer:
-  enabled: true
-  type: "lb11"
-
-# Addons
-addons:
-  cilium:
-    enabled: true
-    hubble:
-      enabled: true
-    encryption:
-      enabled: true
-      type: "wireguard"
-    gateway_api:
-      enabled: true
-  ccm:
-    enabled: true
-  csi:
-    enabled: true
-    encryption: true
-  cert_manager:
-    enabled: true
-    cloudflare:
-      enabled: true
-      email: "admin@example.com"
-  external_dns:
-    enabled: true
-  ingress_nginx:
-    enabled: true
-  metrics_server:
-    enabled: true
-  cluster_autoscaler:
-    enabled: true
-  argocd:
-    enabled: false
-  longhorn:
-    enabled: false
+  count: 3
+  size: cx33
+domain: example.com      # Enables DNS + TLS via Cloudflare
 ```
+
+### Full Configuration (all options)
+
+```yaml
+name: production
+region: fsn1
+mode: ha
+workers:
+  count: 3
+  size: cx33
+
+# Optional: Cloudflare DNS & TLS
+domain: example.com
+cert_email: ops@example.com     # Let's Encrypt notifications
+argo_subdomain: argocd          # ArgoCD at argocd.example.com
+
+# Optional: Monitoring stack
+monitoring: true                # Prometheus, Grafana, Alertmanager
+grafana_subdomain: grafana      # Grafana at grafana.example.com
+
+# Optional: etcd backups
+backup: true                    # Requires HETZNER_S3_ACCESS_KEY/SECRET_KEY
+```
+
+### Configuration Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Cluster name (DNS-safe: lowercase, alphanumeric, hyphens) |
+| `region` | Yes | Datacenter: `nbg1`, `fsn1`, or `hel1` |
+| `mode` | Yes | `dev` (1 CP, 1 LB) or `ha` (3 CP, 2 LBs) |
+| `workers.count` | Yes | Number of workers (1-5) |
+| `workers.size` | Yes | Server type: `cx23`, `cx33`, `cx43`, `cx53` |
+| `domain` | No | Cloudflare domain for DNS/TLS |
+| `monitoring` | No | Enable Prometheus/Grafana stack |
+| `backup` | No | Enable etcd backups to S3 |
+
+All infrastructure settings (versions, networking, addons) use tested, production-ready defaults.
 
 </details>
 
 <details>
 <summary><strong>Hetzner Server Types</strong></summary>
 
-### x86 Servers
+### Worker Server Sizes
 
-| Family | Type | vCPU | RAM | Description |
-|--------|------|------|-----|-------------|
-| **CX** | cx22-cx52 | 2-16 | 4-32 GB | Shared, cost-optimized (EU only) |
-| **CPX** | cpx11-cpx51 | 2-16 | 2-32 GB | Shared, AMD EPYC |
-| **CCX** | ccx13-ccx63 | 2-48 | 8-192 GB | Dedicated vCPUs |
+k8zner uses shared CX instances for cost-effectiveness:
 
-### ARM Servers
+| Size | vCPU | RAM | Disk | Price |
+|------|------|-----|------|-------|
+| `cx23` | 2 | 4 GB | 40 GB | ~€4/mo |
+| `cx33` | 4 | 8 GB | 80 GB | ~€8/mo |
+| `cx43` | 8 | 16 GB | 160 GB | ~€16/mo |
+| `cx53` | 16 | 32 GB | 320 GB | ~€30/mo |
 
-| Type | vCPU | RAM | Notes |
-|------|------|-----|-------|
-| cax11-cax41 | 2-16 | 4-32 GB | Ampere Altra (Germany, Finland only) |
+Control planes use `cx23` (sufficient for etcd + API server).
 
-### Locations
+### Regions
 
 | Code | Location |
 |------|----------|
-| fsn1 | Falkenstein, Germany |
-| nbg1 | Nuremberg, Germany |
-| hel1 | Helsinki, Finland |
-| ash | Ashburn, USA |
-| hil | Hillsboro, USA |
+| `fsn1` | Falkenstein, Germany |
+| `nbg1` | Nuremberg, Germany |
+| `hel1` | Helsinki, Finland |
 
 </details>
 
 <details>
 <summary><strong>Cloudflare DNS Integration</strong></summary>
 
-Full documentation: **[docs/configuration.md#cloudflare-dns-integration](docs/configuration.md#cloudflare-dns-integration)**
+Full documentation: **[docs/configuration.md](docs/configuration.md)**
 
-### Creating a Cloudflare API Token
+### Setup
 
 1. Go to [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens)
-2. Click **"Create Token"**
-3. Use the **"Edit zone DNS"** template (or create custom)
-4. Configure permissions:
-   - `Zone > Zone > Read` — to find zone ID
-   - `Zone > DNS > Edit` — to manage records
-5. Set **Zone Resources** to your specific domain (recommended)
-
-**For teams/CI:** Use Account Owned Tokens at *Manage Account → Account API Tokens* (persists when members leave)
+2. Click **"Create Token"** → Use **"Edit zone DNS"** template
+3. Set permissions: `Zone > Zone > Read` + `Zone > DNS > Edit`
+4. Scope to your specific domain
 
 ### Configuration
 
 ```bash
 export CF_API_TOKEN="your-cloudflare-token"
-export CF_DOMAIN="example.com"
 ```
 
 ```yaml
-addons:
-  cloudflare:
-    enabled: true
-  external_dns:
-    enabled: true
-  cert_manager:
-    enabled: true
-    cloudflare:
-      enabled: true
-      email: "admin@example.com"
+name: my-cluster
+region: fsn1
+mode: ha
+workers:
+  count: 3
+  size: cx33
+domain: example.com  # Just add this — DNS and TLS are automatic
 ```
 
-### How It Works
+### What You Get
 
-1. **external-dns** watches Ingress resources → creates DNS A records
-2. **cert-manager** uses DNS01 challenge → issues Let's Encrypt certificates
-3. Certificates auto-renew
+When `domain` is set, k8zner automatically enables:
+- **external-dns**: Creates DNS records from Ingress/Gateway resources
+- **cert-manager + Cloudflare DNS01**: Issues Let's Encrypt certificates
+- **ArgoCD dashboard**: Accessible at `argo.{domain}` with TLS
 
 ### Example Ingress
 
@@ -445,7 +379,6 @@ kind: Ingress
 metadata:
   name: my-app
   annotations:
-    external-dns.alpha.kubernetes.io/hostname: app.example.com
     cert-manager.io/cluster-issuer: letsencrypt-cloudflare-production
 spec:
   tls:
@@ -464,6 +397,8 @@ spec:
                   number: 80
 ```
 
+DNS records are created automatically via external-dns.
+
 </details>
 
 <details>
@@ -473,11 +408,9 @@ spec:
 |---------|-------------|
 | `k8zner init` | Interactive wizard to create k8zner.yaml |
 | `k8zner cost` | Estimate monthly cluster costs |
-| `k8zner apply` | Create or update cluster |
+| `k8zner apply` | Create or update cluster (builds image if needed) |
 | `k8zner destroy` | Tear down all resources |
-| `k8zner upgrade` | Upgrade Talos/Kubernetes |
-| `k8zner image build` | Build Talos image snapshot |
-| `k8zner image delete` | Delete image snapshots |
+| `k8zner upgrade` | Upgrade Talos/Kubernetes versions |
 | `k8zner version` | Show version information |
 
 </details>
@@ -485,15 +418,19 @@ spec:
 <details>
 <summary><strong>Upgrading</strong></summary>
 
-k8zner uses pinned, tested version combinations. To upgrade:
+k8zner uses a pinned, tested version matrix (currently Talos v1.9.0, Kubernetes v1.32.0).
 
-1. Update k8zner to the latest version
-2. Re-apply your cluster:
-   ```bash
-   k8zner apply
-   ```
+To upgrade your cluster:
 
-Version upgrades are handled automatically with compatible Talos and Kubernetes versions.
+```bash
+# 1. Update k8zner binary
+brew upgrade k8zner  # or reinstall
+
+# 2. Upgrade cluster to new versions
+k8zner upgrade
+```
+
+The upgrade process handles Talos and Kubernetes version updates with rolling node upgrades.
 
 </details>
 
@@ -531,7 +468,8 @@ cmd/k8zner/
 └── handlers/         # Business logic
 
 internal/
-├── config/           # Configuration & wizard
+├── config/           # Configuration loading
+│   └── v2/           # Simplified config schema
 ├── orchestration/    # Workflow coordination
 ├── provisioning/     # Infrastructure provisioning
 │   ├── infrastructure/   # Network, firewall, LBs
@@ -541,6 +479,8 @@ internal/
 ├── addons/           # K8s addon installation
 │   ├── helm/             # Chart rendering
 │   └── k8sclient/        # Embedded K8s client
+├── operator/         # Kubernetes operator (future)
+│   └── controller/       # Self-healing controller
 ├── platform/
 │   ├── hcloud/           # Hetzner API
 │   ├── talos/            # Talos config

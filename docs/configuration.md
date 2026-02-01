@@ -72,12 +72,12 @@ Worker node configuration:
 | Field | Description | Valid Values |
 |-------|-------------|--------------|
 | `count` | Number of worker nodes | 1-5 |
-| `size` | Worker server size | cx22, cx32, cx42, cx52 |
+| `size` | Worker server size | cx23, cx33, cx43, cx53 |
 
 ```yaml
 workers:
   count: 3
-  size: cx32
+  size: cx33
 ```
 
 **Why 1-5 workers?** The simplified config uses an opinionated limit to keep clusters predictable and cost-effective for initial deployment. For larger clusters, update the config and run `k8zner apply` again to scale workers.
@@ -86,10 +86,12 @@ workers:
 
 | Size | vCPU | RAM | Best For |
 |------|------|-----|----------|
-| `cx22` | 2 | 4GB | Small workloads |
-| `cx32` | 4 | 8GB | Medium workloads |
-| `cx42` | 8 | 16GB | Larger workloads |
-| `cx52` | 16 | 32GB | Heavy workloads |
+| `cx23` | 2 | 4GB | Small workloads |
+| `cx33` | 4 | 8GB | Medium workloads |
+| `cx43` | 8 | 16GB | Larger workloads |
+| `cx53` | 16 | 32GB | Heavy workloads |
+
+Note: Hetzner renamed server types in 2024 (cx22→cx23, etc.). Both old and new names are accepted for backwards compatibility.
 
 ### domain (optional)
 
@@ -170,7 +172,7 @@ The simplified config automatically includes production-ready settings:
 
 ### Infrastructure
 - **IPv6-only nodes**: No public IPv4 (saves costs, better security)
-- **Control planes**: cx22 servers (cost-effective for control plane workloads)
+- **Control planes**: cx23 servers (cost-effective for control plane workloads)
 - **Disk encryption**: LUKS2 encryption for state and ephemeral partitions
 
 ### Networking
@@ -248,7 +250,7 @@ region: fsn1
 mode: dev
 workers:
   count: 1
-  size: cx22
+  size: cx23
 ```
 
 **Cost**: ~€18/month (1 CP + 1 worker + 1 LB)
@@ -263,7 +265,7 @@ region: fsn1
 mode: ha
 workers:
   count: 3
-  size: cx32
+  size: cx33
 domain: example.com
 ```
 
@@ -279,8 +281,10 @@ region: fsn1
 mode: ha
 workers:
   count: 5
-  size: cx52
+  size: cx53
 domain: example.com
+monitoring: true
+backup: true
 ```
 
 **Cost**: ~€180/month (3 CP + 5 workers + 2 LBs)
