@@ -16,6 +16,7 @@ Running Kubernetes shouldn't require a dedicated platform team. k8zner enables e
 - **Day-one operations solved**: networking, storage, TLS, DNS, GitOps — all pre-configured
 - **Bridge to application deployment**: built-in ArgoCD, ingress, and cert-manager get your apps running fast
 - **Single binary**: No Terraform, kubectl, or talosctl required — just download and run
+- **Opinionated defaults**: Tested version matrix, x86-64 architecture, EU regions — fewer choices, more confidence
 
 Built on [Talos Linux](https://www.talos.dev/), the secure and immutable Kubernetes OS.
 
@@ -315,7 +316,7 @@ All infrastructure settings (versions, networking, addons) use tested, productio
 
 ### Worker Server Sizes
 
-k8zner uses shared CX instances for cost-effectiveness:
+k8zner uses shared CX instances (x86-64) for cost-effectiveness:
 
 | Size | vCPU | RAM | Disk | Price |
 |------|------|-----|------|-------|
@@ -326,13 +327,19 @@ k8zner uses shared CX instances for cost-effectiveness:
 
 Control planes use `cx23` (sufficient for etcd + API server).
 
+**Note:** k8zner supports x86-64 (amd64) architecture only. ARM servers (CAX) are not supported.
+
 ### Regions
+
+k8zner supports EU regions only (where CX instances are available):
 
 | Code | Location |
 |------|----------|
 | `fsn1` | Falkenstein, Germany |
 | `nbg1` | Nuremberg, Germany |
 | `hel1` | Helsinki, Finland |
+
+US regions (Ashburn, Hillsboro) are not supported as they lack CX instance types.
 
 </details>
 

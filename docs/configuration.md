@@ -170,6 +170,11 @@ aws s3 rb s3://{cluster-name}-etcd-backups --force \
 
 The simplified config automatically includes production-ready settings:
 
+### Architecture & Regions
+- **x86-64 only**: All nodes run on amd64 architecture (CX server types)
+- **EU regions only**: Nuremberg, Falkenstein, Helsinki (where CX instances are available)
+- **No ARM support**: CAX (Ampere) servers are not supported
+
 ### Infrastructure
 - **IPv6-only nodes**: No public IPv4 (saves costs, better security)
 - **Control planes**: cx23 servers (cost-effective for control plane workloads)
