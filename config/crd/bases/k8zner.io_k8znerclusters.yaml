@@ -135,8 +135,10 @@ spec:
                     - 5
                     type: integer
                   size:
-                    default: cx22
-                    description: Size is the Hetzner server type (e.g., cx22, cx32)
+                    default: cx23
+                    description: |-
+                      Size is the Hetzner server type (e.g., cx23, cx33, cpx21, cpx31)
+                      CX types (dedicated vCPU) have consistent performance, CPX types (shared vCPU) have better availability
                     type: string
                 required:
                 - count
@@ -270,9 +272,10 @@ spec:
                     minimum: 0
                     type: integer
                   size:
-                    default: cx22
-                    description: Size is the Hetzner server type (e.g., cx22, cx32,
-                      cx42)
+                    default: cx23
+                    description: |-
+                      Size is the Hetzner server type (e.g., cx23, cx33, cpx21, cpx31)
+                      CX types (dedicated vCPU) have consistent performance, CPX types (shared vCPU) have better availability
                     type: string
                 required:
                 - count

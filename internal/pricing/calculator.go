@@ -96,7 +96,7 @@ func (c *Calculator) Calculate(cfg *v2.Config) *Estimate {
 
 	// Control planes
 	cpCount := cfg.ControlPlaneCount()
-	cpType := string(v2.ControlPlaneServerType)
+	cpType := string(cfg.ControlPlaneSize())
 	cpPrice := c.prices.Servers[cpType]
 	cpTotal := float64(cpCount) * cpPrice
 
@@ -159,12 +159,17 @@ func (c *Calculator) Calculate(cfg *v2.Config) *Estimate {
 func DefaultPrices() *Prices {
 	return &Prices{
 		Servers: map[string]float64{
-			// Old names (Hetzner renamed types in 2024)
+			// CPX series - Shared vCPU (better availability)
+			"cpx22": 4.49,
+			"cpx32": 8.49,
+			"cpx42": 15.49,
+			"cpx52": 29.49,
+			// CX series - Old names (Hetzner renamed types in 2024)
 			"cx22": 4.35,
 			"cx32": 8.09,
 			"cx42": 15.59,
 			"cx52": 29.59,
-			// New names
+			// CX series - New names (dedicated vCPU)
 			"cx23": 4.35,
 			"cx33": 8.09,
 			"cx43": 15.59,

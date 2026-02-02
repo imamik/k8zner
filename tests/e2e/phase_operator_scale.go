@@ -114,6 +114,7 @@ func createK8znerClusterForScaling(t *testing.T, state *E2EState, workerCount in
 	cpCount := len(state.ControlPlaneIPs)
 
 	// Note: We no longer need SSH keys annotation since we use ephemeral keys
+	// Use CPX22 (shared vCPU) for better availability in E2E tests
 	manifest := fmt.Sprintf(`apiVersion: k8zner.io/v1alpha1
 kind: K8znerCluster
 metadata:
@@ -123,10 +124,10 @@ spec:
   region: nbg1
   controlPlanes:
     count: %d
-    size: cx22
+    size: cpx22
   workers:
     count: %d
-    size: cx22
+    size: cpx22
   healthCheck:
     nodeNotReadyThreshold: "3m"
 `, state.ClusterName, cpCount, workerCount)

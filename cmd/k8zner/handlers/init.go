@@ -86,7 +86,7 @@ func printInitSuccess(outputPath string, cfg *v2config.Config) {
 	fmt.Printf("  Name:           %s\n", cfg.Name)
 	fmt.Printf("  Region:         %s\n", cfg.Region.String())
 	fmt.Printf("  Mode:           %s\n", cfg.Mode)
-	fmt.Printf("  Control Planes: %d x %s\n", cfg.ControlPlaneCount(), v2config.ControlPlaneServerType)
+	fmt.Printf("  Control Planes: %d x %s\n", cfg.ControlPlaneCount(), cfg.ControlPlaneSize())
 	fmt.Printf("  Workers:        %d x %s\n", cfg.Workers.Count, cfg.Workers.Size)
 	fmt.Printf("  Load Balancers: %d x %s\n", cfg.LoadBalancerCount(), v2config.LoadBalancerType)
 	if cfg.Domain != "" {

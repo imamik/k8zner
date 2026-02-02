@@ -115,6 +115,7 @@ func createK8znerClusterResource(t *testing.T, state *E2EState) {
 
 	// Build the K8znerCluster manifest
 	// Include SSH key annotation so operator can create new servers
+	// Use CPX22 (shared vCPU) for better availability in E2E tests
 	manifest := fmt.Sprintf(`apiVersion: k8zner.io/v1alpha1
 kind: K8znerCluster
 metadata:
@@ -126,10 +127,10 @@ spec:
   region: nbg1
   controlPlanes:
     count: %d
-    size: cx22
+    size: cpx22
   workers:
     count: %d
-    size: cx22
+    size: cpx22
   healthCheck:
     nodeNotReadyThreshold: "2m"
 `, state.ClusterName, state.SSHKeyName, cpCount, workerCount)

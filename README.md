@@ -281,6 +281,10 @@ workers:
   count: 3
   size: cx33
 
+# Optional: Control plane size (defaults to cx23)
+control_plane:
+  size: cx23
+
 # Optional: Cloudflare DNS & TLS
 domain: example.com
 cert_email: ops@example.com     # Let's Encrypt notifications
@@ -302,7 +306,8 @@ backup: true                    # Requires HETZNER_S3_ACCESS_KEY/SECRET_KEY
 | `region` | Yes | Datacenter: `nbg1`, `fsn1`, or `hel1` |
 | `mode` | Yes | `dev` (1 CP, 1 LB) or `ha` (3 CP, 2 LBs) |
 | `workers.count` | Yes | Number of workers (1-5) |
-| `workers.size` | Yes | Server type: `cx23`, `cx33`, `cx43`, `cx53` |
+| `workers.size` | Yes | Server type (see table below) |
+| `control_plane.size` | No | Control plane server type (default: `cpx21`) |
 | `domain` | No | Cloudflare domain for DNS/TLS |
 | `monitoring` | No | Enable Prometheus/Grafana stack |
 | `backup` | No | Enable etcd backups to S3 |
@@ -314,9 +319,12 @@ All infrastructure settings (versions, networking, addons) use tested, productio
 <details>
 <summary><strong>Hetzner Server Types</strong></summary>
 
-### Worker Server Sizes
+### Server Sizes
 
-k8zner uses shared CX instances (x86-64) for cost-effectiveness:
+k8zner supports both dedicated vCPU (CX) and shared vCPU (CPX) instances:
+
+#### CX Series - Dedicated vCPU (Default)
+Consistent performance, recommended for production:
 
 | Size | vCPU | RAM | Disk | Price |
 |------|------|-----|------|-------|
@@ -325,7 +333,17 @@ k8zner uses shared CX instances (x86-64) for cost-effectiveness:
 | `cx43` | 8 | 16 GB | 160 GB | ~€16/mo |
 | `cx53` | 16 | 32 GB | 320 GB | ~€30/mo |
 
-Control planes use `cx23` (sufficient for etcd + API server).
+#### CPX Series - Shared vCPU
+Better availability, suitable for dev/test:
+
+| Size | vCPU | RAM | Disk | Price |
+|------|------|-----|------|-------|
+| `cpx22` | 2 | 4 GB | 40 GB | ~€4.50/mo |
+| `cpx32` | 4 | 8 GB | 80 GB | ~€8.50/mo |
+| `cpx42` | 8 | 16 GB | 160 GB | ~€15.50/mo |
+| `cpx52` | 16 | 32 GB | 320 GB | ~€29.50/mo |
+
+Control planes default to `cx23` (2 dedicated vCPU, 4GB RAM - sufficient for etcd + API server).
 
 **Note:** k8zner supports x86-64 (amd64) architecture only. ARM servers (CAX) are not supported.
 

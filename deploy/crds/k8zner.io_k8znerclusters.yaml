@@ -2,256 +2,602 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: k8znerclusters.k8zner.io
   annotations:
-    controller-gen.kubebuilder.io/version: v0.14.0
+    controller-gen.kubebuilder.io/version: v0.20.0
+  name: k8znerclusters.k8zner.io
 spec:
   group: k8zner.io
   names:
     kind: K8znerCluster
     listKind: K8znerClusterList
     plural: k8znerclusters
-    singular: k8znercluster
     shortNames:
-      - k8z
+    - k8z
+    singular: k8znercluster
   scope: Namespaced
   versions:
-    - name: v1alpha1
-      served: true
-      storage: true
-      subresources:
-        status: {}
-      additionalPrinterColumns:
-        - name: Phase
-          type: string
-          jsonPath: .status.phase
-        - name: CPs
-          type: string
-          jsonPath: .status.controlPlanes.ready
-        - name: Workers
-          type: string
-          jsonPath: .status.workers.ready
-        - name: Age
-          type: date
-          jsonPath: .metadata.creationTimestamp
-      schema:
-        openAPIV3Schema:
-          type: object
-          description: K8znerCluster is the Schema for the k8znerclusters API.
-          properties:
-            apiVersion:
-              type: string
-            kind:
-              type: string
-            metadata:
-              type: object
-            spec:
-              type: object
-              description: K8znerClusterSpec defines the desired state of a K8zner-managed cluster.
-              required:
-                - region
-                - controlPlanes
-                - workers
-              properties:
-                region:
-                  type: string
-                  description: Region is the Hetzner Cloud region
-                  enum: [fsn1, nbg1, hel1, ash, hil]
-                controlPlanes:
-                  type: object
-                  description: ControlPlanes defines the control plane configuration
-                  properties:
-                    count:
-                      type: integer
-                      description: Count is the number of control plane nodes
-                      enum: [1, 3, 5]
-                      default: 1
-                    size:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.controlPlanes.ready
+      name: CPs
+      type: string
+    - jsonPath: .status.workers.ready
+      name: Workers
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: K8znerCluster is the Schema for the k8znerclusters API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: K8znerClusterSpec defines the desired state of a K8zner-managed
+              cluster.
+            properties:
+              addons:
+                description: Addons specifies which addons should be installed
+                properties:
+                  argocd:
+                    description: ArgoCD for GitOps
+                    type: boolean
+                  certManager:
+                    default: true
+                    description: CertManager for TLS certificates
+                    type: boolean
+                  externalDns:
+                    description: ExternalDNS for automatic DNS management
+                    type: boolean
+                  metricsServer:
+                    default: true
+                    description: MetricsServer for resource metrics
+                    type: boolean
+                  traefik:
+                    default: true
+                    description: Traefik ingress controller
+                    type: boolean
+                type: object
+              backup:
+                description: Backup configures automated etcd backups
+                properties:
+                  enabled:
+                    description: Enabled turns on automated backups
+                    type: boolean
+                  retention:
+                    default: 168h
+                    description: 'Retention is how long to keep backups (default:
+                      168h = 7 days)'
+                    type: string
+                  schedule:
+                    default: 0 * * * *
+                    description: 'Schedule is the cron schedule for backups (default:
+                      hourly)'
+                    type: string
+                required:
+                - enabled
+                type: object
+              bootstrap:
+                description: Bootstrap contains the state from CLI bootstrap (if applicable)
+                properties:
+                  bootstrapNode:
+                    description: BootstrapNode is the name of the first control plane
+                      server
+                    type: string
+                  bootstrapNodeID:
+                    description: BootstrapNodeID is the Hetzner server ID of the first
+                      control plane
+                    format: int64
+                    type: integer
+                  completed:
+                    description: Completed indicates the CLI bootstrap has finished
+                    type: boolean
+                  completedAt:
+                    description: CompletedAt is when bootstrap completed
+                    format: date-time
+                    type: string
+                  publicIP:
+                    description: PublicIP is the public IP of the bootstrap node (before
+                      LB)
+                    type: string
+                required:
+                - completed
+                type: object
+              controlPlanes:
+                description: ControlPlanes defines the control plane configuration
+                properties:
+                  count:
+                    default: 1
+                    description: Count is the number of control plane nodes (1 for
+                      dev, 3 for HA)
+                    enum:
+                    - 1
+                    - 3
+                    - 5
+                    type: integer
+                  size:
+                    default: cx23
+                    description: |-
+                      Size is the Hetzner server type (e.g., cx23, cx33, cpx21, cpx31)
+                      CX types (dedicated vCPU) have consistent performance, CPX types (shared vCPU) have better availability
+                    type: string
+                required:
+                - count
+                - size
+                type: object
+              credentialsRef:
+                description: CredentialsRef references the Secret containing HCloud
+                  token and Talos secrets
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              firewall:
+                description: Firewall configures the cluster firewall rules
+                properties:
+                  allowedAPIIPs:
+                    description: AllowedAPIIPs is a list of CIDR ranges allowed to
+                      access the Kubernetes API
+                    items:
                       type: string
-                      description: Size is the Hetzner server type
-                      default: cx22
-                workers:
-                  type: object
-                  description: Workers defines the worker node configuration
+                    type: array
+                  allowedSSHIPs:
+                    description: AllowedSSHIPs is a list of CIDR ranges allowed to
+                      SSH to nodes
+                    items:
+                      type: string
+                    type: array
+                  enabled:
+                    default: true
+                    description: Enabled determines if a firewall should be created
+                    type: boolean
+                type: object
+              healthCheck:
+                description: HealthCheck configures health monitoring thresholds
+                properties:
+                  etcdUnhealthyThreshold:
+                    default: 2m
+                    description: EtcdUnhealthyThreshold is how long etcd can be unhealthy
+                      before CP replacement
+                    type: string
+                  nodeNotReadyThreshold:
+                    default: 3m
+                    description: NodeNotReadyThreshold is how long a node can be NotReady
+                      before replacement
+                    type: string
+                type: object
+              kubernetes:
+                description: Kubernetes specifies the Kubernetes version
+                properties:
+                  version:
+                    description: Version is the Kubernetes version (e.g., "1.32.2")
+                    pattern: ^\d+\.\d+\.\d+$
+                    type: string
+                required:
+                - version
+                type: object
+              network:
+                description: Network configures the cluster networking
+                properties:
+                  ipv4CIDR:
+                    default: 10.0.0.0/16
+                    description: IPv4CIDR is the network CIDR for the Hetzner private
+                      network
+                    type: string
+                  podCIDR:
+                    default: 10.244.0.0/16
+                    description: PodCIDR is the CIDR range for pod IPs
+                    type: string
+                  serviceCIDR:
+                    default: 10.96.0.0/16
+                    description: ServiceCIDR is the CIDR range for service IPs
+                    type: string
+                type: object
+              paused:
+                description: Paused stops the operator from reconciling this cluster
+                type: boolean
+              region:
+                description: Region is the Hetzner Cloud region (e.g., fsn1, nbg1,
+                  hel1)
+                enum:
+                - fsn1
+                - nbg1
+                - hel1
+                - ash
+                - hil
+                type: string
+              talos:
+                description: Talos specifies the Talos configuration
+                properties:
+                  extensions:
+                    description: Extensions is a list of Talos system extensions to
+                      include
+                    items:
+                      type: string
+                    type: array
+                  schematicID:
+                    description: SchematicID is the Talos Factory schematic ID for
+                      custom images
+                    type: string
+                  version:
+                    description: Version is the Talos version (e.g., "v1.10.2")
+                    pattern: ^v\d+\.\d+\.\d+$
+                    type: string
+                required:
+                - version
+                type: object
+              workers:
+                description: Workers defines the worker node configuration
+                properties:
+                  count:
+                    description: Count is the desired number of worker nodes
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                  maxCount:
+                    default: 10
+                    description: MaxCount is the maximum number of workers (for safety)
+                    maximum: 100
+                    type: integer
+                  minCount:
+                    default: 1
+                    description: MinCount is the minimum number of workers (for safety)
+                    minimum: 0
+                    type: integer
+                  size:
+                    default: cx23
+                    description: |-
+                      Size is the Hetzner server type (e.g., cx23, cx33, cpx21, cpx31)
+                      CX types (dedicated vCPU) have consistent performance, CPX types (shared vCPU) have better availability
+                    type: string
+                required:
+                - count
+                - size
+                type: object
+            required:
+            - controlPlanes
+            - credentialsRef
+            - kubernetes
+            - region
+            - talos
+            - workers
+            type: object
+          status:
+            description: K8znerClusterStatus defines the observed state of K8znerCluster.
+            properties:
+              addons:
+                additionalProperties:
+                  description: AddonStatus represents the status of an installed addon.
+                  properties:
+                    healthy:
+                      description: Healthy indicates if the addon is healthy
+                      type: boolean
+                    installed:
+                      description: Installed indicates if the addon is installed
+                      type: boolean
+                    message:
+                      description: Message provides additional status information
+                      type: string
+                    version:
+                      description: Version is the installed version
+                      type: string
                   required:
-                    - count
+                  - healthy
+                  - installed
+                  type: object
+                description: Addons shows the status of installed addons
+                type: object
+              conditions:
+                description: Conditions represent the latest available observations
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
                   properties:
-                    count:
-                      type: integer
-                      description: Count is the desired number of worker nodes
-                      minimum: 1
-                      maximum: 100
-                    size:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
                       type: string
-                      description: Size is the Hetzner server type
-                      default: cx22
-                    minCount:
-                      type: integer
-                      description: MinCount is the minimum number of workers
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
                       minimum: 0
-                      default: 1
-                    maxCount:
                       type: integer
-                      description: MaxCount is the maximum number of workers
-                      maximum: 100
-                      default: 10
-                backup:
-                  type: object
-                  description: Backup configures automated etcd backups
-                  properties:
-                    enabled:
-                      type: boolean
-                      description: Enabled turns on automated backups
-                    schedule:
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
                       type: string
-                      description: Schedule is the cron schedule for backups
-                      default: "0 * * * *"
-                    retention:
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
                       type: string
-                      description: Retention is how long to keep backups
-                      default: "168h"
-                healthCheck:
-                  type: object
-                  description: HealthCheck configures health monitoring thresholds
-                  properties:
-                    nodeNotReadyThreshold:
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
                       type: string
-                      description: NodeNotReadyThreshold is how long a node can be NotReady
-                      default: "5m"
-                    etcdUnhealthyThreshold:
-                      type: string
-                      description: EtcdUnhealthyThreshold is how long etcd can be unhealthy
-                      default: "2m"
-                addons:
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
                   type: object
-                  description: Addons specifies which addons should be installed
-                  properties:
-                    traefik:
-                      type: boolean
-                      default: true
-                    certManager:
-                      type: boolean
-                      default: true
-                    externalDns:
-                      type: boolean
-                    argocd:
-                      type: boolean
-                    metricsServer:
-                      type: boolean
-                      default: true
-                paused:
-                  type: boolean
-                  description: Paused stops the operator from reconciling this cluster
-            status:
-              type: object
-              description: K8znerClusterStatus defines the observed state of K8znerCluster.
-              properties:
-                phase:
-                  type: string
-                  description: Phase is the overall cluster phase
-                  enum: [Provisioning, Running, Degraded, Healing, Failed]
-                controlPlanes:
-                  type: object
-                  description: ControlPlanes shows the status of control plane nodes
-                  properties:
-                    desired:
-                      type: integer
-                    ready:
-                      type: integer
-                    unhealthy:
-                      type: integer
-                    nodes:
-                      type: array
-                      items:
-                        type: object
-                        properties:
-                          name:
-                            type: string
-                          serverID:
-                            type: integer
-                            format: int64
-                          privateIP:
-                            type: string
-                          publicIP:
-                            type: string
-                          healthy:
-                            type: boolean
-                          unhealthyReason:
-                            type: string
-                          unhealthySince:
-                            type: string
-                            format: date-time
-                          etcdMemberID:
-                            type: string
-                          lastHealthCheck:
-                            type: string
-                            format: date-time
-                workers:
-                  type: object
-                  description: Workers shows the status of worker nodes
-                  properties:
-                    desired:
-                      type: integer
-                    ready:
-                      type: integer
-                    unhealthy:
-                      type: integer
-                    nodes:
-                      type: array
-                      items:
-                        type: object
-                        properties:
-                          name:
-                            type: string
-                          serverID:
-                            type: integer
-                            format: int64
-                          privateIP:
-                            type: string
-                          publicIP:
-                            type: string
-                          healthy:
-                            type: boolean
-                          unhealthyReason:
-                            type: string
-                          unhealthySince:
-                            type: string
-                            format: date-time
-                          lastHealthCheck:
-                            type: string
-                            format: date-time
-                addons:
-                  type: object
-                  additionalProperties:
-                    type: object
-                    properties:
-                      installed:
-                        type: boolean
-                      version:
-                        type: string
-                      healthy:
-                        type: boolean
-                      message:
-                        type: string
-                conditions:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      type:
-                        type: string
-                      status:
-                        type: string
-                      reason:
-                        type: string
-                      message:
-                        type: string
-                      lastTransitionTime:
-                        type: string
-                        format: date-time
-                lastReconcileTime:
-                  type: string
-                  format: date-time
-                observedGeneration:
-                  type: integer
-                  format: int64
+                type: array
+              controlPlaneEndpoint:
+                description: ControlPlaneEndpoint is the endpoint for the Kubernetes
+                  API
+                type: string
+              controlPlanes:
+                description: ControlPlanes shows the status of control plane nodes
+                properties:
+                  desired:
+                    description: Desired is the desired number of nodes
+                    type: integer
+                  nodes:
+                    description: Nodes is the detailed status of each node
+                    items:
+                      description: NodeStatus represents the status of a single node.
+                      properties:
+                        etcdMemberID:
+                          description: EtcdMemberID is the etcd member ID (for control
+                            planes)
+                          type: string
+                        healthy:
+                          description: Healthy indicates if the node is healthy (deprecated,
+                            use Phase)
+                          type: boolean
+                        lastHealthCheck:
+                          description: LastHealthCheck is when health was last checked
+                          format: date-time
+                          type: string
+                        name:
+                          description: Name is the Kubernetes node name
+                          type: string
+                        phase:
+                          description: Phase is the lifecycle phase of this node
+                          enum:
+                          - Provisioning
+                          - Configuring
+                          - Ready
+                          - Unhealthy
+                          - Terminating
+                          type: string
+                        phaseReason:
+                          description: PhaseReason provides additional context for
+                            the current phase
+                          type: string
+                        phaseTransitionTime:
+                          description: PhaseTransitionTime is when the node transitioned
+                            to the current phase
+                          format: date-time
+                          type: string
+                        privateIP:
+                          description: PrivateIP is the private network IP
+                          type: string
+                        publicIP:
+                          description: PublicIP is the public IP (if any)
+                          type: string
+                        serverID:
+                          description: ServerID is the Hetzner server ID
+                          format: int64
+                          type: integer
+                        unhealthyReason:
+                          description: UnhealthyReason explains why the node is unhealthy
+                          type: string
+                        unhealthySince:
+                          description: UnhealthySince is when the node became unhealthy
+                          format: date-time
+                          type: string
+                      required:
+                      - healthy
+                      - name
+                      - serverID
+                      type: object
+                    type: array
+                  ready:
+                    description: Ready is the number of healthy nodes
+                    type: integer
+                  unhealthy:
+                    description: Unhealthy is the number of unhealthy nodes
+                    type: integer
+                required:
+                - desired
+                - ready
+                type: object
+              imageSnapshot:
+                description: ImageSnapshot tracks the Talos image snapshot
+                properties:
+                  createdAt:
+                    description: CreatedAt is when the snapshot was created
+                    format: date-time
+                    type: string
+                  schematicID:
+                    description: SchematicID is the Talos Factory schematic ID
+                    type: string
+                  snapshotID:
+                    description: SnapshotID is the Hetzner snapshot ID
+                    format: int64
+                    type: integer
+                  version:
+                    description: Version is the Talos version of the snapshot
+                    type: string
+                type: object
+              infrastructure:
+                description: Infrastructure tracks the provisioned infrastructure
+                  resources
+                properties:
+                  firewallID:
+                    description: FirewallID is the Hetzner firewall ID
+                    format: int64
+                    type: integer
+                  loadBalancerID:
+                    description: LoadBalancerID is the Hetzner load balancer ID
+                    format: int64
+                    type: integer
+                  loadBalancerIP:
+                    description: LoadBalancerIP is the public IP of the load balancer
+                    type: string
+                  networkID:
+                    description: NetworkID is the Hetzner network ID
+                    format: int64
+                    type: integer
+                  sshKeyID:
+                    description: SSHKeyID is the Hetzner SSH key ID used for nodes
+                    format: int64
+                    type: integer
+                  subnetID:
+                    description: SubnetID is the Hetzner subnet ID
+                    type: string
+                type: object
+              lastReconcileTime:
+                description: LastReconcileTime is when the operator last reconciled
+                  this cluster
+                format: date-time
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the last observed generation
+                format: int64
+                type: integer
+              phase:
+                description: Phase is the overall cluster phase
+                enum:
+                - Provisioning
+                - Running
+                - Degraded
+                - Healing
+                - Failed
+                type: string
+              provisioningPhase:
+                description: ProvisioningPhase tracks the current provisioning stage
+                type: string
+              workers:
+                description: Workers shows the status of worker nodes
+                properties:
+                  desired:
+                    description: Desired is the desired number of nodes
+                    type: integer
+                  nodes:
+                    description: Nodes is the detailed status of each node
+                    items:
+                      description: NodeStatus represents the status of a single node.
+                      properties:
+                        etcdMemberID:
+                          description: EtcdMemberID is the etcd member ID (for control
+                            planes)
+                          type: string
+                        healthy:
+                          description: Healthy indicates if the node is healthy (deprecated,
+                            use Phase)
+                          type: boolean
+                        lastHealthCheck:
+                          description: LastHealthCheck is when health was last checked
+                          format: date-time
+                          type: string
+                        name:
+                          description: Name is the Kubernetes node name
+                          type: string
+                        phase:
+                          description: Phase is the lifecycle phase of this node
+                          enum:
+                          - Provisioning
+                          - Configuring
+                          - Ready
+                          - Unhealthy
+                          - Terminating
+                          type: string
+                        phaseReason:
+                          description: PhaseReason provides additional context for
+                            the current phase
+                          type: string
+                        phaseTransitionTime:
+                          description: PhaseTransitionTime is when the node transitioned
+                            to the current phase
+                          format: date-time
+                          type: string
+                        privateIP:
+                          description: PrivateIP is the private network IP
+                          type: string
+                        publicIP:
+                          description: PublicIP is the public IP (if any)
+                          type: string
+                        serverID:
+                          description: ServerID is the Hetzner server ID
+                          format: int64
+                          type: integer
+                        unhealthyReason:
+                          description: UnhealthyReason explains why the node is unhealthy
+                          type: string
+                        unhealthySince:
+                          description: UnhealthySince is when the node became unhealthy
+                          format: date-time
+                          type: string
+                      required:
+                      - healthy
+                      - name
+                      - serverID
+                      type: object
+                    type: array
+                  ready:
+                    description: Ready is the number of healthy nodes
+                    type: integer
+                  unhealthy:
+                    description: Unhealthy is the number of unhealthy nodes
+                    type: integer
+                required:
+                - desired
+                - ready
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

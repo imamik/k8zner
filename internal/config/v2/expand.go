@@ -117,7 +117,7 @@ func expandControlPlane(cfg *Config) config.ControlPlaneConfig {
 			{
 				Name:       "control-plane",
 				Location:   string(cfg.Region),
-				ServerType: ControlPlaneServerType,
+				ServerType: string(cfg.ControlPlaneSize()), // Use configured or default size
 				Count:      cpCount,
 				Labels: map[string]string{
 					"node.kubernetes.io/role": "control-plane",

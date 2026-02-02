@@ -50,10 +50,10 @@ spec:
   region: fsn1
   controlPlanes:
     count: 3
-    size: cx22
+    size: cpx22
   workers:
     count: 2
-    size: cx22
+    size: cpx22
 `
 	fw.KubectlApply(t, validCluster)
 
@@ -243,10 +243,10 @@ spec:
   region: nbg1
   controlPlanes:
     count: 3
-    size: cx22
+    size: cpx22
   workers:
     count: 3
-    size: cx22
+    size: cpx22
 `
 	fw.KubectlApply(t, nodeTrackingCluster)
 
