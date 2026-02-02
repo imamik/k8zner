@@ -28,6 +28,9 @@ func TestRoot_HasSubcommands(t *testing.T) {
 		"cost",
 		"version",
 		"completion",
+		"create",
+		"health",
+		"migrate",
 	}
 
 	// Get subcommand names (first word of Use string)
@@ -46,5 +49,5 @@ func TestRoot_HasSubcommands(t *testing.T) {
 
 func TestRoot_SubcommandCount(t *testing.T) {
 	cmd := Root()
-	assert.Len(t, cmd.Commands(), 9, "Expected 9 subcommands")
+	assert.Len(t, cmd.Commands(), 12, "Expected 12 subcommands")
 }

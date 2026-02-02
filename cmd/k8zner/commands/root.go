@@ -17,11 +17,17 @@ func Root() *cobra.Command {
 		Short: "Provision Kubernetes on Hetzner Cloud using Talos",
 	}
 
+	// Core commands
 	cmd.AddCommand(Init())
+	cmd.AddCommand(Create())
 	cmd.AddCommand(Apply())
+	cmd.AddCommand(Health())
+	cmd.AddCommand(Destroy())
+	cmd.AddCommand(Migrate())
+
+	// Legacy/utility commands
 	cmd.AddCommand(Bootstrap())
 	cmd.AddCommand(Image())
-	cmd.AddCommand(Destroy())
 	cmd.AddCommand(Upgrade())
 	cmd.AddCommand(Cost())
 	cmd.AddCommand(Version())

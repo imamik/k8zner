@@ -44,6 +44,10 @@ type K8znerClusterSpec struct {
 	// +optional
 	Firewall FirewallSpec `json:"firewall,omitempty"`
 
+	// PlacementGroup configures server placement strategy
+	// +optional
+	PlacementGroup *PlacementGroupSpec `json:"placementGroup,omitempty"`
+
 	// Kubernetes specifies the Kubernetes version
 	Kubernetes KubernetesSpec `json:"kubernetes"`
 
@@ -56,6 +60,20 @@ type K8znerClusterSpec struct {
 	// Bootstrap contains the state from CLI bootstrap (if applicable)
 	// +optional
 	Bootstrap *BootstrapState `json:"bootstrap,omitempty"`
+}
+
+// PlacementGroupSpec configures server placement strategy.
+type PlacementGroupSpec struct {
+	// Enabled determines if a placement group should be created
+	// +kubebuilder:default=true
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Type is the placement group type (spread)
+	// +kubebuilder:validation:Enum=spread
+	// +kubebuilder:default="spread"
+	// +optional
+	Type string `json:"type,omitempty"`
 }
 
 // NetworkSpec configures the cluster networking.
@@ -286,7 +304,11 @@ const (
 	PhaseCompute ProvisioningPhase = "Compute"
 	// PhaseBootstrap means the operator is bootstrapping the cluster
 	PhaseBootstrap ProvisioningPhase = "Bootstrap"
-	// PhaseConfiguring means the operator is configuring the cluster (addons, etc.)
+	// PhaseCNI means the operator is installing Cilium CNI
+	PhaseCNI ProvisioningPhase = "CNI"
+	// PhaseAddons means the operator is installing other addons (after CNI is ready)
+	PhaseAddons ProvisioningPhase = "Addons"
+	// PhaseConfiguring means the operator is configuring the cluster (legacy, use PhaseCNI/PhaseAddons)
 	PhaseConfiguring ProvisioningPhase = "Configuring"
 	// PhaseComplete means provisioning is complete and the cluster is running
 	PhaseComplete ProvisioningPhase = "Complete"
@@ -317,6 +339,14 @@ type InfrastructureStatus struct {
 	// SSHKeyID is the Hetzner SSH key ID used for nodes
 	// +optional
 	SSHKeyID int64 `json:"sshKeyID,omitempty"`
+
+	// PlacementGroupID is the Hetzner placement group ID
+	// +optional
+	PlacementGroupID int64 `json:"placementGroupID,omitempty"`
+
+	// SnapshotID is the Hetzner Talos image snapshot ID
+	// +optional
+	SnapshotID int64 `json:"snapshotID,omitempty"`
 }
 
 // ImageStatus tracks the Talos image snapshot.
@@ -434,6 +464,22 @@ type NodeStatus struct {
 	LastHealthCheck *metav1.Time `json:"lastHealthCheck,omitempty"`
 }
 
+// AddonPhase represents the installation phase of an addon.
+type AddonPhase string
+
+const (
+	// AddonPhasePending means the addon is waiting to be installed
+	AddonPhasePending AddonPhase = "Pending"
+	// AddonPhaseInstalling means the addon is being installed
+	AddonPhaseInstalling AddonPhase = "Installing"
+	// AddonPhaseInstalled means the addon is installed and healthy
+	AddonPhaseInstalled AddonPhase = "Installed"
+	// AddonPhaseFailed means the addon installation failed
+	AddonPhaseFailed AddonPhase = "Failed"
+	// AddonPhaseUpgrading means the addon is being upgraded
+	AddonPhaseUpgrading AddonPhase = "Upgrading"
+)
+
 // AddonStatus represents the status of an installed addon.
 type AddonStatus struct {
 	// Installed indicates if the addon is installed
@@ -449,6 +495,19 @@ type AddonStatus struct {
 	// Message provides additional status information
 	// +optional
 	Message string `json:"message,omitempty"`
+
+	// Phase is the current installation phase of the addon
+	// +kubebuilder:validation:Enum=Pending;Installing;Installed;Failed;Upgrading
+	// +optional
+	Phase AddonPhase `json:"phase,omitempty"`
+
+	// LastTransitionTime is when the addon phase last changed
+	// +optional
+	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
+
+	// InstallOrder is the order in which this addon should be installed
+	// +optional
+	InstallOrder int `json:"installOrder,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -505,4 +564,32 @@ const (
 	CredentialsKeyTalosSecrets = "talos-secrets"
 	// CredentialsKeyTalosConfig is the key for the talosconfig in the credentials Secret
 	CredentialsKeyTalosConfig = "talosconfig"
+)
+
+// Addon names used for status tracking
+const (
+	AddonNameCilium        = "cilium"
+	AddonNameCCM           = "hcloud-ccm"
+	AddonNameCSI           = "hcloud-csi"
+	AddonNameMetricsServer = "metrics-server"
+	AddonNameCertManager   = "cert-manager"
+	AddonNameTraefik       = "traefik"
+	AddonNameExternalDNS   = "external-dns"
+	AddonNameArgoCD        = "argocd"
+	AddonNameMonitoring    = "monitoring"
+	AddonNameTalosBackup   = "talos-backup"
+)
+
+// Addon install order (lower = earlier)
+const (
+	AddonOrderCilium        = 1  // CNI foundation - REQUIRED FIRST
+	AddonOrderCCM           = 2  // Hetzner cloud controller
+	AddonOrderCSI           = 3  // Hetzner storage
+	AddonOrderMetricsServer = 4  // Resource metrics
+	AddonOrderCertManager   = 5  // TLS certificates
+	AddonOrderTraefik       = 6  // Ingress controller
+	AddonOrderExternalDNS   = 7  // DNS management
+	AddonOrderArgoCD        = 8  // GitOps
+	AddonOrderMonitoring    = 9  // Prometheus/Grafana
+	AddonOrderTalosBackup   = 10 // Backup controller
 )
