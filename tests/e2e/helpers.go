@@ -452,9 +452,9 @@ func verifyLoadBalancerRDNS(ctx context.Context, t *testing.T, state *E2EState) 
 
 // gatherKubernetesDiagnostics collects comprehensive diagnostic information about
 // pods, events, CRDs, and connectivity for debugging test failures.
-func gatherKubernetesDiagnostics(t *testing.T, kubeconfigPath, namespace, context string) {
+func gatherKubernetesDiagnostics(t *testing.T, kubeconfigPath, namespace, diagContext string) {
 	t.Log("=== GATHERING KUBERNETES DIAGNOSTICS ===")
-	t.Logf("Namespace: %s, Context: %s", namespace, context)
+	t.Logf("Namespace: %s, Context: %s", namespace, diagContext)
 
 	// 1. Get pod status with node placement
 	t.Log("--- Pod Status ---")
