@@ -379,7 +379,8 @@ func TestProvisionFloatingIPs_Enabled(t *testing.T) {
 	err := p.ProvisionFloatingIPs(ctx)
 	assert.NoError(t, err)
 	assert.Contains(t, capturedName, "test-cluster")
-	assert.Contains(t, capturedName, "ipv4")
+	// New naming: {cluster}-cp-ip
+	assert.Contains(t, capturedName, "cp-ip")
 }
 
 func TestProvisionNetwork_WithWorkers(t *testing.T) {
@@ -486,7 +487,8 @@ func TestProvisionLoadBalancers_WithIngress(t *testing.T) {
 	var capturedAlgorithm hcloud.LoadBalancerAlgorithmType
 	mockInfra.EnsureLoadBalancerFunc = func(_ context.Context, name, _ string, _ string, algorithm hcloud.LoadBalancerAlgorithmType, _ map[string]string) (*hcloud.LoadBalancer, error) {
 		lbNames = append(lbNames, name)
-		if name == "test-cluster-ingress" {
+		// New naming: {cluster}-lb-ingress
+		if name == "test-cluster-lb-ingress" {
 			capturedAlgorithm = algorithm
 		}
 		return &hcloud.LoadBalancer{
@@ -511,7 +513,8 @@ func TestProvisionLoadBalancers_WithIngress(t *testing.T) {
 	err := p.ProvisionLoadBalancers(ctx)
 
 	assert.NoError(t, err)
-	assert.Contains(t, lbNames, "test-cluster-kube-api")
-	assert.Contains(t, lbNames, "test-cluster-ingress")
+	// New naming: {cluster}-lb and {cluster}-lb-ingress
+	assert.Contains(t, lbNames, "test-cluster-lb")
+	assert.Contains(t, lbNames, "test-cluster-lb-ingress")
 	assert.Equal(t, hcloud.LoadBalancerAlgorithmTypeLeastConnections, capturedAlgorithm)
 }

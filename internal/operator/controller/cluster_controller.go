@@ -23,10 +23,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	hcloudgo "github.com/hetznercloud/hcloud-go/v2/hcloud"
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	configv2 "github.com/imamik/k8zner/internal/config/v2"
+	operatorprov "github.com/imamik/k8zner/internal/operator/provisioning"
 	"github.com/imamik/k8zner/internal/platform/hcloud"
+	"github.com/imamik/k8zner/internal/provisioning"
+	"github.com/imamik/k8zner/internal/util/naming"
 )
 
 const (
@@ -34,7 +36,7 @@ const (
 	defaultRequeueAfter = 30 * time.Second
 
 	// Default health check thresholds.
-	defaultNodeNotReadyThreshold  = 5 * time.Minute
+	defaultNodeNotReadyThreshold  = 3 * time.Minute
 	defaultEtcdUnhealthyThreshold = 2 * time.Minute
 
 	// Server creation timeouts.
@@ -55,6 +57,21 @@ const (
 	EventReasonServerCreationError = "ServerCreationError"
 	EventReasonConfigApplyError    = "ConfigApplyError"
 	EventReasonNodeReadyTimeout    = "NodeReadyTimeout"
+
+	// Provisioning event reasons.
+	EventReasonProvisioningPhase       = "ProvisioningPhase"
+	EventReasonInfrastructureCreated   = "InfrastructureCreated"
+	EventReasonInfrastructureFailed    = "InfrastructureFailed"
+	EventReasonImageReady              = "ImageReady"
+	EventReasonImageFailed             = "ImageFailed"
+	EventReasonComputeProvisioned      = "ComputeProvisioned"
+	EventReasonComputeFailed           = "ComputeFailed"
+	EventReasonBootstrapComplete       = "BootstrapComplete"
+	EventReasonBootstrapFailed         = "BootstrapFailed"
+	EventReasonConfiguringComplete     = "ConfiguringComplete"
+	EventReasonConfiguringFailed       = "ConfiguringFailed"
+	EventReasonProvisioningComplete    = "ProvisioningComplete"
+	EventReasonCredentialsError        = "CredentialsError"
 )
 
 // normalizeServerSize converts legacy server type names to current Hetzner names.
@@ -76,6 +93,9 @@ type ClusterReconciler struct {
 	hcloudToken        string
 	enableMetrics      bool
 	maxConcurrentHeals int
+
+	// Provisioning adapter for operator-driven provisioning.
+	phaseAdapter *operatorprov.PhaseAdapter
 }
 
 // Option configures a ClusterReconciler.
@@ -131,6 +151,7 @@ func NewClusterReconciler(c client.Client, scheme *runtime.Scheme, recorder reco
 		Recorder:           recorder,
 		enableMetrics:      true,
 		maxConcurrentHeals: 1,
+		phaseAdapter:       operatorprov.NewPhaseAdapter(c),
 	}
 
 	for _, opt := range opts {
@@ -231,11 +252,65 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 }
 
 // reconcile runs the main reconciliation logic.
+// It uses a state machine based on ProvisioningPhase for new clusters,
+// and falls back to health-check-only mode for existing clusters without provisioning state.
 func (r *ClusterReconciler) reconcile(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	// Always update the cluster phase before returning
 	defer r.updateClusterPhase(cluster)
+
+	// Check if this cluster needs provisioning (has credentialsRef set)
+	if cluster.Spec.CredentialsRef.Name != "" {
+		// This is an operator-managed cluster - use state machine
+		return r.reconcileWithStateMachine(ctx, cluster)
+	}
+
+	// Legacy mode: health check + healing only (for clusters created before operator-centric architecture)
+	return r.reconcileLegacy(ctx, cluster)
+}
+
+// reconcileWithStateMachine handles provisioning and ongoing management using a phase-based state machine.
+func (r *ClusterReconciler) reconcileWithStateMachine(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
+	// Determine current phase (empty means start from beginning)
+	currentPhase := cluster.Status.ProvisioningPhase
+	if currentPhase == "" {
+		// New cluster - start with infrastructure phase
+		currentPhase = k8znerv1alpha1.PhaseInfrastructure
+	}
+
+	logger.Info("reconciling with state machine", "phase", currentPhase)
+
+	switch currentPhase {
+	case k8znerv1alpha1.PhaseInfrastructure:
+		return r.reconcileInfrastructurePhase(ctx, cluster)
+
+	case k8znerv1alpha1.PhaseImage:
+		return r.reconcileImagePhase(ctx, cluster)
+
+	case k8znerv1alpha1.PhaseCompute:
+		return r.reconcileComputePhase(ctx, cluster)
+
+	case k8znerv1alpha1.PhaseBootstrap:
+		return r.reconcileBootstrapPhase(ctx, cluster)
+
+	case k8znerv1alpha1.PhaseConfiguring:
+		return r.reconcileConfiguringPhase(ctx, cluster)
+
+	case k8znerv1alpha1.PhaseComplete:
+		// Provisioning complete - switch to health monitoring mode
+		return r.reconcileRunningPhase(ctx, cluster)
+
+	default:
+		logger.Info("unknown provisioning phase, resetting to infrastructure", "phase", currentPhase)
+		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseInfrastructure
+		return ctrl.Result{Requeue: true}, nil
+	}
+}
+
+// reconcileLegacy handles health check and healing for legacy clusters.
+func (r *ClusterReconciler) reconcileLegacy(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
 
 	// Phase 1: Health Check
 	logger.V(1).Info("running health check phase")
@@ -257,6 +332,258 @@ func (r *ClusterReconciler) reconcile(ctx context.Context, cluster *k8znerv1alph
 
 	// Requeue for continuous monitoring
 	return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+}
+
+// reconcileInfrastructurePhase creates network, firewall, and load balancer.
+// If infrastructure already exists (from CLI bootstrap), it skips creation and proceeds to the next phase.
+func (r *ClusterReconciler) reconcileInfrastructurePhase(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	logger.Info("reconciling infrastructure phase")
+
+	cluster.Status.Phase = k8znerv1alpha1.ClusterPhaseProvisioning
+	cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseInfrastructure
+
+	// Check if infrastructure already exists (from CLI bootstrap)
+	infra := cluster.Status.Infrastructure
+	if infra.NetworkID != 0 && infra.LoadBalancerID != 0 && infra.FirewallID != 0 {
+		logger.Info("infrastructure already exists from CLI bootstrap, skipping creation",
+			"networkID", infra.NetworkID,
+			"loadBalancerID", infra.LoadBalancerID,
+			"firewallID", infra.FirewallID,
+		)
+
+		// Set the control plane endpoint from the LB IP if not already set
+		if cluster.Status.ControlPlaneEndpoint == "" && infra.LoadBalancerIP != "" {
+			cluster.Status.ControlPlaneEndpoint = infra.LoadBalancerIP
+		}
+
+		r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonInfrastructureCreated,
+			"Using existing infrastructure from CLI bootstrap")
+
+		// Transition to image phase
+		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseImage
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// Infrastructure doesn't exist - need to create it
+	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonProvisioningPhase,
+		"Starting infrastructure provisioning")
+
+	// Load credentials
+	creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
+	if err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCredentialsError,
+			"Failed to load credentials: %v", err)
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+	}
+
+	// Build provisioning context
+	pCtx, err := r.buildProvisioningContext(ctx, cluster, creds)
+	if err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonInfrastructureFailed,
+			"Failed to build provisioning context: %v", err)
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+	}
+
+	// Run infrastructure provisioning
+	if err := r.phaseAdapter.ReconcileInfrastructure(pCtx, cluster); err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonInfrastructureFailed,
+			"Infrastructure provisioning failed: %v", err)
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+	}
+
+	// If bootstrap node exists, attach it to infrastructure
+	if cluster.Spec.Bootstrap != nil && cluster.Spec.Bootstrap.Completed {
+		if err := r.phaseAdapter.AttachBootstrapNodeToInfrastructure(pCtx, cluster); err != nil {
+			logger.Error(err, "failed to attach bootstrap node to infrastructure")
+			// Non-fatal - continue to next phase
+		}
+	}
+
+	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonInfrastructureCreated,
+		"Infrastructure provisioned successfully")
+
+	// Transition to image phase
+	cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseImage
+	return ctrl.Result{Requeue: true}, nil
+}
+
+// reconcileImagePhase ensures the Talos image snapshot exists.
+func (r *ClusterReconciler) reconcileImagePhase(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	logger.Info("reconciling image phase")
+
+	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonProvisioningPhase,
+		"Ensuring Talos image is available")
+
+	// Load credentials
+	creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
+	if err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCredentialsError,
+			"Failed to load credentials: %v", err)
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+	}
+
+	// Build provisioning context
+	pCtx, err := r.buildProvisioningContext(ctx, cluster, creds)
+	if err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonImageFailed,
+			"Failed to build provisioning context: %v", err)
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+	}
+
+	// Run image provisioning
+	if err := r.phaseAdapter.ReconcileImage(pCtx, cluster); err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonImageFailed,
+			"Image provisioning failed: %v", err)
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+	}
+
+	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonImageReady,
+		"Talos image is available")
+
+	// Transition to compute phase
+	cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseCompute
+	return ctrl.Result{Requeue: true}, nil
+}
+
+// reconcileComputePhase provisions control plane and worker servers.
+func (r *ClusterReconciler) reconcileComputePhase(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	logger.Info("reconciling compute phase")
+
+	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonProvisioningPhase,
+		"Provisioning compute resources")
+
+	// Load credentials
+	creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
+	if err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCredentialsError,
+			"Failed to load credentials: %v", err)
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+	}
+
+	// Build provisioning context
+	pCtx, err := r.buildProvisioningContext(ctx, cluster, creds)
+	if err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonComputeFailed,
+			"Failed to build provisioning context: %v", err)
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+	}
+
+	// Run compute provisioning
+	if err := r.phaseAdapter.ReconcileCompute(pCtx, cluster); err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonComputeFailed,
+			"Compute provisioning failed: %v", err)
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+	}
+
+	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonComputeProvisioned,
+		"Compute resources provisioned")
+
+	// Transition to bootstrap phase
+	cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseBootstrap
+	return ctrl.Result{Requeue: true}, nil
+}
+
+// reconcileBootstrapPhase applies Talos configs and bootstraps the cluster.
+func (r *ClusterReconciler) reconcileBootstrapPhase(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	logger.Info("reconciling bootstrap phase")
+
+	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonProvisioningPhase,
+		"Bootstrapping cluster")
+
+	// Load credentials
+	creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
+	if err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCredentialsError,
+			"Failed to load credentials: %v", err)
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+	}
+
+	// Build provisioning context
+	pCtx, err := r.buildProvisioningContext(ctx, cluster, creds)
+	if err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonBootstrapFailed,
+			"Failed to build provisioning context: %v", err)
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+	}
+
+	// Run cluster bootstrap
+	if err := r.phaseAdapter.ReconcileBootstrap(pCtx, cluster); err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonBootstrapFailed,
+			"Cluster bootstrap failed: %v", err)
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+	}
+
+	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonBootstrapComplete,
+		"Cluster bootstrapped successfully")
+
+	// Transition to configuring phase
+	cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseConfiguring
+	return ctrl.Result{Requeue: true}, nil
+}
+
+// reconcileConfiguringPhase installs addons and finalizes cluster configuration.
+func (r *ClusterReconciler) reconcileConfiguringPhase(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	logger.Info("reconciling configuring phase")
+
+	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonProvisioningPhase,
+		"Configuring cluster (installing addons)")
+
+	// TODO: Install addons (Cilium, CCM, CSI, etc.)
+	// This will be implemented when we add addon management to the operator
+
+	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonConfiguringComplete,
+		"Cluster configuration complete")
+
+	// Transition to complete phase
+	cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseComplete
+	cluster.Status.Phase = k8znerv1alpha1.ClusterPhaseRunning
+
+	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonProvisioningComplete,
+		"Cluster provisioning complete")
+
+	return ctrl.Result{Requeue: true}, nil
+}
+
+// reconcileRunningPhase handles health monitoring and scaling for a running cluster.
+func (r *ClusterReconciler) reconcileRunningPhase(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	logger.V(1).Info("reconciling running phase (health monitoring)")
+
+	// Run health check
+	if err := r.reconcileHealthCheck(ctx, cluster); err != nil {
+		return ctrl.Result{}, fmt.Errorf("health check failed: %w", err)
+	}
+
+	// Control plane reconciliation
+	if result, err := r.reconcileControlPlanes(ctx, cluster); err != nil || result.Requeue || result.RequeueAfter > 0 {
+		return result, err
+	}
+
+	// Worker reconciliation
+	if result, err := r.reconcileWorkers(ctx, cluster); err != nil || result.Requeue || result.RequeueAfter > 0 {
+		return result, err
+	}
+
+	// Requeue for continuous monitoring
+	return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+}
+
+// buildProvisioningContext creates a provisioning context for phase adapter methods.
+func (r *ClusterReconciler) buildProvisioningContext(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, creds *operatorprov.Credentials) (*provisioning.Context, error) {
+	// Create HCloud infrastructure manager
+	infraManager := hcloud.NewRealClient(creds.HCloudToken)
+
+	// Create Talos config producer (if secrets available)
+	// TODO: Initialize Talos generator from secrets
+	var talosProducer provisioning.TalosConfigProducer
+	// For now, we pass nil - the adapter will handle this
+
+	return r.phaseAdapter.BuildProvisioningContext(ctx, cluster, creds, infraManager, talosProducer)
 }
 
 // reconcileHealthCheck checks the health of all nodes and updates status.
@@ -557,53 +884,12 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 		return err
 	}
 
-	// Step 3: Find the next available worker index
-	nextIndex := r.findNextWorkerIndex(cluster)
-
-	// Step 4: Create workers (respect maxConcurrentHeals)
+	// Step 3: Create workers (respect maxConcurrentHeals)
+	// With random IDs, we don't need to track indexes - each name is unique
 	created := 0
 	for i := 0; i < count && created < r.maxConcurrentHeals; i++ {
-		workerIndex := nextIndex + i
-		newServerName := fmt.Sprintf("%s-workers-%d", cluster.Name, workerIndex)
-
-		// Check if a server with this name already exists
-		existingServer, err := r.hcloudClient.GetServerByName(ctx, newServerName)
-		if err != nil {
-			logger.Error(err, "failed to check for existing server", "name", newServerName)
-			// Continue with creation attempt
-		} else if existingServer != nil {
-			// Server exists - check its status
-			switch existingServer.Status {
-			case hcloudgo.ServerStatusRunning, hcloudgo.ServerStatusInitializing, hcloudgo.ServerStatusStarting:
-				// Server is running/starting - wait for it to join Kubernetes cluster
-				// Skip creating a new one (it will join soon)
-				logger.Info("server already exists and is running/initializing, waiting for it to join Kubernetes",
-					"name", newServerName,
-					"serverID", existingServer.ID,
-					"status", existingServer.Status,
-				)
-				created++ // Count as created so we don't try another index
-				continue
-			case hcloudgo.ServerStatusOff:
-				// Server is powered off (e.g., simulated failure) - delete it before creating new one
-				logger.Info("deleting powered-off server before creating new one",
-					"name", newServerName,
-					"serverID", existingServer.ID,
-				)
-				if err := r.hcloudClient.DeleteServer(ctx, newServerName); err != nil {
-					logger.Error(err, "failed to delete powered-off server", "name", newServerName)
-					// Continue anyway - will fail on create if server still exists
-				}
-			default:
-				// Other states (stopping, migrating, etc.) - wait
-				logger.Info("server exists in transitional state, will retry later",
-					"name", newServerName,
-					"serverID", existingServer.ID,
-					"status", existingServer.Status,
-				)
-				continue
-			}
-		}
+		// Generate a unique server name with random ID
+		newServerName := naming.Worker(cluster.Name)
 
 		serverLabels := map[string]string{
 			"cluster": cluster.Name,
@@ -616,7 +902,6 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 			"name", newServerName,
 			"snapshot", snapshot.ID,
 			"serverType", serverType,
-			"index", workerIndex,
 		)
 
 		startTime := time.Now()
@@ -1169,18 +1454,36 @@ func (r *ClusterReconciler) buildClusterState(ctx context.Context, cluster *k8zn
 		},
 	}
 
-	// Get network by cluster name convention
-	networkName := fmt.Sprintf("%s-network", cluster.Name)
-	network, err := r.hcloudClient.GetNetwork(ctx, networkName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get network %s: %w", networkName, err)
-	}
-	if network != nil {
-		state.NetworkID = network.ID
+	// First, try to use infrastructure IDs from CRD status (set by CLI bootstrap)
+	if cluster.Status.Infrastructure.NetworkID != 0 {
+		state.NetworkID = cluster.Status.Infrastructure.NetworkID
+	} else {
+		// Fall back to looking up network by name
+		networkName := fmt.Sprintf("%s-network", cluster.Name)
+		network, err := r.hcloudClient.GetNetwork(ctx, networkName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get network %s: %w", networkName, err)
+		}
+		if network != nil {
+			state.NetworkID = network.ID
+		}
 	}
 
 	// Build SANs from existing healthy control plane IPs
 	var sans []string
+
+	// Add load balancer IP to SANs (from status, infrastructure, or annotation)
+	if cluster.Status.ControlPlaneEndpoint != "" {
+		sans = append(sans, cluster.Status.ControlPlaneEndpoint)
+	} else if cluster.Status.Infrastructure.LoadBalancerIP != "" {
+		sans = append(sans, cluster.Status.Infrastructure.LoadBalancerIP)
+	} else if cluster.Annotations != nil {
+		if endpoint, ok := cluster.Annotations["k8zner.io/control-plane-endpoint"]; ok {
+			sans = append(sans, endpoint)
+		}
+	}
+
+	// Add control plane node IPs to SANs
 	for _, node := range cluster.Status.ControlPlanes.Nodes {
 		if node.PrivateIP != "" {
 			sans = append(sans, node.PrivateIP)
@@ -1202,14 +1505,19 @@ func (r *ClusterReconciler) buildClusterState(ctx context.Context, cluster *k8zn
 		state.SSHKeyIDs = []string{fmt.Sprintf("%s-key", cluster.Name)}
 	}
 
-	// Get control plane endpoint (load balancer IP) from annotations or find healthy CP
-	if cluster.Annotations != nil {
+	// Get control plane endpoint (load balancer IP)
+	// Priority: 1. CRD status endpoint, 2. Infrastructure LB IP, 3. Annotation, 4. Healthy CP IP
+	if cluster.Status.ControlPlaneEndpoint != "" {
+		state.ControlPlaneIP = cluster.Status.ControlPlaneEndpoint
+	} else if cluster.Status.Infrastructure.LoadBalancerIP != "" {
+		state.ControlPlaneIP = cluster.Status.Infrastructure.LoadBalancerIP
+	} else if cluster.Annotations != nil {
 		if endpoint, ok := cluster.Annotations["k8zner.io/control-plane-endpoint"]; ok {
 			state.ControlPlaneIP = endpoint
 		}
 	}
+	// Final fallback: use a healthy control plane IP
 	if state.ControlPlaneIP == "" {
-		// Fall back to first healthy control plane IP
 		state.ControlPlaneIP = r.findHealthyControlPlaneIP(cluster)
 	}
 
@@ -1224,24 +1532,19 @@ func (r *ClusterReconciler) buildClusterState(ctx context.Context, cluster *k8zn
 }
 
 // generateReplacementServerName generates a new server name for a replacement node.
+// Uses the new naming convention: {cluster}-{role}-{5char} where role is cp or w.
 func (r *ClusterReconciler) generateReplacementServerName(cluster *k8znerv1alpha1.K8znerCluster, role string, oldName string) string {
-	// Extract the pool and index from the old name if possible
-	// Format: {cluster}-{pool}-{index}
-	// If the old name follows the expected pattern, reuse it directly
-	if strings.HasPrefix(oldName, cluster.Name+"-") {
-		parts := strings.Split(oldName, "-")
-		if len(parts) >= 3 {
-			// Check if last part is a number (index)
-			if _, err := strconv.Atoi(parts[len(parts)-1]); err == nil {
-				// Reuse the same name for replacement (same pool and index)
-				return oldName
-			}
-		}
+	// Always generate a new name with random ID for replacements
+	// This avoids naming conflicts and makes it clear it's a new server
+	switch role {
+	case "control-plane":
+		return naming.ControlPlane(cluster.Name)
+	case "worker":
+		return naming.Worker(cluster.Name)
+	default:
+		// Fallback for unknown roles
+		return fmt.Sprintf("%s-%s-%s", cluster.Name, role[:2], naming.GenerateID(naming.IDLength))
 	}
-
-	// Fallback: generate new name with timestamp suffix
-	timestamp := time.Now().Unix()
-	return fmt.Sprintf("%s-%s-%d", cluster.Name, role, timestamp)
 }
 
 // waitForServerIP waits for a server to have an IP assigned.

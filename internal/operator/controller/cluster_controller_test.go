@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -1180,19 +1181,30 @@ func TestGenerateReplacementServerName(t *testing.T) {
 		},
 	}
 
-	t.Run("preserves pool and index from old name", func(t *testing.T) {
+	t.Run("generates new name for control plane with cp role", func(t *testing.T) {
 		name := r.generateReplacementServerName(cluster, "control-plane", "my-cluster-control-plane-3")
-		assert.Equal(t, "my-cluster-control-plane-3", name)
+		// New format: {cluster}-cp-{5char}
+		assert.True(t, strings.HasPrefix(name, "my-cluster-cp-"), "expected name to start with my-cluster-cp-, got %s", name)
+		// Check the random ID part is 5 chars
+		parts := strings.Split(name, "-")
+		assert.Equal(t, 4, len(parts), "expected 4 parts: my, cluster, cp, id")
+		assert.Equal(t, 5, len(parts[3]), "expected 5-char random ID, got %s", parts[3])
 	})
 
-	t.Run("preserves worker pool name", func(t *testing.T) {
+	t.Run("generates new name for worker with w role", func(t *testing.T) {
 		name := r.generateReplacementServerName(cluster, "worker", "my-cluster-workers-2")
-		assert.Equal(t, "my-cluster-workers-2", name)
+		// New format: {cluster}-w-{5char}
+		assert.True(t, strings.HasPrefix(name, "my-cluster-w-"), "expected name to start with my-cluster-w-, got %s", name)
+		// Check the random ID part is 5 chars
+		parts := strings.Split(name, "-")
+		assert.Equal(t, 4, len(parts), "expected 4 parts: my, cluster, w, id")
+		assert.Equal(t, 5, len(parts[3]), "expected 5-char random ID, got %s", parts[3])
 	})
 
-	t.Run("generates new name with timestamp for invalid old name", func(t *testing.T) {
-		name := r.generateReplacementServerName(cluster, "worker", "invalid-name")
-		assert.Contains(t, name, "my-cluster-worker-")
+	t.Run("generates unique names each time", func(t *testing.T) {
+		name1 := r.generateReplacementServerName(cluster, "worker", "old-name")
+		name2 := r.generateReplacementServerName(cluster, "worker", "old-name")
+		assert.NotEqual(t, name1, name2, "expected unique names on each call")
 	})
 }
 
@@ -1263,14 +1275,18 @@ func TestScaleUpWorkers(t *testing.T) {
 		// Verify two servers were created
 		assert.Len(t, mockHCloud.CreateServerCalls, 2)
 
-		// Verify first server has correct naming (index 2, since 1 exists)
-		assert.Equal(t, "test-cluster-workers-2", mockHCloud.CreateServerCalls[0].Name)
+		// Verify first server has correct naming format (random ID)
+		assert.True(t, strings.HasPrefix(mockHCloud.CreateServerCalls[0].Name, "test-cluster-w-"),
+			"expected name to start with test-cluster-w-, got %s", mockHCloud.CreateServerCalls[0].Name)
 		assert.Equal(t, "cx23", mockHCloud.CreateServerCalls[0].ServerType) // cx22 normalized to cx23
 		assert.Equal(t, "nbg1", mockHCloud.CreateServerCalls[0].Location)
 		assert.Equal(t, "worker", mockHCloud.CreateServerCalls[0].Labels["role"])
 
-		// Verify second server has correct naming (index 3)
-		assert.Equal(t, "test-cluster-workers-3", mockHCloud.CreateServerCalls[1].Name)
+		// Verify second server also has correct naming format
+		assert.True(t, strings.HasPrefix(mockHCloud.CreateServerCalls[1].Name, "test-cluster-w-"),
+			"expected name to start with test-cluster-w-, got %s", mockHCloud.CreateServerCalls[1].Name)
+		// Verify names are different (random IDs)
+		assert.NotEqual(t, mockHCloud.CreateServerCalls[0].Name, mockHCloud.CreateServerCalls[1].Name)
 
 		// Verify talos configs were generated
 		assert.Len(t, mockTalosGen.GenerateWorkerConfigCalls, 2)
