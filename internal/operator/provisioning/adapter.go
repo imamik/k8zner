@@ -27,6 +27,7 @@ import (
 	"github.com/imamik/k8zner/internal/provisioning/compute"
 	"github.com/imamik/k8zner/internal/provisioning/image"
 	"github.com/imamik/k8zner/internal/provisioning/infrastructure"
+	"github.com/imamik/k8zner/internal/util/naming"
 )
 
 // Credentials holds the secrets needed for provisioning.
@@ -182,6 +183,8 @@ func (a *PhaseAdapter) ReconcileImage(pCtx *provisioning.Context, k8sCluster *k8
 			SchematicID: pCtx.Config.Talos.SchematicID,
 			CreatedAt:   &now,
 		}
+		// Also update in Infrastructure for backwards compatibility
+		k8sCluster.Status.Infrastructure.SnapshotID = snapshot.ID
 	}
 
 	// Set condition
@@ -214,6 +217,12 @@ func (a *PhaseAdapter) ReconcileCompute(pCtx *provisioning.Context, k8sCluster *
 
 	// Update node statuses from provisioning results
 	updateNodeStatuses(k8sCluster, pCtx.State)
+
+	// Try to get placement group ID for status (optional - don't fail if not found)
+	pgName := naming.PlacementGroup(k8sCluster.Name, "control-plane")
+	if pg, err := pCtx.Infra.GetPlacementGroup(pCtx.Context, pgName); err == nil && pg != nil {
+		k8sCluster.Status.Infrastructure.PlacementGroupID = pg.ID
+	}
 
 	return nil
 }
@@ -462,6 +471,9 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 			},
 			Traefik: config.TraefikConfig{
 				Enabled: spec.Addons != nil && spec.Addons.Traefik,
+			},
+			ExternalDNS: config.ExternalDNSConfig{
+				Enabled: spec.Addons != nil && spec.Addons.ExternalDNS,
 			},
 			ArgoCD: config.ArgoCDConfig{
 				Enabled: spec.Addons != nil && spec.Addons.ArgoCD,
