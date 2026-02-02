@@ -169,6 +169,13 @@ var _ = Describe("K8znerCluster Controller", func() {
 					Count: 2,
 					Size:  "cx22",
 				},
+				// Required fields with validation patterns
+				Kubernetes: k8znerv1alpha1.KubernetesSpec{
+					Version: "1.32.0",
+				},
+				Talos: k8znerv1alpha1.TalosSpec{
+					Version: "v1.10.0",
+				},
 			},
 		}
 		for _, opt := range opts {
