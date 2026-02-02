@@ -13,6 +13,7 @@ import (
 
 	"github.com/imamik/k8zner/internal/addons"
 	"github.com/imamik/k8zner/internal/config"
+	v2 "github.com/imamik/k8zner/internal/config/v2"
 )
 
 // phaseOperatorScale tests scaling the cluster via the K8znerCluster CRD.
@@ -108,12 +109,44 @@ func deployOperatorForScaling(t *testing.T, state *E2EState, token string) {
 }
 
 // createK8znerClusterForScaling creates a K8znerCluster CRD for scaling tests.
+// This function creates both the credentials Secret and the K8znerCluster CRD.
 func createK8znerClusterForScaling(t *testing.T, state *E2EState, workerCount int) {
 	t.Logf("Creating K8znerCluster CRD (workers: %d)...", workerCount)
 
 	cpCount := len(state.ControlPlaneIPs)
+	credentialsSecretName := fmt.Sprintf("%s-credentials", state.ClusterName)
 
-	// Note: We no longer need SSH keys annotation since we use ephemeral keys
+	// Get HCloud token from environment
+	token := os.Getenv("HCLOUD_TOKEN")
+	if token == "" {
+		t.Fatal("HCLOUD_TOKEN required for creating K8znerCluster")
+	}
+
+	// Create credentials Secret first
+	secretManifest := fmt.Sprintf(`apiVersion: v1
+kind: Secret
+metadata:
+  name: %s
+  namespace: k8zner-system
+type: Opaque
+stringData:
+  token: %s
+`, credentialsSecretName, token)
+
+	cmd := exec.Command("kubectl",
+		"--kubeconfig", state.KubeconfigPath,
+		"apply", "-f", "-")
+	cmd.Stdin = strings.NewReader(secretManifest)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Failed to create credentials Secret: %v\nOutput: %s", err, string(output))
+	}
+	t.Logf("Credentials Secret created: %s", credentialsSecretName)
+
+	// Get versions from version matrix
+	versionMatrix := v2.DefaultVersionMatrix()
+
+	// Create K8znerCluster CRD with all required fields
 	// Use CPX22 (shared vCPU) for better availability in E2E tests
 	manifest := fmt.Sprintf(`apiVersion: k8zner.io/v1alpha1
 kind: K8znerCluster
@@ -122,6 +155,12 @@ metadata:
   namespace: k8zner-system
 spec:
   region: nbg1
+  credentialsRef:
+    name: %s
+  kubernetes:
+    version: "%s"
+  talos:
+    version: "%s"
   controlPlanes:
     count: %d
     size: cpx22
@@ -130,13 +169,13 @@ spec:
     size: cpx22
   healthCheck:
     nodeNotReadyThreshold: "3m"
-`, state.ClusterName, cpCount, workerCount)
+`, state.ClusterName, credentialsSecretName, versionMatrix.Kubernetes, versionMatrix.Talos, cpCount, workerCount)
 
-	cmd := exec.Command("kubectl",
+	cmd = exec.Command("kubectl",
 		"--kubeconfig", state.KubeconfigPath,
 		"apply", "-f", "-")
 	cmd.Stdin = strings.NewReader(manifest)
-	output, err := cmd.CombinedOutput()
+	output, err = cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("Failed to create K8znerCluster: %v\nOutput: %s", err, string(output))
 	}
@@ -392,7 +431,7 @@ func showClusterStatusForScaling(t *testing.T, kubeconfigPath, clusterName strin
 	t.Logf("K8znerCluster:\n%s", string(output))
 }
 
-// cleanupK8znerClusterForScaling removes the K8znerCluster resource.
+// cleanupK8znerClusterForScaling removes the K8znerCluster resource and credentials Secret.
 func cleanupK8znerClusterForScaling(t *testing.T, state *E2EState) {
 	t.Log("Cleaning up K8znerCluster resource...")
 
@@ -404,5 +443,15 @@ func cleanupK8znerClusterForScaling(t *testing.T, state *E2EState) {
 		t.Logf("Warning: Failed to delete K8znerCluster: %v\nOutput: %s", err, string(output))
 	}
 
-	t.Log("K8znerCluster resource deleted")
+	// Also delete the credentials Secret
+	credentialsSecretName := fmt.Sprintf("%s-credentials", state.ClusterName)
+	cmd = exec.Command("kubectl",
+		"--kubeconfig", state.KubeconfigPath,
+		"delete", "secret", "-n", "k8zner-system", credentialsSecretName,
+		"--ignore-not-found")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Logf("Warning: Failed to delete credentials Secret: %v\nOutput: %s", err, string(output))
+	}
+
+	t.Log("K8znerCluster resource and credentials Secret deleted")
 }

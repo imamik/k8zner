@@ -160,7 +160,7 @@ func TestBuild_DefaultServerType(t *testing.T) {
 		arch               string
 		expectedServerType string
 	}{
-		{"amd64 default", "amd64", "cx23"},
+		{"amd64 default", "amd64", "cpx22"},
 		{"arm64 default", "arm64", "cax11"},
 	}
 

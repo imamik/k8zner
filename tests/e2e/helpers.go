@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -447,4 +448,102 @@ func verifyLoadBalancerRDNS(ctx context.Context, t *testing.T, state *E2EState) 
 	} else {
 		t.Log("  ⚠ No load balancer IP available, skipping RDNS verification")
 	}
+}
+
+// gatherKubernetesDiagnostics collects comprehensive diagnostic information about
+// pods, events, CRDs, and connectivity for debugging test failures.
+func gatherKubernetesDiagnostics(t *testing.T, kubeconfigPath, namespace, context string) {
+	t.Log("=== GATHERING KUBERNETES DIAGNOSTICS ===")
+	t.Logf("Namespace: %s, Context: %s", namespace, context)
+
+	// 1. Get pod status with node placement
+	t.Log("--- Pod Status ---")
+	cmd := exec.CommandContext(context.Background(), "kubectl",
+		"--kubeconfig", kubeconfigPath,
+		"get", "pods", "-n", namespace, "-o", "wide")
+	if output, err := cmd.CombinedOutput(); err == nil {
+		t.Logf("Pods:\n%s", string(output))
+	} else {
+		t.Logf("Failed to get pods: %v", err)
+	}
+
+	// 2. Describe pods with events and conditions
+	t.Log("--- Pod Details ---")
+	cmd = exec.CommandContext(context.Background(), "kubectl",
+		"--kubeconfig", kubeconfigPath,
+		"describe", "pods", "-n", namespace)
+	if output, err := cmd.CombinedOutput(); err == nil {
+		// Limit output to avoid overwhelming logs
+		outputStr := string(output)
+		if len(outputStr) > 10000 {
+			outputStr = outputStr[:10000] + "\n... (truncated)"
+		}
+		t.Logf("Pod descriptions:\n%s", outputStr)
+	} else {
+		t.Logf("Failed to describe pods: %v", err)
+	}
+
+	// 3. Get recent events sorted by timestamp
+	t.Log("--- Recent Events ---")
+	cmd = exec.CommandContext(context.Background(), "kubectl",
+		"--kubeconfig", kubeconfigPath,
+		"get", "events", "-n", namespace, "--sort-by=.lastTimestamp")
+	if output, err := cmd.CombinedOutput(); err == nil {
+		t.Logf("Events:\n%s", string(output))
+	} else {
+		t.Logf("Failed to get events: %v", err)
+	}
+
+	// 4. Get K8znerCluster CRD status if in k8zner-system namespace
+	if namespace == "k8zner-system" {
+		t.Log("--- K8znerCluster CRD Status ---")
+		cmd = exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"get", "k8znerclusters", "-n", namespace, "-o", "yaml")
+		if output, err := cmd.CombinedOutput(); err == nil {
+			t.Logf("K8znerClusters:\n%s", string(output))
+		} else {
+			t.Logf("Failed to get K8znerClusters: %v", err)
+		}
+	}
+
+	// 5. Get recent logs from pods in namespace
+	t.Log("--- Recent Pod Logs ---")
+	cmd = exec.CommandContext(context.Background(), "kubectl",
+		"--kubeconfig", kubeconfigPath,
+		"logs", "-n", namespace, "--all-containers=true", "--tail=50", "-l", "app")
+	if output, err := cmd.CombinedOutput(); err == nil {
+		outputStr := string(output)
+		if len(outputStr) > 5000 {
+			outputStr = outputStr[:5000] + "\n... (truncated)"
+		}
+		t.Logf("Pod logs:\n%s", outputStr)
+	} else {
+		t.Logf("Failed to get pod logs: %v (this is normal if no pods match)", err)
+	}
+
+	t.Log("=== END KUBERNETES DIAGNOSTICS ===")
+}
+
+// gatherConnectivityDiagnostics checks TCP connectivity to control plane IPs.
+func gatherConnectivityDiagnostics(t *testing.T, controlPlaneIPs []string) {
+	t.Log("=== CONNECTIVITY DIAGNOSTICS ===")
+
+	for _, ip := range controlPlaneIPs {
+		// Check Kubernetes API port (6443)
+		if err := quickPortCheck(ip, 6443); err != nil {
+			t.Logf("  ✗ %s:6443 (kube-api): %v", ip, err)
+		} else {
+			t.Logf("  ✓ %s:6443 (kube-api): reachable", ip)
+		}
+
+		// Check Talos API port (50000)
+		if err := quickPortCheck(ip, 50000); err != nil {
+			t.Logf("  ✗ %s:50000 (talos-api): %v", ip, err)
+		} else {
+			t.Logf("  ✓ %s:50000 (talos-api): reachable", ip)
+		}
+	}
+
+	t.Log("=== END CONNECTIVITY DIAGNOSTICS ===")
 }
