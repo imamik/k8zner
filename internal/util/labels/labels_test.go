@@ -272,10 +272,10 @@ func TestFluentChaining(t *testing.T) {
 
 		// Check new keys
 		expected := map[string]string{
-			KeyCluster:  "test-cluster",
-			KeyRole:     RoleWorker,
-			KeyPool:     "workers",
-			KeyServerID: "abc12",
+			KeyCluster:   "test-cluster",
+			KeyRole:      RoleWorker,
+			KeyPool:      "workers",
+			KeyServerID:  "abc12",
 			KeyManagedBy: ManagedByK8zner,
 		}
 

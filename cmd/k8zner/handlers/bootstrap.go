@@ -26,19 +26,20 @@ import (
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	"github.com/imamik/k8zner/internal/config"
 	hcloudInternal "github.com/imamik/k8zner/internal/platform/hcloud"
+	"github.com/imamik/k8zner/internal/util/keygen"
 	"github.com/imamik/k8zner/internal/util/labels"
 	"github.com/imamik/k8zner/internal/util/naming"
 )
 
 const (
 	// Bootstrap timeouts.
-	serverCreateTimeout     = 5 * time.Minute
-	serverIPWaitTimeout     = 2 * time.Minute
-	serverIPRetryInterval   = 5 * time.Second
-	talosBootstrapTimeout   = 10 * time.Minute
-	apiServerReadyTimeout   = 5 * time.Minute
-	operatorInstallTimeout  = 2 * time.Minute
-	lbCreateTimeout         = 6 * time.Minute
+	serverCreateTimeout    = 5 * time.Minute
+	serverIPWaitTimeout    = 2 * time.Minute
+	serverIPRetryInterval  = 5 * time.Second
+	talosBootstrapTimeout  = 10 * time.Minute
+	apiServerReadyTimeout  = 5 * time.Minute
+	operatorInstallTimeout = 2 * time.Minute
+	lbCreateTimeout        = 6 * time.Minute
 
 	// Kubernetes namespace for k8zner resources.
 	k8znerNamespace = "k8zner-system"
@@ -453,6 +454,7 @@ func parseCIDRs(cidrs []string) []net.IPNet {
 }
 
 // createBootstrapServer creates the first control plane server attached to the network.
+// Uses an ephemeral SSH key to avoid Hetzner password emails, then deletes it after provisioning.
 func createBootstrapServer(ctx context.Context, client hcloudInternal.InfrastructureManager, cfg *config.Config, snapshotID int64, infra *InfrastructureInfo) (*BootstrapServerInfo, error) {
 	serverName := naming.Server(cfg.ClusterName, "control-plane", 0)
 
@@ -475,6 +477,34 @@ func createBootstrapServer(ctx context.Context, client hcloudInternal.Infrastruc
 		}, nil
 	}
 
+	// Create ephemeral SSH key to avoid Hetzner password emails
+	// This key is created for server provisioning and deleted immediately after
+	sshKeyName := fmt.Sprintf("ephemeral-%s-%d", serverName, time.Now().Unix())
+	log.Printf("Creating ephemeral SSH key: %s", sshKeyName)
+
+	keyPair, err := keygen.GenerateRSAKeyPair(2048)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate ephemeral SSH key: %w", err)
+	}
+
+	sshKeyLabels := labels.NewLabelBuilder(cfg.ClusterName).
+		WithTestIDIfSet(cfg.TestID).
+		Build()
+	sshKeyLabels["type"] = "ephemeral-bootstrap"
+
+	_, err = client.CreateSSHKey(ctx, sshKeyName, string(keyPair.PublicKey), sshKeyLabels)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upload ephemeral SSH key: %w", err)
+	}
+
+	// Schedule cleanup of the ephemeral SSH key
+	defer func() {
+		log.Printf("Cleaning up ephemeral SSH key: %s", sshKeyName)
+		if err := client.DeleteSSHKey(ctx, sshKeyName); err != nil {
+			log.Printf("Warning: failed to delete ephemeral SSH key %s: %v", sshKeyName, err)
+		}
+	}()
+
 	// Build labels
 	serverLabels := labels.NewLabelBuilder(cfg.ClusterName).
 		WithRole("control-plane").
@@ -492,21 +522,21 @@ func createBootstrapServer(ctx context.Context, client hcloudInternal.Infrastruc
 		return nil, fmt.Errorf("failed to calculate private IP: %w", err)
 	}
 
-	// Create server attached to network
+	// Create server attached to network using the ephemeral SSH key
 	serverIDStr, err := client.CreateServer(
 		ctx,
 		serverName,
 		fmt.Sprintf("%d", snapshotID),
 		cfg.ControlPlane.NodePools[0].ServerType,
 		cfg.Location,
-		cfg.SSHKeys,
+		[]string{sshKeyName}, // Use ephemeral SSH key instead of cfg.SSHKeys
 		serverLabels,
-		"",                  // userData
-		nil,                 // placementGroupID
-		infra.NetworkID,     // networkID - attach to network
-		privateIPStr,        // privateIP
-		true,                // enablePublicIPv4
-		true,                // enablePublicIPv6
+		"",              // userData
+		nil,             // placementGroupID
+		infra.NetworkID, // networkID - attach to network
+		privateIPStr,    // privateIP
+		true,            // enablePublicIPv4
+		true,            // enablePublicIPv6
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create server: %w", err)

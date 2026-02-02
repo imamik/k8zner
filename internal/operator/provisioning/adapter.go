@@ -12,11 +12,11 @@ import (
 	"time"
 
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
+	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"gopkg.in/yaml.v3"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	"github.com/imamik/k8zner/internal/config"
@@ -258,19 +258,66 @@ func (a *PhaseAdapter) AttachBootstrapNodeToInfrastructure(
 		"serverID", cluster.Spec.Bootstrap.BootstrapNodeID,
 	)
 
-	// The infrastructure provisioner creates the network, firewall, and LB
-	// with label selectors that automatically apply to servers with matching labels.
-	// For the bootstrap node, we may need to ensure it has the correct labels.
+	// Get the network ID from the provisioning state or cluster status
+	networkID := pCtx.State.Network.ID
+	if networkID == 0 {
+		networkID = cluster.Status.Infrastructure.NetworkID
+	}
+	if networkID == 0 {
+		return fmt.Errorf("network ID not available - infrastructure must be provisioned first")
+	}
 
-	// Note: In the current architecture, the firewall is applied via label selector
-	// on server creation. The LB targets are also label-based. So we primarily need
-	// to ensure the bootstrap node is attached to the private network.
+	// Check if server is already attached to the network
+	server, err := pCtx.Infra.GetServerByName(pCtx.Context, bootstrapName)
+	if err != nil {
+		return fmt.Errorf("failed to get bootstrap server: %w", err)
+	}
+	if server == nil {
+		return fmt.Errorf("bootstrap server not found: %s", bootstrapName)
+	}
 
-	// The network attachment happens in the compute provisioner when creating new servers.
-	// For the bootstrap node (created without network), we need to manually attach it.
+	// Check if already attached
+	for _, pn := range server.PrivateNet {
+		if pn.Network.ID == networkID {
+			logger.Info("bootstrap node already attached to network",
+				"nodeName", bootstrapName,
+				"networkID", networkID,
+				"privateIP", pn.IP.String(),
+			)
+			return nil
+		}
+	}
 
-	// This will be handled by the infrastructure provisioner's network attachment logic
-	// when we add the bootstrap node to the state before running compute.
+	// Calculate private IP for bootstrap node (first CP in subnet)
+	// Control planes use subnet index 0, which is 10.0.0.0/24 by default
+	// First CP gets IP .2 (after network .0 and gateway .1)
+	networkCIDR := defaultString(cluster.Spec.Network.IPv4CIDR, "10.0.0.0/16")
+	cpSubnet, err := config.CIDRSubnet(networkCIDR, 8, 0) // Control plane subnet
+	if err != nil {
+		return fmt.Errorf("failed to calculate control plane subnet: %w", err)
+	}
+
+	privateIP, err := config.CIDRHost(cpSubnet, 2) // First CP IP (.2)
+	if err != nil {
+		return fmt.Errorf("failed to calculate bootstrap node IP: %w", err)
+	}
+
+	logger.Info("attaching bootstrap node to network",
+		"nodeName", bootstrapName,
+		"networkID", networkID,
+		"privateIP", privateIP,
+	)
+
+	// Attach the server to the network
+	if err := pCtx.Infra.AttachServerToNetwork(pCtx.Context, bootstrapName, networkID, privateIP); err != nil {
+		return fmt.Errorf("failed to attach bootstrap node to network: %w", err)
+	}
+
+	logger.Info("bootstrap node attached to infrastructure",
+		"nodeName", bootstrapName,
+		"networkID", networkID,
+		"privateIP", privateIP,
+	)
 
 	return nil
 }
