@@ -25,6 +25,7 @@ func Expand(cfg *Config) (*config.Config, error) {
 		// Basic cluster info
 		ClusterName: cfg.Name,
 		Location:    string(cfg.Region),
+		HCloudToken: os.Getenv("HCLOUD_TOKEN"),
 
 		// Access configuration
 		ClusterAccess:             "public", // LB is public, nodes are IPv6-only
