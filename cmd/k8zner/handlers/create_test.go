@@ -86,11 +86,11 @@ func TestGetWorkerSize(t *testing.T) {
 
 func TestGetBootstrapNode(t *testing.T) {
 	tests := []struct {
-		name           string
-		pCtx           *provisioning.Context
-		expectedName   string
-		expectedID     int64
-		expectedIP     string
+		name         string
+		pCtx         *provisioning.Context
+		expectedName string
+		expectedID   int64
+		expectedIP   string
 	}{
 		{
 			name: "empty state",
