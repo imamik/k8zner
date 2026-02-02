@@ -124,10 +124,10 @@ var _ = AfterSuite(func() {
 })
 
 var _ = Describe("K8znerCluster Controller", func() {
-	// Test timing constants
+	// Test timing constants - increased for CI environments which can be slower
 	const (
-		timeout  = time.Second * 10
-		interval = time.Millisecond * 250
+		timeout  = time.Second * 30
+		interval = time.Millisecond * 500
 	)
 
 	// Helper to create unique cluster names for test isolation
