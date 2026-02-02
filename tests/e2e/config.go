@@ -18,6 +18,7 @@ type E2EConfig struct {
 	SkipAddonsAdvanced bool
 	SkipMonitoring     bool
 	SkipScale          bool
+	SkipOperatorScale  bool // Operator-centric scaling via CRD
 	SkipSelfHealing    bool
 	SkipUpgrade        bool
 
@@ -49,6 +50,7 @@ func LoadE2EConfig() *E2EConfig {
 		SkipAddonsAdvanced: getEnvBool("E2E_SKIP_ADDONS_ADVANCED"),
 		SkipMonitoring:     getEnvBool("E2E_SKIP_MONITORING"),
 		SkipScale:          getEnvBool("E2E_SKIP_SCALE"),
+		SkipOperatorScale:  getEnvBool("E2E_SKIP_OPERATOR_SCALE"),
 		SkipSelfHealing:    getEnvBool("E2E_SKIP_SELF_HEALING"),
 		SkipUpgrade:        getEnvBool("E2E_SKIP_UPGRADE"),
 
@@ -102,6 +104,9 @@ func (c *E2EConfig) RunPhases() []string {
 	}
 	if !c.SkipScale {
 		phases = append(phases, "scale")
+	}
+	if !c.SkipOperatorScale {
+		phases = append(phases, "operator-scale")
 	}
 	if !c.SkipSelfHealing {
 		phases = append(phases, "self-healing")
