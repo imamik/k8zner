@@ -4,7 +4,9 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -206,35 +208,16 @@ func isCiliumReady(ctx context.Context, k8sClient client.Client) bool {
 func createTestConfig(t *testing.T, clusterName string) string {
 	t.Helper()
 
-	content := `
-cluster_name: ` + clusterName + `
-location: nbg1
-
-kubernetes:
-  version: "1.32.2"
-
-talos:
-  version: "v1.10.2"
-
-control_plane:
-  - name: cp
-    count: 1
-    server_type: cpx22
+	content := `name: ` + clusterName + `
+region: nbg1
+mode: dev
 
 workers:
-  - name: worker
-    count: 1
-    server_type: cpx22
+  count: 1
+  size: cpx22
 
-addons:
-  cilium:
-    enabled: true
-  ccm:
-    enabled: true
-  csi:
-    enabled: true
-  metrics_server:
-    enabled: true
+control_plane:
+  size: cpx22
 `
 
 	tmpFile, err := os.CreateTemp("", "k8zner-e2e-*.yaml")
@@ -256,60 +239,32 @@ func updateTestConfigWorkers(t *testing.T, configPath string, count int) {
 	content, err := os.ReadFile(configPath)
 	require.NoError(t, err)
 
-	// Simple string replacement for the count
-	// This is a simplified approach - in production use proper YAML parsing
-	newContent := string(content)
-	// The config has "count: 1" under workers
-	// We replace it with the new count
-
-	tmpFile, err := os.CreateTemp("", "k8zner-e2e-*.yaml")
-	require.NoError(t, err)
+	clusterName := extractClusterName(string(content))
 
 	// Create new config with updated count
-	updatedContent := `
-cluster_name: ` + extractClusterName(newContent) + `
-location: nbg1
-
-kubernetes:
-  version: "1.32.2"
-
-talos:
-  version: "v1.10.2"
-
-control_plane:
-  - name: cp
-    count: 1
-    server_type: cpx22
+	updatedContent := `name: ` + clusterName + `
+region: nbg1
+mode: dev
 
 workers:
-  - name: worker
-    count: ` + string(rune('0'+count)) + `
-    server_type: cpx22
+  count: ` + fmt.Sprintf("%d", count) + `
+  size: cpx22
 
-addons:
-  cilium:
-    enabled: true
-  ccm:
-    enabled: true
-  csi:
-    enabled: true
-  metrics_server:
-    enabled: true
+control_plane:
+  size: cpx22
 `
 
 	err = os.WriteFile(configPath, []byte(updatedContent), 0644)
 	require.NoError(t, err)
-
-	tmpFile.Close()
-	os.Remove(tmpFile.Name())
 }
 
 // extractClusterName extracts cluster name from config content.
 func extractClusterName(content string) string {
-	// Simple extraction - find "cluster_name: " and get the value
+	// Simple extraction - find "name: " at the start of a line and get the value
 	for _, line := range splitLines(content) {
-		if len(line) > 14 && line[:14] == "cluster_name: " {
-			return line[14:]
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "name: ") {
+			return strings.TrimSpace(trimmed[6:])
 		}
 	}
 	return "unknown"
