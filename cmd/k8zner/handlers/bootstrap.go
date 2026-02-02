@@ -253,7 +253,7 @@ func Bootstrap(ctx context.Context, opts BootstrapOptions) error {
 }
 
 // createLoadBalancer creates the API load balancer and returns its public IP.
-func createLoadBalancer(ctx context.Context, client hcloudInternal.InfrastructureManager, cfg *config.Config, infra *InfrastructureInfo) error {
+func createLoadBalancer(ctx context.Context, hclient hcloudInternal.InfrastructureManager, cfg *config.Config, infra *InfrastructureInfo) error {
 	lbName := naming.KubeAPILoadBalancer(cfg.ClusterName)
 	infra.LoadBalancerName = lbName
 
@@ -263,7 +263,7 @@ func createLoadBalancer(ctx context.Context, client hcloudInternal.Infrastructur
 		Build()
 
 	// Create load balancer
-	lb, err := client.EnsureLoadBalancer(ctx, lbName, cfg.Location, "lb11", hcloud.LoadBalancerAlgorithmTypeRoundRobin, lbLabels)
+	lb, err := hclient.EnsureLoadBalancer(ctx, lbName, cfg.Location, "lb11", hcloud.LoadBalancerAlgorithmTypeRoundRobin, lbLabels)
 	if err != nil {
 		return fmt.Errorf("failed to ensure load balancer: %w", err)
 	}
@@ -293,13 +293,13 @@ func createLoadBalancer(ctx context.Context, client hcloudInternal.Infrastructur
 			},
 		},
 	}
-	if err := client.ConfigureService(ctx, lb, service); err != nil {
+	if err := hclient.ConfigureService(ctx, lb, service); err != nil {
 		return fmt.Errorf("failed to configure LB service: %w", err)
 	}
 
 	// Add target using label selector (will match servers with cluster=<name>,role=control-plane)
 	targetSelector := fmt.Sprintf("cluster=%s,role=control-plane", cfg.ClusterName)
-	if err := client.AddTarget(ctx, lb, hcloud.LoadBalancerTargetTypeLabelSelector, targetSelector); err != nil {
+	if err := hclient.AddTarget(ctx, lb, hcloud.LoadBalancerTargetTypeLabelSelector, targetSelector); err != nil {
 		return fmt.Errorf("failed to add LB target: %w", err)
 	}
 
@@ -307,7 +307,7 @@ func createLoadBalancer(ctx context.Context, client hcloudInternal.Infrastructur
 }
 
 // createNetwork creates the private network and subnets.
-func createNetwork(ctx context.Context, client hcloudInternal.InfrastructureManager, cfg *config.Config, infra *InfrastructureInfo) error {
+func createNetwork(ctx context.Context, hclient hcloudInternal.InfrastructureManager, cfg *config.Config, infra *InfrastructureInfo) error {
 	networkName := cfg.ClusterName
 	infra.NetworkName = networkName
 
@@ -316,7 +316,7 @@ func createNetwork(ctx context.Context, client hcloudInternal.InfrastructureMana
 		Build()
 
 	// Create network
-	network, err := client.EnsureNetwork(ctx, networkName, cfg.Network.IPv4CIDR, cfg.Network.Zone, networkLabels)
+	network, err := hclient.EnsureNetwork(ctx, networkName, cfg.Network.IPv4CIDR, cfg.Network.Zone, networkLabels)
 	if err != nil {
 		return fmt.Errorf("failed to ensure network: %w", err)
 	}
@@ -328,7 +328,7 @@ func createNetwork(ctx context.Context, client hcloudInternal.InfrastructureMana
 	if err != nil {
 		return fmt.Errorf("failed to calculate control-plane subnet: %w", err)
 	}
-	if err := client.EnsureSubnet(ctx, network, cpSubnet, cfg.Network.Zone, hcloud.NetworkSubnetTypeCloud); err != nil {
+	if err := hclient.EnsureSubnet(ctx, network, cpSubnet, cfg.Network.Zone, hcloud.NetworkSubnetTypeCloud); err != nil {
 		return fmt.Errorf("failed to ensure control-plane subnet: %w", err)
 	}
 
@@ -337,7 +337,7 @@ func createNetwork(ctx context.Context, client hcloudInternal.InfrastructureMana
 	if err != nil {
 		return fmt.Errorf("failed to calculate load-balancer subnet: %w", err)
 	}
-	if err := client.EnsureSubnet(ctx, network, lbSubnet, cfg.Network.Zone, hcloud.NetworkSubnetTypeCloud); err != nil {
+	if err := hclient.EnsureSubnet(ctx, network, lbSubnet, cfg.Network.Zone, hcloud.NetworkSubnetTypeCloud); err != nil {
 		return fmt.Errorf("failed to ensure load-balancer subnet: %w", err)
 	}
 
@@ -347,13 +347,13 @@ func createNetwork(ctx context.Context, client hcloudInternal.InfrastructureMana
 		if err != nil {
 			return fmt.Errorf("failed to calculate worker subnet %d: %w", i, err)
 		}
-		if err := client.EnsureSubnet(ctx, network, wSubnet, cfg.Network.Zone, hcloud.NetworkSubnetTypeCloud); err != nil {
+		if err := hclient.EnsureSubnet(ctx, network, wSubnet, cfg.Network.Zone, hcloud.NetworkSubnetTypeCloud); err != nil {
 			return fmt.Errorf("failed to ensure worker subnet %d: %w", i, err)
 		}
 	}
 
 	// Attach LB to network
-	lb, err := client.GetLoadBalancer(ctx, infra.LoadBalancerName)
+	lb, err := hclient.GetLoadBalancer(ctx, infra.LoadBalancerName)
 	if err != nil {
 		return fmt.Errorf("failed to get load balancer: %w", err)
 	}
@@ -365,7 +365,7 @@ func createNetwork(ctx context.Context, client hcloudInternal.InfrastructureMana
 	}
 	lbPrivateIP := net.ParseIP(lbPrivateIPStr)
 
-	if err := client.AttachToNetwork(ctx, lb, network, lbPrivateIP); err != nil {
+	if err := hclient.AttachToNetwork(ctx, lb, network, lbPrivateIP); err != nil {
 		return fmt.Errorf("failed to attach LB to network: %w", err)
 	}
 
@@ -373,7 +373,7 @@ func createNetwork(ctx context.Context, client hcloudInternal.InfrastructureMana
 }
 
 // createFirewall creates the cluster firewall.
-func createFirewall(ctx context.Context, client hcloudInternal.InfrastructureManager, cfg *config.Config, infra *InfrastructureInfo) error {
+func createFirewall(ctx context.Context, hclient hcloudInternal.InfrastructureManager, cfg *config.Config, infra *InfrastructureInfo) error {
 	firewallName := cfg.ClusterName
 	infra.FirewallName = firewallName
 
@@ -382,7 +382,7 @@ func createFirewall(ctx context.Context, client hcloudInternal.InfrastructureMan
 		Build()
 
 	// Detect current public IP for firewall rules
-	publicIP, _ := client.GetPublicIP(ctx)
+	publicIP, _ := hclient.GetPublicIP(ctx)
 
 	// Build firewall rules
 	rules := []hcloud.FirewallRule{}
@@ -432,7 +432,7 @@ func createFirewall(ctx context.Context, client hcloudInternal.InfrastructureMan
 	// Apply firewall with label selector
 	applyToLabelSelector := fmt.Sprintf("cluster=%s", cfg.ClusterName)
 
-	firewall, err := client.EnsureFirewall(ctx, firewallName, rules, firewallLabels, applyToLabelSelector)
+	firewall, err := hclient.EnsureFirewall(ctx, firewallName, rules, firewallLabels, applyToLabelSelector)
 	if err != nil {
 		return fmt.Errorf("failed to ensure firewall: %w", err)
 	}
@@ -455,13 +455,13 @@ func parseCIDRs(cidrs []string) []net.IPNet {
 
 // createBootstrapServer creates the first control plane server attached to the network.
 // Uses an ephemeral SSH key to avoid Hetzner password emails, then deletes it after provisioning.
-func createBootstrapServer(ctx context.Context, client hcloudInternal.InfrastructureManager, cfg *config.Config, snapshotID int64, infra *InfrastructureInfo) (*BootstrapServerInfo, error) {
+func createBootstrapServer(ctx context.Context, hclient hcloudInternal.InfrastructureManager, cfg *config.Config, snapshotID int64, infra *InfrastructureInfo) (*BootstrapServerInfo, error) {
 	serverName := naming.Server(cfg.ClusterName, "control-plane", 0)
 
 	// Check if server already exists
-	existingIP, err := client.GetServerIP(ctx, serverName)
+	existingIP, err := hclient.GetServerIP(ctx, serverName)
 	if err == nil && existingIP != "" {
-		serverIDStr, err := client.GetServerID(ctx, serverName)
+		serverIDStr, err := hclient.GetServerID(ctx, serverName)
 		if err != nil {
 			return nil, fmt.Errorf("server exists but failed to get ID: %w", err)
 		}
@@ -492,7 +492,7 @@ func createBootstrapServer(ctx context.Context, client hcloudInternal.Infrastruc
 		Build()
 	sshKeyLabels["type"] = "ephemeral-bootstrap"
 
-	_, err = client.CreateSSHKey(ctx, sshKeyName, string(keyPair.PublicKey), sshKeyLabels)
+	_, err = hclient.CreateSSHKey(ctx, sshKeyName, string(keyPair.PublicKey), sshKeyLabels)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload ephemeral SSH key: %w", err)
 	}
@@ -500,7 +500,7 @@ func createBootstrapServer(ctx context.Context, client hcloudInternal.Infrastruc
 	// Schedule cleanup of the ephemeral SSH key
 	defer func() {
 		log.Printf("Cleaning up ephemeral SSH key: %s", sshKeyName)
-		if err := client.DeleteSSHKey(ctx, sshKeyName); err != nil {
+		if err := hclient.DeleteSSHKey(ctx, sshKeyName); err != nil {
 			log.Printf("Warning: failed to delete ephemeral SSH key %s: %v", sshKeyName, err)
 		}
 	}()
@@ -523,7 +523,7 @@ func createBootstrapServer(ctx context.Context, client hcloudInternal.Infrastruc
 	}
 
 	// Create server attached to network using the ephemeral SSH key
-	serverIDStr, err := client.CreateServer(
+	serverIDStr, err := hclient.CreateServer(
 		ctx,
 		serverName,
 		fmt.Sprintf("%d", snapshotID),
@@ -548,7 +548,7 @@ func createBootstrapServer(ctx context.Context, client hcloudInternal.Infrastruc
 	}
 
 	// Wait for public IP
-	publicIP, err := waitForServerIP(ctx, client, serverName, serverIPWaitTimeout)
+	publicIP, err := waitForServerIP(ctx, hclient, serverName, serverIPWaitTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("server created but failed to get IP: %w", err)
 	}
@@ -562,12 +562,12 @@ func createBootstrapServer(ctx context.Context, client hcloudInternal.Infrastruc
 }
 
 // ensureTalosImage ensures a Talos image snapshot exists.
-func ensureTalosImage(ctx context.Context, client hcloudInternal.InfrastructureManager, cfg *config.Config) (*SnapshotInfo, error) {
+func ensureTalosImage(ctx context.Context, hclient hcloudInternal.InfrastructureManager, cfg *config.Config) (*SnapshotInfo, error) {
 	snapshotLabels := map[string]string{
 		"os":            "talos",
 		"talos_version": cfg.Talos.Version,
 	}
-	snapshot, err := client.GetSnapshotByLabels(ctx, snapshotLabels)
+	snapshot, err := hclient.GetSnapshotByLabels(ctx, snapshotLabels)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check for existing snapshot: %w", err)
 	}
@@ -579,7 +579,7 @@ func ensureTalosImage(ctx context.Context, client hcloudInternal.InfrastructureM
 }
 
 // waitForServerIP waits for a server to have a public IP assigned.
-func waitForServerIP(ctx context.Context, client hcloudInternal.InfrastructureManager, serverName string, timeout time.Duration) (string, error) {
+func waitForServerIP(ctx context.Context, hclient hcloudInternal.InfrastructureManager, serverName string, timeout time.Duration) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -591,7 +591,7 @@ func waitForServerIP(ctx context.Context, client hcloudInternal.InfrastructureMa
 		case <-ctx.Done():
 			return "", fmt.Errorf("timeout waiting for server IP: %w", ctx.Err())
 		case <-ticker.C:
-			ip, err := client.GetServerIP(ctx, serverName)
+			ip, err := hclient.GetServerIP(ctx, serverName)
 			if err == nil && ip != "" {
 				return ip, nil
 			}
@@ -613,7 +613,7 @@ func applyTalosConfig(ctx context.Context, talosClientConfig []byte, nodeIP stri
 	if err != nil {
 		return fmt.Errorf("failed to create Talos client: %w", err)
 	}
-	defer talosClient.Close()
+	defer func() { _ = talosClient.Close() }()
 
 	_, err = talosClient.ApplyConfiguration(ctx, &machine.ApplyConfigurationRequest{
 		Data: machineConfig,
@@ -636,7 +636,7 @@ func bootstrapEtcd(ctx context.Context, talosClientConfig []byte, nodeIP string)
 	if err != nil {
 		return fmt.Errorf("failed to create Talos client: %w", err)
 	}
-	defer talosClient.Close()
+	defer func() { _ = talosClient.Close() }()
 
 	return talosClient.Bootstrap(ctx, &machine.BootstrapRequest{})
 }
@@ -669,7 +669,7 @@ func waitForAPIServer(ctx context.Context, talosClientConfig []byte, endpoint st
 			}
 
 			kubeconfig, err := talosClient.Kubeconfig(ctx)
-			talosClient.Close()
+			_ = talosClient.Close()
 
 			if err == nil && len(kubeconfig) > 0 {
 				return kubeconfig, nil
@@ -842,7 +842,7 @@ func createK8znerClusterCRD(ctx context.Context, kubeconfig []byte, cfg *config.
 	}
 
 	crdPath := fmt.Sprintf("%s-cluster.yaml", cfg.ClusterName)
-	if err := os.WriteFile(crdPath, clusterYAML, 0644); err != nil {
+	if err := os.WriteFile(crdPath, clusterYAML, 0600); err != nil {
 		return fmt.Errorf("failed to write cluster CRD: %w", err)
 	}
 

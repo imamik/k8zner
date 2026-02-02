@@ -59,17 +59,17 @@ func NewPhaseAdapter(c client.Client) *PhaseAdapter {
 }
 
 // LoadCredentials loads the credentials from the referenced Secret.
-func (a *PhaseAdapter) LoadCredentials(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (*Credentials, error) {
+func (a *PhaseAdapter) LoadCredentials(ctx context.Context, k8sCluster *k8znerv1alpha1.K8znerCluster) (*Credentials, error) {
 	logger := log.FromContext(ctx)
 
-	if cluster.Spec.CredentialsRef.Name == "" {
+	if k8sCluster.Spec.CredentialsRef.Name == "" {
 		return nil, fmt.Errorf("credentialsRef.name is not set")
 	}
 
 	secret := &corev1.Secret{}
 	key := client.ObjectKey{
-		Namespace: cluster.Namespace,
-		Name:      cluster.Spec.CredentialsRef.Name,
+		Namespace: k8sCluster.Namespace,
+		Name:      k8sCluster.Spec.CredentialsRef.Name,
 	}
 
 	if err := a.client.Get(ctx, key, secret); err != nil {
@@ -86,8 +86,8 @@ func (a *PhaseAdapter) LoadCredentials(ctx context.Context, cluster *k8znerv1alp
 	}
 
 	// Talos secrets (optional for existing clusters)
-	if secrets, ok := secret.Data[k8znerv1alpha1.CredentialsKeyTalosSecrets]; ok {
-		creds.TalosSecrets = secrets
+	if talosSecretData, ok := secret.Data[k8znerv1alpha1.CredentialsKeyTalosSecrets]; ok {
+		creds.TalosSecrets = talosSecretData
 	}
 
 	// Talos config (optional for existing clusters)
@@ -107,13 +107,13 @@ func (a *PhaseAdapter) LoadCredentials(ctx context.Context, cluster *k8znerv1alp
 // BuildProvisioningContext creates a provisioning context from the CRD spec and credentials.
 func (a *PhaseAdapter) BuildProvisioningContext(
 	ctx context.Context,
-	cluster *k8znerv1alpha1.K8znerCluster,
+	k8sCluster *k8znerv1alpha1.K8znerCluster,
 	creds *Credentials,
 	infraManager hcloudInternal.InfrastructureManager,
 	talosProducer provisioning.TalosConfigProducer,
 ) (*provisioning.Context, error) {
 	// Convert CRD spec to internal config
-	cfg, err := SpecToConfig(cluster, creds)
+	cfg, err := SpecToConfig(k8sCluster, creds)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert spec to config: %w", err)
 	}
@@ -135,7 +135,7 @@ func (a *PhaseAdapter) BuildProvisioningContext(
 
 // ReconcileInfrastructure runs the infrastructure provisioning phase.
 // Creates network, firewall, and load balancer.
-func (a *PhaseAdapter) ReconcileInfrastructure(pCtx *provisioning.Context, cluster *k8znerv1alpha1.K8znerCluster) error {
+func (a *PhaseAdapter) ReconcileInfrastructure(pCtx *provisioning.Context, k8sCluster *k8znerv1alpha1.K8znerCluster) error {
 	logger := log.FromContext(pCtx.Context)
 	logger.Info("reconciling infrastructure")
 
@@ -146,22 +146,22 @@ func (a *PhaseAdapter) ReconcileInfrastructure(pCtx *provisioning.Context, clust
 
 	// Update CRD status with infrastructure IDs
 	if pCtx.State.Network != nil {
-		cluster.Status.Infrastructure.NetworkID = pCtx.State.Network.ID
+		k8sCluster.Status.Infrastructure.NetworkID = pCtx.State.Network.ID
 	}
 	if pCtx.State.Firewall != nil {
-		cluster.Status.Infrastructure.FirewallID = pCtx.State.Firewall.ID
+		k8sCluster.Status.Infrastructure.FirewallID = pCtx.State.Firewall.ID
 	}
-	cluster.Status.Infrastructure.SSHKeyID = pCtx.State.SSHKeyID
+	k8sCluster.Status.Infrastructure.SSHKeyID = pCtx.State.SSHKeyID
 
 	// Set condition
-	SetCondition(cluster, k8znerv1alpha1.ConditionInfrastructureReady, metav1.ConditionTrue,
+	SetCondition(k8sCluster, k8znerv1alpha1.ConditionInfrastructureReady, metav1.ConditionTrue,
 		"InfrastructureProvisioned", "Network, firewall, and load balancer created")
 
 	return nil
 }
 
 // ReconcileImage ensures the Talos image snapshot exists.
-func (a *PhaseAdapter) ReconcileImage(pCtx *provisioning.Context, cluster *k8znerv1alpha1.K8znerCluster) error {
+func (a *PhaseAdapter) ReconcileImage(pCtx *provisioning.Context, k8sCluster *k8znerv1alpha1.K8znerCluster) error {
 	logger := log.FromContext(pCtx.Context)
 	logger.Info("reconciling image")
 
@@ -176,7 +176,7 @@ func (a *PhaseAdapter) ReconcileImage(pCtx *provisioning.Context, cluster *k8zne
 	})
 	if err == nil && snapshot != nil {
 		now := metav1.Now()
-		cluster.Status.ImageSnapshot = &k8znerv1alpha1.ImageStatus{
+		k8sCluster.Status.ImageSnapshot = &k8znerv1alpha1.ImageStatus{
 			SnapshotID:  snapshot.ID,
 			Version:     pCtx.Config.Talos.Version,
 			SchematicID: pCtx.Config.Talos.SchematicID,
@@ -185,7 +185,7 @@ func (a *PhaseAdapter) ReconcileImage(pCtx *provisioning.Context, cluster *k8zne
 	}
 
 	// Set condition
-	SetCondition(cluster, k8znerv1alpha1.ConditionImageReady, metav1.ConditionTrue,
+	SetCondition(k8sCluster, k8znerv1alpha1.ConditionImageReady, metav1.ConditionTrue,
 		"ImageAvailable", "Talos image snapshot is available")
 
 	return nil
@@ -193,17 +193,17 @@ func (a *PhaseAdapter) ReconcileImage(pCtx *provisioning.Context, cluster *k8zne
 
 // ReconcileCompute provisions the remaining control plane and worker servers.
 // Skips the bootstrap node if it already exists.
-func (a *PhaseAdapter) ReconcileCompute(pCtx *provisioning.Context, cluster *k8znerv1alpha1.K8znerCluster) error {
+func (a *PhaseAdapter) ReconcileCompute(pCtx *provisioning.Context, k8sCluster *k8znerv1alpha1.K8znerCluster) error {
 	logger := log.FromContext(pCtx.Context)
 	logger.Info("reconciling compute")
 
 	// If bootstrap node exists, we need to account for it
-	if cluster.Spec.Bootstrap != nil && cluster.Spec.Bootstrap.Completed {
+	if k8sCluster.Spec.Bootstrap != nil && k8sCluster.Spec.Bootstrap.Completed {
 		// Add bootstrap node to state so compute provisioner doesn't recreate it
-		bootstrapName := cluster.Spec.Bootstrap.BootstrapNode
+		bootstrapName := k8sCluster.Spec.Bootstrap.BootstrapNode
 		if bootstrapName != "" {
-			pCtx.State.ControlPlaneIPs[bootstrapName] = cluster.Spec.Bootstrap.PublicIP
-			pCtx.State.ControlPlaneServerIDs[bootstrapName] = cluster.Spec.Bootstrap.BootstrapNodeID
+			pCtx.State.ControlPlaneIPs[bootstrapName] = k8sCluster.Spec.Bootstrap.PublicIP
+			pCtx.State.ControlPlaneServerIDs[bootstrapName] = k8sCluster.Spec.Bootstrap.BootstrapNodeID
 		}
 	}
 
@@ -213,13 +213,13 @@ func (a *PhaseAdapter) ReconcileCompute(pCtx *provisioning.Context, cluster *k8z
 	}
 
 	// Update node statuses from provisioning results
-	updateNodeStatuses(cluster, pCtx.State)
+	updateNodeStatuses(k8sCluster, pCtx.State)
 
 	return nil
 }
 
 // ReconcileBootstrap applies Talos configs and bootstraps the cluster.
-func (a *PhaseAdapter) ReconcileBootstrap(pCtx *provisioning.Context, cluster *k8znerv1alpha1.K8znerCluster) error {
+func (a *PhaseAdapter) ReconcileBootstrap(pCtx *provisioning.Context, k8sCluster *k8znerv1alpha1.K8znerCluster) error {
 	logger := log.FromContext(pCtx.Context)
 	logger.Info("reconciling bootstrap")
 
@@ -229,7 +229,7 @@ func (a *PhaseAdapter) ReconcileBootstrap(pCtx *provisioning.Context, cluster *k
 	}
 
 	// Set condition
-	SetCondition(cluster, k8znerv1alpha1.ConditionBootstrapped, metav1.ConditionTrue,
+	SetCondition(k8sCluster, k8znerv1alpha1.ConditionBootstrapped, metav1.ConditionTrue,
 		"ClusterBootstrapped", "Cluster has been bootstrapped successfully")
 
 	return nil
@@ -240,28 +240,28 @@ func (a *PhaseAdapter) ReconcileBootstrap(pCtx *provisioning.Context, cluster *k
 // This is called after infrastructure is created to integrate the bootstrap node.
 func (a *PhaseAdapter) AttachBootstrapNodeToInfrastructure(
 	pCtx *provisioning.Context,
-	cluster *k8znerv1alpha1.K8znerCluster,
+	k8sCluster *k8znerv1alpha1.K8znerCluster,
 ) error {
 	logger := log.FromContext(pCtx.Context)
 
-	if cluster.Spec.Bootstrap == nil || !cluster.Spec.Bootstrap.Completed {
+	if k8sCluster.Spec.Bootstrap == nil || !k8sCluster.Spec.Bootstrap.Completed {
 		return fmt.Errorf("bootstrap state not available")
 	}
 
-	bootstrapName := cluster.Spec.Bootstrap.BootstrapNode
+	bootstrapName := k8sCluster.Spec.Bootstrap.BootstrapNode
 	if bootstrapName == "" {
 		return fmt.Errorf("bootstrap node name is not set")
 	}
 
 	logger.Info("attaching bootstrap node to infrastructure",
 		"nodeName", bootstrapName,
-		"serverID", cluster.Spec.Bootstrap.BootstrapNodeID,
+		"serverID", k8sCluster.Spec.Bootstrap.BootstrapNodeID,
 	)
 
 	// Get the network ID from the provisioning state or cluster status
 	networkID := pCtx.State.Network.ID
 	if networkID == 0 {
-		networkID = cluster.Status.Infrastructure.NetworkID
+		networkID = k8sCluster.Status.Infrastructure.NetworkID
 	}
 	if networkID == 0 {
 		return fmt.Errorf("network ID not available - infrastructure must be provisioned first")
@@ -291,7 +291,7 @@ func (a *PhaseAdapter) AttachBootstrapNodeToInfrastructure(
 	// Calculate private IP for bootstrap node (first CP in subnet)
 	// Control planes use subnet index 0, which is 10.0.0.0/24 by default
 	// First CP gets IP .2 (after network .0 and gateway .1)
-	networkCIDR := defaultString(cluster.Spec.Network.IPv4CIDR, "10.0.0.0/16")
+	networkCIDR := defaultString(k8sCluster.Spec.Network.IPv4CIDR, "10.0.0.0/16")
 	cpSubnet, err := config.CIDRSubnet(networkCIDR, 8, 0) // Control plane subnet
 	if err != nil {
 		return fmt.Errorf("failed to calculate control plane subnet: %w", err)
@@ -323,21 +323,21 @@ func (a *PhaseAdapter) AttachBootstrapNodeToInfrastructure(
 }
 
 // updateNodeStatuses updates the cluster status with node information from provisioning state.
-func updateNodeStatuses(cluster *k8znerv1alpha1.K8znerCluster, state *provisioning.State) {
+func updateNodeStatuses(k8sCluster *k8znerv1alpha1.K8znerCluster, state *provisioning.State) {
 	// Update control plane nodes
 	for name, ip := range state.ControlPlaneIPs {
 		serverID := state.ControlPlaneServerIDs[name]
 		found := false
-		for i := range cluster.Status.ControlPlanes.Nodes {
-			if cluster.Status.ControlPlanes.Nodes[i].Name == name {
-				cluster.Status.ControlPlanes.Nodes[i].PublicIP = ip
-				cluster.Status.ControlPlanes.Nodes[i].ServerID = serverID
+		for i := range k8sCluster.Status.ControlPlanes.Nodes {
+			if k8sCluster.Status.ControlPlanes.Nodes[i].Name == name {
+				k8sCluster.Status.ControlPlanes.Nodes[i].PublicIP = ip
+				k8sCluster.Status.ControlPlanes.Nodes[i].ServerID = serverID
 				found = true
 				break
 			}
 		}
 		if !found {
-			cluster.Status.ControlPlanes.Nodes = append(cluster.Status.ControlPlanes.Nodes,
+			k8sCluster.Status.ControlPlanes.Nodes = append(k8sCluster.Status.ControlPlanes.Nodes,
 				k8znerv1alpha1.NodeStatus{
 					Name:     name,
 					ServerID: serverID,
@@ -350,16 +350,16 @@ func updateNodeStatuses(cluster *k8znerv1alpha1.K8znerCluster, state *provisioni
 	for name, ip := range state.WorkerIPs {
 		serverID := state.WorkerServerIDs[name]
 		found := false
-		for i := range cluster.Status.Workers.Nodes {
-			if cluster.Status.Workers.Nodes[i].Name == name {
-				cluster.Status.Workers.Nodes[i].PublicIP = ip
-				cluster.Status.Workers.Nodes[i].ServerID = serverID
+		for i := range k8sCluster.Status.Workers.Nodes {
+			if k8sCluster.Status.Workers.Nodes[i].Name == name {
+				k8sCluster.Status.Workers.Nodes[i].PublicIP = ip
+				k8sCluster.Status.Workers.Nodes[i].ServerID = serverID
 				found = true
 				break
 			}
 		}
 		if !found {
-			cluster.Status.Workers.Nodes = append(cluster.Status.Workers.Nodes,
+			k8sCluster.Status.Workers.Nodes = append(k8sCluster.Status.Workers.Nodes,
 				k8znerv1alpha1.NodeStatus{
 					Name:     name,
 					ServerID: serverID,
@@ -370,7 +370,7 @@ func updateNodeStatuses(cluster *k8znerv1alpha1.K8znerCluster, state *provisioni
 }
 
 // SetCondition sets a condition on the cluster status.
-func SetCondition(cluster *k8znerv1alpha1.K8znerCluster, condType string, status metav1.ConditionStatus, reason, message string) {
+func SetCondition(k8sCluster *k8znerv1alpha1.K8znerCluster, condType string, status metav1.ConditionStatus, reason, message string) {
 	now := metav1.Now()
 	condition := metav1.Condition{
 		Type:               condType,
@@ -381,23 +381,23 @@ func SetCondition(cluster *k8znerv1alpha1.K8znerCluster, condType string, status
 	}
 
 	// Find and update existing condition or append new one
-	for i, c := range cluster.Status.Conditions {
+	for i, c := range k8sCluster.Status.Conditions {
 		if c.Type == condType {
 			if c.Status != status {
-				cluster.Status.Conditions[i] = condition
+				k8sCluster.Status.Conditions[i] = condition
 			}
 			return
 		}
 	}
-	cluster.Status.Conditions = append(cluster.Status.Conditions, condition)
+	k8sCluster.Status.Conditions = append(k8sCluster.Status.Conditions, condition)
 }
 
 // SpecToConfig converts a K8znerCluster spec to the internal config.Config format.
-func SpecToConfig(cluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) (*config.Config, error) {
-	spec := &cluster.Spec
+func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) (*config.Config, error) {
+	spec := &k8sCluster.Spec
 
 	cfg := &config.Config{
-		ClusterName: cluster.Name,
+		ClusterName: k8sCluster.Name,
 		HCloudToken: creds.HCloudToken,
 		Location:    spec.Region,
 
@@ -516,7 +516,7 @@ func ParseSecretsFromBytes(data []byte) (*secrets.Bundle, error) {
 // CreateTalosGenerator creates a TalosConfigProducer from the cluster spec and credentials.
 // This is used by the operator to generate Talos configs for new nodes.
 func (a *PhaseAdapter) CreateTalosGenerator(
-	cluster *k8znerv1alpha1.K8znerCluster,
+	k8sCluster *k8znerv1alpha1.K8znerCluster,
 	creds *Credentials,
 ) (provisioning.TalosConfigProducer, error) {
 	// Parse secrets from the credential data
@@ -527,25 +527,25 @@ func (a *PhaseAdapter) CreateTalosGenerator(
 
 	// Determine the endpoint
 	// Priority: 1. Load balancer IP (if exists), 2. Bootstrap public IP, 3. Cluster name
-	endpoint := cluster.Name
-	if cluster.Status.ControlPlaneEndpoint != "" {
-		endpoint = cluster.Status.ControlPlaneEndpoint
-	} else if cluster.Spec.Bootstrap != nil && cluster.Spec.Bootstrap.PublicIP != "" {
-		endpoint = cluster.Spec.Bootstrap.PublicIP
+	endpoint := k8sCluster.Name
+	if k8sCluster.Status.ControlPlaneEndpoint != "" {
+		endpoint = k8sCluster.Status.ControlPlaneEndpoint
+	} else if k8sCluster.Spec.Bootstrap != nil && k8sCluster.Spec.Bootstrap.PublicIP != "" {
+		endpoint = k8sCluster.Spec.Bootstrap.PublicIP
 	}
 
 	// Create the generator
 	generator := talos.NewGenerator(
-		cluster.Name,
-		cluster.Spec.Kubernetes.Version,
-		cluster.Spec.Talos.Version,
+		k8sCluster.Name,
+		k8sCluster.Spec.Kubernetes.Version,
+		k8sCluster.Spec.Talos.Version,
 		endpoint,
 		sb,
 	)
 
 	// Set machine config options from spec
 	machineOpts := &talos.MachineConfigOptions{
-		SchematicID: cluster.Spec.Talos.SchematicID,
+		SchematicID: k8sCluster.Spec.Talos.SchematicID,
 		// Set defaults for operator-managed clusters
 		StateEncryption:         true,
 		EphemeralEncryption:     true,
@@ -556,10 +556,10 @@ func (a *PhaseAdapter) CreateTalosGenerator(
 		DiscoveryServiceEnabled: true,
 		KubeProxyReplacement:    true, // Cilium replaces kube-proxy
 		// Network context from spec
-		NodeIPv4CIDR:    defaultString(cluster.Spec.Network.IPv4CIDR, "10.0.0.0/16"),
-		PodIPv4CIDR:     defaultString(cluster.Spec.Network.PodCIDR, "10.244.0.0/16"),
-		ServiceIPv4CIDR: defaultString(cluster.Spec.Network.ServiceCIDR, "10.96.0.0/16"),
-		EtcdSubnet:      defaultString(cluster.Spec.Network.IPv4CIDR, "10.0.0.0/16"),
+		NodeIPv4CIDR:    defaultString(k8sCluster.Spec.Network.IPv4CIDR, "10.0.0.0/16"),
+		PodIPv4CIDR:     defaultString(k8sCluster.Spec.Network.PodCIDR, "10.244.0.0/16"),
+		ServiceIPv4CIDR: defaultString(k8sCluster.Spec.Network.ServiceCIDR, "10.96.0.0/16"),
+		EtcdSubnet:      defaultString(k8sCluster.Spec.Network.IPv4CIDR, "10.0.0.0/16"),
 	}
 
 	generator.SetMachineConfigOptions(machineOpts)

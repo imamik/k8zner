@@ -1825,6 +1825,7 @@ func (r *ClusterReconciler) buildClusterState(ctx context.Context, cluster *k8zn
 	var sans []string
 
 	// Add load balancer IP to SANs (from status, infrastructure, or annotation)
+	//nolint:gocritic // ifElseChain is appropriate here as we're checking different sources with fallback logic
 	if cluster.Status.ControlPlaneEndpoint != "" {
 		sans = append(sans, cluster.Status.ControlPlaneEndpoint)
 	} else if cluster.Status.Infrastructure.LoadBalancerIP != "" {
@@ -1859,6 +1860,7 @@ func (r *ClusterReconciler) buildClusterState(ctx context.Context, cluster *k8zn
 
 	// Get control plane endpoint (load balancer IP)
 	// Priority: 1. CRD status endpoint, 2. Infrastructure LB IP, 3. Annotation, 4. Healthy CP IP
+	//nolint:gocritic // ifElseChain is appropriate here as we're checking different sources with fallback logic
 	if cluster.Status.ControlPlaneEndpoint != "" {
 		state.ControlPlaneIP = cluster.Status.ControlPlaneEndpoint
 	} else if cluster.Status.Infrastructure.LoadBalancerIP != "" {
