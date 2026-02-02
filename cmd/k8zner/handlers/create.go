@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -16,10 +17,12 @@ import (
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	"github.com/imamik/k8zner/internal/addons"
 	"github.com/imamik/k8zner/internal/config"
+	configv2 "github.com/imamik/k8zner/internal/config/v2"
 	hcloudInternal "github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning"
 	"github.com/imamik/k8zner/internal/provisioning/cluster"
 	"github.com/imamik/k8zner/internal/provisioning/compute"
+	"github.com/imamik/k8zner/internal/provisioning/destroy"
 	"github.com/imamik/k8zner/internal/provisioning/image"
 	"github.com/imamik/k8zner/internal/provisioning/infrastructure"
 	"github.com/imamik/k8zner/internal/util/naming"
@@ -28,6 +31,12 @@ import (
 const (
 	// credentialsSecretName is the name of the secret containing Hetzner and Talos credentials.
 	credentialsSecretName = "k8zner-credentials" //nolint:gosec // This is a secret name, not a credential value
+
+	// operatorPollInterval is the interval between status checks when waiting for the operator.
+	operatorPollInterval = 10 * time.Second
+
+	// operatorWaitTimeout is the maximum time to wait for the operator to complete provisioning.
+	operatorWaitTimeout = 30 * time.Minute
 )
 
 // Factory function variables for create - can be replaced in tests.
@@ -96,19 +105,36 @@ func Create(ctx context.Context, configPath string, wait bool) error {
 	// Create provisioning context
 	pCtx := newProvisioningContext(ctx, cfg, infraClient, talosGen)
 
+	// Track whether cleanup is needed on failure
+	var cleanupNeeded bool
+	var createErr error
+	defer func() {
+		if createErr != nil && cleanupNeeded {
+			log.Println("Create failed, cleaning up created resources...")
+			cleanupCtx := context.Background() // Use fresh context for cleanup
+			if cleanupErr := cleanupOnFailure(cleanupCtx, cfg, infraClient); cleanupErr != nil {
+				log.Printf("Warning: cleanup failed: %v", cleanupErr)
+			}
+		}
+	}()
+
 	// Phase 1: Image
 	log.Println("Phase 1: Ensuring Talos image snapshot...")
 	imageProvisioner := newImageProvisionerForCreate()
 	if err := imageProvisioner.Provision(pCtx); err != nil {
-		return fmt.Errorf("image provisioning failed: %w", err)
+		createErr = fmt.Errorf("image provisioning failed: %w", err)
+		return createErr
 	}
 
 	// Phase 2: Infrastructure
 	log.Println("Phase 2: Creating infrastructure (network, firewall, LB, placement group)...")
 	infraProvisioner := newInfraProvisionerForCreate()
 	if err := infraProvisioner.Provision(pCtx); err != nil {
-		return fmt.Errorf("infrastructure provisioning failed: %w", err)
+		createErr = fmt.Errorf("infrastructure provisioning failed: %w", err)
+		return createErr
 	}
+	// Mark cleanup needed from here on - infrastructure has been created
+	cleanupNeeded = true
 
 	// Phase 3: First Control Plane
 	log.Println("Phase 3: Creating first control plane...")
@@ -124,7 +150,8 @@ func Create(ctx context.Context, configPath string, wait bool) error {
 
 	computeProvisioner := newComputeProvisionerForCreate()
 	if err := computeProvisioner.Provision(pCtx); err != nil {
-		return fmt.Errorf("compute provisioning failed: %w", err)
+		createErr = fmt.Errorf("compute provisioning failed: %w", err)
+		return createErr
 	}
 
 	// Restore original counts
@@ -137,16 +164,19 @@ func Create(ctx context.Context, configPath string, wait bool) error {
 	log.Println("Phase 4: Bootstrapping cluster...")
 	clusterProvisioner := newClusterProvisionerForCreate()
 	if err := clusterProvisioner.Provision(pCtx); err != nil {
-		return fmt.Errorf("cluster bootstrap failed: %w", err)
+		createErr = fmt.Errorf("cluster bootstrap failed: %w", err)
+		return createErr
 	}
 
 	// Get kubeconfig from the state (populated by cluster provisioner)
 	kubeconfig := pCtx.State.Kubeconfig
 	if len(kubeconfig) == 0 {
-		return fmt.Errorf("kubeconfig not available after cluster bootstrap")
+		createErr = fmt.Errorf("kubeconfig not available after cluster bootstrap")
+		return createErr
 	}
 	if err := writeKubeconfig(kubeconfig); err != nil {
-		return err
+		createErr = err
+		return createErr
 	}
 
 	// Phase 5: Install Operator
@@ -157,7 +187,8 @@ func Create(ctx context.Context, configPath string, wait bool) error {
 
 	// Install only the operator addon
 	if err := installOperatorOnly(ctx, cfg, kubeconfig, pCtx.State.Network.ID); err != nil {
-		return fmt.Errorf("operator installation failed: %w", err)
+		createErr = fmt.Errorf("operator installation failed: %w", err)
+		return createErr
 	}
 
 	// Get infrastructure details for CRD
@@ -268,16 +299,8 @@ func createClusterCRDForCreate(ctx context.Context, cfg *config.Config, pCtx *pr
 		return fmt.Errorf("failed to create credentials secret: %w", err)
 	}
 
-	// Get bootstrap node info
-	var bootstrapName string
-	var bootstrapID int64
-	var bootstrapIP string
-	for name, ip := range pCtx.State.ControlPlaneIPs {
-		bootstrapName = name
-		bootstrapIP = ip
-		bootstrapID = pCtx.State.ControlPlaneServerIDs[name]
-		break
-	}
+	// Get bootstrap node info - use deterministic selection by sorting names
+	bootstrapName, bootstrapID, bootstrapIP := getBootstrapNode(pCtx)
 
 	// Create K8znerCluster CRD
 	k8znerCluster := buildK8znerClusterForCreate(cfg, pCtx, infraInfo, bootstrapName, bootstrapID, bootstrapIP)
@@ -398,7 +421,7 @@ func getWorkerCount(cfg *config.Config) int {
 // getWorkerSize returns the worker server type from config.
 func getWorkerSize(cfg *config.Config) string {
 	if len(cfg.Workers) == 0 {
-		return "cx23"
+		return configv2.DefaultWorkerServerType
 	}
 	return cfg.Workers[0].ServerType
 }
@@ -418,37 +441,61 @@ func waitForOperatorComplete(ctx context.Context, clusterName string, kubeconfig
 		return fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(operatorPollInterval)
 	defer ticker.Stop()
 
-	timeout := time.After(30 * time.Minute)
+	deadline := time.Now().Add(operatorWaitTimeout)
 
 	for {
+		// Check context first
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-timeout:
-			return fmt.Errorf("timeout waiting for operator to complete")
+		default:
+		}
+
+		// Check timeout
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timeout waiting for operator to complete after %v", operatorWaitTimeout)
+		}
+
+		// Wait for next tick or context cancellation
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
 		case <-ticker.C:
-			k8zCluster := &k8znerv1alpha1.K8znerCluster{}
-			key := client.ObjectKey{
-				Namespace: k8znerNamespace,
-				Name:      clusterName,
-			}
+		}
 
-			if err := k8sClient.Get(ctx, key, k8zCluster); err != nil {
-				continue // Retry
-			}
+		// Check context again after waking up
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 
-			phase := k8zCluster.Status.ProvisioningPhase
-			clusterPhase := k8zCluster.Status.Phase
+		// Use a timeout context for the API call
+		getCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		k8zCluster := &k8znerv1alpha1.K8znerCluster{}
+		key := client.ObjectKey{
+			Namespace: k8znerNamespace,
+			Name:      clusterName,
+		}
 
-			log.Printf("Status: %s (phase: %s)", clusterPhase, phase)
+		err := k8sClient.Get(getCtx, key, k8zCluster)
+		cancel()
 
-			if phase == k8znerv1alpha1.PhaseComplete && clusterPhase == k8znerv1alpha1.ClusterPhaseRunning {
-				log.Println("Cluster provisioning complete!")
-				return nil
-			}
+		if err != nil {
+			// Log but continue on transient errors
+			log.Printf("Warning: failed to get cluster status: %v", err)
+			continue
+		}
+
+		phase := k8zCluster.Status.ProvisioningPhase
+		clusterPhase := k8zCluster.Status.Phase
+
+		log.Printf("Status: %s (phase: %s)", clusterPhase, phase)
+
+		if phase == k8znerv1alpha1.PhaseComplete && clusterPhase == k8znerv1alpha1.ClusterPhaseRunning {
+			log.Println("Cluster provisioning complete!")
+			return nil
 		}
 	}
 }
@@ -479,4 +526,43 @@ func printCreateSuccess(cfg *config.Config, wait bool) {
 	fmt.Printf("\nAccess your cluster:\n")
 	fmt.Printf("  export KUBECONFIG=%s\n", kubeconfigPath)
 	fmt.Printf("  kubectl get nodes\n")
+}
+
+// getBootstrapNode returns the bootstrap node info from the provisioning state.
+// It uses sorted iteration to ensure deterministic selection.
+func getBootstrapNode(pCtx *provisioning.Context) (name string, serverID int64, ip string) {
+	if len(pCtx.State.ControlPlaneIPs) == 0 {
+		return "", 0, ""
+	}
+
+	// Sort names for deterministic selection
+	names := make([]string, 0, len(pCtx.State.ControlPlaneIPs))
+	for n := range pCtx.State.ControlPlaneIPs {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+
+	// Return the first (alphabetically) control plane
+	name = names[0]
+	ip = pCtx.State.ControlPlaneIPs[name]
+	serverID = pCtx.State.ControlPlaneServerIDs[name]
+	return name, serverID, ip
+}
+
+// cleanupOnFailure destroys all resources created during a failed create operation.
+// This uses the destroy provisioner to clean up infrastructure by cluster label.
+func cleanupOnFailure(ctx context.Context, cfg *config.Config, infraClient hcloudInternal.InfrastructureManager) error {
+	log.Printf("Cleaning up resources for cluster: %s", cfg.ClusterName)
+
+	// Create a minimal provisioning context for destroy
+	pCtx := provisioning.NewContext(ctx, cfg, infraClient, nil)
+
+	// Use the destroy provisioner
+	destroyer := destroy.NewProvisioner()
+	if err := destroyer.Provision(pCtx); err != nil {
+		return fmt.Errorf("cleanup failed: %w", err)
+	}
+
+	log.Printf("Cleanup complete for cluster: %s", cfg.ClusterName)
+	return nil
 }

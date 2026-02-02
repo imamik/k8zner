@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -15,6 +17,12 @@ import (
 	"github.com/imamik/k8zner/internal/config"
 	"github.com/imamik/k8zner/internal/provisioning"
 	"github.com/imamik/k8zner/internal/provisioning/destroy"
+)
+
+const (
+	// s3MetadataFile is the name of the metadata file used to verify bucket ownership.
+	// This should match s3.MetadataFileName.
+	s3MetadataFile = "k8zner_metadata.json"
 )
 
 // Provisioner interface for testing - matches provisioning.Phase.
@@ -113,18 +121,97 @@ func cleanupS3Buckets(ctx context.Context, clusterName string, backupCfg config.
 		return fmt.Errorf("failed to list S3 buckets: %w", err)
 	}
 
-	// Find buckets matching cluster naming convention
+	// Find buckets matching cluster naming convention and verify ownership
 	prefix := clusterName + "-"
 	for _, bucket := range result.Buckets {
-		if bucket.Name != nil && strings.HasPrefix(*bucket.Name, prefix) {
-			log.Printf("Deleting S3 bucket: %s", *bucket.Name)
-			if err := deleteS3Bucket(ctx, s3Client, *bucket.Name); err != nil {
-				log.Printf("Warning: failed to delete bucket %s: %v", *bucket.Name, err)
-			}
+		if bucket.Name == nil || !strings.HasPrefix(*bucket.Name, prefix) {
+			continue
+		}
+
+		bucketName := *bucket.Name
+
+		// Verify bucket ownership via metadata file
+		owned, err := verifyBucketOwnership(ctx, s3Client, bucketName, clusterName)
+		if err != nil {
+			log.Printf("Warning: failed to verify ownership of bucket %s: %v", bucketName, err)
+			continue
+		}
+
+		if !owned {
+			log.Printf("Skipping bucket %s: ownership not verified (no valid metadata)", bucketName)
+			continue
+		}
+
+		log.Printf("Deleting S3 bucket: %s", bucketName)
+		if err := deleteS3Bucket(ctx, s3Client, bucketName); err != nil {
+			log.Printf("Warning: failed to delete bucket %s: %v", bucketName, err)
 		}
 	}
 
 	return nil
+}
+
+// s3BucketMetadata represents the metadata stored in k8zner-managed buckets.
+type s3BucketMetadata struct {
+	ClusterName string `json:"clusterName"`
+	ManagedBy   string `json:"managedBy"`
+	CreatedAt   string `json:"createdAt,omitempty"`
+}
+
+// verifyBucketOwnership checks if a bucket is owned by the specified cluster
+// by reading the k8zner_metadata.json file and verifying the cluster name.
+func verifyBucketOwnership(ctx context.Context, s3Client *s3.Client, bucketName, expectedCluster string) (bool, error) {
+	// Try to get the metadata file
+	result, err := s3Client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(s3MetadataFile),
+	})
+	if err != nil {
+		// If the metadata file doesn't exist, check if bucket name matches exactly
+		// This provides backwards compatibility for buckets created before metadata was added
+		errStr := err.Error()
+		if strings.Contains(errStr, "NoSuchKey") || strings.Contains(errStr, "not found") || strings.Contains(errStr, "404") {
+			// Fall back to strict prefix matching only for known k8zner bucket patterns
+			knownPatterns := []string{
+				expectedCluster + "-etcd-backup",
+				expectedCluster + "-talos-backup",
+			}
+			for _, pattern := range knownPatterns {
+				if bucketName == pattern {
+					log.Printf("Bucket %s has no metadata file but matches known k8zner pattern, allowing deletion", bucketName)
+					return true, nil
+				}
+			}
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to get metadata: %w", err)
+	}
+	defer func() { _ = result.Body.Close() }()
+
+	// Read and parse the metadata
+	data, err := io.ReadAll(result.Body)
+	if err != nil {
+		return false, fmt.Errorf("failed to read metadata: %w", err)
+	}
+
+	var metadata s3BucketMetadata
+	if err := json.Unmarshal(data, &metadata); err != nil {
+		return false, fmt.Errorf("failed to parse metadata: %w", err)
+	}
+
+	// Verify cluster name matches
+	if metadata.ClusterName != expectedCluster {
+		log.Printf("Bucket %s belongs to cluster %s, not %s", bucketName, metadata.ClusterName, expectedCluster)
+		return false, nil
+	}
+
+	// Verify this is a k8zner-managed bucket
+	if metadata.ManagedBy != "k8zner" {
+		log.Printf("Bucket %s is not managed by k8zner (managedBy: %s)", bucketName, metadata.ManagedBy)
+		return false, nil
+	}
+
+	return true, nil
 }
 
 // deleteS3Bucket empties and deletes an S3 bucket.

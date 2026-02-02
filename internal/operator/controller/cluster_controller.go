@@ -46,9 +46,13 @@ const (
 	defaultEtcdUnhealthyThreshold = 2 * time.Minute
 
 	// Server creation timeouts.
-	serverIPTimeout    = 2 * time.Minute
-	nodeReadyTimeout   = 5 * time.Minute
-	serverIPRetryDelay = 5 * time.Second
+	serverIPTimeout  = 2 * time.Minute
+	nodeReadyTimeout = 5 * time.Minute
+
+	// Status update retry settings.
+	statusUpdateRetries = 3
+	statusRetryInterval = 100 * time.Millisecond
+	serverIPRetryDelay  = 5 * time.Second
 
 	// Event reasons.
 	EventReasonReconciling         = "Reconciling"
@@ -238,11 +242,11 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Run the reconciliation phases
 	result, err := r.reconcile(ctx, cluster)
 
-	// Update status
+	// Update status with retry for conflict handling
 	cluster.Status.LastReconcileTime = &metav1.Time{Time: time.Now()}
 	cluster.Status.ObservedGeneration = cluster.Generation
 
-	if statusErr := r.Status().Update(ctx, cluster); statusErr != nil {
+	if statusErr := r.updateStatusWithRetry(ctx, cluster); statusErr != nil {
 		logger.Error(statusErr, "failed to update status")
 		if err == nil {
 			err = statusErr
@@ -261,6 +265,39 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	return result, err
+}
+
+// updateStatusWithRetry updates the cluster status with retry on conflict.
+// This handles the case where another reconcile has modified the object.
+func (r *ClusterReconciler) updateStatusWithRetry(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) error {
+	logger := log.FromContext(ctx)
+
+	for i := 0; i < statusUpdateRetries; i++ {
+		err := r.Status().Update(ctx, cluster)
+		if err == nil {
+			return nil
+		}
+
+		if !apierrors.IsConflict(err) {
+			return err
+		}
+
+		// On conflict, re-fetch the latest version and re-apply our status changes
+		logger.V(1).Info("status update conflict, retrying", "attempt", i+1)
+
+		latest := &k8znerv1alpha1.K8znerCluster{}
+		if getErr := r.Get(ctx, client.ObjectKeyFromObject(cluster), latest); getErr != nil {
+			return fmt.Errorf("failed to get latest cluster for retry: %w", getErr)
+		}
+
+		// Preserve our status changes on the latest version
+		latest.Status = cluster.Status
+		cluster = latest
+
+		time.Sleep(statusRetryInterval)
+	}
+
+	return fmt.Errorf("failed to update status after %d retries", statusUpdateRetries)
 }
 
 // reconcile runs the main reconciliation logic.
