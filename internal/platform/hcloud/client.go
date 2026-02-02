@@ -26,6 +26,11 @@ type ServerProvisioner interface {
 	ResetServer(ctx context.Context, serverID string) error
 	PoweroffServer(ctx context.Context, serverID string) error
 	GetServerID(ctx context.Context, name string) (string, error)
+	// GetServerByName returns the full server object by name, or nil if not found.
+	GetServerByName(ctx context.Context, name string) (*hcloud.Server, error)
+	// AttachServerToNetwork attaches an existing server to a network.
+	// The server must exist and not already be attached to the network.
+	AttachServerToNetwork(ctx context.Context, serverName string, networkID int64, privateIP string) error
 }
 
 // SnapshotManager defines the interface for managing snapshots.

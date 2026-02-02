@@ -21,6 +21,7 @@ func TestRoot_HasSubcommands(t *testing.T) {
 	expectedSubcommands := []string{
 		"init",
 		"apply",
+		"bootstrap",
 		"image",
 		"destroy",
 		"upgrade",
@@ -45,5 +46,5 @@ func TestRoot_HasSubcommands(t *testing.T) {
 
 func TestRoot_SubcommandCount(t *testing.T) {
 	cmd := Root()
-	assert.Len(t, cmd.Commands(), 8, "Expected 8 subcommands")
+	assert.Len(t, cmd.Commands(), 9, "Expected 9 subcommands")
 }

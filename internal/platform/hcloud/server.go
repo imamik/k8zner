@@ -279,3 +279,37 @@ func (c *RealClient) GetServersByLabel(ctx context.Context, labels map[string]st
 	}
 	return servers, nil
 }
+
+// AttachServerToNetwork attaches an existing server to a network.
+// If the server is already attached to the network, this is a no-op.
+// The server will be powered on after successful attachment.
+func (c *RealClient) AttachServerToNetwork(ctx context.Context, serverName string, networkID int64, privateIP string) error {
+	// Get the server
+	server, _, err := c.client.Server.Get(ctx, serverName)
+	if err != nil {
+		return fmt.Errorf("failed to get server %s: %w", serverName, err)
+	}
+	if server == nil {
+		return fmt.Errorf("server not found: %s", serverName)
+	}
+
+	// Check if already attached to this network
+	for _, pn := range server.PrivateNet {
+		if pn.Network.ID == networkID {
+			// Already attached, ensure server is running
+			if server.Status != hcloud.ServerStatusRunning {
+				action, _, err := c.client.Server.Poweron(ctx, server)
+				if err != nil {
+					return fmt.Errorf("failed to power on server: %w", err)
+				}
+				if err := c.client.Action.WaitFor(ctx, action); err != nil {
+					return fmt.Errorf("failed to wait for server power on: %w", err)
+				}
+			}
+			return nil // Already attached
+		}
+	}
+
+	// Use the existing helper to attach and power on
+	return c.attachServerToNetwork(ctx, server, networkID, privateIP)
+}

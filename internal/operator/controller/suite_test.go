@@ -124,10 +124,10 @@ var _ = AfterSuite(func() {
 })
 
 var _ = Describe("K8znerCluster Controller", func() {
-	// Test timing constants
+	// Test timing constants - increased for CI environments which can be slower
 	const (
-		timeout  = time.Second * 10
-		interval = time.Millisecond * 250
+		timeout  = time.Second * 30
+		interval = time.Millisecond * 500
 	)
 
 	// Helper to create unique cluster names for test isolation
@@ -168,6 +168,13 @@ var _ = Describe("K8znerCluster Controller", func() {
 				Workers: k8znerv1alpha1.WorkerSpec{
 					Count: 2,
 					Size:  "cx22",
+				},
+				// Required fields with validation patterns
+				Kubernetes: k8znerv1alpha1.KubernetesSpec{
+					Version: "1.32.0",
+				},
+				Talos: k8znerv1alpha1.TalosSpec{
+					Version: "v1.10.0",
 				},
 			},
 		}

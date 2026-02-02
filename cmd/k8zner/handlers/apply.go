@@ -12,7 +12,11 @@ import (
 	"os"
 
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/clientcmd"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	"github.com/imamik/k8zner/internal/config"
 	v2config "github.com/imamik/k8zner/internal/config/v2"
 	"github.com/imamik/k8zner/internal/orchestration"
@@ -73,17 +77,19 @@ var (
 //
 // This function orchestrates the complete cluster provisioning workflow:
 //  1. Loads and validates cluster configuration (auto-detects v2 or legacy format)
-//  2. Initializes Hetzner Cloud client using HCLOUD_TOKEN environment variable
-//  3. Generates Talos machine configurations and persists secrets immediately
-//  4. Reconciles cluster infrastructure (networks, servers, load balancers, bootstrap)
-//  5. Writes kubeconfig if cluster bootstrap completed successfully
-//  6. Installs configured cluster addons (CCM, CSI, etc.) if bootstrap succeeded
+//  2. Checks if cluster is operator-managed (K8znerCluster CRD exists)
+//  3. If operator-managed: updates CRD spec and lets operator reconcile
+//  4. If not operator-managed: runs full CLI provisioning flow
+//
+// For CLI provisioning:
+//  1. Initializes Hetzner Cloud client using HCLOUD_TOKEN environment variable
+//  2. Generates Talos machine configurations and persists secrets immediately
+//  3. Reconciles cluster infrastructure (networks, servers, load balancers, bootstrap)
+//  4. Writes kubeconfig if cluster bootstrap completed successfully
+//  5. Installs configured cluster addons (CCM, CSI, etc.) if bootstrap succeeded
 //
 // Secrets and Talos config are written before reconciliation to ensure they're
 // preserved even if reconciliation fails, enabling retry without data loss.
-//
-// Addon installation is performed separately after infrastructure provisioning
-// to maintain clean separation between infrastructure and cluster components.
 //
 // The function expects HCLOUD_TOKEN to be set in the environment and will
 // delegate validation to the Hetzner Cloud client.
@@ -100,7 +106,19 @@ func Apply(ctx context.Context, configPath string) error {
 
 	log.Printf("Applying configuration for cluster: %s", cfg.ClusterName)
 
-	client := initializeClient()
+	// Check if this cluster is operator-managed
+	if isOperatorManaged, err := checkOperatorManaged(ctx, cfg.ClusterName); err == nil && isOperatorManaged {
+		log.Printf("Cluster %s is operator-managed, updating CRD spec", cfg.ClusterName)
+		return applyOperatorMode(ctx, cfg)
+	}
+
+	// Not operator-managed, run full CLI provisioning
+	return applyCLIMode(ctx, cfg)
+}
+
+// applyCLIMode runs the traditional full CLI provisioning workflow.
+func applyCLIMode(ctx context.Context, cfg *config.Config) error {
+	infraClient := initializeClient()
 	talosGen, err := initializeTalosGenerator(cfg)
 	if err != nil {
 		return err
@@ -110,7 +128,7 @@ func Apply(ctx context.Context, configPath string) error {
 		return err
 	}
 
-	kubeconfig, err := reconcileInfrastructure(ctx, client, talosGen, cfg)
+	kubeconfig, err := reconcileInfrastructure(ctx, infraClient, talosGen, cfg)
 	if err != nil {
 		return err
 	}
@@ -121,6 +139,130 @@ func Apply(ctx context.Context, configPath string) error {
 
 	printApplySuccess(kubeconfig, cfg)
 	return nil
+}
+
+// applyOperatorMode updates the K8znerCluster CRD spec for operator reconciliation.
+func applyOperatorMode(ctx context.Context, cfg *config.Config) error {
+	// Load kubeconfig to connect to the cluster
+	kubecfg, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to load kubeconfig: %w", err)
+	}
+
+	// Create controller-runtime client
+	scheme := k8znerv1alpha1.Scheme
+	k8sClient, err := client.New(kubecfg, client.Options{Scheme: scheme})
+	if err != nil {
+		return fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+
+	// Get existing K8znerCluster CRD
+	cluster := &k8znerv1alpha1.K8znerCluster{}
+	key := client.ObjectKey{
+		Namespace: k8znerNamespace,
+		Name:      cfg.ClusterName,
+	}
+
+	if err := k8sClient.Get(ctx, key, cluster); err != nil {
+		return fmt.Errorf("failed to get K8znerCluster: %w", err)
+	}
+
+	// Update spec from config
+	updateClusterSpecFromConfig(cluster, cfg)
+
+	// Apply the update
+	if err := k8sClient.Update(ctx, cluster); err != nil {
+		return fmt.Errorf("failed to update K8znerCluster: %w", err)
+	}
+
+	log.Printf("Updated K8znerCluster %s spec", cfg.ClusterName)
+	log.Printf("\nThe operator will now reconcile the changes.")
+	log.Printf("Monitor progress with:")
+	log.Printf("  kubectl logs -f -n %s deploy/k8zner-operator", k8znerNamespace)
+	log.Printf("  kubectl get k8znerclusters -n %s -w", k8znerNamespace)
+
+	return nil
+}
+
+// checkOperatorManaged checks if a cluster is managed by the operator.
+// Returns true if K8znerCluster CRD exists for the cluster.
+func checkOperatorManaged(ctx context.Context, clusterName string) (bool, error) {
+	// Check if kubeconfig exists
+	if _, err := os.Stat(kubeconfigPath); os.IsNotExist(err) {
+		return false, nil
+	}
+
+	// Try to load kubeconfig
+	kubecfg, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+	if err != nil {
+		return false, err
+	}
+
+	// Create controller-runtime client
+	scheme := k8znerv1alpha1.Scheme
+	k8sClient, err := client.New(kubecfg, client.Options{Scheme: scheme})
+	if err != nil {
+		return false, err
+	}
+
+	// Check if K8znerCluster CRD exists
+	cluster := &k8znerv1alpha1.K8znerCluster{}
+	key := client.ObjectKey{
+		Namespace: k8znerNamespace,
+		Name:      clusterName,
+	}
+
+	if err := k8sClient.Get(ctx, key, cluster); err != nil {
+		return false, nil // CRD doesn't exist or not accessible
+	}
+
+	// Check if cluster has credentials reference (indicates operator management)
+	return cluster.Spec.CredentialsRef.Name != "", nil
+}
+
+// updateClusterSpecFromConfig updates the K8znerCluster spec from config.Config.
+func updateClusterSpecFromConfig(cluster *k8znerv1alpha1.K8znerCluster, cfg *config.Config) {
+	// Update control plane settings
+	if len(cfg.ControlPlane.NodePools) > 0 {
+		pool := cfg.ControlPlane.NodePools[0]
+		cluster.Spec.ControlPlanes.Count = pool.Count
+		cluster.Spec.ControlPlanes.Size = pool.ServerType
+	}
+
+	// Update worker settings
+	if len(cfg.Workers) > 0 {
+		pool := cfg.Workers[0]
+		cluster.Spec.Workers.Count = pool.Count
+		cluster.Spec.Workers.Size = pool.ServerType
+	}
+
+	// Update Talos settings
+	cluster.Spec.Talos.Version = cfg.Talos.Version
+	cluster.Spec.Talos.SchematicID = cfg.Talos.SchematicID
+	cluster.Spec.Talos.Extensions = cfg.Talos.Extensions
+
+	// Update Kubernetes version
+	cluster.Spec.Kubernetes.Version = cfg.Kubernetes.Version
+
+	// Update network settings
+	cluster.Spec.Network.IPv4CIDR = cfg.Network.IPv4CIDR
+	cluster.Spec.Network.PodCIDR = cfg.Network.PodIPv4CIDR
+	cluster.Spec.Network.ServiceCIDR = cfg.Network.ServiceIPv4CIDR
+
+	// Update addons if specified
+	if cluster.Spec.Addons == nil {
+		cluster.Spec.Addons = &k8znerv1alpha1.AddonSpec{}
+	}
+	cluster.Spec.Addons.MetricsServer = cfg.Addons.MetricsServer.Enabled
+	cluster.Spec.Addons.CertManager = cfg.Addons.CertManager.Enabled
+	cluster.Spec.Addons.Traefik = cfg.Addons.Traefik.Enabled
+	cluster.Spec.Addons.ArgoCD = cfg.Addons.ArgoCD.Enabled
+
+	// Set last modified annotation
+	if cluster.Annotations == nil {
+		cluster.Annotations = make(map[string]string)
+	}
+	cluster.Annotations["k8zner.io/last-applied"] = metav1.Now().Format(metav1.RFC3339Micro)
 }
 
 // loadConfig loads and validates cluster configuration.
@@ -174,10 +316,10 @@ func initializeTalosGenerator(cfg *config.Config) (provisioning.TalosConfigProdu
 // reconcileInfrastructure provisions infrastructure and bootstraps the Kubernetes orchestration.
 // Returns kubeconfig bytes if bootstrap completed.
 // Kubeconfig will be empty if cluster was already bootstrapped.
-func reconcileInfrastructure(ctx context.Context, client hcloud.InfrastructureManager, talosGen provisioning.TalosConfigProducer, cfg *config.Config) ([]byte, error) {
+func reconcileInfrastructure(ctx context.Context, hclient hcloud.InfrastructureManager, talosGen provisioning.TalosConfigProducer, cfg *config.Config) ([]byte, error) {
 	log.Println("Starting infrastructure reconciliation...")
 
-	reconciler := newReconciler(client, talosGen, cfg)
+	reconciler := newReconciler(hclient, talosGen, cfg)
 	kubeconfig, err := reconciler.Reconcile(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("reconciliation failed: %w", err)

@@ -4,6 +4,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -34,6 +35,105 @@ type K8znerClusterSpec struct {
 	// Paused stops the operator from reconciling this cluster
 	// +optional
 	Paused bool `json:"paused,omitempty"`
+
+	// Network configures the cluster networking
+	// +optional
+	Network NetworkSpec `json:"network,omitempty"`
+
+	// Firewall configures the cluster firewall rules
+	// +optional
+	Firewall FirewallSpec `json:"firewall,omitempty"`
+
+	// Kubernetes specifies the Kubernetes version
+	Kubernetes KubernetesSpec `json:"kubernetes"`
+
+	// Talos specifies the Talos configuration
+	Talos TalosSpec `json:"talos"`
+
+	// CredentialsRef references the Secret containing HCloud token and Talos secrets
+	CredentialsRef corev1.LocalObjectReference `json:"credentialsRef"`
+
+	// Bootstrap contains the state from CLI bootstrap (if applicable)
+	// +optional
+	Bootstrap *BootstrapState `json:"bootstrap,omitempty"`
+}
+
+// NetworkSpec configures the cluster networking.
+type NetworkSpec struct {
+	// IPv4CIDR is the network CIDR for the Hetzner private network
+	// +kubebuilder:default="10.0.0.0/16"
+	// +optional
+	IPv4CIDR string `json:"ipv4CIDR,omitempty"`
+
+	// PodCIDR is the CIDR range for pod IPs
+	// +kubebuilder:default="10.244.0.0/16"
+	// +optional
+	PodCIDR string `json:"podCIDR,omitempty"`
+
+	// ServiceCIDR is the CIDR range for service IPs
+	// +kubebuilder:default="10.96.0.0/16"
+	// +optional
+	ServiceCIDR string `json:"serviceCIDR,omitempty"`
+}
+
+// FirewallSpec configures firewall rules for the cluster.
+type FirewallSpec struct {
+	// Enabled determines if a firewall should be created
+	// +kubebuilder:default=true
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// AllowedSSHIPs is a list of CIDR ranges allowed to SSH to nodes
+	// +optional
+	AllowedSSHIPs []string `json:"allowedSSHIPs,omitempty"`
+
+	// AllowedAPIIPs is a list of CIDR ranges allowed to access the Kubernetes API
+	// +optional
+	AllowedAPIIPs []string `json:"allowedAPIIPs,omitempty"`
+}
+
+// KubernetesSpec specifies the Kubernetes version.
+type KubernetesSpec struct {
+	// Version is the Kubernetes version (e.g., "1.32.2")
+	// +kubebuilder:validation:Pattern=`^\d+\.\d+\.\d+$`
+	Version string `json:"version"`
+}
+
+// TalosSpec specifies the Talos configuration.
+type TalosSpec struct {
+	// Version is the Talos version (e.g., "v1.10.2")
+	// +kubebuilder:validation:Pattern=`^v\d+\.\d+\.\d+$`
+	Version string `json:"version"`
+
+	// SchematicID is the Talos Factory schematic ID for custom images
+	// +optional
+	SchematicID string `json:"schematicID,omitempty"`
+
+	// Extensions is a list of Talos system extensions to include
+	// +optional
+	Extensions []string `json:"extensions,omitempty"`
+}
+
+// BootstrapState contains the state from CLI bootstrap.
+type BootstrapState struct {
+	// Completed indicates the CLI bootstrap has finished
+	Completed bool `json:"completed"`
+
+	// CompletedAt is when bootstrap completed
+	// +optional
+	CompletedAt *metav1.Time `json:"completedAt,omitempty"`
+
+	// BootstrapNode is the name of the first control plane server
+	// +optional
+	BootstrapNode string `json:"bootstrapNode,omitempty"`
+
+	// BootstrapNodeID is the Hetzner server ID of the first control plane
+	// +optional
+	BootstrapNodeID int64 `json:"bootstrapNodeID,omitempty"`
+
+	// PublicIP is the public IP of the bootstrap node (before LB)
+	// +optional
+	PublicIP string `json:"publicIP,omitempty"`
 }
 
 // ControlPlaneSpec defines the control plane configuration.
@@ -91,7 +191,7 @@ type BackupSpec struct {
 // HealthCheckSpec configures health monitoring thresholds.
 type HealthCheckSpec struct {
 	// NodeNotReadyThreshold is how long a node can be NotReady before replacement
-	// +kubebuilder:default="5m"
+	// +kubebuilder:default="3m"
 	// +optional
 	NodeNotReadyThreshold string `json:"nodeNotReadyThreshold,omitempty"`
 
@@ -154,6 +254,85 @@ type K8znerClusterStatus struct {
 	// ObservedGeneration is the last observed generation
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// ProvisioningPhase tracks the current provisioning stage
+	// +optional
+	ProvisioningPhase ProvisioningPhase `json:"provisioningPhase,omitempty"`
+
+	// Infrastructure tracks the provisioned infrastructure resources
+	// +optional
+	Infrastructure InfrastructureStatus `json:"infrastructure,omitempty"`
+
+	// ControlPlaneEndpoint is the endpoint for the Kubernetes API
+	// +optional
+	ControlPlaneEndpoint string `json:"controlPlaneEndpoint,omitempty"`
+
+	// ImageSnapshot tracks the Talos image snapshot
+	// +optional
+	ImageSnapshot *ImageStatus `json:"imageSnapshot,omitempty"`
+}
+
+// ProvisioningPhase represents the current stage of cluster provisioning.
+type ProvisioningPhase string
+
+const (
+	// PhaseInfrastructure means the operator is creating infrastructure (network, firewall, LB)
+	PhaseInfrastructure ProvisioningPhase = "Infrastructure"
+	// PhaseImage means the operator is ensuring the Talos image snapshot exists
+	PhaseImage ProvisioningPhase = "Image"
+	// PhaseCompute means the operator is provisioning compute resources (servers)
+	PhaseCompute ProvisioningPhase = "Compute"
+	// PhaseBootstrap means the operator is bootstrapping the cluster
+	PhaseBootstrap ProvisioningPhase = "Bootstrap"
+	// PhaseConfiguring means the operator is configuring the cluster (addons, etc.)
+	PhaseConfiguring ProvisioningPhase = "Configuring"
+	// PhaseComplete means provisioning is complete and the cluster is running
+	PhaseComplete ProvisioningPhase = "Complete"
+)
+
+// InfrastructureStatus tracks the provisioned infrastructure resources.
+type InfrastructureStatus struct {
+	// NetworkID is the Hetzner network ID
+	// +optional
+	NetworkID int64 `json:"networkID,omitempty"`
+
+	// SubnetID is the Hetzner subnet ID
+	// +optional
+	SubnetID string `json:"subnetID,omitempty"`
+
+	// FirewallID is the Hetzner firewall ID
+	// +optional
+	FirewallID int64 `json:"firewallID,omitempty"`
+
+	// LoadBalancerID is the Hetzner load balancer ID
+	// +optional
+	LoadBalancerID int64 `json:"loadBalancerID,omitempty"`
+
+	// LoadBalancerIP is the public IP of the load balancer
+	// +optional
+	LoadBalancerIP string `json:"loadBalancerIP,omitempty"`
+
+	// SSHKeyID is the Hetzner SSH key ID used for nodes
+	// +optional
+	SSHKeyID int64 `json:"sshKeyID,omitempty"`
+}
+
+// ImageStatus tracks the Talos image snapshot.
+type ImageStatus struct {
+	// SnapshotID is the Hetzner snapshot ID
+	SnapshotID int64 `json:"snapshotID,omitempty"`
+
+	// Version is the Talos version of the snapshot
+	// +optional
+	Version string `json:"version,omitempty"`
+
+	// SchematicID is the Talos Factory schematic ID
+	// +optional
+	SchematicID string `json:"schematicID,omitempty"`
+
+	// CreatedAt is when the snapshot was created
+	// +optional
+	CreatedAt *metav1.Time `json:"createdAt,omitempty"`
 }
 
 // ClusterPhase represents the overall cluster state.
@@ -189,6 +368,22 @@ type NodeGroupStatus struct {
 	Nodes []NodeStatus `json:"nodes,omitempty"`
 }
 
+// NodePhase represents the lifecycle phase of a node.
+type NodePhase string
+
+const (
+	// NodePhaseProvisioning means the server is created but not yet configured
+	NodePhaseProvisioning NodePhase = "Provisioning"
+	// NodePhaseConfiguring means Talos config is being applied, waiting for node ready
+	NodePhaseConfiguring NodePhase = "Configuring"
+	// NodePhaseReady means the node is healthy and serving
+	NodePhaseReady NodePhase = "Ready"
+	// NodePhaseUnhealthy means health checks are failing
+	NodePhaseUnhealthy NodePhase = "Unhealthy"
+	// NodePhaseTerminating means the node is marked for deletion
+	NodePhaseTerminating NodePhase = "Terminating"
+)
+
 // NodeStatus represents the status of a single node.
 type NodeStatus struct {
 	// Name is the Kubernetes node name
@@ -204,7 +399,20 @@ type NodeStatus struct {
 	// +optional
 	PublicIP string `json:"publicIP,omitempty"`
 
-	// Healthy indicates if the node is healthy
+	// Phase is the lifecycle phase of this node
+	// +kubebuilder:validation:Enum=Provisioning;Configuring;Ready;Unhealthy;Terminating
+	// +optional
+	Phase NodePhase `json:"phase,omitempty"`
+
+	// PhaseReason provides additional context for the current phase
+	// +optional
+	PhaseReason string `json:"phaseReason,omitempty"`
+
+	// PhaseTransitionTime is when the node transitioned to the current phase
+	// +optional
+	PhaseTransitionTime *metav1.Time `json:"phaseTransitionTime,omitempty"`
+
+	// Healthy indicates if the node is healthy (deprecated, use Phase)
 	Healthy bool `json:"healthy"`
 
 	// UnhealthyReason explains why the node is unhealthy
@@ -279,4 +487,20 @@ const (
 	ConditionEtcdHealthy = "EtcdHealthy"
 	// ConditionAddonsHealthy indicates all addons are healthy
 	ConditionAddonsHealthy = "AddonsHealthy"
+	// ConditionInfrastructureReady indicates infrastructure is provisioned
+	ConditionInfrastructureReady = "InfrastructureReady"
+	// ConditionImageReady indicates Talos image is available
+	ConditionImageReady = "ImageReady"
+	// ConditionBootstrapped indicates the cluster has been bootstrapped
+	ConditionBootstrapped = "Bootstrapped"
+)
+
+// Credentials Secret keys
+const (
+	// CredentialsKeyHCloudToken is the key for the HCloud API token in the credentials Secret
+	CredentialsKeyHCloudToken = "hcloud-token"
+	// CredentialsKeyTalosSecrets is the key for the Talos secrets.yaml in the credentials Secret
+	CredentialsKeyTalosSecrets = "talos-secrets"
+	// CredentialsKeyTalosConfig is the key for the talosconfig in the credentials Secret
+	CredentialsKeyTalosConfig = "talosconfig"
 )
