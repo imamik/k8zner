@@ -71,11 +71,12 @@ func Expand(cfg *Config) (*config.Config, error) {
 
 func expandNetwork(cfg *Config) config.NetworkConfig {
 	return config.NetworkConfig{
-		IPv4CIDR:        NetworkCIDR,
-		NodeIPv4CIDR:    NodeCIDR,
-		ServiceIPv4CIDR: ServiceCIDR,
-		PodIPv4CIDR:     PodCIDR,
-		Zone:            NetworkZone(cfg.Region),
+		IPv4CIDR:           NetworkCIDR,
+		NodeIPv4CIDR:       NodeCIDR,
+		ServiceIPv4CIDR:    ServiceCIDR,
+		PodIPv4CIDR:        PodCIDR,
+		Zone:               NetworkZone(cfg.Region),
+		NodeIPv4SubnetMask: 25, // /25 subnets for each role (126 IPs per subnet)
 	}
 }
 
