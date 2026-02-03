@@ -41,7 +41,7 @@ func (e *CleanupError) HasErrors() bool {
 
 // resource is a constraint for Hetzner Cloud resources that have Name and ID fields.
 type resource interface {
-	*hcloud.Server | *hcloud.LoadBalancer | *hcloud.FloatingIP | *hcloud.Firewall |
+	*hcloud.Server | *hcloud.LoadBalancer | *hcloud.Firewall |
 		*hcloud.Network | *hcloud.PlacementGroup | *hcloud.SSHKey | *hcloud.Certificate | *hcloud.Volume
 }
 
@@ -57,8 +57,6 @@ func getResourceInfo[T resource](r T) resourceInfo {
 	case *hcloud.Server:
 		return resourceInfo{Name: v.Name, ID: v.ID}
 	case *hcloud.LoadBalancer:
-		return resourceInfo{Name: v.Name, ID: v.ID}
-	case *hcloud.FloatingIP:
 		return resourceInfo{Name: v.Name, ID: v.ID}
 	case *hcloud.Firewall:
 		return resourceInfo{Name: v.Name, ID: v.ID}
@@ -121,12 +119,11 @@ func (c *RealClient) CleanupByLabel(ctx context.Context, labelSelector map[strin
 	// 1. Servers (must be deleted before networks, load balancers)
 	// 2. Volumes (must be deleted after servers detach them)
 	// 3. Load Balancers
-	// 4. Floating IPs
-	// 5. Firewalls
-	// 6. Networks
-	// 7. Placement Groups
-	// 8. SSH Keys
-	// 9. Certificates
+	// 4. Firewalls
+	// 5. Networks
+	// 6. Placement Groups
+	// 7. SSH Keys
+	// 8. Certificates
 
 	if err := c.deleteServersByLabel(ctx, labelString); err != nil {
 		log.Printf("[Cleanup] Warning: Failed to delete servers: %v", err)
@@ -141,11 +138,6 @@ func (c *RealClient) CleanupByLabel(ctx context.Context, labelSelector map[strin
 	if err := c.deleteLoadBalancersByLabel(ctx, labelString); err != nil {
 		log.Printf("[Cleanup] Warning: Failed to delete load balancers: %v", err)
 		cleanupErrs.Add(fmt.Errorf("load balancers: %w", err))
-	}
-
-	if err := c.deleteFloatingIPsByLabel(ctx, labelString); err != nil {
-		log.Printf("[Cleanup] Warning: Failed to delete floating IPs: %v", err)
-		cleanupErrs.Add(fmt.Errorf("floating IPs: %w", err))
 	}
 
 	if err := c.deleteFirewallsByLabel(ctx, labelString); err != nil {
@@ -255,21 +247,6 @@ func (c *RealClient) deleteLoadBalancersByLabel(ctx context.Context, labelSelect
 		},
 		func(ctx context.Context, lb *hcloud.LoadBalancer) error {
 			_, err := c.client.LoadBalancer.Delete(ctx, lb)
-			return err
-		},
-	)
-}
-
-// deleteFloatingIPsByLabel deletes all floating IPs matching the label selector.
-func (c *RealClient) deleteFloatingIPsByLabel(ctx context.Context, labelSelector string) error {
-	return deleteResourcesByLabel(ctx, "floating IP",
-		func(ctx context.Context) ([]*hcloud.FloatingIP, error) {
-			return c.client.FloatingIP.AllWithOpts(ctx, hcloud.FloatingIPListOpts{
-				ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
-			})
-		},
-		func(ctx context.Context, fip *hcloud.FloatingIP) error {
-			_, err := c.client.FloatingIP.Delete(ctx, fip)
 			return err
 		},
 	)
@@ -427,7 +404,6 @@ type RemainingResources struct {
 	Servers         int
 	Volumes         int
 	LoadBalancers   int
-	FloatingIPs     int
 	Firewalls       int
 	Networks        int
 	PlacementGroups int
@@ -437,7 +413,7 @@ type RemainingResources struct {
 
 // Total returns the total count of remaining resources.
 func (r RemainingResources) Total() int {
-	return r.Servers + r.Volumes + r.LoadBalancers + r.FloatingIPs +
+	return r.Servers + r.Volumes + r.LoadBalancers +
 		r.Firewalls + r.Networks + r.PlacementGroups + r.SSHKeys + r.Certificates
 }
 
@@ -452,9 +428,6 @@ func (r RemainingResources) String() string {
 	}
 	if r.LoadBalancers > 0 {
 		parts = append(parts, fmt.Sprintf("%d load balancers", r.LoadBalancers))
-	}
-	if r.FloatingIPs > 0 {
-		parts = append(parts, fmt.Sprintf("%d floating IPs", r.FloatingIPs))
 	}
 	if r.Firewalls > 0 {
 		parts = append(parts, fmt.Sprintf("%d firewalls", r.Firewalls))
@@ -509,15 +482,6 @@ func (c *RealClient) CountResourcesByLabel(ctx context.Context, labelSelector ma
 		return result, fmt.Errorf("failed to list load balancers: %w", err)
 	}
 	result.LoadBalancers = len(loadBalancers)
-
-	// Count floating IPs
-	floatingIPs, err := c.client.FloatingIP.AllWithOpts(ctx, hcloud.FloatingIPListOpts{
-		ListOpts: hcloud.ListOpts{LabelSelector: labelString},
-	})
-	if err != nil {
-		return result, fmt.Errorf("failed to list floating IPs: %w", err)
-	}
-	result.FloatingIPs = len(floatingIPs)
 
 	// Count firewalls
 	firewalls, err := c.client.Firewall.AllWithOpts(ctx, hcloud.FirewallListOpts{
