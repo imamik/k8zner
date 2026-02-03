@@ -527,6 +527,11 @@ spec:
                   loadBalancerIP:
                     description: LoadBalancerIP is the public IP of the load balancer
                     type: string
+                  loadBalancerPrivateIP:
+                    description: |-
+                      LoadBalancerPrivateIP is the private IP of the load balancer within the cluster network
+                      Used for internal cluster communication (preferred over public IP)
+                    type: string
                   networkID:
                     description: NetworkID is the Hetzner network ID
                     format: int64
