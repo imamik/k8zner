@@ -160,11 +160,6 @@ func TestReconciler_Reconcile(t *testing.T) {
 		return &hcloud.PlacementGroup{ID: 1}, nil
 	}
 
-	// Floating IP
-	mockInfra.EnsureFloatingIPFunc = func(_ context.Context, _, _, _ string, _ map[string]string) (*hcloud.FloatingIP, error) {
-		return &hcloud.FloatingIP{ID: 1}, nil
-	}
-
 	// Talos
 	mockTalos.On("SetMachineConfigOptions", mock.Anything).Return()
 	mockTalos.On("SetEndpoint", "https://5.6.7.8:6443").Return()

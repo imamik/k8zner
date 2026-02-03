@@ -75,12 +75,6 @@ func IngressLoadBalancer(cluster string) string {
 	return fmt.Sprintf("%s-%s-ingress", cluster, SuffixLoadBalancer)
 }
 
-// ControlPlaneFloatingIP returns the name for the control plane floating IP.
-// Format: {cluster}-cp-ip
-func ControlPlaneFloatingIP(cluster string) string {
-	return fmt.Sprintf("%s-%s-ip", cluster, RoleControlPlane)
-}
-
 // Firewall returns the name for the cluster firewall.
 // Format: {cluster}-fw
 func Firewall(cluster string) string {

@@ -36,11 +36,6 @@ func (p *Provisioner) Provision(ctx *provisioning.Context) error {
 		return err
 	}
 
-	// 4. Floating IPs
-	if err := p.ProvisionFloatingIPs(ctx); err != nil {
-		return err
-	}
-
 	return nil
 }
 

@@ -51,11 +51,6 @@ type MockClient struct {
 	DeletePlacementGroupFunc func(ctx context.Context, name string) error
 	GetPlacementGroupFunc    func(ctx context.Context, name string) (*hcloud.PlacementGroup, error)
 
-	// FloatingIP
-	EnsureFloatingIPFunc func(ctx context.Context, name, homeLocation, ipType string, labels map[string]string) (*hcloud.FloatingIP, error)
-	DeleteFloatingIPFunc func(ctx context.Context, name string) error
-	GetFloatingIPFunc    func(ctx context.Context, name string) (*hcloud.FloatingIP, error)
-
 	// Certificate
 	EnsureCertificateFunc func(ctx context.Context, name, certificate, privateKey string, labels map[string]string) (*hcloud.Certificate, error)
 	GetCertificateFunc    func(ctx context.Context, name string) (*hcloud.Certificate, error)
@@ -319,30 +314,6 @@ func (m *MockClient) DeletePlacementGroup(ctx context.Context, name string) erro
 func (m *MockClient) GetPlacementGroup(ctx context.Context, name string) (*hcloud.PlacementGroup, error) {
 	if m.GetPlacementGroupFunc != nil {
 		return m.GetPlacementGroupFunc(ctx, name)
-	}
-	return nil, nil
-}
-
-// EnsureFloatingIP mocks floating IP creation.
-func (m *MockClient) EnsureFloatingIP(ctx context.Context, name, homeLocation, ipType string, labels map[string]string) (*hcloud.FloatingIP, error) {
-	if m.EnsureFloatingIPFunc != nil {
-		return m.EnsureFloatingIPFunc(ctx, name, homeLocation, ipType, labels)
-	}
-	return &hcloud.FloatingIP{ID: 1}, nil
-}
-
-// DeleteFloatingIP mocks floating IP deletion.
-func (m *MockClient) DeleteFloatingIP(ctx context.Context, name string) error {
-	if m.DeleteFloatingIPFunc != nil {
-		return m.DeleteFloatingIPFunc(ctx, name)
-	}
-	return nil
-}
-
-// GetFloatingIP mocks getting a floating IP.
-func (m *MockClient) GetFloatingIP(ctx context.Context, name string) (*hcloud.FloatingIP, error) {
-	if m.GetFloatingIPFunc != nil {
-		return m.GetFloatingIPFunc(ctx, name)
 	}
 	return nil, nil
 }

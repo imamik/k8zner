@@ -127,10 +127,7 @@ type FirewallRule struct {
 
 // ControlPlaneConfig defines the control plane configuration.
 type ControlPlaneConfig struct {
-	NodePools             []ControlPlaneNodePool `mapstructure:"nodepools" yaml:"nodepools"`
-	PublicVIPIPv4Enabled  bool                   `mapstructure:"public_vip_ipv4_enabled" yaml:"public_vip_ipv4_enabled"`
-	PublicVIPIPv4ID       int                    `mapstructure:"public_vip_ipv4_id" yaml:"public_vip_ipv4_id"`
-	PrivateVIPIPv4Enabled bool                   `mapstructure:"private_vip_ipv4_enabled" yaml:"private_vip_ipv4_enabled"`
+	NodePools []ControlPlaneNodePool `mapstructure:"nodepools" yaml:"nodepools"`
 }
 
 // ControlPlaneNodePool defines a node pool for the control plane.
