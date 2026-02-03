@@ -31,8 +31,8 @@ func NewRealTalosClient(talosconfigBytes []byte) (*RealTalosClient, error) {
 // ApplyConfig applies a machine configuration to a node.
 // For nodes in maintenance mode (unconfigured), this uses an insecure connection.
 func (c *RealTalosClient) ApplyConfig(ctx context.Context, nodeIP string, configData []byte) error {
-	// Wait for Talos API to be available
-	if err := waitForTalosAPI(ctx, nodeIP, 2*time.Minute); err != nil {
+	// Wait for Talos API to be available (5 minutes to allow for server boot time)
+	if err := waitForTalosAPI(ctx, nodeIP, 5*time.Minute); err != nil {
 		return fmt.Errorf("failed to wait for Talos API: %w", err)
 	}
 
