@@ -1358,7 +1358,19 @@ func (r *ClusterReconciler) reconcileWorkers(ctx context.Context, cluster *k8zne
 
 	// Check if scaling is needed
 	currentCount := len(cluster.Status.Workers.Nodes)
+	provisioningCount := countWorkersInEarlyProvisioning(cluster.Status.Workers.Nodes)
 	desiredCount := cluster.Spec.Workers.Count
+
+	// Skip scaling if workers are already provisioning to prevent duplicate server creation
+	// from concurrent reconciles seeing stale status
+	if provisioningCount > 0 {
+		logger.Info("workers currently provisioning, skipping scaling check",
+			"provisioning", provisioningCount,
+			"current", currentCount,
+			"desired", desiredCount,
+		)
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	}
 
 	if currentCount < desiredCount {
 		logger.Info("scaling up workers", "current", currentCount, "desired", desiredCount)
@@ -1554,6 +1566,12 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 			RecordHCloudAPICall("create_server", "success", time.Since(startTime).Seconds())
 		}
 		logger.Info("created worker server", "name", newServerName)
+
+		// CRITICAL: Persist status immediately to prevent duplicate server creation
+		// from concurrent reconciles seeing stale status without this node
+		if err := r.persistClusterStatus(ctx, cluster); err != nil {
+			logger.Error(err, "failed to persist status after server creation", "name", newServerName)
+		}
 
 		// Step 5: Wait for server IP assignment
 		r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
