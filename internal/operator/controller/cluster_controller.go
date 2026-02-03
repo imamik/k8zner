@@ -1035,7 +1035,23 @@ func (r *ClusterReconciler) buildProvisioningContext(ctx context.Context, cluste
 		return nil, fmt.Errorf("failed to create talos generator: %w", err)
 	}
 
-	return r.phaseAdapter.BuildProvisioningContext(ctx, cluster, creds, infraManager, talosProducer)
+	pCtx, err := r.phaseAdapter.BuildProvisioningContext(ctx, cluster, creds, infraManager, talosProducer)
+	if err != nil {
+		return nil, err
+	}
+
+	// Populate network state from stored infrastructure status
+	// This is required when the operator is picking up from CLI bootstrap
+	if cluster.Status.Infrastructure.NetworkID != 0 && pCtx.State.Network == nil {
+		// Network name follows the cluster naming convention
+		network, err := infraManager.GetNetwork(ctx, cluster.Name)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get network: %w", err)
+		}
+		pCtx.State.Network = network
+	}
+
+	return pCtx, nil
 }
 
 // reconcileHealthCheck checks the health of all nodes and updates status.
