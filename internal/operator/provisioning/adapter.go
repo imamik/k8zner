@@ -548,6 +548,7 @@ func (a *PhaseAdapter) CreateTalosGenerator(
 	var endpoint string
 	var endpointIP string
 
+	//nolint:gocritic // if-else chain is clearer here due to different condition types
 	if k8sCluster.Status.Infrastructure.LoadBalancerPrivateIP != "" {
 		// Prefer private IP for internal cluster communication (faster, more secure)
 		endpointIP = k8sCluster.Status.Infrastructure.LoadBalancerPrivateIP
