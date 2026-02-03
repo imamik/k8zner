@@ -177,7 +177,10 @@ func buildOperatorValues(cfg *config.Config) helm.Values {
 	// This allows the operator to run on the bootstrap node before Cilium is deployed
 	if cfg.Addons.Operator.HostNetwork {
 		values["hostNetwork"] = true
-		values["dnsPolicy"] = "ClusterFirstWithHostNet"
+		// Use host's DNS resolver directly (not Kubernetes DNS)
+		// This is required because CoreDNS needs CNI, but the operator must
+		// download the Cilium chart before CNI is installed
+		values["dnsPolicy"] = "Default"
 	}
 
 	// Enable ServiceMonitor if monitoring is enabled
