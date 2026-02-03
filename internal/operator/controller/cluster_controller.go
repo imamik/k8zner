@@ -304,8 +304,27 @@ func (r *ClusterReconciler) updateStatusWithRetry(ctx context.Context, cluster *
 // It uses a state machine based on ProvisioningPhase for new clusters,
 // and falls back to health-check-only mode for existing clusters without provisioning state.
 func (r *ClusterReconciler) reconcile(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
 	// Always update the cluster phase before returning
 	defer r.updateClusterPhase(cluster)
+
+	// Step 1: Check for stuck nodes and clean them up
+	stuckNodes := r.checkStuckNodes(ctx, cluster)
+	for _, stuck := range stuckNodes {
+		if err := r.handleStuckNode(ctx, cluster, stuck); err != nil {
+			logger.Error(err, "failed to handle stuck node", "node", stuck.Name)
+		}
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, "NodeStuck",
+			"Node %s stuck in %s phase for %s, cleaning up", stuck.Name, stuck.Phase, stuck.Elapsed.Round(time.Second))
+	}
+
+	// Step 2: Verify and update node states from external APIs
+	// This catches nodes that have progressed without operator involvement
+	if err := r.verifyAndUpdateNodeStates(ctx, cluster); err != nil {
+		logger.Error(err, "failed to verify node states")
+		// Continue with reconciliation - this is not fatal
+	}
 
 	// Check if this cluster needs provisioning (has credentialsRef set)
 	if cluster.Spec.CredentialsRef.Name != "" {
@@ -1356,21 +1375,23 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 		return fmt.Errorf("failed to build cluster state: %w", err)
 	}
 
-	// Step 1b: Load credentials and create Talos clients for config generation
-	var talosConfigGen TalosConfigGenerator
-	var talosClient TalosClient
-	if cluster.Spec.CredentialsRef.Name != "" {
+	// Step 1b: Use injected clients if available (for testing), otherwise load from credentials
+	talosConfigGen := r.talosConfigGen
+	talosClient := r.talosClient
+	if talosClient == nil && cluster.Spec.CredentialsRef.Name != "" {
 		creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
 		if err != nil {
 			logger.Error(err, "failed to load credentials for Talos config generation")
 			// Continue without Talos config - server will be created but not configured
 		} else {
-			// Create Talos config generator
-			generator, err := r.phaseAdapter.CreateTalosGenerator(cluster, creds)
-			if err != nil {
-				logger.Error(err, "failed to create Talos config generator")
-			} else {
-				talosConfigGen = generator
+			// Create Talos config generator if not injected
+			if talosConfigGen == nil {
+				generator, err := r.phaseAdapter.CreateTalosGenerator(cluster, creds)
+				if err != nil {
+					logger.Error(err, "failed to create Talos config generator")
+				} else {
+					talosConfigGen = generator
+				}
 			}
 
 			// Create Talos client if we have talosconfig
@@ -1554,14 +1575,20 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 			continue
 		}
 
-		// Update status with server ID and IP
-		r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
-			Name:     newServerName,
-			ServerID: serverID,
-			PublicIP: serverIP,
-			Phase:    k8znerv1alpha1.NodePhaseWaitingForTalosAPI,
-			Reason:   fmt.Sprintf("Waiting for Talos API on %s:50000", serverIP),
-		})
+		// Get private IP from server
+		privateIP, _ := r.getPrivateIPFromServer(ctx, newServerName)
+
+		// Update status with server ID and IPs, persist to CRD
+		if err := r.updateNodePhaseAndPersist(ctx, cluster, "worker", NodeStatusUpdate{
+			Name:      newServerName,
+			ServerID:  serverID,
+			PublicIP:  serverIP,
+			PrivateIP: privateIP,
+			Phase:     k8znerv1alpha1.NodePhaseWaitingForTalosAPI,
+			Reason:    fmt.Sprintf("Waiting for Talos API on %s:50000", serverIP),
+		}); err != nil {
+			logger.Error(err, "failed to persist node status", "name", newServerName)
+		}
 
 		// Step 7: Generate and apply Talos config (if talos clients are available)
 		if talosConfigGen != nil && talosClient != nil {
@@ -1638,20 +1665,25 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 				continue
 			}
 
-			// Node is ready
+			// Node kubelet is running - transition to NodeInitializing
+			// The state verifier will promote to Ready once K8s node is fully ready
 			r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
 				Name:   newServerName,
-				Phase:  k8znerv1alpha1.NodePhaseReady,
-				Reason: "Node is healthy and serving workloads",
+				Phase:  k8znerv1alpha1.NodePhaseNodeInitializing,
+				Reason: "Kubelet running, waiting for CNI and system pods",
 			})
 		} else {
 			logger.Info("skipping Talos config application (no credentials available)", "name", newServerName)
-			// Still mark as ready since it's now a k8s node (just without Talos config from operator)
 			r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
 				Name:   newServerName,
 				Phase:  k8znerv1alpha1.NodePhaseWaitingForK8s,
 				Reason: "Waiting for node to join cluster (no Talos credentials)",
 			})
+		}
+
+		// Persist final status for this worker
+		if err := r.persistClusterStatus(ctx, cluster); err != nil {
+			logger.Error(err, "failed to persist cluster status", "name", newServerName)
 		}
 
 		r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonScalingUp,
@@ -1851,19 +1883,21 @@ func (r *ClusterReconciler) findNextWorkerIndex(cluster *k8znerv1alpha1.K8znerCl
 func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, node *k8znerv1alpha1.NodeStatus) error {
 	logger := log.FromContext(ctx)
 
-	// Load credentials and create Talos clients
-	var talosConfigGen TalosConfigGenerator
-	var talosClient TalosClient
-	if cluster.Spec.CredentialsRef.Name != "" {
+	// Use injected clients if available (for testing), otherwise load from credentials
+	talosConfigGen := r.talosConfigGen
+	talosClient := r.talosClient
+	if talosClient == nil && cluster.Spec.CredentialsRef.Name != "" {
 		creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
 		if err != nil {
 			logger.Error(err, "failed to load credentials for Talos operations")
 		} else {
-			generator, err := r.phaseAdapter.CreateTalosGenerator(cluster, creds)
-			if err != nil {
-				logger.Error(err, "failed to create Talos config generator")
-			} else {
-				talosConfigGen = generator
+			if talosConfigGen == nil {
+				generator, err := r.phaseAdapter.CreateTalosGenerator(cluster, creds)
+				if err != nil {
+					logger.Error(err, "failed to create Talos config generator")
+				} else {
+					talosConfigGen = generator
+				}
 			}
 			if len(creds.TalosConfig) > 0 {
 				talosClientInstance, err := NewRealTalosClient(creds.TalosConfig)
@@ -2111,14 +2145,20 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 		return fmt.Errorf("failed to parse server ID: %w", err)
 	}
 
-	// Update status with server ID and IP
-	r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
-		Name:     newServerName,
-		ServerID: serverID,
-		PublicIP: serverIP,
-		Phase:    k8znerv1alpha1.NodePhaseWaitingForTalosAPI,
-		Reason:   fmt.Sprintf("Waiting for Talos API on %s:50000", serverIP),
-	})
+	// Get private IP from server
+	privateIP, _ := r.getPrivateIPFromServer(ctx, newServerName)
+
+	// Update status with server ID and IPs, persist to CRD
+	if err := r.updateNodePhaseAndPersist(ctx, cluster, "control-plane", NodeStatusUpdate{
+		Name:      newServerName,
+		ServerID:  serverID,
+		PublicIP:  serverIP,
+		PrivateIP: privateIP,
+		Phase:     k8znerv1alpha1.NodePhaseWaitingForTalosAPI,
+		Reason:    fmt.Sprintf("Waiting for Talos API on %s:50000", serverIP),
+	}); err != nil {
+		logger.Error(err, "failed to persist node status", "name", newServerName)
+	}
 
 	// Step 9: Generate and apply Talos config (if talos clients are available)
 	if talosConfigGen != nil && talosClient != nil {
@@ -2199,14 +2239,15 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 			return fmt.Errorf("node failed to become ready: %w", err)
 		}
 
-		// Node is ready
+		// Node kubelet is running - transition to NodeInitializing
+		// The state verifier will promote to Ready once K8s node is fully ready
 		r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
 			Name:   newServerName,
-			Phase:  k8znerv1alpha1.NodePhaseReady,
-			Reason: "Node is healthy and serving workloads",
+			Phase:  k8znerv1alpha1.NodePhaseNodeInitializing,
+			Reason: "Kubelet running, waiting for CNI and system pods",
 		})
 
-		logger.Info("control plane node is ready", "name", newServerName)
+		logger.Info("control plane node kubelet is running", "name", newServerName)
 	} else {
 		logger.Info("skipping Talos config application (no credentials available)", "name", newServerName)
 		r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
@@ -2214,6 +2255,11 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 			Phase:  k8znerv1alpha1.NodePhaseWaitingForK8s,
 			Reason: "Waiting for node to join cluster (no Talos credentials)",
 		})
+	}
+
+	// Persist final status
+	if err := r.persistClusterStatus(ctx, cluster); err != nil {
+		logger.Error(err, "failed to persist cluster status", "name", newServerName)
 	}
 
 	return nil
@@ -2291,19 +2337,21 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 		return fmt.Errorf("failed to build cluster state: %w", err)
 	}
 
-	// Step 5b: Load credentials and create Talos clients for config generation
-	var talosConfigGen TalosConfigGenerator
-	var talosClient TalosClient
-	if cluster.Spec.CredentialsRef.Name != "" {
+	// Step 5b: Use injected clients if available (for testing), otherwise load from credentials
+	talosConfigGen := r.talosConfigGen
+	talosClient := r.talosClient
+	if talosClient == nil && cluster.Spec.CredentialsRef.Name != "" {
 		creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
 		if err != nil {
 			logger.Error(err, "failed to load credentials for Talos config generation")
 		} else {
-			generator, err := r.phaseAdapter.CreateTalosGenerator(cluster, creds)
-			if err != nil {
-				logger.Error(err, "failed to create Talos config generator")
-			} else {
-				talosConfigGen = generator
+			if talosConfigGen == nil {
+				generator, err := r.phaseAdapter.CreateTalosGenerator(cluster, creds)
+				if err != nil {
+					logger.Error(err, "failed to create Talos config generator")
+				} else {
+					talosConfigGen = generator
+				}
 			}
 			if len(creds.TalosConfig) > 0 {
 				talosClientInstance, err := NewRealTalosClient(creds.TalosConfig)
@@ -2476,14 +2524,20 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 		return fmt.Errorf("failed to parse server ID: %w", err)
 	}
 
-	// Update status with server ID and IP
-	r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
-		Name:     newServerName,
-		ServerID: serverID,
-		PublicIP: serverIP,
-		Phase:    k8znerv1alpha1.NodePhaseWaitingForTalosAPI,
-		Reason:   fmt.Sprintf("Waiting for Talos API on %s:50000", serverIP),
-	})
+	// Get private IP from server
+	privateIP, _ := r.getPrivateIPFromServer(ctx, newServerName)
+
+	// Update status with server ID and IPs, persist to CRD
+	if err := r.updateNodePhaseAndPersist(ctx, cluster, "worker", NodeStatusUpdate{
+		Name:      newServerName,
+		ServerID:  serverID,
+		PublicIP:  serverIP,
+		PrivateIP: privateIP,
+		Phase:     k8znerv1alpha1.NodePhaseWaitingForTalosAPI,
+		Reason:    fmt.Sprintf("Waiting for Talos API on %s:50000", serverIP),
+	}); err != nil {
+		logger.Error(err, "failed to persist node status", "name", newServerName)
+	}
 
 	// Step 10: Generate and apply Talos config (if talos clients are available)
 	if talosConfigGen != nil && talosClient != nil {
@@ -2560,14 +2614,15 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 			return fmt.Errorf("node failed to become ready: %w", err)
 		}
 
-		// Node is ready
+		// Node kubelet is running - transition to NodeInitializing
+		// The state verifier will promote to Ready once K8s node is fully ready
 		r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
 			Name:   newServerName,
-			Phase:  k8znerv1alpha1.NodePhaseReady,
-			Reason: "Node is healthy and serving workloads",
+			Phase:  k8znerv1alpha1.NodePhaseNodeInitializing,
+			Reason: "Kubelet running, waiting for CNI and system pods",
 		})
 
-		logger.Info("worker node is ready", "name", newServerName)
+		logger.Info("worker node kubelet is running", "name", newServerName)
 	} else {
 		logger.Info("skipping Talos config application (no credentials available)", "name", newServerName)
 		r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
@@ -2575,6 +2630,11 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 			Phase:  k8znerv1alpha1.NodePhaseWaitingForK8s,
 			Reason: "Waiting for node to join cluster (no Talos credentials)",
 		})
+	}
+
+	// Persist final status
+	if err := r.persistClusterStatus(ctx, cluster); err != nil {
+		logger.Error(err, "failed to persist cluster status", "name", newServerName)
 	}
 
 	return nil

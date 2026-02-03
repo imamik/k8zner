@@ -417,6 +417,8 @@ const (
 	NodePhaseRebootingWithConfig NodePhase = "RebootingWithConfig"
 	// NodePhaseWaitingForK8s means waiting for kubelet to register the node with Kubernetes
 	NodePhaseWaitingForK8s NodePhase = "WaitingForK8s"
+	// NodePhaseNodeInitializing means node is registered but system pods (CNI, etc.) are starting
+	NodePhaseNodeInitializing NodePhase = "NodeInitializing"
 	// NodePhaseReady means the node is healthy and serving workloads
 	NodePhaseReady NodePhase = "Ready"
 
@@ -451,7 +453,7 @@ type NodeStatus struct {
 	PublicIP string `json:"publicIP,omitempty"`
 
 	// Phase is the lifecycle phase of this node
-	// +kubebuilder:validation:Enum=CreatingServer;WaitingForIP;WaitingForTalosAPI;ApplyingTalosConfig;RebootingWithConfig;WaitingForK8s;Ready;Unhealthy;Draining;RemovingFromEtcd;DeletingServer;Failed
+	// +kubebuilder:validation:Enum=CreatingServer;WaitingForIP;WaitingForTalosAPI;ApplyingTalosConfig;RebootingWithConfig;WaitingForK8s;NodeInitializing;Ready;Unhealthy;Draining;RemovingFromEtcd;DeletingServer;Failed
 	// +optional
 	Phase NodePhase `json:"phase,omitempty"`
 

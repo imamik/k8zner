@@ -93,10 +93,10 @@ func DetermineNodePhaseFromState(info *NodeStateInfo) (k8znerv1alpha1.NodePhase,
 		return k8znerv1alpha1.NodePhaseReady, "Node is registered and ready in Kubernetes"
 	}
 
-	// If K8s node exists but not ready, check why
+	// If K8s node exists but not ready, it's initializing (CNI, system pods, etc.)
 	if info.K8sNodeExists && !info.K8sNodeReady {
 		if info.TalosKubeletRunning {
-			return k8znerv1alpha1.NodePhaseUnhealthy, "Node exists but is not ready"
+			return k8znerv1alpha1.NodePhaseNodeInitializing, "Node registered, waiting for system pods (CNI, etc.)"
 		}
 		return k8znerv1alpha1.NodePhaseWaitingForK8s, "Waiting for kubelet to become ready"
 	}
