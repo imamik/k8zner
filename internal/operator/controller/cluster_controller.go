@@ -1356,6 +1356,35 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 		return fmt.Errorf("failed to build cluster state: %w", err)
 	}
 
+	// Step 1b: Load credentials and create Talos clients for config generation
+	var talosConfigGen TalosConfigGenerator
+	var talosClient TalosClient
+	if cluster.Spec.CredentialsRef.Name != "" {
+		creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
+		if err != nil {
+			logger.Error(err, "failed to load credentials for Talos config generation")
+			// Continue without Talos config - server will be created but not configured
+		} else {
+			// Create Talos config generator
+			generator, err := r.phaseAdapter.CreateTalosGenerator(cluster, creds)
+			if err != nil {
+				logger.Error(err, "failed to create Talos config generator")
+			} else {
+				talosConfigGen = generator
+			}
+
+			// Create Talos client if we have talosconfig
+			if len(creds.TalosConfig) > 0 {
+				client, err := NewRealTalosClient(creds.TalosConfig)
+				if err != nil {
+					logger.Error(err, "failed to create Talos client")
+				} else {
+					talosClient = client
+				}
+			}
+		}
+	}
+
 	// Step 2: Get Talos snapshot for server creation
 	snapshotLabels := map[string]string{"os": "talos"}
 	snapshot, err := r.hcloudClient.GetSnapshotByLabels(ctx, snapshotLabels)
@@ -1477,8 +1506,8 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 		}
 
 		// Step 7: Generate and apply Talos config (if talos clients are available)
-		if r.talosConfigGen != nil && r.talosClient != nil {
-			config, err := r.talosConfigGen.GenerateWorkerConfig(newServerName, serverID)
+		if talosConfigGen != nil && talosClient != nil {
+			machineConfig, err := talosConfigGen.GenerateWorkerConfig(newServerName, serverID)
 			if err != nil {
 				logger.Error(err, "failed to generate worker config", "name", newServerName)
 				r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
@@ -1487,7 +1516,7 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 			}
 
 			logger.Info("applying Talos config to worker", "name", newServerName, "ip", serverIP)
-			if err := r.talosClient.ApplyConfig(ctx, serverIP, config); err != nil {
+			if err := talosClient.ApplyConfig(ctx, serverIP, machineConfig); err != nil {
 				logger.Error(err, "failed to apply Talos config", "name", newServerName)
 				r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
 					"Failed to apply config to worker %s: %v", newServerName, err)
@@ -1496,12 +1525,14 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 
 			// Step 8: Wait for node to be ready
 			logger.Info("waiting for worker node to become ready", "name", newServerName)
-			if err := r.talosClient.WaitForNodeReady(ctx, serverIP, int(nodeReadyTimeout.Seconds())); err != nil {
+			if err := talosClient.WaitForNodeReady(ctx, serverIP, int(nodeReadyTimeout.Seconds())); err != nil {
 				logger.Error(err, "worker node not ready in time", "name", newServerName)
 				r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonNodeReadyTimeout,
 					"Worker node %s not ready in time: %v", newServerName, err)
 				continue
 			}
+		} else {
+			logger.Info("skipping Talos config application (no credentials available)", "name", newServerName)
 		}
 
 		r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonScalingUp,
@@ -1701,18 +1732,43 @@ func (r *ClusterReconciler) findNextWorkerIndex(cluster *k8znerv1alpha1.K8znerCl
 func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, node *k8znerv1alpha1.NodeStatus) error {
 	logger := log.FromContext(ctx)
 
+	// Load credentials and create Talos clients
+	var talosConfigGen TalosConfigGenerator
+	var talosClient TalosClient
+	if cluster.Spec.CredentialsRef.Name != "" {
+		creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
+		if err != nil {
+			logger.Error(err, "failed to load credentials for Talos operations")
+		} else {
+			generator, err := r.phaseAdapter.CreateTalosGenerator(cluster, creds)
+			if err != nil {
+				logger.Error(err, "failed to create Talos config generator")
+			} else {
+				talosConfigGen = generator
+			}
+			if len(creds.TalosConfig) > 0 {
+				client, err := NewRealTalosClient(creds.TalosConfig)
+				if err != nil {
+					logger.Error(err, "failed to create Talos client")
+				} else {
+					talosClient = client
+				}
+			}
+		}
+	}
+
 	// Step 1: Remove from etcd cluster (via Talos API)
-	if r.talosClient != nil && node.PrivateIP != "" {
+	if talosClient != nil && node.PrivateIP != "" {
 		// Get etcd members from a healthy control plane
 		healthyIP := r.findHealthyControlPlaneIP(cluster)
 		if healthyIP != "" {
-			members, err := r.talosClient.GetEtcdMembers(ctx, healthyIP)
+			members, err := talosClient.GetEtcdMembers(ctx, healthyIP)
 			if err != nil {
 				logger.Error(err, "failed to get etcd members")
 			} else {
 				for _, member := range members {
 					if member.Name == node.Name || member.Endpoint == node.PrivateIP {
-						if err := r.talosClient.RemoveEtcdMember(ctx, healthyIP, member.ID); err != nil {
+						if err := talosClient.RemoveEtcdMember(ctx, healthyIP, member.ID); err != nil {
 							logger.Error(err, "failed to remove etcd member", "member", member.Name)
 						} else {
 							logger.Info("removed etcd member", "member", member.Name)
@@ -1723,7 +1779,7 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 			}
 		}
 	} else {
-		logger.Info("skipping etcd member removal (talos client not configured or no IP)")
+		logger.Info("skipping etcd member removal (no credentials or no IP)")
 	}
 
 	// Step 2: Delete the Kubernetes node
@@ -1874,12 +1930,12 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 	}
 
 	// Step 9: Generate and apply Talos config (if talos clients are available)
-	if r.talosConfigGen != nil && r.talosClient != nil {
+	if talosConfigGen != nil && talosClient != nil {
 		// Update SANs with new server IP
 		sans := append([]string{}, clusterState.SANs...)
 		sans = append(sans, serverIP)
 
-		config, err := r.talosConfigGen.GenerateControlPlaneConfig(sans, newServerName, serverID)
+		machineConfig, err := talosConfigGen.GenerateControlPlaneConfig(sans, newServerName, serverID)
 		if err != nil {
 			logger.Error(err, "failed to generate control plane config", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
@@ -1888,7 +1944,7 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 		}
 
 		logger.Info("applying Talos config to control plane", "name", newServerName, "ip", serverIP)
-		if err := r.talosClient.ApplyConfig(ctx, serverIP, config); err != nil {
+		if err := talosClient.ApplyConfig(ctx, serverIP, machineConfig); err != nil {
 			logger.Error(err, "failed to apply Talos config", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
 				"Failed to apply config to control plane %s: %v", newServerName, err)
@@ -1897,7 +1953,7 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 
 		// Step 10: Wait for node to become ready
 		logger.Info("waiting for control plane node to become ready", "name", newServerName, "ip", serverIP)
-		if err := r.talosClient.WaitForNodeReady(ctx, serverIP, int(nodeReadyTimeout.Seconds())); err != nil {
+		if err := talosClient.WaitForNodeReady(ctx, serverIP, int(nodeReadyTimeout.Seconds())); err != nil {
 			logger.Error(err, "control plane node failed to become ready", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonNodeReadyTimeout,
 				"Control plane %s failed to become ready: %v", newServerName, err)
@@ -1906,7 +1962,7 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 
 		logger.Info("control plane node is ready", "name", newServerName)
 	} else {
-		logger.Info("skipping Talos config application (talos clients not configured)")
+		logger.Info("skipping Talos config application (no credentials available)", "name", newServerName)
 	}
 
 	return nil
@@ -1967,6 +2023,31 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
 			"Failed to build cluster state for worker replacement: %v", err)
 		return fmt.Errorf("failed to build cluster state: %w", err)
+	}
+
+	// Step 5b: Load credentials and create Talos clients for config generation
+	var talosConfigGen TalosConfigGenerator
+	var talosClient TalosClient
+	if cluster.Spec.CredentialsRef.Name != "" {
+		creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
+		if err != nil {
+			logger.Error(err, "failed to load credentials for Talos config generation")
+		} else {
+			generator, err := r.phaseAdapter.CreateTalosGenerator(cluster, creds)
+			if err != nil {
+				logger.Error(err, "failed to create Talos config generator")
+			} else {
+				talosConfigGen = generator
+			}
+			if len(creds.TalosConfig) > 0 {
+				client, err := NewRealTalosClient(creds.TalosConfig)
+				if err != nil {
+					logger.Error(err, "failed to create Talos client")
+				} else {
+					talosClient = client
+				}
+			}
+		}
 	}
 
 	// Step 6: Get Talos snapshot for server creation
@@ -2082,8 +2163,8 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 	}
 
 	// Step 10: Generate and apply Talos config (if talos clients are available)
-	if r.talosConfigGen != nil && r.talosClient != nil {
-		config, err := r.talosConfigGen.GenerateWorkerConfig(newServerName, serverID)
+	if talosConfigGen != nil && talosClient != nil {
+		machineConfig, err := talosConfigGen.GenerateWorkerConfig(newServerName, serverID)
 		if err != nil {
 			logger.Error(err, "failed to generate worker config", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
@@ -2092,7 +2173,7 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 		}
 
 		logger.Info("applying Talos config to worker", "name", newServerName, "ip", serverIP)
-		if err := r.talosClient.ApplyConfig(ctx, serverIP, config); err != nil {
+		if err := talosClient.ApplyConfig(ctx, serverIP, machineConfig); err != nil {
 			logger.Error(err, "failed to apply Talos config", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
 				"Failed to apply config to worker %s: %v", newServerName, err)
@@ -2101,7 +2182,7 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 
 		// Step 11: Wait for node to become ready
 		logger.Info("waiting for worker node to become ready", "name", newServerName, "ip", serverIP)
-		if err := r.talosClient.WaitForNodeReady(ctx, serverIP, int(nodeReadyTimeout.Seconds())); err != nil {
+		if err := talosClient.WaitForNodeReady(ctx, serverIP, int(nodeReadyTimeout.Seconds())); err != nil {
 			logger.Error(err, "worker node failed to become ready", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonNodeReadyTimeout,
 				"Worker %s failed to become ready: %v", newServerName, err)
@@ -2110,7 +2191,7 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 
 		logger.Info("worker node is ready", "name", newServerName)
 	} else {
-		logger.Info("skipping Talos config application (talos clients not configured)")
+		logger.Info("skipping Talos config application (no credentials available)", "name", newServerName)
 	}
 
 	return nil

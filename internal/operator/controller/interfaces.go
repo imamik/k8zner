@@ -33,6 +33,7 @@ type HCloudClient interface {
 }
 
 // TalosConfigGenerator defines the interface for generating Talos machine configs.
+// This interface is a subset of provisioning.TalosConfigProducer and uses the same method names.
 type TalosConfigGenerator interface {
 	// GenerateControlPlaneConfig generates a Talos config for a control plane node.
 	GenerateControlPlaneConfig(sans []string, hostname string, serverID int64) ([]byte, error)
@@ -43,8 +44,8 @@ type TalosConfigGenerator interface {
 	// SetEndpoint updates the control plane endpoint.
 	SetEndpoint(endpoint string)
 
-	// GetTalosconfig returns the talosconfig for API access.
-	GetTalosconfig() ([]byte, error)
+	// GetClientConfig returns the Talos client configuration for cluster access.
+	GetClientConfig() ([]byte, error)
 }
 
 // TalosClient defines the interface for Talos API operations.
