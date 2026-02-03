@@ -324,8 +324,15 @@ func (r *ClusterReconciler) reconcileWithStateMachine(ctx context.Context, clust
 	// Determine current phase (empty means start from beginning)
 	currentPhase := cluster.Status.ProvisioningPhase
 	if currentPhase == "" {
-		// New cluster - start with infrastructure phase
-		currentPhase = k8znerv1alpha1.PhaseInfrastructure
+		// Check if CLI bootstrap completed - if so, start from CNI phase
+		if cluster.Spec.Bootstrap.Completed {
+			currentPhase = k8znerv1alpha1.PhaseCNI
+			cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseCNI
+			logger.Info("bootstrap completed by CLI, starting from CNI phase")
+		} else {
+			// New cluster - start with infrastructure phase
+			currentPhase = k8znerv1alpha1.PhaseInfrastructure
+		}
 	}
 
 	logger.Info("reconciling with state machine", "phase", currentPhase)
