@@ -1426,12 +1426,19 @@ func TestScaleUpWorkers(t *testing.T) {
 		mockTalos := &MockTalosClient{}
 		mockTalosGen := &MockTalosConfigGenerator{}
 
+		// Track calls to the node ready waiter
+		var nodeReadyWaiterCalls []string
 		r := NewClusterReconciler(client, scheme, recorder,
 			WithHCloudClient(mockHCloud),
 			WithTalosClient(mockTalos),
 			WithTalosConfigGenerator(mockTalosGen),
 			WithMaxConcurrentHeals(5),
 			WithMetrics(false),
+			WithNodeReadyWaiter(func(ctx context.Context, nodeName string, timeout time.Duration) error {
+				// Track the call and return success immediately
+				nodeReadyWaiterCalls = append(nodeReadyWaiterCalls, nodeName)
+				return nil
+			}),
 		)
 
 		err := r.scaleUpWorkers(context.Background(), cluster, 2)
@@ -1459,8 +1466,8 @@ func TestScaleUpWorkers(t *testing.T) {
 		// Verify configs were applied
 		assert.Len(t, mockTalos.ApplyConfigCalls, 2)
 
-		// Verify wait for node ready was called
-		assert.Len(t, mockTalos.WaitForNodeReadyCalls, 2)
+		// Verify node ready waiter was called for each worker
+		assert.Len(t, nodeReadyWaiterCalls, 2, "node ready waiter should be called for each worker")
 	})
 
 	t.Run("respects maxConcurrentHeals limit", func(t *testing.T) {

@@ -110,6 +110,10 @@ type ClusterReconciler struct {
 	enableMetrics      bool
 	maxConcurrentHeals int
 
+	// nodeReadyWaiter is called to wait for a node to become ready after config is applied.
+	// Defaults to waitForK8sNodeReady. Can be overridden in tests.
+	nodeReadyWaiter func(ctx context.Context, nodeName string, timeout time.Duration) error
+
 	// Provisioning adapter for operator-driven provisioning.
 	phaseAdapter *operatorprov.PhaseAdapter
 }
@@ -159,6 +163,14 @@ func WithMaxConcurrentHeals(maxHeals int) Option {
 	}
 }
 
+// WithNodeReadyWaiter sets a custom function for waiting for nodes to become ready.
+// This is primarily used for testing to avoid waiting for actual Kubernetes nodes.
+func WithNodeReadyWaiter(waiter func(ctx context.Context, nodeName string, timeout time.Duration) error) Option {
+	return func(r *ClusterReconciler) {
+		r.nodeReadyWaiter = waiter
+	}
+}
+
 // NewClusterReconciler creates a new ClusterReconciler with the given options.
 func NewClusterReconciler(c client.Client, scheme *runtime.Scheme, recorder record.EventRecorder, opts ...Option) *ClusterReconciler {
 	r := &ClusterReconciler{
@@ -172,6 +184,11 @@ func NewClusterReconciler(c client.Client, scheme *runtime.Scheme, recorder reco
 
 	for _, opt := range opts {
 		opt(r)
+	}
+
+	// Set default nodeReadyWaiter if not overridden
+	if r.nodeReadyWaiter == nil {
+		r.nodeReadyWaiter = r.waitForK8sNodeReady
 	}
 
 	return r
@@ -1769,7 +1786,10 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 				Reason: "Waiting for kubelet to register node with Kubernetes",
 			})
 
-			if err := talosClient.WaitForNodeReady(ctx, talosIP, int(nodeReadyTimeout.Seconds())); err != nil {
+			// After config is applied, the node reboots with NEW TLS certificates.
+			// The old Talos API connection won't work anymore, so we check Kubernetes directly
+			// for node readiness instead of polling via Talos API.
+			if err := r.nodeReadyWaiter(ctx, newServerName, nodeReadyTimeout); err != nil {
 				logger.Error(err, "worker node not ready in time", "name", newServerName)
 				r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonNodeReadyTimeout,
 					"Worker node %s not ready in time: %v", newServerName, err)
@@ -2967,6 +2987,53 @@ func (r *ClusterReconciler) waitForServerIP(ctx context.Context, serverName stri
 			}
 			if ip != "" {
 				return ip, nil
+			}
+		}
+	}
+}
+
+// waitForK8sNodeReady waits for a Kubernetes node to appear and become Ready.
+// This is more reliable than polling Talos API after config is applied, because
+// the node reboots with new TLS certificates that the old Talos client can't authenticate to.
+func (r *ClusterReconciler) waitForK8sNodeReady(ctx context.Context, nodeName string, timeout time.Duration) error {
+	logger := log.FromContext(ctx)
+
+	// Initial delay to allow reboot to begin
+	time.Sleep(10 * time.Second)
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timeout waiting for node %s to become ready", nodeName)
+		case <-ticker.C:
+			// Try to get the node from Kubernetes
+			node := &corev1.Node{}
+			err := r.Get(ctx, types.NamespacedName{Name: nodeName}, node)
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					logger.V(1).Info("node not yet registered in Kubernetes", "node", nodeName)
+					continue
+				}
+				logger.V(1).Info("error getting node", "node", nodeName, "error", err)
+				continue
+			}
+
+			// Check if the node is Ready
+			for _, condition := range node.Status.Conditions {
+				if condition.Type == corev1.NodeReady {
+					if condition.Status == corev1.ConditionTrue {
+						logger.Info("node is ready in Kubernetes", "node", nodeName)
+						return nil
+					}
+					logger.V(1).Info("node exists but not ready", "node", nodeName, "status", condition.Status)
+					break
+				}
 			}
 		}
 	}
