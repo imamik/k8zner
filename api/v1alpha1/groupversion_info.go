@@ -6,6 +6,7 @@ package v1alpha1
 import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/scheme"
 )
 
@@ -25,6 +26,9 @@ var (
 
 func init() {
 	SchemeBuilder.Register(&K8znerCluster{}, &K8znerClusterList{})
+
+	// Add core Kubernetes types to the Scheme (for Namespace, Secret, etc.)
+	_ = clientgoscheme.AddToScheme(Scheme)
 
 	// Add our types to the Scheme
 	_ = AddToScheme(Scheme)
