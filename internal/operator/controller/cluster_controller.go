@@ -1091,7 +1091,39 @@ func (r *ClusterReconciler) buildProvisioningContext(ctx context.Context, cluste
 	// Create HCloud infrastructure manager
 	infraManager := hcloud.NewRealClient(creds.HCloudToken)
 
+	// IMPORTANT: Discover infrastructure from HCloud BEFORE creating Talos generator
+	// The Talos generator needs the control plane endpoint (LB IP) to generate configs
+	// This is critical for CLI-bootstrapped clusters where the CRD status may not have all infra info
+
+	// Discover and populate LoadBalancer info if missing
+	if cluster.Status.Infrastructure.LoadBalancerID == 0 {
+		lbName := naming.KubeAPILoadBalancer(cluster.Name)
+		lb, err := infraManager.GetLoadBalancer(ctx, lbName)
+		if err == nil && lb != nil {
+			cluster.Status.Infrastructure.LoadBalancerID = lb.ID
+			if lb.PublicNet.Enabled && lb.PublicNet.IPv4.IP.String() != "<nil>" {
+				cluster.Status.Infrastructure.LoadBalancerIP = lb.PublicNet.IPv4.IP.String()
+			}
+			// Get private IP from the first attached private network
+			if len(lb.PrivateNet) > 0 && lb.PrivateNet[0].IP != nil {
+				cluster.Status.Infrastructure.LoadBalancerPrivateIP = lb.PrivateNet[0].IP.String()
+			}
+		}
+		// Ignore error - LB might not exist yet if operator is creating infrastructure
+	}
+
+	// Discover and populate Firewall info if missing
+	if cluster.Status.Infrastructure.FirewallID == 0 {
+		fwName := naming.Firewall(cluster.Name)
+		fw, err := infraManager.GetFirewall(ctx, fwName)
+		if err == nil && fw != nil {
+			cluster.Status.Infrastructure.FirewallID = fw.ID
+		}
+		// Ignore error - Firewall might not exist yet
+	}
+
 	// Create Talos config producer from stored secrets
+	// Now that we've discovered LB info, the generator can find a valid endpoint
 	talosProducer, err := r.phaseAdapter.CreateTalosGenerator(cluster, creds)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create talos generator: %w", err)
@@ -1116,34 +1148,6 @@ func (r *ClusterReconciler) buildProvisioningContext(ctx context.Context, cluste
 		if cluster.Status.Infrastructure.NetworkID == 0 && network != nil {
 			cluster.Status.Infrastructure.NetworkID = network.ID
 		}
-	}
-
-	// Also discover and populate LoadBalancer info if missing
-	// This is critical for workers to connect to the control plane
-	if cluster.Status.Infrastructure.LoadBalancerID == 0 {
-		lbName := naming.KubeAPILoadBalancer(cluster.Name)
-		lb, err := infraManager.GetLoadBalancer(ctx, lbName)
-		if err == nil && lb != nil {
-			cluster.Status.Infrastructure.LoadBalancerID = lb.ID
-			if lb.PublicNet.Enabled && lb.PublicNet.IPv4.IP.String() != "<nil>" {
-				cluster.Status.Infrastructure.LoadBalancerIP = lb.PublicNet.IPv4.IP.String()
-			}
-			// Get private IP from the first attached private network
-			if len(lb.PrivateNet) > 0 && lb.PrivateNet[0].IP != nil {
-				cluster.Status.Infrastructure.LoadBalancerPrivateIP = lb.PrivateNet[0].IP.String()
-			}
-		}
-		// Ignore error - LB might not exist yet if operator is creating infrastructure
-	}
-
-	// Also discover and populate Firewall info if missing
-	if cluster.Status.Infrastructure.FirewallID == 0 {
-		fwName := naming.Firewall(cluster.Name)
-		fw, err := infraManager.GetFirewall(ctx, fwName)
-		if err == nil && fw != nil {
-			cluster.Status.Infrastructure.FirewallID = fw.ID
-		}
-		// Ignore error - Firewall might not exist yet
 	}
 
 	return pCtx, nil
