@@ -304,8 +304,27 @@ func (r *ClusterReconciler) updateStatusWithRetry(ctx context.Context, cluster *
 // It uses a state machine based on ProvisioningPhase for new clusters,
 // and falls back to health-check-only mode for existing clusters without provisioning state.
 func (r *ClusterReconciler) reconcile(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
 	// Always update the cluster phase before returning
 	defer r.updateClusterPhase(cluster)
+
+	// Step 1: Check for stuck nodes and clean them up
+	stuckNodes := r.checkStuckNodes(ctx, cluster)
+	for _, stuck := range stuckNodes {
+		if err := r.handleStuckNode(ctx, cluster, stuck); err != nil {
+			logger.Error(err, "failed to handle stuck node", "node", stuck.Name)
+		}
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, "NodeStuck",
+			"Node %s stuck in %s phase for %s, cleaning up", stuck.Name, stuck.Phase, stuck.Elapsed.Round(time.Second))
+	}
+
+	// Step 2: Verify and update node states from external APIs
+	// This catches nodes that have progressed without operator involvement
+	if err := r.verifyAndUpdateNodeStates(ctx, cluster); err != nil {
+		logger.Error(err, "failed to verify node states")
+		// Continue with reconciliation - this is not fatal
+	}
 
 	// Check if this cluster needs provisioning (has credentialsRef set)
 	if cluster.Spec.CredentialsRef.Name != "" {
@@ -1356,30 +1375,32 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 		return fmt.Errorf("failed to build cluster state: %w", err)
 	}
 
-	// Step 1b: Load credentials and create Talos clients for config generation
-	var talosConfigGen TalosConfigGenerator
-	var talosClient TalosClient
-	if cluster.Spec.CredentialsRef.Name != "" {
+	// Step 1b: Use injected clients if available (for testing), otherwise load from credentials
+	talosConfigGen := r.talosConfigGen
+	talosClient := r.talosClient
+	if talosClient == nil && cluster.Spec.CredentialsRef.Name != "" {
 		creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
 		if err != nil {
 			logger.Error(err, "failed to load credentials for Talos config generation")
 			// Continue without Talos config - server will be created but not configured
 		} else {
-			// Create Talos config generator
-			generator, err := r.phaseAdapter.CreateTalosGenerator(cluster, creds)
-			if err != nil {
-				logger.Error(err, "failed to create Talos config generator")
-			} else {
-				talosConfigGen = generator
+			// Create Talos config generator if not injected
+			if talosConfigGen == nil {
+				generator, err := r.phaseAdapter.CreateTalosGenerator(cluster, creds)
+				if err != nil {
+					logger.Error(err, "failed to create Talos config generator")
+				} else {
+					talosConfigGen = generator
+				}
 			}
 
 			// Create Talos client if we have talosconfig
 			if len(creds.TalosConfig) > 0 {
-				client, err := NewRealTalosClient(creds.TalosConfig)
+				talosClientInstance, err := NewRealTalosClient(creds.TalosConfig)
 				if err != nil {
 					logger.Error(err, "failed to create Talos client")
 				} else {
-					talosClient = client
+					talosClient = talosClientInstance
 				}
 			}
 		}
@@ -1452,6 +1473,13 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 			"serverType", serverType,
 		)
 
+		// Track node phase: CreatingServer
+		r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+			Name:   newServerName,
+			Phase:  k8znerv1alpha1.NodePhaseCreatingServer,
+			Reason: fmt.Sprintf("Creating HCloud server with snapshot %d", snapshot.ID),
+		})
+
 		startTime := time.Now()
 		_, err = r.hcloudClient.CreateServer(
 			ctx,
@@ -1475,6 +1503,12 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 			logger.Error(err, "failed to create worker server", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
 				"Failed to create worker server %s: %v", newServerName, err)
+			// Update phase to Failed and remove from tracking
+			r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+				Name:   newServerName,
+				Phase:  k8znerv1alpha1.NodePhaseFailed,
+				Reason: fmt.Sprintf("Failed to create server: %v", err),
+			})
 			// Continue trying to create remaining workers
 			continue
 		}
@@ -1484,11 +1518,27 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 		logger.Info("created worker server", "name", newServerName)
 
 		// Step 5: Wait for server IP assignment
+		r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+			Name:   newServerName,
+			Phase:  k8znerv1alpha1.NodePhaseWaitingForIP,
+			Reason: "Waiting for HCloud to assign IP address",
+		})
+
 		serverIP, err := r.waitForServerIP(ctx, newServerName, serverIPTimeout)
 		if err != nil {
 			logger.Error(err, "failed to get server IP", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
 				"Failed to get IP for worker server %s: %v", newServerName, err)
+			r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+				Name:   newServerName,
+				Phase:  k8znerv1alpha1.NodePhaseFailed,
+				Reason: fmt.Sprintf("Failed to get IP: %v", err),
+			})
+			// Clean up orphaned server
+			if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+				logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+			}
+			r.removeNodeFromStatus(cluster, "worker", newServerName)
 			continue
 		}
 		logger.Info("server IP assigned", "name", newServerName, "ip", serverIP)
@@ -1497,21 +1547,72 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 		serverIDStr, err := r.hcloudClient.GetServerID(ctx, newServerName)
 		if err != nil {
 			logger.Error(err, "failed to get server ID", "name", newServerName)
+			r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+				Name:   newServerName,
+				Phase:  k8znerv1alpha1.NodePhaseFailed,
+				Reason: fmt.Sprintf("Failed to get server ID: %v", err),
+			})
+			// Clean up orphaned server
+			if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+				logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+			}
+			r.removeNodeFromStatus(cluster, "worker", newServerName)
 			continue
 		}
 		var serverID int64
 		if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
 			logger.Error(err, "failed to parse server ID", "name", newServerName)
+			r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+				Name:   newServerName,
+				Phase:  k8znerv1alpha1.NodePhaseFailed,
+				Reason: fmt.Sprintf("Failed to parse server ID: %v", err),
+			})
+			// Clean up orphaned server
+			if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+				logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+			}
+			r.removeNodeFromStatus(cluster, "worker", newServerName)
 			continue
+		}
+
+		// Get private IP from server
+		privateIP, _ := r.getPrivateIPFromServer(ctx, newServerName)
+
+		// Update status with server ID and IPs, persist to CRD
+		if err := r.updateNodePhaseAndPersist(ctx, cluster, "worker", NodeStatusUpdate{
+			Name:      newServerName,
+			ServerID:  serverID,
+			PublicIP:  serverIP,
+			PrivateIP: privateIP,
+			Phase:     k8znerv1alpha1.NodePhaseWaitingForTalosAPI,
+			Reason:    fmt.Sprintf("Waiting for Talos API on %s:50000", serverIP),
+		}); err != nil {
+			logger.Error(err, "failed to persist node status", "name", newServerName)
 		}
 
 		// Step 7: Generate and apply Talos config (if talos clients are available)
 		if talosConfigGen != nil && talosClient != nil {
+			r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+				Name:   newServerName,
+				Phase:  k8znerv1alpha1.NodePhaseApplyingTalosConfig,
+				Reason: "Generating and applying Talos machine configuration",
+			})
+
 			machineConfig, err := talosConfigGen.GenerateWorkerConfig(newServerName, serverID)
 			if err != nil {
 				logger.Error(err, "failed to generate worker config", "name", newServerName)
 				r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
 					"Failed to generate config for worker %s: %v", newServerName, err)
+				r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+					Name:   newServerName,
+					Phase:  k8znerv1alpha1.NodePhaseFailed,
+					Reason: fmt.Sprintf("Failed to generate Talos config: %v", err),
+				})
+				// Clean up orphaned server
+				if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+					logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+				}
+				r.removeNodeFromStatus(cluster, "worker", newServerName)
 				continue
 			}
 
@@ -1520,19 +1621,69 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 				logger.Error(err, "failed to apply Talos config", "name", newServerName)
 				r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
 					"Failed to apply config to worker %s: %v", newServerName, err)
+				r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+					Name:   newServerName,
+					Phase:  k8znerv1alpha1.NodePhaseFailed,
+					Reason: fmt.Sprintf("Failed to apply Talos config: %v", err),
+				})
+				// Clean up orphaned server
+				if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+					logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+				}
+				r.removeNodeFromStatus(cluster, "worker", newServerName)
 				continue
 			}
 
 			// Step 8: Wait for node to be ready
+			r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+				Name:   newServerName,
+				Phase:  k8znerv1alpha1.NodePhaseRebootingWithConfig,
+				Reason: "Talos config applied, node is rebooting with new configuration",
+			})
+
 			logger.Info("waiting for worker node to become ready", "name", newServerName)
+			r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+				Name:   newServerName,
+				Phase:  k8znerv1alpha1.NodePhaseWaitingForK8s,
+				Reason: "Waiting for kubelet to register node with Kubernetes",
+			})
+
 			if err := talosClient.WaitForNodeReady(ctx, serverIP, int(nodeReadyTimeout.Seconds())); err != nil {
 				logger.Error(err, "worker node not ready in time", "name", newServerName)
 				r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonNodeReadyTimeout,
 					"Worker node %s not ready in time: %v", newServerName, err)
+				r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+					Name:   newServerName,
+					Phase:  k8znerv1alpha1.NodePhaseFailed,
+					Reason: fmt.Sprintf("Node not ready in time: %v", err),
+				})
+				// Clean up orphaned server
+				if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+					logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+				}
+				r.removeNodeFromStatus(cluster, "worker", newServerName)
 				continue
 			}
+
+			// Node kubelet is running - transition to NodeInitializing
+			// The state verifier will promote to Ready once K8s node is fully ready
+			r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+				Name:   newServerName,
+				Phase:  k8znerv1alpha1.NodePhaseNodeInitializing,
+				Reason: "Kubelet running, waiting for CNI and system pods",
+			})
 		} else {
 			logger.Info("skipping Talos config application (no credentials available)", "name", newServerName)
+			r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+				Name:   newServerName,
+				Phase:  k8znerv1alpha1.NodePhaseWaitingForK8s,
+				Reason: "Waiting for node to join cluster (no Talos credentials)",
+			})
+		}
+
+		// Persist final status for this worker
+		if err := r.persistClusterStatus(ctx, cluster); err != nil {
+			logger.Error(err, "failed to persist cluster status", "name", newServerName)
 		}
 
 		r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonScalingUp,
@@ -1732,32 +1883,40 @@ func (r *ClusterReconciler) findNextWorkerIndex(cluster *k8znerv1alpha1.K8znerCl
 func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, node *k8znerv1alpha1.NodeStatus) error {
 	logger := log.FromContext(ctx)
 
-	// Load credentials and create Talos clients
-	var talosConfigGen TalosConfigGenerator
-	var talosClient TalosClient
-	if cluster.Spec.CredentialsRef.Name != "" {
+	// Use injected clients if available (for testing), otherwise load from credentials
+	talosConfigGen := r.talosConfigGen
+	talosClient := r.talosClient
+	if talosClient == nil && cluster.Spec.CredentialsRef.Name != "" {
 		creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
 		if err != nil {
 			logger.Error(err, "failed to load credentials for Talos operations")
 		} else {
-			generator, err := r.phaseAdapter.CreateTalosGenerator(cluster, creds)
-			if err != nil {
-				logger.Error(err, "failed to create Talos config generator")
-			} else {
-				talosConfigGen = generator
+			if talosConfigGen == nil {
+				generator, err := r.phaseAdapter.CreateTalosGenerator(cluster, creds)
+				if err != nil {
+					logger.Error(err, "failed to create Talos config generator")
+				} else {
+					talosConfigGen = generator
+				}
 			}
 			if len(creds.TalosConfig) > 0 {
-				client, err := NewRealTalosClient(creds.TalosConfig)
+				talosClientInstance, err := NewRealTalosClient(creds.TalosConfig)
 				if err != nil {
 					logger.Error(err, "failed to create Talos client")
 				} else {
-					talosClient = client
+					talosClient = talosClientInstance
 				}
 			}
 		}
 	}
 
 	// Step 1: Remove from etcd cluster (via Talos API)
+	r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
+		Name:   node.Name,
+		Phase:  k8znerv1alpha1.NodePhaseRemovingFromEtcd,
+		Reason: "Removing etcd member before server deletion",
+	})
+
 	if talosClient != nil && node.PrivateIP != "" {
 		// Get etcd members from a healthy control plane
 		healthyIP := r.findHealthyControlPlaneIP(cluster)
@@ -1783,6 +1942,12 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 	}
 
 	// Step 2: Delete the Kubernetes node
+	r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
+		Name:   node.Name,
+		Phase:  k8znerv1alpha1.NodePhaseDeletingServer,
+		Reason: "Deleting Kubernetes node and HCloud server",
+	})
+
 	k8sNode := &corev1.Node{}
 	if err := r.Get(ctx, types.NamespacedName{Name: node.Name}, k8sNode); err == nil {
 		if err := r.Delete(ctx, k8sNode); err != nil && !apierrors.IsNotFound(err) {
@@ -1807,6 +1972,9 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 			}
 		}
 	}
+
+	// Remove old node from status
+	r.removeNodeFromStatus(cluster, "control-plane", node.Name)
 
 	// Step 4: Build cluster state for server creation
 	clusterState, err := r.buildClusterState(ctx, cluster)
@@ -1871,6 +2039,13 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 		"pool":    "control-plane",
 	}
 
+	// Track new node phase: CreatingServer
+	r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
+		Name:   newServerName,
+		Phase:  k8znerv1alpha1.NodePhaseCreatingServer,
+		Reason: fmt.Sprintf("Creating replacement HCloud server with snapshot %d", snapshot.ID),
+	})
+
 	serverType := normalizeServerSize(cluster.Spec.ControlPlanes.Size)
 	logger.Info("creating replacement control plane server",
 		"name", newServerName,
@@ -1901,6 +2076,11 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 		logger.Error(err, "failed to create replacement control plane server", "name", newServerName)
 		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
 			"Failed to create replacement control plane server %s: %v", newServerName, err)
+		r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
+			Name:   newServerName,
+			Phase:  k8znerv1alpha1.NodePhaseFailed,
+			Reason: fmt.Sprintf("Failed to create server: %v", err),
+		})
 		return fmt.Errorf("failed to create server: %w", err)
 	}
 	if r.enableMetrics {
@@ -1909,11 +2089,27 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 	logger.Info("created replacement control plane server", "name", newServerName)
 
 	// Step 7: Wait for server IP assignment
+	r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
+		Name:   newServerName,
+		Phase:  k8znerv1alpha1.NodePhaseWaitingForIP,
+		Reason: "Waiting for HCloud to assign IP address",
+	})
+
 	serverIP, err := r.waitForServerIP(ctx, newServerName, serverIPTimeout)
 	if err != nil {
 		logger.Error(err, "failed to get server IP", "name", newServerName)
 		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
 			"Failed to get IP for replacement control plane server %s: %v", newServerName, err)
+		r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
+			Name:   newServerName,
+			Phase:  k8znerv1alpha1.NodePhaseFailed,
+			Reason: fmt.Sprintf("Failed to get IP: %v", err),
+		})
+		// Clean up orphaned server
+		if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+			logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+		}
+		r.removeNodeFromStatus(cluster, "control-plane", newServerName)
 		return fmt.Errorf("failed to get server IP: %w", err)
 	}
 	logger.Info("server IP assigned", "name", newServerName, "ip", serverIP)
@@ -1922,15 +2118,56 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 	serverIDStr, err := r.hcloudClient.GetServerID(ctx, newServerName)
 	if err != nil {
 		logger.Error(err, "failed to get server ID", "name", newServerName)
+		r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
+			Name:   newServerName,
+			Phase:  k8znerv1alpha1.NodePhaseFailed,
+			Reason: fmt.Sprintf("Failed to get server ID: %v", err),
+		})
+		// Clean up orphaned server
+		if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+			logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+		}
+		r.removeNodeFromStatus(cluster, "control-plane", newServerName)
 		return fmt.Errorf("failed to get server ID: %w", err)
 	}
 	var serverID int64
 	if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
+		r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
+			Name:   newServerName,
+			Phase:  k8znerv1alpha1.NodePhaseFailed,
+			Reason: fmt.Sprintf("Failed to parse server ID: %v", err),
+		})
+		// Clean up orphaned server
+		if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+			logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+		}
+		r.removeNodeFromStatus(cluster, "control-plane", newServerName)
 		return fmt.Errorf("failed to parse server ID: %w", err)
+	}
+
+	// Get private IP from server
+	privateIP, _ := r.getPrivateIPFromServer(ctx, newServerName)
+
+	// Update status with server ID and IPs, persist to CRD
+	if err := r.updateNodePhaseAndPersist(ctx, cluster, "control-plane", NodeStatusUpdate{
+		Name:      newServerName,
+		ServerID:  serverID,
+		PublicIP:  serverIP,
+		PrivateIP: privateIP,
+		Phase:     k8znerv1alpha1.NodePhaseWaitingForTalosAPI,
+		Reason:    fmt.Sprintf("Waiting for Talos API on %s:50000", serverIP),
+	}); err != nil {
+		logger.Error(err, "failed to persist node status", "name", newServerName)
 	}
 
 	// Step 9: Generate and apply Talos config (if talos clients are available)
 	if talosConfigGen != nil && talosClient != nil {
+		r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
+			Name:   newServerName,
+			Phase:  k8znerv1alpha1.NodePhaseApplyingTalosConfig,
+			Reason: "Generating and applying Talos machine configuration",
+		})
+
 		// Update SANs with new server IP
 		sans := append([]string{}, clusterState.SANs...)
 		sans = append(sans, serverIP)
@@ -1940,6 +2177,16 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 			logger.Error(err, "failed to generate control plane config", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
 				"Failed to generate config for control plane %s: %v", newServerName, err)
+			r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
+				Name:   newServerName,
+				Phase:  k8znerv1alpha1.NodePhaseFailed,
+				Reason: fmt.Sprintf("Failed to generate Talos config: %v", err),
+			})
+			// Clean up orphaned server
+			if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+				logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+			}
+			r.removeNodeFromStatus(cluster, "control-plane", newServerName)
 			return fmt.Errorf("failed to generate config: %w", err)
 		}
 
@@ -1948,21 +2195,71 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 			logger.Error(err, "failed to apply Talos config", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
 				"Failed to apply config to control plane %s: %v", newServerName, err)
+			r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
+				Name:   newServerName,
+				Phase:  k8znerv1alpha1.NodePhaseFailed,
+				Reason: fmt.Sprintf("Failed to apply Talos config: %v", err),
+			})
+			// Clean up orphaned server
+			if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+				logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+			}
+			r.removeNodeFromStatus(cluster, "control-plane", newServerName)
 			return fmt.Errorf("failed to apply config: %w", err)
 		}
 
 		// Step 10: Wait for node to become ready
+		r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
+			Name:   newServerName,
+			Phase:  k8znerv1alpha1.NodePhaseRebootingWithConfig,
+			Reason: "Talos config applied, node is rebooting with new configuration",
+		})
+
 		logger.Info("waiting for control plane node to become ready", "name", newServerName, "ip", serverIP)
+		r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
+			Name:   newServerName,
+			Phase:  k8znerv1alpha1.NodePhaseWaitingForK8s,
+			Reason: "Waiting for kubelet to register node with Kubernetes",
+		})
+
 		if err := talosClient.WaitForNodeReady(ctx, serverIP, int(nodeReadyTimeout.Seconds())); err != nil {
 			logger.Error(err, "control plane node failed to become ready", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonNodeReadyTimeout,
 				"Control plane %s failed to become ready: %v", newServerName, err)
+			r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
+				Name:   newServerName,
+				Phase:  k8znerv1alpha1.NodePhaseFailed,
+				Reason: fmt.Sprintf("Node not ready in time: %v", err),
+			})
+			// Clean up orphaned server
+			if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+				logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+			}
+			r.removeNodeFromStatus(cluster, "control-plane", newServerName)
 			return fmt.Errorf("node failed to become ready: %w", err)
 		}
 
-		logger.Info("control plane node is ready", "name", newServerName)
+		// Node kubelet is running - transition to NodeInitializing
+		// The state verifier will promote to Ready once K8s node is fully ready
+		r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
+			Name:   newServerName,
+			Phase:  k8znerv1alpha1.NodePhaseNodeInitializing,
+			Reason: "Kubelet running, waiting for CNI and system pods",
+		})
+
+		logger.Info("control plane node kubelet is running", "name", newServerName)
 	} else {
 		logger.Info("skipping Talos config application (no credentials available)", "name", newServerName)
+		r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
+			Name:   newServerName,
+			Phase:  k8znerv1alpha1.NodePhaseWaitingForK8s,
+			Reason: "Waiting for node to join cluster (no Talos credentials)",
+		})
+	}
+
+	// Persist final status
+	if err := r.persistClusterStatus(ctx, cluster); err != nil {
+		logger.Error(err, "failed to persist cluster status", "name", newServerName)
 	}
 
 	return nil
@@ -1972,7 +2269,13 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, node *k8znerv1alpha1.NodeStatus) error {
 	logger := log.FromContext(ctx)
 
-	// Step 1: Cordon the node
+	// Step 1: Cordon and drain the node
+	r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+		Name:   node.Name,
+		Phase:  k8znerv1alpha1.NodePhaseDraining,
+		Reason: "Cordoning and draining node before replacement",
+	})
+
 	k8sNode := &corev1.Node{}
 	if err := r.Get(ctx, types.NamespacedName{Name: node.Name}, k8sNode); err == nil {
 		if !k8sNode.Spec.Unschedulable {
@@ -1991,7 +2294,13 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 		// Continue with replacement anyway
 	}
 
-	// Step 3: Delete the Kubernetes node
+	// Step 3: Delete the Kubernetes node and server
+	r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+		Name:   node.Name,
+		Phase:  k8znerv1alpha1.NodePhaseDeletingServer,
+		Reason: "Deleting Kubernetes node and HCloud server",
+	})
+
 	if err := r.Get(ctx, types.NamespacedName{Name: node.Name}, k8sNode); err == nil {
 		if err := r.Delete(ctx, k8sNode); err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("failed to delete k8s node: %w", err)
@@ -2016,6 +2325,9 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 		}
 	}
 
+	// Remove old node from status
+	r.removeNodeFromStatus(cluster, "worker", node.Name)
+
 	// Step 5: Build cluster state for server creation
 	clusterState, err := r.buildClusterState(ctx, cluster)
 	if err != nil {
@@ -2025,26 +2337,28 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 		return fmt.Errorf("failed to build cluster state: %w", err)
 	}
 
-	// Step 5b: Load credentials and create Talos clients for config generation
-	var talosConfigGen TalosConfigGenerator
-	var talosClient TalosClient
-	if cluster.Spec.CredentialsRef.Name != "" {
+	// Step 5b: Use injected clients if available (for testing), otherwise load from credentials
+	talosConfigGen := r.talosConfigGen
+	talosClient := r.talosClient
+	if talosClient == nil && cluster.Spec.CredentialsRef.Name != "" {
 		creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
 		if err != nil {
 			logger.Error(err, "failed to load credentials for Talos config generation")
 		} else {
-			generator, err := r.phaseAdapter.CreateTalosGenerator(cluster, creds)
-			if err != nil {
-				logger.Error(err, "failed to create Talos config generator")
-			} else {
-				talosConfigGen = generator
+			if talosConfigGen == nil {
+				generator, err := r.phaseAdapter.CreateTalosGenerator(cluster, creds)
+				if err != nil {
+					logger.Error(err, "failed to create Talos config generator")
+				} else {
+					talosConfigGen = generator
+				}
 			}
 			if len(creds.TalosConfig) > 0 {
-				client, err := NewRealTalosClient(creds.TalosConfig)
+				talosClientInstance, err := NewRealTalosClient(creds.TalosConfig)
 				if err != nil {
 					logger.Error(err, "failed to create Talos client")
 				} else {
-					talosClient = client
+					talosClient = talosClientInstance
 				}
 			}
 		}
@@ -2104,6 +2418,13 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 		"pool":    "workers",
 	}
 
+	// Track new node phase: CreatingServer
+	r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+		Name:   newServerName,
+		Phase:  k8znerv1alpha1.NodePhaseCreatingServer,
+		Reason: fmt.Sprintf("Creating replacement HCloud server with snapshot %d", snapshot.ID),
+	})
+
 	serverType := normalizeServerSize(cluster.Spec.Workers.Size)
 	logger.Info("creating replacement worker server",
 		"name", newServerName,
@@ -2134,6 +2455,11 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 		logger.Error(err, "failed to create replacement worker server", "name", newServerName)
 		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
 			"Failed to create replacement worker server %s: %v", newServerName, err)
+		r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+			Name:   newServerName,
+			Phase:  k8znerv1alpha1.NodePhaseFailed,
+			Reason: fmt.Sprintf("Failed to create server: %v", err),
+		})
 		return fmt.Errorf("failed to create server: %w", err)
 	}
 	if r.enableMetrics {
@@ -2142,11 +2468,27 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 	logger.Info("created replacement worker server", "name", newServerName)
 
 	// Step 8: Wait for server IP assignment
+	r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+		Name:   newServerName,
+		Phase:  k8znerv1alpha1.NodePhaseWaitingForIP,
+		Reason: "Waiting for HCloud to assign IP address",
+	})
+
 	serverIP, err := r.waitForServerIP(ctx, newServerName, serverIPTimeout)
 	if err != nil {
 		logger.Error(err, "failed to get server IP", "name", newServerName)
 		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
 			"Failed to get IP for replacement worker server %s: %v", newServerName, err)
+		r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+			Name:   newServerName,
+			Phase:  k8znerv1alpha1.NodePhaseFailed,
+			Reason: fmt.Sprintf("Failed to get IP: %v", err),
+		})
+		// Clean up orphaned server
+		if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+			logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+		}
+		r.removeNodeFromStatus(cluster, "worker", newServerName)
 		return fmt.Errorf("failed to get server IP: %w", err)
 	}
 	logger.Info("server IP assigned", "name", newServerName, "ip", serverIP)
@@ -2155,20 +2497,71 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 	serverIDStr, err := r.hcloudClient.GetServerID(ctx, newServerName)
 	if err != nil {
 		logger.Error(err, "failed to get server ID", "name", newServerName)
+		r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+			Name:   newServerName,
+			Phase:  k8znerv1alpha1.NodePhaseFailed,
+			Reason: fmt.Sprintf("Failed to get server ID: %v", err),
+		})
+		// Clean up orphaned server
+		if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+			logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+		}
+		r.removeNodeFromStatus(cluster, "worker", newServerName)
 		return fmt.Errorf("failed to get server ID: %w", err)
 	}
 	var serverID int64
 	if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
+		r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+			Name:   newServerName,
+			Phase:  k8znerv1alpha1.NodePhaseFailed,
+			Reason: fmt.Sprintf("Failed to parse server ID: %v", err),
+		})
+		// Clean up orphaned server
+		if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+			logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+		}
+		r.removeNodeFromStatus(cluster, "worker", newServerName)
 		return fmt.Errorf("failed to parse server ID: %w", err)
+	}
+
+	// Get private IP from server
+	privateIP, _ := r.getPrivateIPFromServer(ctx, newServerName)
+
+	// Update status with server ID and IPs, persist to CRD
+	if err := r.updateNodePhaseAndPersist(ctx, cluster, "worker", NodeStatusUpdate{
+		Name:      newServerName,
+		ServerID:  serverID,
+		PublicIP:  serverIP,
+		PrivateIP: privateIP,
+		Phase:     k8znerv1alpha1.NodePhaseWaitingForTalosAPI,
+		Reason:    fmt.Sprintf("Waiting for Talos API on %s:50000", serverIP),
+	}); err != nil {
+		logger.Error(err, "failed to persist node status", "name", newServerName)
 	}
 
 	// Step 10: Generate and apply Talos config (if talos clients are available)
 	if talosConfigGen != nil && talosClient != nil {
+		r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+			Name:   newServerName,
+			Phase:  k8znerv1alpha1.NodePhaseApplyingTalosConfig,
+			Reason: "Generating and applying Talos machine configuration",
+		})
+
 		machineConfig, err := talosConfigGen.GenerateWorkerConfig(newServerName, serverID)
 		if err != nil {
 			logger.Error(err, "failed to generate worker config", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
 				"Failed to generate config for worker %s: %v", newServerName, err)
+			r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+				Name:   newServerName,
+				Phase:  k8znerv1alpha1.NodePhaseFailed,
+				Reason: fmt.Sprintf("Failed to generate Talos config: %v", err),
+			})
+			// Clean up orphaned server
+			if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+				logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+			}
+			r.removeNodeFromStatus(cluster, "worker", newServerName)
 			return fmt.Errorf("failed to generate config: %w", err)
 		}
 
@@ -2177,21 +2570,71 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 			logger.Error(err, "failed to apply Talos config", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
 				"Failed to apply config to worker %s: %v", newServerName, err)
+			r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+				Name:   newServerName,
+				Phase:  k8znerv1alpha1.NodePhaseFailed,
+				Reason: fmt.Sprintf("Failed to apply Talos config: %v", err),
+			})
+			// Clean up orphaned server
+			if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+				logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+			}
+			r.removeNodeFromStatus(cluster, "worker", newServerName)
 			return fmt.Errorf("failed to apply config: %w", err)
 		}
 
 		// Step 11: Wait for node to become ready
+		r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+			Name:   newServerName,
+			Phase:  k8znerv1alpha1.NodePhaseRebootingWithConfig,
+			Reason: "Talos config applied, node is rebooting with new configuration",
+		})
+
 		logger.Info("waiting for worker node to become ready", "name", newServerName, "ip", serverIP)
+		r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+			Name:   newServerName,
+			Phase:  k8znerv1alpha1.NodePhaseWaitingForK8s,
+			Reason: "Waiting for kubelet to register node with Kubernetes",
+		})
+
 		if err := talosClient.WaitForNodeReady(ctx, serverIP, int(nodeReadyTimeout.Seconds())); err != nil {
 			logger.Error(err, "worker node failed to become ready", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonNodeReadyTimeout,
 				"Worker %s failed to become ready: %v", newServerName, err)
+			r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+				Name:   newServerName,
+				Phase:  k8znerv1alpha1.NodePhaseFailed,
+				Reason: fmt.Sprintf("Node not ready in time: %v", err),
+			})
+			// Clean up orphaned server
+			if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+				logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+			}
+			r.removeNodeFromStatus(cluster, "worker", newServerName)
 			return fmt.Errorf("node failed to become ready: %w", err)
 		}
 
-		logger.Info("worker node is ready", "name", newServerName)
+		// Node kubelet is running - transition to NodeInitializing
+		// The state verifier will promote to Ready once K8s node is fully ready
+		r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+			Name:   newServerName,
+			Phase:  k8znerv1alpha1.NodePhaseNodeInitializing,
+			Reason: "Kubelet running, waiting for CNI and system pods",
+		})
+
+		logger.Info("worker node kubelet is running", "name", newServerName)
 	} else {
 		logger.Info("skipping Talos config application (no credentials available)", "name", newServerName)
+		r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+			Name:   newServerName,
+			Phase:  k8znerv1alpha1.NodePhaseWaitingForK8s,
+			Reason: "Waiting for node to join cluster (no Talos credentials)",
+		})
+	}
+
+	// Persist final status
+	if err := r.persistClusterStatus(ctx, cluster); err != nil {
+		logger.Error(err, "failed to persist cluster status", "name", newServerName)
 	}
 
 	return nil
