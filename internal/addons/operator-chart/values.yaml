@@ -63,6 +63,10 @@ tolerations:
   - key: node-role.kubernetes.io/control-plane
     operator: Exists
     effect: NoSchedule
+  # Tolerate uninitialized taint so operator can run before CCM initializes the node
+  - key: node.cloudprovider.kubernetes.io/uninitialized
+    operator: Exists
+    effect: NoSchedule
 
 # Spread across control plane nodes
 affinity:
