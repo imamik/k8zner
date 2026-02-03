@@ -115,12 +115,19 @@ var _ = BeforeSuite(func() {
 		Expect(err).NotTo(HaveOccurred())
 	}()
 
-	// Wait for the manager's cache to sync before running tests
-	// This ensures the controller is ready to receive events
+	// Wait for the manager to be fully ready
+	// First wait for the cache to sync
 	By("waiting for manager cache to sync")
 	Eventually(func() bool {
 		return k8sManager.GetCache().WaitForCacheSync(ctx)
 	}, time.Second*30, time.Millisecond*500).Should(BeTrue(), "timed out waiting for cache sync")
+
+	// Then verify the manager can list K8znerClusters (proves controller is watching)
+	By("verifying controller is ready by listing clusters")
+	Eventually(func() error {
+		clusters := &k8znerv1alpha1.K8znerClusterList{}
+		return k8sManager.GetClient().List(ctx, clusters)
+	}, time.Second*10, time.Millisecond*100).Should(Succeed(), "controller not ready to list clusters")
 })
 
 var _ = AfterSuite(func() {
@@ -219,6 +226,18 @@ var _ = Describe("K8znerCluster Controller", func() {
 			Expect(k8sClient.Create(ctx, cluster)).Should(Succeed())
 
 			By("Waiting for the controller to reconcile and update status")
+			// First check if LastReconcileTime is set (proves reconciliation happened)
+			Eventually(func() bool {
+				c := &k8znerv1alpha1.K8znerCluster{}
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: testClusterName, Namespace: testNamespace}, c)
+				if err != nil {
+					return false
+				}
+				// Check if any status was updated - reconciliation sets LastReconcileTime
+				return c.Status.LastReconcileTime != nil
+			}, timeout, interval).Should(BeTrue(), "reconciliation did not update LastReconcileTime")
+
+			// Then verify Phase is set
 			Eventually(func() string {
 				c := &k8znerv1alpha1.K8znerCluster{}
 				err := k8sClient.Get(ctx, types.NamespacedName{Name: testClusterName, Namespace: testNamespace}, c)
