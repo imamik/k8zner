@@ -1029,10 +1029,11 @@ func (r *ClusterReconciler) buildProvisioningContext(ctx context.Context, cluste
 	// Create HCloud infrastructure manager
 	infraManager := hcloud.NewRealClient(creds.HCloudToken)
 
-	// Create Talos config producer (if secrets available)
-	// TODO: Initialize Talos generator from secrets
-	var talosProducer provisioning.TalosConfigProducer
-	// For now, we pass nil - the adapter will handle this
+	// Create Talos config producer from stored secrets
+	talosProducer, err := r.phaseAdapter.CreateTalosGenerator(cluster, creds)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create talos generator: %w", err)
+	}
 
 	return r.phaseAdapter.BuildProvisioningContext(ctx, cluster, creds, infraManager, talosProducer)
 }
