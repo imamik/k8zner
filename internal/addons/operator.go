@@ -147,7 +147,7 @@ func buildOperatorValues(cfg *config.Config) helm.Values {
 		"replicaCount": 2,
 		"image": helm.Values{
 			"repository": "ghcr.io/imamik/k8zner-operator",
-			"pullPolicy": "IfNotPresent",
+			"pullPolicy": "Always",
 			"tag":        version,
 		},
 		"credentials": helm.Values{
