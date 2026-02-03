@@ -337,6 +337,11 @@ func (r *ClusterReconciler) reconcileWithStateMachine(ctx context.Context, clust
 
 	logger.Info("reconciling with state machine", "phase", currentPhase)
 
+	// Always keep status.Desired in sync with spec counts
+	// This ensures status reflects the desired state during all provisioning phases
+	cluster.Status.ControlPlanes.Desired = cluster.Spec.ControlPlanes.Count
+	cluster.Status.Workers.Desired = cluster.Spec.Workers.Count
+
 	switch currentPhase {
 	case k8znerv1alpha1.PhaseInfrastructure:
 		return r.reconcileInfrastructurePhase(ctx, cluster)
