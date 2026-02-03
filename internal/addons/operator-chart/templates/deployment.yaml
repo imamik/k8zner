@@ -81,6 +81,20 @@ spec:
             periodSeconds: 10
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: helm-cache
+              mountPath: /home/nonroot/.cache
+            - name: helm-config
+              mountPath: /home/nonroot/.config
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: helm-cache
+          emptyDir: {}
+        - name: helm-config
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
