@@ -336,6 +336,11 @@ type InfrastructureStatus struct {
 	// +optional
 	LoadBalancerIP string `json:"loadBalancerIP,omitempty"`
 
+	// LoadBalancerPrivateIP is the private IP of the load balancer within the cluster network
+	// Used for internal cluster communication (preferred over public IP)
+	// +optional
+	LoadBalancerPrivateIP string `json:"loadBalancerPrivateIP,omitempty"`
+
 	// SSHKeyID is the Hetzner SSH key ID used for nodes
 	// +optional
 	SSHKeyID int64 `json:"sshKeyID,omitempty"`

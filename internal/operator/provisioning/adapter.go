@@ -542,22 +542,28 @@ func (a *PhaseAdapter) CreateTalosGenerator(
 		return nil, fmt.Errorf("failed to parse talos secrets: %w", err)
 	}
 
-	// Determine the endpoint
-	// Priority: 1. ControlPlaneEndpoint (if set), 2. Infrastructure LB IP, 3. Bootstrap public IP, 4. First CP node IP
+	// Determine the endpoint - prefer private IPs for internal cluster communication
+	// Priority: 1. LB Private IP (internal), 2. ControlPlaneEndpoint, 3. LB Public IP, 4. First CP node private IP, 5. First CP node public IP
 	var endpoint string
-	if k8sCluster.Status.ControlPlaneEndpoint != "" {
+	if k8sCluster.Status.Infrastructure.LoadBalancerPrivateIP != "" {
+		// Prefer private IP for internal cluster communication (faster, more secure)
+		endpoint = k8sCluster.Status.Infrastructure.LoadBalancerPrivateIP
+	} else if k8sCluster.Status.ControlPlaneEndpoint != "" {
 		endpoint = k8sCluster.Status.ControlPlaneEndpoint
 	} else if k8sCluster.Status.Infrastructure.LoadBalancerIP != "" {
 		endpoint = k8sCluster.Status.Infrastructure.LoadBalancerIP
-	} else if k8sCluster.Spec.Bootstrap != nil && k8sCluster.Spec.Bootstrap.PublicIP != "" {
-		endpoint = k8sCluster.Spec.Bootstrap.PublicIP
-	} else if len(k8sCluster.Status.ControlPlanes.Nodes) > 0 && k8sCluster.Status.ControlPlanes.Nodes[0].PublicIP != "" {
-		// Fallback to first control plane node's public IP
-		endpoint = k8sCluster.Status.ControlPlanes.Nodes[0].PublicIP
+	} else if len(k8sCluster.Status.ControlPlanes.Nodes) > 0 {
+		// Fallback to first control plane node - prefer private IP
+		cp := k8sCluster.Status.ControlPlanes.Nodes[0]
+		if cp.PrivateIP != "" {
+			endpoint = cp.PrivateIP
+		} else if cp.PublicIP != "" {
+			endpoint = cp.PublicIP
+		}
 	}
 
 	if endpoint == "" {
-		return nil, fmt.Errorf("cannot create talos generator: no valid control plane endpoint found (ControlPlaneEndpoint, LoadBalancerIP, Bootstrap.PublicIP, or CP node IP required)")
+		return nil, fmt.Errorf("cannot create talos generator: no valid control plane endpoint found (LoadBalancerPrivateIP, ControlPlaneEndpoint, LoadBalancerIP, or CP node IP required)")
 	}
 
 	// Create the generator

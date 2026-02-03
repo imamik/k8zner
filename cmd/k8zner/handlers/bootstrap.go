@@ -55,14 +55,15 @@ type BootstrapOptions struct {
 
 // InfrastructureInfo contains information about created infrastructure.
 type InfrastructureInfo struct {
-	NetworkID        int64
-	NetworkName      string
-	FirewallID       int64
-	FirewallName     string
-	LoadBalancerID   int64
-	LoadBalancerName string
-	LoadBalancerIP   string
-	SSHKeyID         int64
+	NetworkID             int64
+	NetworkName           string
+	FirewallID            int64
+	FirewallName          string
+	LoadBalancerID        int64
+	LoadBalancerName      string
+	LoadBalancerIP        string
+	LoadBalancerPrivateIP string // Private IP for internal cluster communication
+	SSHKeyID              int64
 }
 
 // BootstrapServerInfo contains information about the bootstrap server.
@@ -274,6 +275,8 @@ func createLoadBalancer(ctx context.Context, hclient hcloudInternal.Infrastructu
 	if infra.LoadBalancerIP == "" {
 		return fmt.Errorf("load balancer has no public IP")
 	}
+	// Get private IP (for internal cluster communication)
+	infra.LoadBalancerPrivateIP = hcloudInternal.LoadBalancerPrivateIP(lb)
 
 	// Configure service (port 6443)
 	service := hcloud.LoadBalancerAddServiceOpts{
@@ -827,11 +830,12 @@ func createK8znerClusterCRD(ctx context.Context, kubeconfig []byte, cfg *config.
 			Phase:                "Provisioning",
 			ControlPlaneEndpoint: infra.LoadBalancerIP,
 			Infrastructure: k8znerv1alpha1.InfrastructureStatus{
-				NetworkID:      infra.NetworkID,
-				FirewallID:     infra.FirewallID,
-				LoadBalancerID: infra.LoadBalancerID,
-				LoadBalancerIP: infra.LoadBalancerIP,
-				SSHKeyID:       infra.SSHKeyID,
+				NetworkID:             infra.NetworkID,
+				FirewallID:            infra.FirewallID,
+				LoadBalancerID:        infra.LoadBalancerID,
+				LoadBalancerIP:        infra.LoadBalancerIP,
+				LoadBalancerPrivateIP: infra.LoadBalancerPrivateIP,
+				SSHKeyID:              infra.SSHKeyID,
 			},
 		},
 	}

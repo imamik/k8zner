@@ -212,6 +212,7 @@ func Create(ctx context.Context, configPath string, wait bool) error {
 		infraInfo.LoadBalancerID = lb.ID
 		infraInfo.LoadBalancerName = lb.Name
 		infraInfo.LoadBalancerIP = hcloudInternal.LoadBalancerIPv4(lb)
+		infraInfo.LoadBalancerPrivateIP = hcloudInternal.LoadBalancerPrivateIP(lb)
 	}
 
 	// Phase 6: Create CRD
@@ -439,11 +440,12 @@ func buildK8znerClusterForCreate(cfg *config.Config, _ *provisioning.Context, in
 				Desired: getWorkerCount(cfg),
 			},
 			Infrastructure: k8znerv1alpha1.InfrastructureStatus{
-				NetworkID:      infraInfo.NetworkID,
-				FirewallID:     infraInfo.FirewallID,
-				LoadBalancerID: infraInfo.LoadBalancerID,
-				LoadBalancerIP: infraInfo.LoadBalancerIP,
-				SSHKeyID:       infraInfo.SSHKeyID,
+				NetworkID:             infraInfo.NetworkID,
+				FirewallID:            infraInfo.FirewallID,
+				LoadBalancerID:        infraInfo.LoadBalancerID,
+				LoadBalancerIP:        infraInfo.LoadBalancerIP,
+				LoadBalancerPrivateIP: infraInfo.LoadBalancerPrivateIP,
+				SSHKeyID:              infraInfo.SSHKeyID,
 			},
 			ControlPlaneEndpoint: infraInfo.LoadBalancerIP,
 		},
