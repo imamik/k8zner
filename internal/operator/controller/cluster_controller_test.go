@@ -503,6 +503,99 @@ func TestClusterReconciler_reconcileWorkers(t *testing.T) {
 		// Only 1 server should be deleted due to maxConcurrentHeals
 		assert.Len(t, mockHCloud.DeleteServerCalls, 1)
 	})
+
+	t.Run("skips scaling when workers are provisioning", func(t *testing.T) {
+		// Test that scaling is skipped when workers are in early provisioning phases
+		// to prevent duplicate server creation from concurrent reconciles
+		cluster := &k8znerv1alpha1.K8znerCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-cluster",
+				Namespace: "default",
+			},
+			Spec: k8znerv1alpha1.K8znerClusterSpec{
+				Workers: k8znerv1alpha1.WorkerSpec{Count: 2}, // Desire 2 workers
+			},
+			Status: k8znerv1alpha1.K8znerClusterStatus{
+				Workers: k8znerv1alpha1.NodeGroupStatus{
+					Desired: 2,
+					Ready:   0,
+					Nodes: []k8znerv1alpha1.NodeStatus{
+						// One worker currently being provisioned
+						{Name: "worker-1", Phase: k8znerv1alpha1.NodePhaseCreatingServer, Healthy: false},
+					},
+				},
+			},
+		}
+
+		client := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(cluster).
+			WithStatusSubresource(cluster).
+			Build()
+		recorder := record.NewFakeRecorder(10)
+
+		mockHCloud := &MockHCloudClient{}
+
+		r := NewClusterReconciler(client, scheme, recorder,
+			WithHCloudClient(mockHCloud),
+			WithMetrics(false),
+		)
+
+		result, err := r.reconcileWorkers(context.Background(), cluster)
+
+		assert.NoError(t, err)
+		// Should requeue to check again later
+		assert.True(t, result.RequeueAfter > 0)
+		// No servers should be created because one is already provisioning
+		assert.Len(t, mockHCloud.CreateServerCalls, 0)
+	})
+
+	t.Run("scales up when no workers are provisioning", func(t *testing.T) {
+		// Test that scaling proceeds normally when no workers are in provisioning phases
+		cluster := &k8znerv1alpha1.K8znerCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-cluster",
+				Namespace: "default",
+			},
+			Spec: k8znerv1alpha1.K8znerClusterSpec{
+				Workers: k8znerv1alpha1.WorkerSpec{Count: 2, Size: "cx21"}, // Desire 2 workers
+				Region:  "fsn1",
+			},
+			Status: k8znerv1alpha1.K8znerClusterStatus{
+				Workers: k8znerv1alpha1.NodeGroupStatus{
+					Desired: 2,
+					Ready:   1,
+					Nodes: []k8znerv1alpha1.NodeStatus{
+						// One ready worker (not in provisioning phase)
+						{Name: "worker-1", Phase: k8znerv1alpha1.NodePhaseReady, Healthy: true},
+					},
+				},
+			},
+		}
+
+		client := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(cluster).
+			WithStatusSubresource(cluster).
+			Build()
+		recorder := record.NewFakeRecorder(10)
+
+		mockHCloud := &MockHCloudClient{}
+
+		r := NewClusterReconciler(client, scheme, recorder,
+			WithHCloudClient(mockHCloud),
+			WithMetrics(false),
+		)
+
+		result, err := r.reconcileWorkers(context.Background(), cluster)
+
+		assert.NoError(t, err)
+		// Should requeue
+		assert.True(t, result.RequeueAfter > 0)
+		// scaleUpWorkers was called (may fail due to missing snapshot, but the attempt is what matters)
+		// The cluster phase should change to Healing
+		assert.Equal(t, k8znerv1alpha1.ClusterPhaseHealing, cluster.Status.Phase)
+	})
 }
 
 func TestClusterReconciler_updateClusterPhase(t *testing.T) {
@@ -655,6 +748,78 @@ func TestHelperFunctions(t *testing.T) {
 	t.Run("conditionReason", func(t *testing.T) {
 		assert.Equal(t, "Ready", conditionReason(true, "Ready", "NotReady"))
 		assert.Equal(t, "NotReady", conditionReason(false, "Ready", "NotReady"))
+	})
+}
+
+func TestProvisioningDetectionHelpers(t *testing.T) {
+	t.Run("isNodeInEarlyProvisioningPhase", func(t *testing.T) {
+		// Early provisioning phases should return true
+		earlyPhases := []k8znerv1alpha1.NodePhase{
+			k8znerv1alpha1.NodePhaseCreatingServer,
+			k8znerv1alpha1.NodePhaseWaitingForIP,
+			k8znerv1alpha1.NodePhaseWaitingForTalosAPI,
+			k8znerv1alpha1.NodePhaseApplyingTalosConfig,
+			k8znerv1alpha1.NodePhaseRebootingWithConfig,
+			k8znerv1alpha1.NodePhaseWaitingForK8s,
+			k8znerv1alpha1.NodePhaseNodeInitializing,
+		}
+		for _, phase := range earlyPhases {
+			assert.True(t, isNodeInEarlyProvisioningPhase(phase), "expected %s to be early provisioning phase", phase)
+		}
+
+		// Non-provisioning phases should return false
+		nonProvisioningPhases := []k8znerv1alpha1.NodePhase{
+			k8znerv1alpha1.NodePhaseReady,
+			k8znerv1alpha1.NodePhaseUnhealthy,
+			k8znerv1alpha1.NodePhaseFailed,
+			k8znerv1alpha1.NodePhaseDraining,
+			k8znerv1alpha1.NodePhaseRemovingFromEtcd,
+			k8znerv1alpha1.NodePhaseDeletingServer,
+		}
+		for _, phase := range nonProvisioningPhases {
+			assert.False(t, isNodeInEarlyProvisioningPhase(phase), "expected %s to NOT be early provisioning phase", phase)
+		}
+
+		// Empty phase should return false
+		assert.False(t, isNodeInEarlyProvisioningPhase(""))
+	})
+
+	t.Run("countWorkersInEarlyProvisioning", func(t *testing.T) {
+		// Empty list
+		assert.Equal(t, 0, countWorkersInEarlyProvisioning(nil))
+		assert.Equal(t, 0, countWorkersInEarlyProvisioning([]k8znerv1alpha1.NodeStatus{}))
+
+		// No provisioning nodes
+		nodes := []k8znerv1alpha1.NodeStatus{
+			{Name: "worker-1", Phase: k8znerv1alpha1.NodePhaseReady},
+			{Name: "worker-2", Phase: k8znerv1alpha1.NodePhaseReady},
+		}
+		assert.Equal(t, 0, countWorkersInEarlyProvisioning(nodes))
+
+		// Some provisioning nodes
+		nodes = []k8znerv1alpha1.NodeStatus{
+			{Name: "worker-1", Phase: k8znerv1alpha1.NodePhaseReady},
+			{Name: "worker-2", Phase: k8znerv1alpha1.NodePhaseCreatingServer},
+			{Name: "worker-3", Phase: k8znerv1alpha1.NodePhaseWaitingForIP},
+		}
+		assert.Equal(t, 2, countWorkersInEarlyProvisioning(nodes))
+
+		// All provisioning nodes
+		nodes = []k8znerv1alpha1.NodeStatus{
+			{Name: "worker-1", Phase: k8znerv1alpha1.NodePhaseCreatingServer},
+			{Name: "worker-2", Phase: k8znerv1alpha1.NodePhaseWaitingForTalosAPI},
+			{Name: "worker-3", Phase: k8znerv1alpha1.NodePhaseApplyingTalosConfig},
+		}
+		assert.Equal(t, 3, countWorkersInEarlyProvisioning(nodes))
+
+		// Mixed phases including unhealthy and failed
+		nodes = []k8znerv1alpha1.NodeStatus{
+			{Name: "worker-1", Phase: k8znerv1alpha1.NodePhaseReady},
+			{Name: "worker-2", Phase: k8znerv1alpha1.NodePhaseUnhealthy},
+			{Name: "worker-3", Phase: k8znerv1alpha1.NodePhaseFailed},
+			{Name: "worker-4", Phase: k8znerv1alpha1.NodePhaseNodeInitializing},
+		}
+		assert.Equal(t, 1, countWorkersInEarlyProvisioning(nodes))
 	})
 }
 
