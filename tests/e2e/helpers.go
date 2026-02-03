@@ -9,60 +9,15 @@ import (
 	"net"
 	"net/http"
 	"os/exec"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/util/keygen"
 
 	"github.com/siderolabs/talos/pkg/machinery/api/machine"
 	"github.com/siderolabs/talos/pkg/machinery/client"
 	"github.com/siderolabs/talos/pkg/machinery/client/config"
 )
-
-// boolPtr returns a pointer to the given bool value.
-func boolPtr(b bool) *bool {
-	return &b
-}
-
-// ResourceCleaner helps track and clean up resources.
-// Uses t.Cleanup() to ensure cleanup runs even on test timeout.
-type ResourceCleaner struct {
-	t *testing.T
-}
-
-// Add adds a cleanup function that will run even if the test times out.
-// Functions are executed in LIFO order (last added, first executed).
-func (rc *ResourceCleaner) Add(f func()) {
-	rc.t.Cleanup(f)
-}
-
-// setupSSHKey generates a temporary SSH key, uploads it to HCloud, and registers cleanup.
-// It returns the key name and private key bytes.
-func setupSSHKey(t *testing.T, client *hcloud.RealClient, cleaner *ResourceCleaner, prefix string, labels map[string]string) (string, []byte) {
-	keyName := fmt.Sprintf("%s-key-%d", prefix, time.Now().UnixNano())
-	t.Logf("Generating SSH key %s...", keyName)
-
-	keyPair, err := keygen.GenerateRSAKeyPair(2048)
-	if err != nil {
-		t.Fatalf("Failed to generate key pair: %v", err)
-	}
-
-	_, err = client.CreateSSHKey(context.Background(), keyName, string(keyPair.PublicKey), labels)
-	if err != nil {
-		t.Fatalf("Failed to upload ssh key: %v", err)
-	}
-
-	cleaner.Add(func() {
-		t.Logf("Deleting SSH key %s...", keyName)
-		if err := client.DeleteSSHKey(context.Background(), keyName); err != nil {
-			t.Logf("Failed to delete ssh key %s (might not exist): %v", keyName, err)
-		}
-	})
-
-	return keyName, keyPair.PrivateKey
-}
 
 // WaitForPort waits for a TCP port to become accessible.
 // Uses a fixed polling interval of 5 seconds for predictable behavior.
@@ -99,15 +54,6 @@ func WaitForPort(ctx context.Context, ip string, port int, timeout time.Duration
 			}
 		}
 	}
-}
-
-// httpGet performs an HTTP GET request with a short timeout.
-// Returns the response or an error if the request fails or times out.
-func httpGet(url string) (*http.Response, error) {
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-	}
-	return client.Get(url) //nolint:noctx // Simple helper for e2e tests
 }
 
 // ClusterDiagnostics holds diagnostic information about a cluster.
@@ -369,87 +315,6 @@ func quickPortCheck(ip string, port int) error {
 	return nil
 }
 
-// verifyRDNS verifies that RDNS (PTR) records are configured correctly for a resource.
-// It performs a reverse DNS lookup with retry logic (for DNS propagation) and checks
-// if the result matches expected patterns.
-// Returns an error if the lookup fails or the record doesn't match expectations.
-func verifyRDNS(t *testing.T, ip, expectedPattern string) error {
-	t.Logf("  Verifying RDNS for %s (expected pattern: %s)...", ip, expectedPattern)
-
-	var names []string
-	var err error
-	maxRetries := 5
-
-	// Retry with exponential backoff for DNS propagation
-	// Delays: 1s, 2s, 4s, 8s, 16s (total ~31 seconds max)
-	for i := 0; i < maxRetries; i++ {
-		names, err = net.LookupAddr(ip)
-		if err == nil && len(names) > 0 {
-			break
-		}
-
-		if i < maxRetries-1 {
-			delay := time.Duration(1<<uint(i)) * time.Second
-			t.Logf("    DNS lookup attempt %d/%d failed, retrying in %v...", i+1, maxRetries, delay)
-			time.Sleep(delay)
-		}
-	}
-
-	if err != nil {
-		return fmt.Errorf("failed to lookup PTR record for %s after %d attempts: %w", ip, maxRetries, err)
-	}
-
-	if len(names) == 0 {
-		return fmt.Errorf("no PTR record found for %s after %d attempts", ip, maxRetries)
-	}
-
-	// Check if any of the returned names match the expected pattern
-	ptrRecord := strings.TrimSuffix(names[0], ".")
-	t.Logf("  ✓ Found PTR record: %s → %s", ip, ptrRecord)
-
-	// If expectedPattern is not empty, verify it matches
-	if expectedPattern != "" && !strings.Contains(ptrRecord, expectedPattern) {
-		return fmt.Errorf("PTR record %s does not contain expected pattern %s", ptrRecord, expectedPattern)
-	}
-
-	return nil
-}
-
-// verifyServerRDNS verifies RDNS configuration for all servers in the cluster.
-func verifyServerRDNS(ctx context.Context, t *testing.T, state *E2EState) {
-	t.Log("--- Verifying Server RDNS ---")
-
-	// Verify control plane servers
-	for i, ip := range state.ControlPlaneIPs {
-		expectedPattern := state.ClusterName
-		if err := verifyRDNS(t, ip, expectedPattern); err != nil {
-			t.Logf("  Warning: RDNS verification failed for control plane node %d: %v", i+1, err)
-		}
-	}
-
-	// Verify worker servers
-	for i, ip := range state.WorkerIPs {
-		expectedPattern := state.ClusterName
-		if err := verifyRDNS(t, ip, expectedPattern); err != nil {
-			t.Logf("  Warning: RDNS verification failed for worker node %d: %v", i+1, err)
-		}
-	}
-}
-
-// verifyLoadBalancerRDNS verifies RDNS configuration for load balancers.
-func verifyLoadBalancerRDNS(ctx context.Context, t *testing.T, state *E2EState) {
-	t.Log("--- Verifying Load Balancer RDNS ---")
-
-	if state.LoadBalancerIP != "" {
-		expectedPattern := state.ClusterName
-		if err := verifyRDNS(t, state.LoadBalancerIP, expectedPattern); err != nil {
-			t.Logf("  Warning: RDNS verification failed for load balancer: %v", err)
-		}
-	} else {
-		t.Log("  ⚠ No load balancer IP available, skipping RDNS verification")
-	}
-}
-
 // gatherKubernetesDiagnostics collects comprehensive diagnostic information about
 // pods, events, CRDs, and connectivity for debugging test failures.
 func gatherKubernetesDiagnostics(t *testing.T, kubeconfigPath, namespace, diagContext string) {
@@ -546,4 +411,39 @@ func gatherConnectivityDiagnostics(t *testing.T, controlPlaneIPs []string) {
 	}
 
 	t.Log("=== END CONNECTIVITY DIAGNOSTICS ===")
+}
+
+// runClusterDiagnostics runs comprehensive diagnostics on a cluster for debugging test failures.
+func runClusterDiagnostics(ctx context.Context, t *testing.T, state *E2EState) {
+	if len(state.ControlPlaneIPs) == 0 {
+		t.Log("No control plane IPs available for diagnostics")
+		return
+	}
+
+	diag := NewClusterDiagnostics(t, state.ControlPlaneIPs[0], state.LoadBalancerIP, state.TalosConfig)
+	diag.RunFullDiagnostics(ctx)
+}
+
+// setupSSHKeyForCluster creates an SSH key in Hetzner Cloud for the cluster.
+func setupSSHKeyForCluster(ctx context.Context, t *testing.T, state *E2EState) error {
+	keyName := fmt.Sprintf("%s-key-%d", state.ClusterName, time.Now().UnixNano())
+
+	keyPair, err := keygen.GenerateRSAKeyPair(2048)
+	if err != nil {
+		return fmt.Errorf("failed to generate key pair: %w", err)
+	}
+
+	labels := map[string]string{
+		"cluster": state.ClusterName,
+		"test-id": state.TestID,
+	}
+
+	_, err = state.Client.CreateSSHKey(ctx, keyName, string(keyPair.PublicKey), labels)
+	if err != nil {
+		return fmt.Errorf("failed to upload SSH key: %w", err)
+	}
+
+	state.SSHKeyName = keyName
+	state.SSHPrivateKey = keyPair.PrivateKey
+	return nil
 }

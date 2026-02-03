@@ -11,8 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	v2 "github.com/imamik/k8zner/internal/config/v2"
-	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/platform/s3"
 )
 
@@ -50,7 +51,7 @@ func TestE2EBackup(t *testing.T) {
 	timestamp := time.Now().Unix()
 	clusterName := fmt.Sprintf("e2e-backup-%d", timestamp)
 	region := v2.RegionFalkenstein
-	regionCode := string(region) // Use raw region code, not String() which includes description
+	regionCode := string(region)
 	bucketName := clusterName + "-etcd-backups"
 	endpoint := fmt.Sprintf("https://%s.your-objectstorage.com", regionCode)
 
@@ -94,10 +95,9 @@ func testBucketOperations(t *testing.T, s3Client *s3.Client, bucketName string) 
 	if err := s3Client.CreateBucket(ctx, bucketName); err != nil {
 		t.Fatalf("Failed to create bucket: %v", err)
 	}
-	t.Logf("  ✓ Bucket %s created", bucketName)
+	t.Logf("  Bucket %s created", bucketName)
 
 	// Wait for eventual consistency and verify bucket exists
-	// S3-compatible services may have eventual consistency for bucket operations
 	var exists bool
 	var err error
 	for i := 0; i < 10; i++ {
@@ -118,7 +118,7 @@ func testBucketOperations(t *testing.T, s3Client *s3.Client, bucketName string) 
 	if !exists {
 		t.Fatal("Bucket was created but doesn't exist after 20 seconds")
 	}
-	t.Log("  ✓ Bucket existence verified")
+	t.Log("  Bucket existence verified")
 
 	// Test writing an object
 	testKey := "test-object.txt"
@@ -127,7 +127,7 @@ func testBucketOperations(t *testing.T, s3Client *s3.Client, bucketName string) 
 	if err := s3Client.PutObject(ctx, bucketName, testKey, testContent); err != nil {
 		t.Fatalf("Failed to write test object: %v", err)
 	}
-	t.Log("  ✓ Test object written")
+	t.Log("  Test object written")
 
 	// Verify object exists by listing
 	objects, err := s3Client.ListObjects(ctx, bucketName, "")
@@ -145,15 +145,15 @@ func testBucketOperations(t *testing.T, s3Client *s3.Client, bucketName string) 
 	if !found {
 		t.Fatalf("Test object not found in bucket (objects: %v)", objects)
 	}
-	t.Log("  ✓ Test object verified in bucket")
+	t.Log("  Test object verified in bucket")
 
 	// Cleanup test object
 	if err := s3Client.DeleteObject(ctx, bucketName, testKey); err != nil {
 		t.Logf("Warning: failed to delete test object: %v", err)
 	}
-	t.Log("  ✓ Test object deleted")
+	t.Log("  Test object deleted")
 
-	t.Log("✓ S3 bucket operations working correctly")
+	t.Log("S3 bucket operations working correctly")
 }
 
 // testBackupConfigValidation verifies the v2 config backup expansion is correct.
@@ -176,28 +176,28 @@ func testBackupConfigValidation(t *testing.T, clusterName string, region v2.Regi
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Config validation failed: %v", err)
 	}
-	t.Log("  ✓ Config validation passed")
+	t.Log("  Config validation passed")
 
 	// Verify bucket name generation
 	if cfg.BackupBucketName() != expectedBucket {
 		t.Fatalf("Bucket name mismatch: got %s, want %s", cfg.BackupBucketName(), expectedBucket)
 	}
-	t.Log("  ✓ Bucket name generation correct")
+	t.Log("  Bucket name generation correct")
 
 	// Verify S3 endpoint generation
 	expectedEndpoint := fmt.Sprintf("https://%s.your-objectstorage.com", string(region))
 	if cfg.S3Endpoint() != expectedEndpoint {
 		t.Fatalf("S3 endpoint mismatch: got %s, want %s", cfg.S3Endpoint(), expectedEndpoint)
 	}
-	t.Log("  ✓ S3 endpoint generation correct")
+	t.Log("  S3 endpoint generation correct")
 
 	// Verify HasBackup
 	if !cfg.HasBackup() {
 		t.Fatal("HasBackup() should return true")
 	}
-	t.Log("  ✓ HasBackup() returns true")
+	t.Log("  HasBackup() returns true")
 
-	t.Log("✓ Backup configuration validated")
+	t.Log("Backup configuration validated")
 }
 
 // verifyBackupCronJob verifies the TalosBackup CronJob is properly configured.
@@ -218,7 +218,7 @@ func verifyBackupCronJob(t *testing.T, kubeconfigPath, expectedSchedule string) 
 	if schedule != expectedSchedule {
 		t.Fatalf("Unexpected schedule: got %s, want %s", schedule, expectedSchedule)
 	}
-	t.Logf("  ✓ CronJob schedule: %s", schedule)
+	t.Logf("  CronJob schedule: %s", schedule)
 
 	// Verify S3 secret exists
 	cmd = exec.CommandContext(context.Background(), "kubectl",
@@ -227,7 +227,7 @@ func verifyBackupCronJob(t *testing.T, kubeconfigPath, expectedSchedule string) 
 	if err := cmd.Run(); err != nil {
 		t.Fatal("  S3 secrets not found")
 	}
-	t.Log("  ✓ S3 secrets configured")
+	t.Log("  S3 secrets configured")
 }
 
 // triggerBackupJob creates a manual Job from the CronJob and waits for completion.
@@ -244,7 +244,7 @@ func triggerBackupJob(t *testing.T, kubeconfigPath string, timeout time.Duration
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("Failed to create backup job: %v\nOutput: %s", err, string(output))
 	}
-	t.Logf("  ✓ Created job: %s", jobName)
+	t.Logf("  Created job: %s", jobName)
 
 	// Wait for job completion
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -272,7 +272,7 @@ func triggerBackupJob(t *testing.T, kubeconfigPath string, timeout time.Duration
 				"-o", "jsonpath={.status.succeeded}")
 			output, err := cmd.CombinedOutput()
 			if err == nil && string(output) == "1" {
-				t.Log("  ✓ Backup job completed successfully")
+				t.Log("  Backup job completed successfully")
 				return
 			}
 
@@ -311,7 +311,7 @@ func verifyBackupInS3(t *testing.T, s3Client *s3.Client, bucketName, prefix stri
 		t.Fatal("  No backup files found in S3 bucket")
 	}
 
-	t.Logf("  ✓ Found %d backup file(s) in S3:", len(objects))
+	t.Logf("  Found %d backup file(s) in S3:", len(objects))
 	for _, obj := range objects {
 		t.Logf("    - %s", obj)
 	}
@@ -320,7 +320,6 @@ func verifyBackupInS3(t *testing.T, s3Client *s3.Client, bucketName, prefix stri
 }
 
 // verifyBackupRestore downloads and validates the backup file can be decompressed.
-// This simulates the first step of a restore process - ensuring the backup is valid.
 func verifyBackupRestore(t *testing.T, s3Client *s3.Client, bucketName, backupKey string) {
 	t.Log("  Verifying backup can be restored (download and validate)...")
 
@@ -332,7 +331,7 @@ func verifyBackupRestore(t *testing.T, s3Client *s3.Client, bucketName, backupKe
 		t.Fatalf("Failed to download backup: %v", err)
 	}
 
-	t.Logf("  ✓ Downloaded backup: %d bytes", len(data))
+	t.Logf("  Downloaded backup: %d bytes", len(data))
 
 	// Verify it's a valid zstd-compressed file
 	// zstd magic number: 0x28 0xB5 0x2F 0xFD
@@ -347,24 +346,21 @@ func verifyBackupRestore(t *testing.T, s3Client *s3.Client, bucketName, backupKe
 			zstdMagic[0], zstdMagic[1], zstdMagic[2], zstdMagic[3])
 	}
 
-	t.Log("  ✓ Backup is valid zstd-compressed file")
-	t.Log("  ✓ Backup restore verification passed (file is downloadable and valid)")
+	t.Log("  Backup is valid zstd-compressed file")
+	t.Log("  Backup restore verification passed (file is downloadable and valid)")
 }
 
 // TestE2EBackupFullCluster deploys a cluster with backup enabled and verifies the backup/restore flow.
 //
 // This comprehensive test:
-// 1. Deploys a dev cluster with backup: true
-// 2. Creates test data (ConfigMap)
-// 3. Waits for TalosBackup CronJob to be ready
-// 4. Triggers a manual backup
-// 5. Verifies backup appears in S3
-// 6. Downloads and verifies backup is valid etcd snapshot
+// 1. Deploys a dev cluster with backup: true via operator
+// 2. Waits for TalosBackup CronJob to be ready
+// 3. Triggers a manual backup
+// 4. Verifies backup appears in S3
+// 5. Downloads and verifies backup is valid etcd snapshot
 //
 // Prerequisites:
 //   - HCLOUD_TOKEN, HETZNER_S3_ACCESS_KEY, HETZNER_S3_SECRET_KEY
-//
-// This test takes ~25-30 minutes.
 //
 // Example:
 //
@@ -384,21 +380,15 @@ func TestE2EBackupFullCluster(t *testing.T) {
 	// Generate unique cluster name
 	timestamp := time.Now().Unix()
 	clusterName := fmt.Sprintf("e2e-bkp-%d", timestamp)
-	region := v2.RegionFalkenstein
-	regionCode := string(region)
+	region := "fsn1"
 	bucketName := clusterName + "-etcd-backups"
-	endpoint := fmt.Sprintf("https://%s.your-objectstorage.com", regionCode)
+	endpoint := fmt.Sprintf("https://%s.your-objectstorage.com", region)
 
 	t.Logf("=== Starting Full Backup E2E Test: %s ===", clusterName)
 	t.Logf("=== Bucket: %s ===", bucketName)
 
-	// Create Hetzner client for cleanup
-	client := hcloud.NewRealClient(token)
-	state := NewE2EState(clusterName, client)
-	defer cleanupE2ECluster(t, state)
-
 	// Create S3 client
-	s3Client, err := s3.NewClient(endpoint, regionCode, s3AccessKey, s3SecretKey)
+	s3Client, err := s3.NewClient(endpoint, region, s3AccessKey, s3SecretKey)
 	if err != nil {
 		t.Fatalf("Failed to create S3 client: %v", err)
 	}
@@ -411,60 +401,64 @@ func TestE2EBackupFullCluster(t *testing.T) {
 		}
 	}()
 
-	// === PHASE 1: Deploy cluster with backup ===
-	t.Log("=== PHASE 1: Deploying cluster with backup enabled ===")
-	deployDevClusterWithBackup(t, state, token, regionCode)
+	// Create configuration with backup enabled
+	configPath := CreateTestConfig(t, clusterName, ModeDev,
+		WithWorkers(1),
+		WithRegion(region),
+		WithBackup(true),
+	)
+	defer os.Remove(configPath)
 
-	// === PHASE 2: Verify TalosBackup is configured ===
-	t.Log("=== PHASE 2: Verifying TalosBackup configuration ===")
-	verifyBackupCronJob(t, state.KubeconfigPath, "0 * * * *")
-
-	// === PHASE 3: Trigger manual backup ===
-	t.Log("=== PHASE 3: Triggering manual backup ===")
-	triggerBackupJob(t, state.KubeconfigPath, 5*time.Minute)
-
-	// === PHASE 4: Verify backup in S3 ===
-	t.Log("=== PHASE 4: Verifying backup in S3 ===")
-	backupKey := verifyBackupInS3(t, s3Client, bucketName, "etcd-backups/")
-
-	// === PHASE 5: Verify backup can be restored ===
-	t.Log("=== PHASE 5: Verifying backup restore capability ===")
-	verifyBackupRestore(t, s3Client, bucketName, backupKey)
-
-	t.Log("=== FULL BACKUP E2E TEST PASSED ===")
-}
-
-// deployDevClusterWithBackup deploys a dev cluster with backup enabled.
-func deployDevClusterWithBackup(t *testing.T, state *E2EState, token, regionCode string) {
-	t.Logf("[Deploy] Deploying Dev cluster with backup enabled...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
 	defer cancel()
 
-	// Setup SSH key
-	if err := setupSSHKeyForFullStack(ctx, t, state); err != nil {
-		t.Fatalf("Failed to setup SSH key: %v", err)
-	}
+	// Create cluster via operator
+	var state *OperatorTestContext
 
-	// Create v2 config with backup enabled
-	v2Cfg := &v2.Config{
-		Name:   state.ClusterName,
-		Region: v2.Region(regionCode),
-		Mode:   v2.ModeDev,
-		Workers: v2.Worker{
-			Count: 1,
-			Size:  v2.SizeCX22,
-		},
-		Backup: true,
-	}
+	t.Run("Create", func(t *testing.T) {
+		state, err = CreateClusterViaOperator(ctx, t, configPath)
+		require.NoError(t, err, "Cluster creation should succeed")
+	})
 
-	// Deploy using the shared deployment function
-	_ = deployClusterWithConfig(ctx, t, state, v2Cfg, token)
+	// Ensure cleanup
+	defer func() {
+		if state != nil {
+			DestroyCluster(context.Background(), t, state)
+		}
+	}()
 
-	// Mark addons as installed
-	state.AddonsInstalled["talos-backup"] = true
+	// Wait for cluster to be ready
+	t.Run("WaitForClusterReady", func(t *testing.T) {
+		err := WaitForClusterReady(ctx, t, state, 30*time.Minute)
+		require.NoError(t, err, "Cluster should become ready")
+	})
 
-	t.Log("[Deploy] Cluster with backup deployed successfully")
+	// === PHASE 2: Verify TalosBackup is configured ===
+	t.Log("=== Verifying TalosBackup configuration ===")
+	t.Run("VerifyBackupCronJob", func(t *testing.T) {
+		verifyBackupCronJob(t, state.KubeconfigPath, "0 * * * *")
+	})
+
+	// === PHASE 3: Trigger manual backup ===
+	t.Log("=== Triggering manual backup ===")
+	t.Run("TriggerBackup", func(t *testing.T) {
+		triggerBackupJob(t, state.KubeconfigPath, 5*time.Minute)
+	})
+
+	// === PHASE 4: Verify backup in S3 ===
+	t.Log("=== Verifying backup in S3 ===")
+	var backupKey string
+	t.Run("VerifyBackupInS3", func(t *testing.T) {
+		backupKey = verifyBackupInS3(t, s3Client, bucketName, "etcd-backups/")
+	})
+
+	// === PHASE 5: Verify backup can be restored ===
+	t.Log("=== Verifying backup restore capability ===")
+	t.Run("VerifyBackupRestore", func(t *testing.T) {
+		verifyBackupRestore(t, s3Client, bucketName, backupKey)
+	})
+
+	t.Log("=== FULL BACKUP E2E TEST PASSED ===")
 }
 
 // cleanupS3Bucket deletes all objects and the bucket itself.

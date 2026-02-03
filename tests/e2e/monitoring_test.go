@@ -9,14 +9,13 @@ import (
 	"testing"
 	"time"
 
-	v2 "github.com/imamik/k8zner/internal/config/v2"
-	"github.com/imamik/k8zner/internal/platform/hcloud"
+	"github.com/stretchr/testify/require"
 )
 
 // TestE2EMonitoring tests the kube-prometheus-stack installation on a fresh cluster.
 //
 // This test verifies:
-// 1. kube-prometheus-stack can be installed
+// 1. kube-prometheus-stack can be installed via operator
 // 2. Prometheus, Grafana, and Alertmanager are healthy
 // 3. ServiceMonitors and PrometheusRules are created
 // 4. (Optional) Grafana ingress with TLS works if CF_API_TOKEN/CF_DOMAIN are set
@@ -49,73 +48,76 @@ func TestE2EMonitoring(t *testing.T) {
 
 	t.Logf("=== Starting Monitoring E2E Test: %s ===", clusterName)
 
-	// Create Hetzner client for cleanup
-	client := hcloud.NewRealClient(token)
-	state := NewE2EState(clusterName, client)
-	defer cleanupE2ECluster(t, state)
+	// Create configuration with monitoring enabled
+	configPath := CreateTestConfig(t, clusterName, ModeDev,
+		WithWorkers(1),
+		WithRegion("fsn1"),
+		WithMonitoring(true),
+	)
+	defer os.Remove(configPath)
 
-	// === PHASE 1: Deploy dev cluster ===
-	t.Log("=== PHASE 1: Deploying dev cluster ===")
-	deployDevClusterForMonitoring(t, state, token)
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
+	defer cancel()
 
-	// === PHASE 2: Get network ID ===
-	ctx := context.Background()
-	network, _ := state.Client.GetNetwork(ctx, state.ClusterName)
+	// Create cluster via operator
+	var state *OperatorTestContext
+	var err error
+
+	t.Run("Create", func(t *testing.T) {
+		state, err = CreateClusterViaOperator(ctx, t, configPath)
+		require.NoError(t, err, "Cluster creation should succeed")
+	})
+
+	// Ensure cleanup
+	defer func() {
+		if state != nil {
+			DestroyCluster(context.Background(), t, state)
+		}
+	}()
+
+	// Wait for cluster to be ready
+	t.Run("WaitForClusterReady", func(t *testing.T) {
+		err := WaitForClusterReady(ctx, t, state, 30*time.Minute)
+		require.NoError(t, err, "Cluster should become ready")
+	})
+
+	// Get legacy state for addon tests
+	legacyState := state.ToE2EState()
+
+	// Get network ID
+	network, _ := state.HCloudClient.GetNetwork(ctx, state.ClusterName)
 	networkID := int64(0)
 	if network != nil {
 		networkID = network.ID
 	}
 
-	// === PHASE 3: Test monitoring stack ===
+	// Test monitoring stack
 	cfAPIToken := os.Getenv("CF_API_TOKEN")
 	cfDomain := os.Getenv("CF_DOMAIN")
 
 	if cfAPIToken != "" && cfDomain != "" {
-		t.Log("=== PHASE 3: Installing monitoring with Grafana ingress ===")
-		testMonitoringStack(t, state, token)
+		t.Log("=== Installing monitoring with Grafana ingress ===")
+		t.Run("MonitoringWithIngress", func(t *testing.T) {
+			testMonitoringStack(t, legacyState, token)
+		})
 	} else {
-		t.Log("=== PHASE 3: Installing basic monitoring (no ingress) ===")
-		testMonitoringWithoutIngress(t, state, token, networkID)
+		t.Log("=== Installing basic monitoring (no ingress) ===")
+		t.Run("MonitoringBasic", func(t *testing.T) {
+			testMonitoringWithoutIngress(t, legacyState, token, networkID)
+		})
 	}
 
-	// === PHASE 4: Verify ServiceMonitors ===
-	t.Log("=== PHASE 4: Verifying ServiceMonitors ===")
-	verifyServiceMonitors(t, state.KubeconfigPath)
+	// Verify ServiceMonitors
+	t.Run("VerifyServiceMonitors", func(t *testing.T) {
+		verifyServiceMonitors(t, state.KubeconfigPath)
+	})
 
-	// === PHASE 5: Verify PrometheusRules ===
-	t.Log("=== PHASE 5: Verifying PrometheusRules ===")
-	testPrometheusAlerts(t, state.KubeconfigPath)
+	// Verify PrometheusRules
+	t.Run("VerifyPrometheusRules", func(t *testing.T) {
+		testPrometheusAlerts(t, state.KubeconfigPath)
+	})
 
 	t.Log("=== MONITORING E2E TEST PASSED ===")
-}
-
-// deployDevClusterForMonitoring deploys a dev cluster for monitoring testing.
-func deployDevClusterForMonitoring(t *testing.T, state *E2EState, token string) {
-	t.Logf("[Deploy] Deploying Dev cluster for monitoring test...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Minute)
-	defer cancel()
-
-	// Setup SSH key
-	if err := setupSSHKeyForFullStack(ctx, t, state); err != nil {
-		t.Fatalf("Failed to setup SSH key: %v", err)
-	}
-
-	// Create v2 config
-	v2Cfg := &v2.Config{
-		Name:   state.ClusterName,
-		Region: v2.RegionFalkenstein,
-		Mode:   v2.ModeDev,
-		Workers: v2.Worker{
-			Count: 1,
-			Size:  v2.SizeCX22,
-		},
-	}
-
-	// Deploy using the shared deployment function
-	_ = deployClusterWithConfig(ctx, t, state, v2Cfg, token)
-
-	t.Log("[Deploy] Cluster deployed successfully")
 }
 
 // TestE2EMonitoringQuick tests monitoring installation on an existing cluster.
@@ -146,20 +148,20 @@ func TestE2EMonitoringQuick(t *testing.T) {
 	t.Logf("=== Starting Quick Monitoring E2E Test on cluster: %s ===", clusterName)
 
 	// Create state for existing cluster
-	client := hcloud.NewRealClient(token)
-	state := NewE2EState(clusterName, client)
+	client := sharedCtx.Client
+	legacyState := NewE2EState(clusterName, client)
 
 	// Load existing kubeconfig
 	kubeconfig, err := os.ReadFile(kubeconfigPath)
 	if err != nil {
 		t.Fatalf("Failed to read kubeconfig: %v", err)
 	}
-	state.Kubeconfig = kubeconfig
-	state.KubeconfigPath = kubeconfigPath
+	legacyState.Kubeconfig = kubeconfig
+	legacyState.KubeconfigPath = kubeconfigPath
 
 	// Get network ID
 	ctx := context.Background()
-	network, _ := state.Client.GetNetwork(ctx, state.ClusterName)
+	network, _ := legacyState.Client.GetNetwork(ctx, legacyState.ClusterName)
 	networkID := int64(0)
 	if network != nil {
 		networkID = network.ID
@@ -171,15 +173,15 @@ func TestE2EMonitoringQuick(t *testing.T) {
 
 	if cfAPIToken != "" && cfDomain != "" {
 		t.Log("Testing monitoring with Grafana ingress...")
-		testMonitoringStack(t, state, token)
+		testMonitoringStack(t, legacyState, token)
 	} else {
 		t.Log("Testing basic monitoring (no ingress)...")
-		testMonitoringWithoutIngress(t, state, token, networkID)
+		testMonitoringWithoutIngress(t, legacyState, token, networkID)
 	}
 
 	// Verify components
-	verifyServiceMonitors(t, state.KubeconfigPath)
-	testPrometheusAlerts(t, state.KubeconfigPath)
+	verifyServiceMonitors(t, legacyState.KubeconfigPath)
+	testPrometheusAlerts(t, legacyState.KubeconfigPath)
 
 	t.Log("=== QUICK MONITORING E2E TEST PASSED ===")
 }

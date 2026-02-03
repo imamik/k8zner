@@ -222,18 +222,6 @@ spec:
 	t.Log("    ✓ Whoami deployment ready")
 }
 
-// showExternalDNSLogs shows external-dns pod logs for debugging.
-func showExternalDNSLogs(t *testing.T, kubeconfigPath string) {
-	cmd := exec.CommandContext(context.Background(), "kubectl",
-		"--kubeconfig", kubeconfigPath,
-		"logs", "-n", "external-dns", "-l", "app.kubernetes.io/name=external-dns",
-		"--tail=50")
-	output, _ := cmd.CombinedOutput()
-	if len(output) > 0 {
-		t.Logf("    External-DNS logs:\n%s", string(output))
-	}
-}
-
 // verifyDNSRecord waits for the DNS record to be created and resolve to the expected IP.
 func verifyDNSRecord(t *testing.T, kubeconfigPath, hostname, expectedIP string, timeout time.Duration) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -428,16 +416,6 @@ func cleanupCloudflareTest(t *testing.T, state *E2EState, hostname string) {
 }
 
 // Helper functions
-
-func verifyClusterIssuerExists(t *testing.T, kubeconfigPath, name string) {
-	cmd := exec.CommandContext(context.Background(), "kubectl",
-		"--kubeconfig", kubeconfigPath,
-		"get", "clusterissuer", name)
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("ClusterIssuer %s not found", name)
-	}
-	t.Logf("    ✓ ClusterIssuer %s exists", name)
-}
 
 func waitForDeploymentReady(t *testing.T, kubeconfigPath, namespace, name string, timeout time.Duration) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)

@@ -686,4 +686,3 @@ func (o *OperatorObserver) WithFields(fields map[string]string) provisioning.Obs
 		fields: newFields,
 	}
 }
-
