@@ -309,6 +309,11 @@ func (r *ClusterReconciler) reconcile(ctx context.Context, cluster *k8znerv1alph
 	// Always update the cluster phase before returning
 	defer r.updateClusterPhase(cluster)
 
+	// Always keep status.Desired in sync with spec counts
+	// This ensures status reflects the desired state for both legacy and state-machine modes
+	cluster.Status.ControlPlanes.Desired = cluster.Spec.ControlPlanes.Count
+	cluster.Status.Workers.Desired = cluster.Spec.Workers.Count
+
 	// Step 1: Check for stuck nodes and clean them up
 	stuckNodes := r.checkStuckNodes(ctx, cluster)
 	for _, stuck := range stuckNodes {
@@ -355,11 +360,6 @@ func (r *ClusterReconciler) reconcileWithStateMachine(ctx context.Context, clust
 	}
 
 	logger.Info("reconciling with state machine", "phase", currentPhase)
-
-	// Always keep status.Desired in sync with spec counts
-	// This ensures status reflects the desired state during all provisioning phases
-	cluster.Status.ControlPlanes.Desired = cluster.Spec.ControlPlanes.Count
-	cluster.Status.Workers.Desired = cluster.Spec.Workers.Count
 
 	switch currentPhase {
 	case k8znerv1alpha1.PhaseInfrastructure:
