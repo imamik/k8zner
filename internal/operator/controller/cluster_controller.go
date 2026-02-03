@@ -1489,6 +1489,10 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 			logger.Error(err, "failed to get server IP", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
 				"Failed to get IP for worker server %s: %v", newServerName, err)
+			// Clean up orphaned server
+			if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+				logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+			}
 			continue
 		}
 		logger.Info("server IP assigned", "name", newServerName, "ip", serverIP)
@@ -1497,11 +1501,19 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 		serverIDStr, err := r.hcloudClient.GetServerID(ctx, newServerName)
 		if err != nil {
 			logger.Error(err, "failed to get server ID", "name", newServerName)
+			// Clean up orphaned server
+			if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+				logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+			}
 			continue
 		}
 		var serverID int64
 		if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
 			logger.Error(err, "failed to parse server ID", "name", newServerName)
+			// Clean up orphaned server
+			if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+				logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+			}
 			continue
 		}
 
@@ -1512,6 +1524,10 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 				logger.Error(err, "failed to generate worker config", "name", newServerName)
 				r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
 					"Failed to generate config for worker %s: %v", newServerName, err)
+				// Clean up orphaned server
+				if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+					logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+				}
 				continue
 			}
 
@@ -1520,6 +1536,10 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 				logger.Error(err, "failed to apply Talos config", "name", newServerName)
 				r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
 					"Failed to apply config to worker %s: %v", newServerName, err)
+				// Clean up orphaned server
+				if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+					logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+				}
 				continue
 			}
 
@@ -1529,6 +1549,10 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 				logger.Error(err, "worker node not ready in time", "name", newServerName)
 				r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonNodeReadyTimeout,
 					"Worker node %s not ready in time: %v", newServerName, err)
+				// Clean up orphaned server
+				if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+					logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+				}
 				continue
 			}
 		} else {
@@ -1914,6 +1938,10 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 		logger.Error(err, "failed to get server IP", "name", newServerName)
 		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
 			"Failed to get IP for replacement control plane server %s: %v", newServerName, err)
+		// Clean up orphaned server
+		if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+			logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+		}
 		return fmt.Errorf("failed to get server IP: %w", err)
 	}
 	logger.Info("server IP assigned", "name", newServerName, "ip", serverIP)
@@ -1922,10 +1950,18 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 	serverIDStr, err := r.hcloudClient.GetServerID(ctx, newServerName)
 	if err != nil {
 		logger.Error(err, "failed to get server ID", "name", newServerName)
+		// Clean up orphaned server
+		if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+			logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+		}
 		return fmt.Errorf("failed to get server ID: %w", err)
 	}
 	var serverID int64
 	if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
+		// Clean up orphaned server
+		if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+			logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+		}
 		return fmt.Errorf("failed to parse server ID: %w", err)
 	}
 
@@ -1940,6 +1976,10 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 			logger.Error(err, "failed to generate control plane config", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
 				"Failed to generate config for control plane %s: %v", newServerName, err)
+			// Clean up orphaned server
+			if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+				logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+			}
 			return fmt.Errorf("failed to generate config: %w", err)
 		}
 
@@ -1948,6 +1988,10 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 			logger.Error(err, "failed to apply Talos config", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
 				"Failed to apply config to control plane %s: %v", newServerName, err)
+			// Clean up orphaned server
+			if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+				logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+			}
 			return fmt.Errorf("failed to apply config: %w", err)
 		}
 
@@ -1957,6 +2001,10 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 			logger.Error(err, "control plane node failed to become ready", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonNodeReadyTimeout,
 				"Control plane %s failed to become ready: %v", newServerName, err)
+			// Clean up orphaned server
+			if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+				logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+			}
 			return fmt.Errorf("node failed to become ready: %w", err)
 		}
 
@@ -2147,6 +2195,10 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 		logger.Error(err, "failed to get server IP", "name", newServerName)
 		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
 			"Failed to get IP for replacement worker server %s: %v", newServerName, err)
+		// Clean up orphaned server
+		if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+			logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+		}
 		return fmt.Errorf("failed to get server IP: %w", err)
 	}
 	logger.Info("server IP assigned", "name", newServerName, "ip", serverIP)
@@ -2155,10 +2207,18 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 	serverIDStr, err := r.hcloudClient.GetServerID(ctx, newServerName)
 	if err != nil {
 		logger.Error(err, "failed to get server ID", "name", newServerName)
+		// Clean up orphaned server
+		if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+			logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+		}
 		return fmt.Errorf("failed to get server ID: %w", err)
 	}
 	var serverID int64
 	if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
+		// Clean up orphaned server
+		if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+			logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+		}
 		return fmt.Errorf("failed to parse server ID: %w", err)
 	}
 
@@ -2169,6 +2229,10 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 			logger.Error(err, "failed to generate worker config", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
 				"Failed to generate config for worker %s: %v", newServerName, err)
+			// Clean up orphaned server
+			if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+				logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+			}
 			return fmt.Errorf("failed to generate config: %w", err)
 		}
 
@@ -2177,6 +2241,10 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 			logger.Error(err, "failed to apply Talos config", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
 				"Failed to apply config to worker %s: %v", newServerName, err)
+			// Clean up orphaned server
+			if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+				logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+			}
 			return fmt.Errorf("failed to apply config: %w", err)
 		}
 
@@ -2186,6 +2254,10 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 			logger.Error(err, "worker node failed to become ready", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonNodeReadyTimeout,
 				"Worker %s failed to become ready: %v", newServerName, err)
+			// Clean up orphaned server
+			if delErr := r.hcloudClient.DeleteServer(ctx, newServerName); delErr != nil {
+				logger.Error(delErr, "failed to delete orphaned server", "name", newServerName)
+			}
 			return fmt.Errorf("node failed to become ready: %w", err)
 		}
 
