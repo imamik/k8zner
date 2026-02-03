@@ -114,6 +114,13 @@ var _ = BeforeSuite(func() {
 		err = k8sManager.Start(ctx)
 		Expect(err).NotTo(HaveOccurred())
 	}()
+
+	// Wait for the manager's cache to sync before running tests
+	// This ensures the controller is ready to receive events
+	By("waiting for manager cache to sync")
+	Eventually(func() bool {
+		return k8sManager.GetCache().WaitForCacheSync(ctx)
+	}, time.Second*30, time.Millisecond*500).Should(BeTrue(), "timed out waiting for cache sync")
 })
 
 var _ = AfterSuite(func() {
