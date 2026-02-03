@@ -404,16 +404,35 @@ type NodeGroupStatus struct {
 type NodePhase string
 
 const (
-	// NodePhaseProvisioning means the server is created but not yet configured
-	NodePhaseProvisioning NodePhase = "Provisioning"
-	// NodePhaseConfiguring means Talos config is being applied, waiting for node ready
-	NodePhaseConfiguring NodePhase = "Configuring"
-	// NodePhaseReady means the node is healthy and serving
+	// Server provisioning lifecycle phases
+	// NodePhaseCreatingServer means HCloud CreateServer has been called
+	NodePhaseCreatingServer NodePhase = "CreatingServer"
+	// NodePhaseWaitingForIP means server is created, waiting for IP assignment
+	NodePhaseWaitingForIP NodePhase = "WaitingForIP"
+	// NodePhaseWaitingForTalosAPI means IP is assigned, waiting for Talos API to respond
+	NodePhaseWaitingForTalosAPI NodePhase = "WaitingForTalosAPI"
+	// NodePhaseApplyingTalosConfig means Talos API is ready, applying machine configuration
+	NodePhaseApplyingTalosConfig NodePhase = "ApplyingTalosConfig"
+	// NodePhaseRebootingWithConfig means config is applied, node is rebooting with new configuration
+	NodePhaseRebootingWithConfig NodePhase = "RebootingWithConfig"
+	// NodePhaseWaitingForK8s means waiting for kubelet to register the node with Kubernetes
+	NodePhaseWaitingForK8s NodePhase = "WaitingForK8s"
+	// NodePhaseReady means the node is healthy and serving workloads
 	NodePhaseReady NodePhase = "Ready"
+
+	// Unhealthy and removal phases
 	// NodePhaseUnhealthy means health checks are failing
 	NodePhaseUnhealthy NodePhase = "Unhealthy"
-	// NodePhaseTerminating means the node is marked for deletion
-	NodePhaseTerminating NodePhase = "Terminating"
+	// NodePhaseDraining means the node is being drained before replacement
+	NodePhaseDraining NodePhase = "Draining"
+	// NodePhaseRemovingFromEtcd means the etcd member is being removed (control plane only)
+	NodePhaseRemovingFromEtcd NodePhase = "RemovingFromEtcd"
+	// NodePhaseDeletingServer means the HCloud server is being deleted
+	NodePhaseDeletingServer NodePhase = "DeletingServer"
+
+	// Error phase
+	// NodePhaseFailed means provisioning failed and the node cannot be recovered automatically
+	NodePhaseFailed NodePhase = "Failed"
 )
 
 // NodeStatus represents the status of a single node.
@@ -432,7 +451,7 @@ type NodeStatus struct {
 	PublicIP string `json:"publicIP,omitempty"`
 
 	// Phase is the lifecycle phase of this node
-	// +kubebuilder:validation:Enum=Provisioning;Configuring;Ready;Unhealthy;Terminating
+	// +kubebuilder:validation:Enum=CreatingServer;WaitingForIP;WaitingForTalosAPI;ApplyingTalosConfig;RebootingWithConfig;WaitingForK8s;Ready;Unhealthy;Draining;RemovingFromEtcd;DeletingServer;Failed
 	// +optional
 	Phase NodePhase `json:"phase,omitempty"`
 
