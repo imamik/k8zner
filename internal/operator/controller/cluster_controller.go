@@ -2810,6 +2810,12 @@ func (r *ClusterReconciler) waitForServerIP(ctx context.Context, serverName stri
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	// Check immediately first (helps with mocks and already-assigned IPs)
+	ip, err := r.hcloudClient.GetServerIP(ctx, serverName)
+	if err == nil && ip != "" {
+		return ip, nil
+	}
+
 	ticker := time.NewTicker(serverIPRetryDelay)
 	defer ticker.Stop()
 
