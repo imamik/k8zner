@@ -82,16 +82,17 @@ var _ = BeforeSuite(func() {
 	err = k8znerv1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	// Create the test client
-	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
-	Expect(err).NotTo(HaveOccurred())
-	Expect(k8sClient).NotTo(BeNil())
-
 	// Create controller manager
 	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme.Scheme,
 	})
 	Expect(err).NotTo(HaveOccurred())
+
+	// Use the manager's client for tests - this ensures resources created by tests
+	// are visible to the controller's informers. Using a separate direct client
+	// can cause issues where created resources aren't seen by the cached client.
+	k8sClient = k8sManager.GetClient()
+	Expect(k8sClient).NotTo(BeNil())
 
 	// Initialize mock clients with default behavior
 	mockHCloud = &MockHCloudClient{}
