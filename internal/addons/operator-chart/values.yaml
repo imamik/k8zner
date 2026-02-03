@@ -67,6 +67,10 @@ tolerations:
   - key: node.cloudprovider.kubernetes.io/uninitialized
     operator: Exists
     effect: NoSchedule
+  # Tolerate not-ready taint so operator can run before CNI makes node ready
+  - key: node.kubernetes.io/not-ready
+    operator: Exists
+    effect: NoSchedule
 
 # Spread across control plane nodes
 affinity:
