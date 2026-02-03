@@ -1045,15 +1045,20 @@ func (r *ClusterReconciler) buildProvisioningContext(ctx context.Context, cluste
 		return nil, err
 	}
 
-	// Populate network state from stored infrastructure status
+	// Populate network state by looking up network by cluster name
 	// This is required when the operator is picking up from CLI bootstrap
-	if cluster.Status.Infrastructure.NetworkID != 0 && pCtx.State.Network == nil {
-		// Network name follows the cluster naming convention
+	// Network name always follows the cluster naming convention: {clusterName}
+	if pCtx.State.Network == nil {
 		network, err := infraManager.GetNetwork(ctx, cluster.Name)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get network: %w", err)
 		}
 		pCtx.State.Network = network
+
+		// Also populate the infrastructure status if it's missing
+		if cluster.Status.Infrastructure.NetworkID == 0 && network != nil {
+			cluster.Status.Infrastructure.NetworkID = network.ID
+		}
 	}
 
 	return pCtx, nil
