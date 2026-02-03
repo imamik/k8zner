@@ -1466,6 +1466,31 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 			logger.Error(err, "failed to load credentials for Talos config generation")
 			// Continue without Talos config - server will be created but not configured
 		} else {
+			// IMPORTANT: Discover LB info from HCloud before creating Talos generator
+			// The Talos generator needs the control plane endpoint (LB IP) to generate valid configs
+			// This is critical when the cluster status doesn't have all infrastructure info yet
+			if cluster.Status.Infrastructure.LoadBalancerID == 0 || cluster.Status.Infrastructure.LoadBalancerIP == "" {
+				// Create a temporary infraManager to look up LB info
+				infraManager := hcloud.NewRealClient(creds.HCloudToken)
+				lbName := naming.KubeAPILoadBalancer(cluster.Name)
+				lb, lbErr := infraManager.GetLoadBalancer(ctx, lbName)
+				if lbErr == nil && lb != nil {
+					cluster.Status.Infrastructure.LoadBalancerID = lb.ID
+					if lb.PublicNet.Enabled && lb.PublicNet.IPv4.IP.String() != "<nil>" {
+						cluster.Status.Infrastructure.LoadBalancerIP = lb.PublicNet.IPv4.IP.String()
+					}
+					// Get private IP from the first attached private network
+					if len(lb.PrivateNet) > 0 && lb.PrivateNet[0].IP != nil {
+						cluster.Status.Infrastructure.LoadBalancerPrivateIP = lb.PrivateNet[0].IP.String()
+					}
+					logger.Info("discovered LB info for worker scaling",
+						"lbID", lb.ID,
+						"lbIP", cluster.Status.Infrastructure.LoadBalancerIP,
+						"lbPrivateIP", cluster.Status.Infrastructure.LoadBalancerPrivateIP,
+					)
+				}
+			}
+
 			// Create Talos config generator if not injected
 			if talosConfigGen == nil {
 				generator, err := r.phaseAdapter.CreateTalosGenerator(cluster, creds)
