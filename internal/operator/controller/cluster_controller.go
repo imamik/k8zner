@@ -657,8 +657,27 @@ func (r *ClusterReconciler) reconcileConfiguringPhase(ctx context.Context, clust
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
-	// Get network ID from status
+	// Get network ID from status, or look it up from HCloud if not set
 	networkID := cluster.Status.Infrastructure.NetworkID
+	if networkID == 0 {
+		// Network ID not in status - look it up from HCloud by cluster name
+		logger.Info("networkID not in status, looking up from HCloud", "clusterName", cluster.Name)
+		network, err := r.hcloudClient.GetNetwork(ctx, cluster.Name)
+		if err != nil {
+			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfiguringFailed,
+				"Failed to get network from HCloud: %v", err)
+			return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+		}
+		if network == nil {
+			r.Recorder.Event(cluster, corev1.EventTypeWarning, EventReasonConfiguringFailed,
+				"Network not found in HCloud - waiting for infrastructure")
+			return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+		}
+		networkID = network.ID
+		// Update the status with the network ID for future reconciles
+		cluster.Status.Infrastructure.NetworkID = networkID
+		logger.Info("found network ID from HCloud", "networkID", networkID)
+	}
 
 	// Install addons
 	logger.Info("installing addons", "networkID", networkID)
@@ -853,8 +872,27 @@ func (r *ClusterReconciler) reconcileAddonsPhase(ctx context.Context, cluster *k
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
-	// Get network ID from status
+	// Get network ID from status, or look it up from HCloud if not set
 	networkID := cluster.Status.Infrastructure.NetworkID
+	if networkID == 0 {
+		// Network ID not in status - look it up from HCloud by cluster name
+		logger.Info("networkID not in status, looking up from HCloud", "clusterName", cluster.Name)
+		network, err := r.hcloudClient.GetNetwork(ctx, cluster.Name)
+		if err != nil {
+			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonAddonsFailed,
+				"Failed to get network from HCloud: %v", err)
+			return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+		}
+		if network == nil {
+			r.Recorder.Event(cluster, corev1.EventTypeWarning, EventReasonAddonsFailed,
+				"Network not found in HCloud - waiting for infrastructure")
+			return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+		}
+		networkID = network.ID
+		// Update the status with the network ID for future reconciles
+		cluster.Status.Infrastructure.NetworkID = networkID
+		logger.Info("found network ID from HCloud", "networkID", networkID)
+	}
 
 	// Install remaining addons (Cilium already installed in CNI phase)
 	logger.Info("installing addons", "networkID", networkID)
@@ -1578,6 +1616,14 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 		// Get private IP from server
 		privateIP, _ := r.getPrivateIPFromServer(ctx, newServerName)
 
+		// Use private IP for Talos communication if available (bypasses firewall restrictions)
+		// This is important for operator-centric flow where the operator runs inside the cluster
+		talosIP := serverIP
+		if privateIP != "" {
+			talosIP = privateIP
+			logger.Info("using private IP for Talos communication", "name", newServerName, "privateIP", privateIP)
+		}
+
 		// Update status with server ID and IPs, persist to CRD
 		if err := r.updateNodePhaseAndPersist(ctx, cluster, "worker", NodeStatusUpdate{
 			Name:      newServerName,
@@ -1585,7 +1631,7 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 			PublicIP:  serverIP,
 			PrivateIP: privateIP,
 			Phase:     k8znerv1alpha1.NodePhaseWaitingForTalosAPI,
-			Reason:    fmt.Sprintf("Waiting for Talos API on %s:50000", serverIP),
+			Reason:    fmt.Sprintf("Waiting for Talos API on %s:50000", talosIP),
 		}); err != nil {
 			logger.Error(err, "failed to persist node status", "name", newServerName)
 		}
@@ -1616,8 +1662,8 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 				continue
 			}
 
-			logger.Info("applying Talos config to worker", "name", newServerName, "ip", serverIP)
-			if err := talosClient.ApplyConfig(ctx, serverIP, machineConfig); err != nil {
+			logger.Info("applying Talos config to worker", "name", newServerName, "ip", talosIP)
+			if err := talosClient.ApplyConfig(ctx, talosIP, machineConfig); err != nil {
 				logger.Error(err, "failed to apply Talos config", "name", newServerName)
 				r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
 					"Failed to apply config to worker %s: %v", newServerName, err)
@@ -1641,14 +1687,14 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 				Reason: "Talos config applied, node is rebooting with new configuration",
 			})
 
-			logger.Info("waiting for worker node to become ready", "name", newServerName)
+			logger.Info("waiting for worker node to become ready", "name", newServerName, "ip", talosIP)
 			r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
 				Name:   newServerName,
 				Phase:  k8znerv1alpha1.NodePhaseWaitingForK8s,
 				Reason: "Waiting for kubelet to register node with Kubernetes",
 			})
 
-			if err := talosClient.WaitForNodeReady(ctx, serverIP, int(nodeReadyTimeout.Seconds())); err != nil {
+			if err := talosClient.WaitForNodeReady(ctx, talosIP, int(nodeReadyTimeout.Seconds())); err != nil {
 				logger.Error(err, "worker node not ready in time", "name", newServerName)
 				r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonNodeReadyTimeout,
 					"Worker node %s not ready in time: %v", newServerName, err)
@@ -2148,6 +2194,14 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 	// Get private IP from server
 	privateIP, _ := r.getPrivateIPFromServer(ctx, newServerName)
 
+	// Use private IP for Talos communication if available (bypasses firewall restrictions)
+	// This is important for operator-centric flow where the operator runs inside the cluster
+	talosIP := serverIP
+	if privateIP != "" {
+		talosIP = privateIP
+		logger.Info("using private IP for Talos communication", "name", newServerName, "privateIP", privateIP)
+	}
+
 	// Update status with server ID and IPs, persist to CRD
 	if err := r.updateNodePhaseAndPersist(ctx, cluster, "control-plane", NodeStatusUpdate{
 		Name:      newServerName,
@@ -2155,7 +2209,7 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 		PublicIP:  serverIP,
 		PrivateIP: privateIP,
 		Phase:     k8znerv1alpha1.NodePhaseWaitingForTalosAPI,
-		Reason:    fmt.Sprintf("Waiting for Talos API on %s:50000", serverIP),
+		Reason:    fmt.Sprintf("Waiting for Talos API on %s:50000", talosIP),
 	}); err != nil {
 		logger.Error(err, "failed to persist node status", "name", newServerName)
 	}
@@ -2190,8 +2244,8 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 			return fmt.Errorf("failed to generate config: %w", err)
 		}
 
-		logger.Info("applying Talos config to control plane", "name", newServerName, "ip", serverIP)
-		if err := talosClient.ApplyConfig(ctx, serverIP, machineConfig); err != nil {
+		logger.Info("applying Talos config to control plane", "name", newServerName, "ip", talosIP)
+		if err := talosClient.ApplyConfig(ctx, talosIP, machineConfig); err != nil {
 			logger.Error(err, "failed to apply Talos config", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
 				"Failed to apply config to control plane %s: %v", newServerName, err)
@@ -2215,14 +2269,14 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 			Reason: "Talos config applied, node is rebooting with new configuration",
 		})
 
-		logger.Info("waiting for control plane node to become ready", "name", newServerName, "ip", serverIP)
+		logger.Info("waiting for control plane node to become ready", "name", newServerName, "ip", talosIP)
 		r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
 			Name:   newServerName,
 			Phase:  k8znerv1alpha1.NodePhaseWaitingForK8s,
 			Reason: "Waiting for kubelet to register node with Kubernetes",
 		})
 
-		if err := talosClient.WaitForNodeReady(ctx, serverIP, int(nodeReadyTimeout.Seconds())); err != nil {
+		if err := talosClient.WaitForNodeReady(ctx, talosIP, int(nodeReadyTimeout.Seconds())); err != nil {
 			logger.Error(err, "control plane node failed to become ready", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonNodeReadyTimeout,
 				"Control plane %s failed to become ready: %v", newServerName, err)
@@ -2527,6 +2581,14 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 	// Get private IP from server
 	privateIP, _ := r.getPrivateIPFromServer(ctx, newServerName)
 
+	// Use private IP for Talos communication if available (bypasses firewall restrictions)
+	// This is important for operator-centric flow where the operator runs inside the cluster
+	talosIP := serverIP
+	if privateIP != "" {
+		talosIP = privateIP
+		logger.Info("using private IP for Talos communication", "name", newServerName, "privateIP", privateIP)
+	}
+
 	// Update status with server ID and IPs, persist to CRD
 	if err := r.updateNodePhaseAndPersist(ctx, cluster, "worker", NodeStatusUpdate{
 		Name:      newServerName,
@@ -2534,7 +2596,7 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 		PublicIP:  serverIP,
 		PrivateIP: privateIP,
 		Phase:     k8znerv1alpha1.NodePhaseWaitingForTalosAPI,
-		Reason:    fmt.Sprintf("Waiting for Talos API on %s:50000", serverIP),
+		Reason:    fmt.Sprintf("Waiting for Talos API on %s:50000", talosIP),
 	}); err != nil {
 		logger.Error(err, "failed to persist node status", "name", newServerName)
 	}
@@ -2565,8 +2627,8 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 			return fmt.Errorf("failed to generate config: %w", err)
 		}
 
-		logger.Info("applying Talos config to worker", "name", newServerName, "ip", serverIP)
-		if err := talosClient.ApplyConfig(ctx, serverIP, machineConfig); err != nil {
+		logger.Info("applying Talos config to worker", "name", newServerName, "ip", talosIP)
+		if err := talosClient.ApplyConfig(ctx, talosIP, machineConfig); err != nil {
 			logger.Error(err, "failed to apply Talos config", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
 				"Failed to apply config to worker %s: %v", newServerName, err)
@@ -2590,14 +2652,14 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 			Reason: "Talos config applied, node is rebooting with new configuration",
 		})
 
-		logger.Info("waiting for worker node to become ready", "name", newServerName, "ip", serverIP)
+		logger.Info("waiting for worker node to become ready", "name", newServerName, "ip", talosIP)
 		r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
 			Name:   newServerName,
 			Phase:  k8znerv1alpha1.NodePhaseWaitingForK8s,
 			Reason: "Waiting for kubelet to register node with Kubernetes",
 		})
 
-		if err := talosClient.WaitForNodeReady(ctx, serverIP, int(nodeReadyTimeout.Seconds())); err != nil {
+		if err := talosClient.WaitForNodeReady(ctx, talosIP, int(nodeReadyTimeout.Seconds())); err != nil {
 			logger.Error(err, "worker node failed to become ready", "name", newServerName)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonNodeReadyTimeout,
 				"Worker %s failed to become ready: %v", newServerName, err)
