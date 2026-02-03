@@ -7,6 +7,7 @@ on:
     paths:
       - 'cmd/operator/**'
       - 'internal/operator/**'
+      - 'internal/platform/**'
       - 'api/**'
       - 'Dockerfile.operator'
       - '.github/workflows/operator-image.yaml'
@@ -16,6 +17,7 @@ on:
     paths:
       - 'cmd/operator/**'
       - 'internal/operator/**'
+      - 'internal/platform/**'
       - 'api/**'
       - 'Dockerfile.operator'
 
