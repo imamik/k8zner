@@ -543,12 +543,21 @@ func (a *PhaseAdapter) CreateTalosGenerator(
 	}
 
 	// Determine the endpoint
-	// Priority: 1. Load balancer IP (if exists), 2. Bootstrap public IP, 3. Cluster name
-	endpoint := k8sCluster.Name
+	// Priority: 1. ControlPlaneEndpoint (if set), 2. Infrastructure LB IP, 3. Bootstrap public IP, 4. First CP node IP
+	var endpoint string
 	if k8sCluster.Status.ControlPlaneEndpoint != "" {
 		endpoint = k8sCluster.Status.ControlPlaneEndpoint
+	} else if k8sCluster.Status.Infrastructure.LoadBalancerIP != "" {
+		endpoint = k8sCluster.Status.Infrastructure.LoadBalancerIP
 	} else if k8sCluster.Spec.Bootstrap != nil && k8sCluster.Spec.Bootstrap.PublicIP != "" {
 		endpoint = k8sCluster.Spec.Bootstrap.PublicIP
+	} else if len(k8sCluster.Status.ControlPlanes.Nodes) > 0 && k8sCluster.Status.ControlPlanes.Nodes[0].PublicIP != "" {
+		// Fallback to first control plane node's public IP
+		endpoint = k8sCluster.Status.ControlPlanes.Nodes[0].PublicIP
+	}
+
+	if endpoint == "" {
+		return nil, fmt.Errorf("cannot create talos generator: no valid control plane endpoint found (ControlPlaneEndpoint, LoadBalancerIP, Bootstrap.PublicIP, or CP node IP required)")
 	}
 
 	// Create the generator
