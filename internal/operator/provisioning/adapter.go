@@ -8,6 +8,7 @@ package provisioning
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -529,6 +530,24 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 		}
 		// Note: Retention is not directly supported in TalosBackupConfig
 		// The backup job handles retention via the age of backups in S3
+	}
+
+	// Enable Cloudflare when ExternalDNS is enabled
+	// ExternalDNS requires Cloudflare for DNS provider functionality
+	// CF_API_TOKEN environment variable must be set for this to work
+	if cfg.Addons.ExternalDNS.Enabled {
+		cfAPIToken := os.Getenv("CF_API_TOKEN")
+		cfg.Addons.Cloudflare = config.CloudflareConfig{
+			Enabled:  true,
+			APIToken: cfAPIToken,
+		}
+		// Also enable CertManager Cloudflare integration if cert-manager is enabled
+		// This allows automatic DNS-01 challenge for TLS certificates
+		if cfg.Addons.CertManager.Enabled {
+			cfg.Addons.CertManager.Cloudflare = config.CertManagerCloudflareConfig{
+				Enabled: true,
+			}
+		}
 	}
 
 	// Calculate derived network configuration (NodeIPv4CIDR, etc.)
