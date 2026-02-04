@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/imamik/k8zner/internal/addons/k8sclient"
 	"github.com/imamik/k8zner/internal/config"
@@ -136,13 +137,22 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 	}
 
 	// Install Talos Backup (etcd backup to S3)
+	// The Talos Backup addon requires the talos.dev/v1alpha1 ServiceAccount CRD,
+	// which is provided by Talos when kubernetesTalosAPIAccess is enabled.
+	// We wait for this CRD to be available before installing the backup addon.
 	if cfg.Addons.TalosBackup.Enabled {
-		log.Printf("[addons] Installing Talos Backup (schedule=%s, bucket=%s)...",
-			cfg.Addons.TalosBackup.Schedule, cfg.Addons.TalosBackup.S3Bucket)
-		if err := applyTalosBackup(ctx, client, cfg); err != nil {
-			return fmt.Errorf("failed to install Talos Backup: %w", err)
+		log.Printf("[addons] Waiting for Talos API CRD to be available...")
+		if err := waitForTalosCRD(ctx, client); err != nil {
+			log.Printf("[addons] Warning: Talos API CRD not available after waiting: %v", err)
+			log.Printf("[addons] Skipping Talos Backup installation - CRD may be registered later")
+		} else {
+			log.Printf("[addons] Installing Talos Backup (schedule=%s, bucket=%s)...",
+				cfg.Addons.TalosBackup.Schedule, cfg.Addons.TalosBackup.S3Bucket)
+			if err := applyTalosBackup(ctx, client, cfg); err != nil {
+				return fmt.Errorf("failed to install Talos Backup: %w", err)
+			}
+			log.Printf("[addons] Talos Backup installed successfully")
 		}
-		log.Printf("[addons] Talos Backup installed successfully")
 	}
 
 	// Install k8zner-operator (self-healing)
@@ -314,13 +324,22 @@ func ApplyWithoutCilium(ctx context.Context, cfg *config.Config, kubeconfig []by
 	}
 
 	// Install Talos Backup (etcd backup to S3)
+	// The Talos Backup addon requires the talos.dev/v1alpha1 ServiceAccount CRD,
+	// which is provided by Talos when kubernetesTalosAPIAccess is enabled.
+	// We wait for this CRD to be available before installing the backup addon.
 	if cfg.Addons.TalosBackup.Enabled {
-		log.Printf("[addons] Installing Talos Backup (schedule=%s, bucket=%s)...",
-			cfg.Addons.TalosBackup.Schedule, cfg.Addons.TalosBackup.S3Bucket)
-		if err := applyTalosBackup(ctx, client, cfg); err != nil {
-			return fmt.Errorf("failed to install Talos Backup: %w", err)
+		log.Printf("[addons] Waiting for Talos API CRD to be available...")
+		if err := waitForTalosCRD(ctx, client); err != nil {
+			log.Printf("[addons] Warning: Talos API CRD not available after waiting: %v", err)
+			log.Printf("[addons] Skipping Talos Backup installation - CRD may be registered later")
+		} else {
+			log.Printf("[addons] Installing Talos Backup (schedule=%s, bucket=%s)...",
+				cfg.Addons.TalosBackup.Schedule, cfg.Addons.TalosBackup.S3Bucket)
+			if err := applyTalosBackup(ctx, client, cfg); err != nil {
+				return fmt.Errorf("failed to install Talos Backup: %w", err)
+			}
+			log.Printf("[addons] Talos Backup installed successfully")
 		}
-		log.Printf("[addons] Talos Backup installed successfully")
 	}
 
 	// Skip operator installation - it's already running if we're in this flow
@@ -389,4 +408,46 @@ func validateAddonConfig(cfg *config.Config) error {
 	}
 
 	return nil
+}
+
+// waitForTalosCRD waits for the Talos API CRD (talos.dev/v1alpha1) to be available.
+// This CRD is registered by Talos when kubernetesTalosAPIAccess is enabled in the
+// machine config. The CRD registration happens asynchronously after cluster bootstrap,
+// so we need to wait for it before installing the Talos Backup addon.
+func waitForTalosCRD(ctx context.Context, client k8sclient.Client) error {
+	const (
+		talosCRD       = "talos.dev/v1alpha1/ServiceAccount"
+		checkInterval  = 5 * time.Second
+		maxWaitTime    = 2 * time.Minute
+	)
+
+	deadline := time.Now().Add(maxWaitTime)
+	attempt := 0
+
+	for time.Now().Before(deadline) {
+		attempt++
+
+		// Check if the CRD exists
+		exists, err := client.HasCRD(ctx, talosCRD)
+		if err != nil {
+			log.Printf("[addons] Error checking for Talos CRD (attempt %d): %v", attempt, err)
+		} else if exists {
+			log.Printf("[addons] Talos API CRD is available (after %d attempts)", attempt)
+			return nil
+		}
+
+		// Log progress every 30 seconds
+		if attempt%6 == 0 {
+			log.Printf("[addons] Still waiting for Talos API CRD (attempt %d)...", attempt)
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(checkInterval):
+			// Continue waiting
+		}
+	}
+
+	return fmt.Errorf("timeout waiting for Talos API CRD after %v", maxWaitTime)
 }
