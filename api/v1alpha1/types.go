@@ -290,6 +290,11 @@ type K8znerClusterStatus struct {
 	// ImageSnapshot tracks the Talos image snapshot
 	// +optional
 	ImageSnapshot *ImageStatus `json:"imageSnapshot,omitempty"`
+
+	// PhaseStartedAt tracks when the current provisioning phase started.
+	// Used for timeout detection in long-running phases like addon installation.
+	// +optional
+	PhaseStartedAt *metav1.Time `json:"phaseStartedAt,omitempty"`
 }
 
 // ProvisioningPhase represents the current stage of cluster provisioning.
