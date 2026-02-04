@@ -8,7 +8,6 @@ package provisioning
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -33,9 +32,10 @@ import (
 
 // Credentials holds the secrets needed for provisioning.
 type Credentials struct {
-	HCloudToken  string
-	TalosSecrets []byte
-	TalosConfig  []byte
+	HCloudToken         string
+	TalosSecrets        []byte
+	TalosConfig         []byte
+	CloudflareAPIToken  string // Optional, for DNS/TLS integration
 }
 
 // PhaseAdapter wraps existing CLI provisioners for operator use.
@@ -97,10 +97,16 @@ func (a *PhaseAdapter) LoadCredentials(ctx context.Context, k8sCluster *k8znerv1
 		creds.TalosConfig = cfg
 	}
 
+	// Cloudflare API token (optional, for DNS/TLS integration)
+	if cfToken, ok := secret.Data[k8znerv1alpha1.CredentialsKeyCloudflareAPIToken]; ok {
+		creds.CloudflareAPIToken = string(cfToken)
+	}
+
 	logger.V(1).Info("loaded credentials from secret",
 		"secret", key.Name,
 		"hasTalosSecrets", len(creds.TalosSecrets) > 0,
 		"hasTalosConfig", len(creds.TalosConfig) > 0,
+		"hasCloudflareToken", len(creds.CloudflareAPIToken) > 0,
 	)
 
 	return creds, nil
@@ -534,12 +540,11 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 
 	// Enable Cloudflare when ExternalDNS is enabled
 	// ExternalDNS requires Cloudflare for DNS provider functionality
-	// CF_API_TOKEN environment variable must be set for this to work
+	// The API token comes from the credentials secret (cf-api-token key)
 	if cfg.Addons.ExternalDNS.Enabled {
-		cfAPIToken := os.Getenv("CF_API_TOKEN")
 		cfg.Addons.Cloudflare = config.CloudflareConfig{
 			Enabled:  true,
-			APIToken: cfAPIToken,
+			APIToken: creds.CloudflareAPIToken,
 		}
 		// Also enable CertManager Cloudflare integration if cert-manager is enabled
 		// This allows automatic DNS-01 challenge for TLS certificates
