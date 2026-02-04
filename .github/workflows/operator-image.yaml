@@ -8,6 +8,7 @@ on:
       - 'cmd/operator/**'
       - 'internal/operator/**'
       - 'internal/platform/**'
+      - 'internal/addons/**'
       - 'api/**'
       - 'Dockerfile.operator'
       - '.github/workflows/operator-image.yaml'
@@ -18,6 +19,7 @@ on:
       - 'cmd/operator/**'
       - 'internal/operator/**'
       - 'internal/platform/**'
+      - 'internal/addons/**'
       - 'api/**'
       - 'Dockerfile.operator'
 
