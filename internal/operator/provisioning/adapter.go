@@ -232,6 +232,44 @@ func (a *PhaseAdapter) ReconcileBootstrap(pCtx *provisioning.Context, k8sCluster
 	logger := log.FromContext(pCtx.Context)
 	logger.Info("reconciling bootstrap")
 
+	// CRITICAL: Populate state from CRD status (filled during Compute phase)
+	// This is required for CLI-bootstrapped clusters where we need to configure new nodes.
+	// Without this, the cluster provisioner won't know about the new servers and
+	// configureNewNodes() will have an empty IP list.
+	for _, node := range k8sCluster.Status.ControlPlanes.Nodes {
+		if node.Name != "" && node.PublicIP != "" {
+			pCtx.State.ControlPlaneIPs[node.Name] = node.PublicIP
+			pCtx.State.ControlPlaneServerIDs[node.Name] = node.ServerID
+		}
+	}
+	for _, node := range k8sCluster.Status.Workers.Nodes {
+		if node.Name != "" && node.PublicIP != "" {
+			pCtx.State.WorkerIPs[node.Name] = node.PublicIP
+			pCtx.State.WorkerServerIDs[node.Name] = node.ServerID
+		}
+	}
+
+	// CRITICAL: Populate SANs from infrastructure status
+	// SANs are required for generating valid Talos configs for new control plane nodes.
+	// Without proper SANs, the generated certificates won't include the LB IP and
+	// kubectl/API access will fail with certificate errors.
+	var sans []string
+	if k8sCluster.Status.Infrastructure.LoadBalancerIP != "" {
+		sans = append(sans, k8sCluster.Status.Infrastructure.LoadBalancerIP)
+	}
+	if k8sCluster.Status.Infrastructure.LoadBalancerPrivateIP != "" {
+		sans = append(sans, k8sCluster.Status.Infrastructure.LoadBalancerPrivateIP)
+	}
+	pCtx.State.SANs = sans
+
+	logger.V(1).Info("populated state from CRD status for bootstrap",
+		"controlPlaneCount", len(pCtx.State.ControlPlaneIPs),
+		"workerCount", len(pCtx.State.WorkerIPs),
+		"controlPlaneIPs", pCtx.State.ControlPlaneIPs,
+		"workerIPs", pCtx.State.WorkerIPs,
+		"SANs", pCtx.State.SANs,
+	)
+
 	// Run the cluster provisioner (applies configs, bootstraps etcd)
 	if err := a.clusterProvisioner.Provision(pCtx); err != nil {
 		return fmt.Errorf("cluster bootstrap failed: %w", err)
