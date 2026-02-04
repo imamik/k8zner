@@ -1208,3 +1208,37 @@ type OperatorConfig struct {
 	// Default: false
 	HostNetwork bool `mapstructure:"host_network" yaml:"host_network"`
 }
+
+// IsPrivateFirst returns true if the cluster should use private-first architecture.
+// In private-first mode:
+// - Servers have no public IPv4 (only IPv6 + private IPv4)
+// - The Load Balancer is the only IPv4 entry point
+// - All internal communication uses private IPs
+// - CLI communicates with Talos API via LB:50000
+func (c *Config) IsPrivateFirst() bool {
+	return c.ClusterAccess == "private"
+}
+
+// ShouldEnablePublicIPv4 returns whether servers should have public IPv4 enabled.
+// Returns false for private-first mode, true otherwise.
+// This respects the explicit Talos.Machine.PublicIPv4Enabled setting if set.
+func (c *Config) ShouldEnablePublicIPv4() bool {
+	// If explicitly configured in Talos machine config, use that
+	if c.Talos.Machine.PublicIPv4Enabled != nil {
+		return *c.Talos.Machine.PublicIPv4Enabled
+	}
+	// Otherwise, disable in private-first mode
+	return !c.IsPrivateFirst()
+}
+
+// ShouldEnablePublicIPv6 returns whether servers should have public IPv6 enabled.
+// Returns true by default (for debugging/fallback access).
+// This respects the explicit Talos.Machine.PublicIPv6Enabled setting if set.
+func (c *Config) ShouldEnablePublicIPv6() bool {
+	// If explicitly configured in Talos machine config, use that
+	if c.Talos.Machine.PublicIPv6Enabled != nil {
+		return *c.Talos.Machine.PublicIPv6Enabled
+	}
+	// Default to enabled (IPv6 is free and useful for debugging)
+	return true
+}
