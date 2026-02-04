@@ -32,10 +32,10 @@ import (
 
 // Credentials holds the secrets needed for provisioning.
 type Credentials struct {
-	HCloudToken         string
-	TalosSecrets        []byte
-	TalosConfig         []byte
-	CloudflareAPIToken  string // Optional, for DNS/TLS integration
+	HCloudToken        string
+	TalosSecrets       []byte
+	TalosConfig        []byte
+	CloudflareAPIToken string // Optional, for DNS/TLS integration
 }
 
 // PhaseAdapter wraps existing CLI provisioners for operator use.
