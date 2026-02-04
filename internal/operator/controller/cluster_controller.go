@@ -34,6 +34,7 @@ import (
 	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning"
 	"github.com/imamik/k8zner/internal/util/keygen"
+	"github.com/imamik/k8zner/internal/util/labels"
 	"github.com/imamik/k8zner/internal/util/naming"
 )
 
@@ -1731,11 +1732,11 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 		// Generate a unique server name with random ID
 		newServerName := naming.Worker(cluster.Name)
 
-		serverLabels := map[string]string{
-			"cluster": cluster.Name,
-			"role":    "worker",
-			"pool":    "workers",
-		}
+		serverLabels := labels.NewLabelBuilder(cluster.Name).
+			WithRole("worker").
+			WithPool("workers").
+			WithManagedBy(labels.ManagedByOperator).
+			Build()
 
 		serverType := normalizeServerSize(cluster.Spec.Workers.Size)
 		logger.Info("creating new worker server",
@@ -2321,11 +2322,11 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 
 	// Step 6: Create new server
 	newServerName := r.generateReplacementServerName(cluster, "control-plane", node.Name)
-	serverLabels := map[string]string{
-		"cluster": cluster.Name,
-		"role":    "control-plane",
-		"pool":    "control-plane",
-	}
+	serverLabels := labels.NewLabelBuilder(cluster.Name).
+		WithRole("control-plane").
+		WithPool("control-plane").
+		WithManagedBy(labels.ManagedByOperator).
+		Build()
 
 	// Track new node phase: CreatingServer
 	r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
@@ -2708,11 +2709,11 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 
 	// Step 7: Create new server
 	newServerName := r.generateReplacementServerName(cluster, "worker", node.Name)
-	serverLabels := map[string]string{
-		"cluster": cluster.Name,
-		"role":    "worker",
-		"pool":    "workers",
-	}
+	serverLabels := labels.NewLabelBuilder(cluster.Name).
+		WithRole("worker").
+		WithPool("workers").
+		WithManagedBy(labels.ManagedByOperator).
+		Build()
 
 	// Track new node phase: CreatingServer
 	r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
