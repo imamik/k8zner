@@ -61,9 +61,9 @@ func buildCCMValues(cfg *config.Config, _ int64) helm.Values {
 				"operator": "Exists",
 			},
 			{
-				"key":      "node.cloudprovider.kubernetes.io/uninitialized",
-				"value":    "true",
-				"effect":   "NoSchedule",
+				"key":    "node.cloudprovider.kubernetes.io/uninitialized",
+				"value":  "true",
+				"effect": "NoSchedule",
 			},
 			{
 				// Tolerate not-ready nodes to ensure CCM can start during bootstrap

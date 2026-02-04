@@ -416,9 +416,9 @@ func validateAddonConfig(cfg *config.Config) error {
 // so we need to wait for it before installing the Talos Backup addon.
 func waitForTalosCRD(ctx context.Context, client k8sclient.Client) error {
 	const (
-		talosCRD       = "talos.dev/v1alpha1/ServiceAccount"
-		checkInterval  = 5 * time.Second
-		maxWaitTime    = 2 * time.Minute
+		talosCRD      = "talos.dev/v1alpha1/ServiceAccount"
+		checkInterval = 5 * time.Second
+		maxWaitTime   = 2 * time.Minute
 	)
 
 	deadline := time.Now().Add(maxWaitTime)
