@@ -79,6 +79,17 @@ func buildCCMEnvVars(cfg *config.Config, lb *config.CCMLoadBalancerConfig) helm.
 	ccm := &cfg.Addons.CCM
 	env := helm.Values{}
 
+	// HCLOUD_TOKEN - Critical: CCM needs this to authenticate with Hetzner Cloud API
+	// Without this, CCM cannot provision load balancers or manage routes
+	env["HCLOUD_TOKEN"] = helm.Values{
+		"valueFrom": helm.Values{
+			"secretKeyRef": helm.Values{
+				"name": "hcloud",
+				"key":  "token",
+			},
+		},
+	}
+
 	// HCLOUD_LOAD_BALANCERS_ENABLED
 	if lb.Enabled != nil {
 		env["HCLOUD_LOAD_BALANCERS_ENABLED"] = helm.Values{

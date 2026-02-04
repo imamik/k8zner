@@ -519,6 +519,18 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 		},
 	}
 
+	// Map backup configuration from spec.Backup to cfg.Addons.TalosBackup
+	// Note: S3 credentials must be provided separately via environment or secrets
+	// The CRD only configures enabled state, schedule, and retention
+	if spec.Backup != nil && spec.Backup.Enabled {
+		cfg.Addons.TalosBackup = config.TalosBackupConfig{
+			Enabled:  true,
+			Schedule: spec.Backup.Schedule,
+		}
+		// Note: Retention is not directly supported in TalosBackupConfig
+		// The backup job handles retention via the age of backups in S3
+	}
+
 	// Calculate derived network configuration (NodeIPv4CIDR, etc.)
 	if err := cfg.CalculateSubnets(); err != nil {
 		return nil, fmt.Errorf("failed to calculate network subnets: %w", err)
