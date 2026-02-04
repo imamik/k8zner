@@ -101,19 +101,6 @@ func normalizeServerSize(size string) string {
 	return string(configv2.ServerSize(size).Normalize())
 }
 
-// logAndRecordError logs an error and records a Kubernetes event.
-// This ensures errors are visible in both operator logs (for kubectl logs) and
-// Kubernetes events (for kubectl describe/get events).
-func (r *ClusterReconciler) logAndRecordError(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, err error, reason, message string) {
-	logger := log.FromContext(ctx)
-	logger.Error(err, message,
-		"cluster", cluster.Name,
-		"phase", cluster.Status.ProvisioningPhase,
-		"reason", reason,
-	)
-	r.Recorder.Eventf(cluster, corev1.EventTypeWarning, reason, "%s: %v", message, err)
-}
-
 // ClusterReconciler reconciles a K8znerCluster object.
 type ClusterReconciler struct {
 	client.Client
@@ -138,6 +125,19 @@ type ClusterReconciler struct {
 
 // Option configures a ClusterReconciler.
 type Option func(*ClusterReconciler)
+
+// logAndRecordError logs an error and records a Kubernetes event.
+// This ensures errors are visible in both operator logs (for kubectl logs) and
+// Kubernetes events (for kubectl describe/get events).
+func (r *ClusterReconciler) logAndRecordError(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, err error, reason, message string) {
+	logger := log.FromContext(ctx)
+	logger.Error(err, message,
+		"cluster", cluster.Name,
+		"phase", cluster.Status.ProvisioningPhase,
+		"reason", reason,
+	)
+	r.Recorder.Eventf(cluster, corev1.EventTypeWarning, reason, "%s: %v", message, err)
+}
 
 // WithHCloudClient sets a custom HCloud client.
 func WithHCloudClient(c HCloudClient) Option {
