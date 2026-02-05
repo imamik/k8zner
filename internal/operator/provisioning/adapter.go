@@ -543,7 +543,8 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 			},
 			// Core addons
 			TalosCCM: config.TalosCCMConfig{
-				Enabled: true, // Node lifecycle management
+				Enabled: true,      // Node lifecycle management
+				Version: "v1.11.0", // Pinned Talos CCM version
 			},
 			Cilium: config.CiliumConfig{
 				Enabled: true,
