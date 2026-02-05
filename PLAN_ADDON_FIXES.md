@@ -16,7 +16,9 @@ This plan addresses all addon deployment issues discovered during E2E testing in
 
 ---
 
-## Phase 2: Backup Credential Flow (CRITICAL)
+## Phase 2: Backup Credential Flow (DONE)
+
+**Status: Implemented**
 
 ### Problem
 TalosBackup addon requires S3 credentials, but the CRD-to-operator flow loses them:
@@ -28,6 +30,16 @@ TalosBackup addon requires S3 credentials, but the CRD-to-operator flow loses th
 ### Solution: Use SecretRef Pattern
 
 Instead of storing credentials in the CRD spec, reference a Secret that contains them.
+
+### Implementation Summary
+1. Added `SecretReference` type and `S3SecretRef` field to `BackupSpec` in `api/v1alpha1/types.go`
+2. Added `buildBackupSpec()` and `createBackupS3Secret()` helper functions in `cmd/k8zner/handlers/create.go`
+3. Updated `createClusterCRDForCreate()` to create backup S3 Secret when backup is enabled
+4. Updated `buildK8znerClusterForCreate()` to set backup spec with S3SecretRef
+5. Extended `Credentials` struct in `adapter.go` to include backup S3 credentials
+6. Updated `LoadCredentials()` to load backup S3 credentials from referenced Secret
+7. Updated `SpecToConfig()` to populate TalosBackup config with loaded credentials
+8. Updated `updateClusterSpecFromConfig()` in apply.go for consistency
 
 ### Files to Modify
 
@@ -477,7 +489,7 @@ t.Run("07_Verify_MetricsServer", func(t *testing.T) {
 | Phase | Description | Priority | Effort | Dependencies |
 |-------|-------------|----------|--------|--------------|
 | 1 | Monitoring Stack | CRITICAL | DONE | - |
-| 2 | Backup Credentials | CRITICAL | Medium | Phase 1 |
+| 2 | Backup Credentials | CRITICAL | DONE | Phase 1 |
 | 3 | Talos CRD Timeout | HIGH | Low | Phase 2 |
 | 4 | ArgoCD Dependencies | MEDIUM | Low | Phase 1 |
 | 5 | E2E Test Timing | MEDIUM | Low | All above |

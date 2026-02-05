@@ -259,6 +259,22 @@ func updateClusterSpecFromConfig(cluster *k8znerv1alpha1.K8znerCluster, cfg *con
 	cluster.Spec.Addons.ArgoCD = cfg.Addons.ArgoCD.Enabled
 	cluster.Spec.Addons.Monitoring = cfg.Addons.KubePrometheusStack.Enabled
 
+	// Update backup configuration
+	// Note: The backup S3 Secret must be created separately if enabling backup
+	if cfg.Addons.TalosBackup.Enabled && cfg.Addons.TalosBackup.S3AccessKey != "" {
+		if cluster.Spec.Backup == nil {
+			cluster.Spec.Backup = &k8znerv1alpha1.BackupSpec{}
+		}
+		cluster.Spec.Backup.Enabled = true
+		cluster.Spec.Backup.Schedule = cfg.Addons.TalosBackup.Schedule
+		// Set S3SecretRef if not already set
+		if cluster.Spec.Backup.S3SecretRef == nil {
+			cluster.Spec.Backup.S3SecretRef = &k8znerv1alpha1.SecretReference{
+				Name: cluster.Name + "-backup-s3",
+			}
+		}
+	}
+
 	// Set last modified annotation
 	if cluster.Annotations == nil {
 		cluster.Annotations = make(map[string]string)

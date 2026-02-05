@@ -212,6 +212,18 @@ type BackupSpec struct {
 	// +kubebuilder:default="168h"
 	// +optional
 	Retention string `json:"retention,omitempty"`
+
+	// S3SecretRef references a Secret containing S3 credentials for backup storage.
+	// The Secret must contain keys: access-key, secret-key, endpoint, bucket, region
+	// If not specified, backup will be skipped.
+	// +optional
+	S3SecretRef *SecretReference `json:"s3SecretRef,omitempty"`
+}
+
+// SecretReference references a Secret in the same namespace as the K8znerCluster.
+type SecretReference struct {
+	// Name is the name of the Secret
+	Name string `json:"name"`
 }
 
 // HealthCheckSpec configures health monitoring thresholds.
