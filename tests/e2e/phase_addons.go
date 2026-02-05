@@ -347,14 +347,14 @@ func waitForCSIReady(t *testing.T, kubeconfigPath string, timeout time.Duration)
 
 			cmd := exec.CommandContext(context.Background(), "kubectl",
 				"--kubeconfig", kubeconfigPath,
-				"get", "deployment", "-n", "kube-system", "-l", "app=hcloud-csi-controller", "-o", "wide")
+				"get", "deployment", "hcloud-csi-controller", "-n", "kube-system", "-o", "wide")
 			if output, _ := cmd.CombinedOutput(); len(output) > 0 {
 				t.Logf("CSI controller deployment status:\n%s", string(output))
 			}
 
 			cmd = exec.CommandContext(context.Background(), "kubectl",
 				"--kubeconfig", kubeconfigPath,
-				"get", "pods", "-n", "kube-system", "-l", "app=hcloud-csi-controller", "-o", "wide")
+				"get", "pods", "-n", "kube-system", "-l", "app.kubernetes.io/name=hcloud-csi,app.kubernetes.io/component=controller", "-o", "wide")
 			if output, _ := cmd.CombinedOutput(); len(output) > 0 {
 				t.Logf("CSI controller pods:\n%s", string(output))
 			}

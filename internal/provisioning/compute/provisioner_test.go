@@ -183,7 +183,7 @@ func TestProvisionControlPlane_SingleNode(t *testing.T) {
 	mockInfra.CreateServerFunc = func(_ context.Context, name, _, serverType, location string, _ []string, labels map[string]string, _ string, pgID *int64, _ int64, privateIP string, _, _ bool) (string, error) {
 		serverCreated = true
 		assert.Contains(t, name, "test-cluster")
-		assert.Contains(t, name, "control-plane")
+		assert.Contains(t, name, "-cp-") // New naming: cluster-cp-1
 		assert.Equal(t, "cx21", serverType)
 		assert.Equal(t, "nbg1", location)
 		assert.NotNil(t, pgID)

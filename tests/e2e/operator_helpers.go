@@ -19,6 +19,7 @@ import (
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	"github.com/imamik/k8zner/cmd/k8zner/handlers"
 	"github.com/imamik/k8zner/internal/platform/hcloud"
+	"github.com/imamik/k8zner/internal/util/naming"
 )
 
 // OperatorTestContext holds state for operator-centric tests.
@@ -524,19 +525,19 @@ func VerifyClusterCleanup(ctx context.Context, t *testing.T, state *OperatorTest
 	t.Log("Verifying cluster cleanup...")
 
 	// Check network is gone
-	networkName := state.ClusterName + "-network"
+	networkName := naming.Network(state.ClusterName)
 	network, err := state.HCloudClient.GetNetwork(ctx, networkName)
 	require.NoError(t, err, "GetNetwork should not error")
 	require.Nil(t, network, "network should be deleted")
 
 	// Check firewall is gone
-	firewallName := state.ClusterName + "-firewall"
+	firewallName := naming.Firewall(state.ClusterName)
 	firewall, err := state.HCloudClient.GetFirewall(ctx, firewallName)
 	require.NoError(t, err, "GetFirewall should not error")
 	require.Nil(t, firewall, "firewall should be deleted")
 
 	// Check LB is gone
-	lbName := state.ClusterName + "-kube-api"
+	lbName := naming.KubeAPILoadBalancer(state.ClusterName)
 	lb, err := state.HCloudClient.GetLoadBalancer(ctx, lbName)
 	require.NoError(t, err, "GetLoadBalancer should not error")
 	require.Nil(t, lb, "load balancer should be deleted")
@@ -704,7 +705,7 @@ func (o *OperatorTestContext) ToE2EState() *E2EState {
 	if o.HCloudClient != nil {
 		// Get control plane IPs
 		for i := 1; i <= 3; i++ {
-			serverName := fmt.Sprintf("%s-control-plane-%d", o.ClusterName, i)
+			serverName := naming.ControlPlaneWithID(o.ClusterName, fmt.Sprintf("%d", i))
 			ip, err := o.HCloudClient.GetServerIP(ctx, serverName)
 			if err == nil {
 				state.ControlPlaneIPs = append(state.ControlPlaneIPs, ip)
@@ -713,7 +714,7 @@ func (o *OperatorTestContext) ToE2EState() *E2EState {
 
 		// Get worker IPs
 		for i := 1; i <= 10; i++ {
-			serverName := fmt.Sprintf("%s-workers-%d", o.ClusterName, i)
+			serverName := naming.WorkerWithID(o.ClusterName, fmt.Sprintf("%d", i))
 			ip, err := o.HCloudClient.GetServerIP(ctx, serverName)
 			if err == nil {
 				state.WorkerIPs = append(state.WorkerIPs, ip)
@@ -721,7 +722,7 @@ func (o *OperatorTestContext) ToE2EState() *E2EState {
 		}
 
 		// Get load balancer IP
-		lb, err := o.HCloudClient.GetLoadBalancer(ctx, o.ClusterName+"-kube-api")
+		lb, err := o.HCloudClient.GetLoadBalancer(ctx, naming.KubeAPILoadBalancer(o.ClusterName))
 		if err == nil && lb != nil {
 			state.LoadBalancerIP = hcloud.LoadBalancerIPv4(lb)
 		}

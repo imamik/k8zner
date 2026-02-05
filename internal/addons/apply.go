@@ -195,13 +195,14 @@ func ApplyWithoutCilium(ctx context.Context, cfg *config.Config, kubeconfig []by
 	}
 
 	log.Printf("[addons] Starting addon installation (networkID=%d)", networkID)
-	log.Printf("[addons] Enabled addons: CCM=%v, CSI=%v, MetricsServer=%v, CertManager=%v, Traefik=%v, ArgoCD=%v, TalosBackup=%v",
+	log.Printf("[addons] Enabled addons: CCM=%v, CSI=%v, MetricsServer=%v, CertManager=%v, Traefik=%v, ArgoCD=%v, Monitoring=%v, TalosBackup=%v",
 		cfg.Addons.CCM.Enabled,
 		cfg.Addons.CSI.Enabled,
 		cfg.Addons.MetricsServer.Enabled,
 		cfg.Addons.CertManager.Enabled,
 		cfg.Addons.Traefik.Enabled,
 		cfg.Addons.ArgoCD.Enabled,
+		cfg.Addons.KubePrometheusStack.Enabled,
 		cfg.Addons.TalosBackup.Enabled,
 	)
 
@@ -475,7 +476,8 @@ func waitForTalosCRDWithTimeout(ctx context.Context, client k8sclient.Client, ti
 // IngressClass wait time constants
 const (
 	// DefaultIngressClassWaitTime is the default time to wait for an IngressClass to be ready.
-	DefaultIngressClassWaitTime = 2 * time.Minute
+	// Increased to 5 minutes to allow time for Traefik DaemonSet to fully deploy.
+	DefaultIngressClassWaitTime = 5 * time.Minute
 
 	// IngressClassCheckInterval is how often to check for IngressClass availability.
 	IngressClassCheckInterval = 5 * time.Second

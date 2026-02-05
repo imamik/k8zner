@@ -5,18 +5,17 @@ package e2e
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	"github.com/imamik/k8zner/internal/platform/s3"
+	"github.com/imamik/k8zner/internal/util/naming"
 )
 
 // TestE2EFullStackDev is Test 1: Full addon validation.
@@ -59,11 +58,11 @@ func TestE2EFullStackDev(t *testing.T) {
 		t.Skip("HETZNER_S3_ACCESS_KEY and HETZNER_S3_SECRET_KEY required for backup test")
 	}
 
-	// Generate unique identifiers
-	timestamp := time.Now().Unix()
-	clusterName := fmt.Sprintf("e2e-fullstack-%d", timestamp)
-	argoSubdomain := fmt.Sprintf("argo-%d", timestamp)
-	grafanaSubdomain := fmt.Sprintf("grafana-%d", timestamp)
+	// Generate unique identifiers (short cluster names for Hetzner resource limits)
+	clusterName := naming.E2ECluster(naming.E2EFullStack) // e.g., e2e-fs-abc12
+	clusterID := clusterName[len(naming.E2EFullStack)+1:] // Extract the 5-char ID
+	argoSubdomain := "argo-" + clusterID
+	grafanaSubdomain := "grafana-" + clusterID
 	argoHost := fmt.Sprintf("%s.%s", argoSubdomain, cfDomain)
 	grafanaHost := fmt.Sprintf("%s.%s", grafanaSubdomain, cfDomain)
 
