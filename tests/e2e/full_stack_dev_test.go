@@ -29,6 +29,9 @@ import (
 // This test should be run FIRST before TestE2EHAOperations as it validates
 // the full addon stack. The HA test only runs if this test passes.
 //
+// IMPORTANT: The HA test (TestE2EHAOperations) will ONLY run if ALL subtests
+// in this test pass. If any subtest fails, the HA test will be skipped.
+//
 // Required environment variables:
 //   - HCLOUD_TOKEN - Hetzner Cloud API token
 //   - CF_API_TOKEN - Cloudflare API token (for DNS/TLS)
@@ -42,6 +45,20 @@ import (
 //	HETZNER_S3_ACCESS_KEY=aaa HETZNER_S3_SECRET_KEY=bbb \
 //	go test -v -timeout=60m -tags=e2e -run TestE2EFullStackDev ./tests/e2e/
 func TestE2EFullStackDev(t *testing.T) {
+	// Track if any subtest fails - HA test should NEVER run if FullStack has failures
+	allSubtestsPassed := true
+	runSubtest := func(name string, fn func(t *testing.T)) {
+		if !allSubtestsPassed {
+			t.Skipf("Skipping %s: previous subtest failed", name)
+			return
+		}
+		t.Run(name, func(t *testing.T) {
+			fn(t)
+			if t.Failed() {
+				allSubtestsPassed = false
+			}
+		})
+	}
 	// Validate required environment variables
 	token := os.Getenv("HCLOUD_TOKEN")
 	if token == "" {
@@ -116,7 +133,7 @@ func TestE2EFullStackDev(t *testing.T) {
 	// =========================================================================
 	// SUBTEST 01: Create Cluster
 	// =========================================================================
-	t.Run("01_CreateCluster", func(t *testing.T) {
+	runSubtest("01_CreateCluster", func(t *testing.T) {
 		var createErr error
 		state, createErr = CreateClusterViaOperator(ctx, t, configPath)
 		require.NoError(t, createErr, "Cluster creation should succeed")
@@ -125,19 +142,25 @@ func TestE2EFullStackDev(t *testing.T) {
 	// =========================================================================
 	// SUBTEST 02: Wait for Cluster Ready
 	// =========================================================================
-	t.Run("02_WaitForClusterReady", func(t *testing.T) {
+	runSubtest("02_WaitForClusterReady", func(t *testing.T) {
 		err := WaitForClusterReady(ctx, t, state, 30*time.Minute)
 		require.NoError(t, err, "Cluster should become ready")
 	})
 
 	// Verify cluster is in good state before proceeding
-	cluster := GetClusterStatus(ctx, state)
-	require.NotNil(t, cluster, "Cluster CRD should exist")
+	var cluster *k8znerv1alpha1.K8znerCluster
+	if allSubtestsPassed && state != nil {
+		cluster = GetClusterStatus(ctx, state)
+		if cluster == nil {
+			allSubtestsPassed = false
+			t.Error("Cluster CRD should exist")
+		}
+	}
 
 	// =========================================================================
 	// SUBTEST 03: Verify Cilium
 	// =========================================================================
-	t.Run("03_Verify_Cilium", func(t *testing.T) {
+	runSubtest("03_Verify_Cilium", func(t *testing.T) {
 		// Check addon status
 		cilium, ok := cluster.Status.Addons[k8znerv1alpha1.AddonNameCilium]
 		require.True(t, ok && cilium.Installed, "Cilium should be installed")
@@ -150,7 +173,7 @@ func TestE2EFullStackDev(t *testing.T) {
 	// =========================================================================
 	// SUBTEST 04: Verify CCM
 	// =========================================================================
-	t.Run("04_Verify_CCM", func(t *testing.T) {
+	runSubtest("04_Verify_CCM", func(t *testing.T) {
 		// Check addon status
 		cluster := GetClusterStatus(ctx, state)
 		ccm, ok := cluster.Status.Addons[k8znerv1alpha1.AddonNameCCM]
@@ -164,7 +187,7 @@ func TestE2EFullStackDev(t *testing.T) {
 	// =========================================================================
 	// SUBTEST 05: Verify CSI
 	// =========================================================================
-	t.Run("05_Verify_CSI", func(t *testing.T) {
+	runSubtest("05_Verify_CSI", func(t *testing.T) {
 		// Check addon status
 		cluster := GetClusterStatus(ctx, state)
 		csi, ok := cluster.Status.Addons[k8znerv1alpha1.AddonNameCSI]
@@ -178,14 +201,14 @@ func TestE2EFullStackDev(t *testing.T) {
 	// =========================================================================
 	// SUBTEST 06: Verify Metrics Server
 	// =========================================================================
-	t.Run("06_Verify_MetricsServer", func(t *testing.T) {
+	runSubtest("06_Verify_MetricsServer", func(t *testing.T) {
 		testMetricsAPI(t, state.KubeconfigPath)
 	})
 
 	// =========================================================================
 	// SUBTEST 07: Verify Traefik
 	// =========================================================================
-	t.Run("07_Verify_Traefik", func(t *testing.T) {
+	runSubtest("07_Verify_Traefik", func(t *testing.T) {
 		// IngressClass exists
 		verifyIngressClassExists(t, state.KubeconfigPath, "traefik")
 
@@ -196,7 +219,7 @@ func TestE2EFullStackDev(t *testing.T) {
 	// =========================================================================
 	// SUBTEST 08: Verify CertManager
 	// =========================================================================
-	t.Run("08_Verify_CertManager", func(t *testing.T) {
+	runSubtest("08_Verify_CertManager", func(t *testing.T) {
 		// ClusterIssuers exist
 		verifyClusterIssuerExists(t, state.KubeconfigPath, "letsencrypt-cloudflare-staging")
 
@@ -207,7 +230,7 @@ func TestE2EFullStackDev(t *testing.T) {
 	// =========================================================================
 	// SUBTEST 09: Verify ExternalDNS
 	// =========================================================================
-	t.Run("09_Verify_ExternalDNS", func(t *testing.T) {
+	runSubtest("09_Verify_ExternalDNS", func(t *testing.T) {
 		// Pod running
 		waitForPod(t, state.KubeconfigPath, "external-dns", "app.kubernetes.io/name=external-dns", 5*time.Minute)
 		t.Log("  ExternalDNS pod running (DNS verified via dashboards)")
@@ -216,7 +239,7 @@ func TestE2EFullStackDev(t *testing.T) {
 	// =========================================================================
 	// SUBTEST 10: Verify ArgoCD
 	// =========================================================================
-	t.Run("10_Verify_ArgoCD", func(t *testing.T) {
+	runSubtest("10_Verify_ArgoCD", func(t *testing.T) {
 		// ArgoCD server pods running
 		waitForPod(t, state.KubeconfigPath, "argocd", "app.kubernetes.io/name=argocd-server", 5*time.Minute)
 
@@ -238,7 +261,7 @@ func TestE2EFullStackDev(t *testing.T) {
 	// =========================================================================
 	// SUBTEST 11: Verify Grafana
 	// =========================================================================
-	t.Run("11_Verify_Grafana", func(t *testing.T) {
+	runSubtest("11_Verify_Grafana", func(t *testing.T) {
 		// Grafana pods running
 		waitForPod(t, state.KubeconfigPath, "monitoring", "app.kubernetes.io/name=grafana", 5*time.Minute)
 
@@ -259,7 +282,7 @@ func TestE2EFullStackDev(t *testing.T) {
 	// =========================================================================
 	// SUBTEST 12: Verify Prometheus
 	// =========================================================================
-	t.Run("12_Verify_Prometheus", func(t *testing.T) {
+	runSubtest("12_Verify_Prometheus", func(t *testing.T) {
 		// Prometheus pods running
 		waitForPrometheusReady(t, state.KubeconfigPath, 8*time.Minute)
 
@@ -273,7 +296,7 @@ func TestE2EFullStackDev(t *testing.T) {
 	// =========================================================================
 	// SUBTEST 13: Verify Alertmanager
 	// =========================================================================
-	t.Run("13_Verify_Alertmanager", func(t *testing.T) {
+	runSubtest("13_Verify_Alertmanager", func(t *testing.T) {
 		// Pod running
 		waitForAlertmanagerReady(t, state.KubeconfigPath, 5*time.Minute)
 	})
@@ -281,7 +304,7 @@ func TestE2EFullStackDev(t *testing.T) {
 	// =========================================================================
 	// SUBTEST 14: Verify Backup
 	// =========================================================================
-	t.Run("14_Verify_Backup", func(t *testing.T) {
+	runSubtest("14_Verify_Backup", func(t *testing.T) {
 		// CronJob exists
 		verifyBackupCronJob(t, state.KubeconfigPath, "0 * * * *")
 
@@ -295,10 +318,14 @@ func TestE2EFullStackDev(t *testing.T) {
 		verifyBackupRestore(t, s3Client, bucketName, backupKey)
 	})
 
-	// Mark full stack test as passed for TestE2EHAOperations
-	SetFullStackPassed()
-
-	t.Log("=== FULL STACK DEV E2E TEST PASSED ===")
+	// ONLY mark full stack test as passed if ALL subtests passed
+	// This is critical: HA test should NEVER run if FullStack has any failures
+	if allSubtestsPassed {
+		SetFullStackPassed()
+		t.Log("=== FULL STACK DEV E2E TEST PASSED ===")
+	} else {
+		t.Log("=== FULL STACK DEV E2E TEST FAILED - HA test will be skipped ===")
+	}
 }
 
 // verifyArgoCDIngressConfigured verifies the ArgoCD ingress is properly configured.
