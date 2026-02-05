@@ -163,12 +163,21 @@ if spec.Backup != nil && spec.Backup.Enabled {
 
 ---
 
-## Phase 3: Talos CRD Wait Timeout (HIGH)
+## Phase 3: Talos CRD Wait Timeout (DONE)
+
+**Status: Implemented**
 
 ### Problem
 Backup addon silently skips installation if Talos API CRD isn't registered within 2 minutes.
 
 ### Solution: Configurable Timeout + Better Status Reporting
+
+### Implementation Summary
+1. Increased default timeout from 2 minutes to 5 minutes (`DefaultTalosCRDWaitTime`)
+2. Added `waitForTalosCRDWithTimeout()` function for customizable timeout
+3. Improved progress logging with elapsed/remaining time display
+4. Added clear WARNING messages when backup is skipped with actionable guidance
+5. Better error messages explaining the root cause (kubernetesTalosAPIAccess)
 
 ### Files to Modify
 
@@ -490,7 +499,7 @@ t.Run("07_Verify_MetricsServer", func(t *testing.T) {
 |-------|-------------|----------|--------|--------------|
 | 1 | Monitoring Stack | CRITICAL | DONE | - |
 | 2 | Backup Credentials | CRITICAL | DONE | Phase 1 |
-| 3 | Talos CRD Timeout | HIGH | Low | Phase 2 |
+| 3 | Talos CRD Timeout | HIGH | DONE | Phase 2 |
 | 4 | ArgoCD Dependencies | MEDIUM | Low | Phase 1 |
 | 5 | E2E Test Timing | MEDIUM | Low | All above |
 
