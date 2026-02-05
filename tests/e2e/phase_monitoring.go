@@ -263,6 +263,55 @@ func installKubePrometheusStack(t *testing.T, state *E2EState, hcloudToken, cfAP
 	t.Logf("      kube-prometheus-stack installed with Grafana ingress for %s", grafanaHost)
 }
 
+// waitForMonitoringReady waits for the complete monitoring stack (Prometheus, Grafana, Alertmanager) to be ready.
+// This is a convenience function that waits for all monitoring components.
+func waitForMonitoringReady(t *testing.T, kubeconfigPath string, timeout time.Duration) {
+	t.Log("  Waiting for monitoring stack to be ready...")
+
+	// Allocate time for each component (proportionally)
+	componentTimeout := timeout / 3
+
+	waitForPrometheusReady(t, kubeconfigPath, componentTimeout)
+	waitForGrafanaReady(t, kubeconfigPath, componentTimeout)
+	waitForAlertmanagerReady(t, kubeconfigPath, componentTimeout)
+
+	t.Log("  Monitoring stack is ready")
+}
+
+// waitForGrafanaReady waits for Grafana deployment to be ready.
+func waitForGrafanaReady(t *testing.T, kubeconfigPath string, timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			t.Log("Warning: Timeout waiting for Grafana (may be disabled or taking longer)")
+			return
+		case <-ticker.C:
+			// Check if Grafana deployment is ready
+			cmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "deployment", "-n", "monitoring",
+				"-l", "app.kubernetes.io/name=grafana",
+				"-o", "jsonpath={.items[*].status.readyReplicas}")
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				continue
+			}
+
+			replicas := strings.TrimSpace(string(output))
+			if replicas != "" && replicas != "0" {
+				t.Log("      Grafana is ready")
+				return
+			}
+		}
+	}
+}
+
 // waitForPrometheusReady waits for Prometheus StatefulSet to be ready.
 func waitForPrometheusReady(t *testing.T, kubeconfigPath string, timeout time.Duration) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)

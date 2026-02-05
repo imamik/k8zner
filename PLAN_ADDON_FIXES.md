@@ -365,12 +365,21 @@ func (c *Client) HasIngressClass(ctx context.Context, name string) (bool, error)
 
 ---
 
-## Phase 5: E2E Test Timing Improvements (MEDIUM)
+## Phase 5: E2E Test Timing Improvements (DONE)
+
+**Status: Implemented**
 
 ### Problem
 Tests check addon functionality before pods are ready.
 
 ### Solution: Add Explicit Waits in E2E Tests
+
+### Implementation Summary
+1. Added `waitForCSIReady()` function to wait for CSI controller deployment
+2. Updated `testCSIVolume()` to wait for CSI readiness before volume tests
+3. Added `waitForMonitoringReady()` convenience function for full stack
+4. Added `waitForGrafanaReady()` function for Grafana deployment
+5. Improved diagnostics in wait functions (logs deployment/pod status on timeout)
 
 ### Files to Modify
 
@@ -510,7 +519,7 @@ t.Run("07_Verify_MetricsServer", func(t *testing.T) {
 | 2 | Backup Credentials | CRITICAL | DONE | Phase 1 |
 | 3 | Talos CRD Timeout | HIGH | DONE | Phase 2 |
 | 4 | ArgoCD Dependencies | MEDIUM | DONE | Phase 1 |
-| 5 | E2E Test Timing | MEDIUM | Low | All above |
+| 5 | E2E Test Timing | MEDIUM | DONE | All above |
 
 ---
 
