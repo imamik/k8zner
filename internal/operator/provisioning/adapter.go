@@ -36,6 +36,13 @@ type Credentials struct {
 	TalosSecrets       []byte
 	TalosConfig        []byte
 	CloudflareAPIToken string // Optional, for DNS/TLS integration
+
+	// Backup S3 credentials (loaded from S3SecretRef if specified)
+	BackupS3AccessKey string
+	BackupS3SecretKey string
+	BackupS3Endpoint  string
+	BackupS3Bucket    string
+	BackupS3Region    string
 }
 
 // PhaseAdapter wraps existing CLI provisioners for operator use.
@@ -102,11 +109,32 @@ func (a *PhaseAdapter) LoadCredentials(ctx context.Context, k8sCluster *k8znerv1
 		creds.CloudflareAPIToken = string(cfToken)
 	}
 
+	// Load backup S3 credentials if S3SecretRef is specified
+	if k8sCluster.Spec.Backup != nil && k8sCluster.Spec.Backup.S3SecretRef != nil && k8sCluster.Spec.Backup.S3SecretRef.Name != "" {
+		backupSecret := &corev1.Secret{}
+		backupKey := client.ObjectKey{
+			Namespace: k8sCluster.Namespace,
+			Name:      k8sCluster.Spec.Backup.S3SecretRef.Name,
+		}
+
+		if err := a.client.Get(ctx, backupKey, backupSecret); err != nil {
+			logger.Error(err, "failed to load backup S3 secret, backup will be skipped", "secret", backupKey.Name)
+		} else {
+			creds.BackupS3AccessKey = string(backupSecret.Data["access-key"])
+			creds.BackupS3SecretKey = string(backupSecret.Data["secret-key"])
+			creds.BackupS3Endpoint = string(backupSecret.Data["endpoint"])
+			creds.BackupS3Bucket = string(backupSecret.Data["bucket"])
+			creds.BackupS3Region = string(backupSecret.Data["region"])
+			logger.V(1).Info("loaded backup S3 credentials from secret", "secret", backupKey.Name)
+		}
+	}
+
 	logger.V(1).Info("loaded credentials from secret",
 		"secret", key.Name,
 		"hasTalosSecrets", len(creds.TalosSecrets) > 0,
 		"hasTalosConfig", len(creds.TalosConfig) > 0,
 		"hasCloudflareToken", len(creds.CloudflareAPIToken) > 0,
+		"hasBackupS3Creds", creds.BackupS3AccessKey != "",
 	)
 
 	return creds, nil
@@ -506,6 +534,17 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 
 		// Enable essential addons
 		Addons: config.AddonsConfig{
+			// CRDs - always enabled as dependencies for other addons
+			GatewayAPICRDs: config.GatewayAPICRDsConfig{
+				Enabled: true,
+			},
+			PrometheusOperatorCRDs: config.PrometheusOperatorCRDsConfig{
+				Enabled: true, // Required for kube-prometheus-stack
+			},
+			// Core addons
+			TalosCCM: config.TalosCCMConfig{
+				Enabled: true, // Node lifecycle management
+			},
 			Cilium: config.CiliumConfig{
 				Enabled: true,
 			},
@@ -530,19 +569,30 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 			ArgoCD: config.ArgoCDConfig{
 				Enabled: spec.Addons != nil && spec.Addons.ArgoCD,
 			},
+			// Monitoring stack (Prometheus, Grafana, Alertmanager)
+			KubePrometheusStack: config.KubePrometheusStackConfig{
+				Enabled: spec.Addons != nil && spec.Addons.Monitoring,
+			},
 		},
 	}
 
 	// Map backup configuration from spec.Backup to cfg.Addons.TalosBackup
-	// Note: S3 credentials must be provided separately via environment or secrets
-	// The CRD only configures enabled state, schedule, and retention
+	// S3 credentials are loaded from the referenced Secret via LoadCredentials
 	if spec.Backup != nil && spec.Backup.Enabled {
-		cfg.Addons.TalosBackup = config.TalosBackupConfig{
-			Enabled:  true,
-			Schedule: spec.Backup.Schedule,
+		// Only enable backup if we have the required S3 credentials
+		if creds.BackupS3AccessKey != "" && creds.BackupS3SecretKey != "" {
+			cfg.Addons.TalosBackup = config.TalosBackupConfig{
+				Enabled:     true,
+				Schedule:    spec.Backup.Schedule,
+				S3AccessKey: creds.BackupS3AccessKey,
+				S3SecretKey: creds.BackupS3SecretKey,
+				S3Endpoint:  creds.BackupS3Endpoint,
+				S3Bucket:    creds.BackupS3Bucket,
+				S3Region:    creds.BackupS3Region,
+			}
 		}
-		// Note: Retention is not directly supported in TalosBackupConfig
-		// The backup job handles retention via the age of backups in S3
+		// If credentials are missing, backup will be silently skipped
+		// The LoadCredentials function logs a warning in this case
 	}
 
 	// Enable Cloudflare when ExternalDNS is enabled

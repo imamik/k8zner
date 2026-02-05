@@ -326,8 +326,69 @@ spec:
 }
 
 // testCSIVolume tests CSI's ability to provision and mount volumes.
+// waitForCSIReady waits for the CSI controller deployment to be ready.
+// This ensures the CSI driver can provision volumes before running volume tests.
+func waitForCSIReady(t *testing.T, kubeconfigPath string, timeout time.Duration) {
+	t.Log("  Waiting for CSI controller to be ready...")
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	startTime := time.Now()
+	lastProgressLog := time.Now()
+
+	for {
+		select {
+		case <-ctx.Done():
+			// Timeout - gather diagnostics
+			t.Logf("Timeout waiting for CSI controller - gathering diagnostics...")
+
+			cmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "deployment", "-n", "kube-system", "-l", "app=hcloud-csi-controller", "-o", "wide")
+			if output, _ := cmd.CombinedOutput(); len(output) > 0 {
+				t.Logf("CSI controller deployment status:\n%s", string(output))
+			}
+
+			cmd = exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "pods", "-n", "kube-system", "-l", "app=hcloud-csi-controller", "-o", "wide")
+			if output, _ := cmd.CombinedOutput(); len(output) > 0 {
+				t.Logf("CSI controller pods:\n%s", string(output))
+			}
+
+			t.Fatalf("Timeout waiting for CSI controller to be ready after %v", timeout)
+		case <-ticker.C:
+			// Check if hcloud-csi-controller deployment has ready replicas
+			cmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "deployment", "hcloud-csi-controller",
+				"-n", "kube-system",
+				"-o", "jsonpath={.status.readyReplicas}")
+			output, err := cmd.CombinedOutput()
+			if err == nil && strings.TrimSpace(string(output)) != "" && strings.TrimSpace(string(output)) != "0" {
+				elapsed := time.Since(startTime).Round(time.Second)
+				t.Logf("  CSI controller ready (after %v)", elapsed)
+				return
+			}
+
+			// Log progress every 30 seconds
+			if time.Since(lastProgressLog) >= 30*time.Second {
+				elapsed := time.Since(startTime).Round(time.Second)
+				t.Logf("  [%s] Waiting for CSI controller (readyReplicas: %s)...", elapsed, strings.TrimSpace(string(output)))
+				lastProgressLog = time.Now()
+			}
+		}
+	}
+}
+
 func testCSIVolume(t *testing.T, state *E2EState) {
 	t.Log("  Testing CSI volume provisioning...")
+
+	// Wait for CSI controller to be ready before testing volume provisioning
+	waitForCSIReady(t, state.KubeconfigPath, 3*time.Minute)
 
 	pvcName := "e2e-csi-test-pvc"
 	podName := "e2e-csi-test-pod"
