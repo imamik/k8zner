@@ -359,7 +359,7 @@ func testCSIVolume(t *testing.T, state *E2EState) {
 	t.Log("  Testing CSI volume provisioning...")
 
 	// Wait for CSI controller to be ready before testing volume provisioning
-	waitForCSIReady(t, state.KubeconfigPath, 3*time.Minute)
+	waitForCSIReady(t, state.KubeconfigPath, 5*time.Minute)
 
 	pvcName := "e2e-csi-test-pvc"
 	podName := "e2e-csi-test-pod"

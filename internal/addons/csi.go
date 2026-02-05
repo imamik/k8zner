@@ -107,6 +107,7 @@ func buildCSIValues(cfg *config.Config) helm.Values {
 					"matchLabelKeys": []string{"pod-template-hash"},
 				},
 			},
+			"dnsPolicy": "Default",
 			"nodeSelector": helm.Values{
 				"node-role.kubernetes.io/control-plane": "",
 			},
