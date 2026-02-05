@@ -491,6 +491,7 @@ func buildAddonSpec(cfg *config.Config) *k8znerv1alpha1.AddonSpec {
 		ExternalDNS:   cfg.Addons.ExternalDNS.Enabled,
 		ArgoCD:        cfg.Addons.ArgoCD.Enabled,
 		MetricsServer: cfg.Addons.MetricsServer.Enabled,
+		Monitoring:    cfg.Addons.KubePrometheusStack.Enabled,
 	}
 }
 

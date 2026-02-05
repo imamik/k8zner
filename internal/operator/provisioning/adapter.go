@@ -506,6 +506,17 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 
 		// Enable essential addons
 		Addons: config.AddonsConfig{
+			// CRDs - always enabled as dependencies for other addons
+			GatewayAPICRDs: config.GatewayAPICRDsConfig{
+				Enabled: true,
+			},
+			PrometheusOperatorCRDs: config.PrometheusOperatorCRDsConfig{
+				Enabled: true, // Required for kube-prometheus-stack
+			},
+			// Core addons
+			TalosCCM: config.TalosCCMConfig{
+				Enabled: true, // Node lifecycle management
+			},
 			Cilium: config.CiliumConfig{
 				Enabled: true,
 			},
@@ -529,6 +540,10 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 			},
 			ArgoCD: config.ArgoCDConfig{
 				Enabled: spec.Addons != nil && spec.Addons.ArgoCD,
+			},
+			// Monitoring stack (Prometheus, Grafana, Alertmanager)
+			KubePrometheusStack: config.KubePrometheusStackConfig{
+				Enabled: spec.Addons != nil && spec.Addons.Monitoring,
 			},
 		},
 	}

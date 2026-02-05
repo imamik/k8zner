@@ -251,6 +251,10 @@ type AddonSpec struct {
 	// +kubebuilder:default=true
 	// +optional
 	MetricsServer bool `json:"metricsServer,omitempty"`
+
+	// Monitoring enables kube-prometheus-stack (Prometheus, Grafana, Alertmanager)
+	// +optional
+	Monitoring bool `json:"monitoring,omitempty"`
 }
 
 // K8znerClusterStatus defines the observed state of K8znerCluster.

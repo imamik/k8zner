@@ -257,6 +257,7 @@ func updateClusterSpecFromConfig(cluster *k8znerv1alpha1.K8znerCluster, cfg *con
 	cluster.Spec.Addons.CertManager = cfg.Addons.CertManager.Enabled
 	cluster.Spec.Addons.Traefik = cfg.Addons.Traefik.Enabled
 	cluster.Spec.Addons.ArgoCD = cfg.Addons.ArgoCD.Enabled
+	cluster.Spec.Addons.Monitoring = cfg.Addons.KubePrometheusStack.Enabled
 
 	// Set last modified annotation
 	if cluster.Annotations == nil {
