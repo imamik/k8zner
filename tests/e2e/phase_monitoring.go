@@ -323,13 +323,14 @@ func waitForPrometheusReady(t *testing.T, kubeconfigPath string, timeout time.Du
 	for {
 		select {
 		case <-ctx.Done():
-			// Get Prometheus status for debugging
-			descCmd := exec.CommandContext(context.Background(), "kubectl",
-				"--kubeconfig", kubeconfigPath,
-				"get", "prometheus", "-n", "monitoring", "-o", "yaml")
-			if descOutput, _ := descCmd.CombinedOutput(); len(descOutput) > 0 {
-				t.Logf("Prometheus status:\n%s", string(descOutput))
-			}
+			// Collect comprehensive diagnostics
+			t.Log("Timeout waiting for Prometheus - collecting comprehensive diagnostics...")
+
+			diag := NewDiagnosticCollector(t, kubeconfigPath, "monitoring", "app.kubernetes.io/name=prometheus")
+			diag.WithComponentName("Prometheus")
+			diag.Collect()
+			diag.Report()
+
 			t.Fatal("Timeout waiting for Prometheus to be ready")
 		case <-ticker.C:
 			// Check if Prometheus pod is ready
