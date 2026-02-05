@@ -23,20 +23,16 @@ var (
 )
 
 // SetFullStackPassed marks the full stack test as passed.
-// This is called by TestE2EFullStackDev after successful completion.
+// This is called by TestE2EFullStackDev after ALL subtests pass.
 func SetFullStackPassed() {
 	testResultsLock.Lock()
 	defer testResultsLock.Unlock()
 	fullStackPassed = true
-	os.Setenv("E2E_FULLSTACK_PASSED", "true")
 }
 
 // IsFullStackPassed returns whether TestE2EFullStackDev passed.
+// There is NO override - HA test will NEVER run if FullStack failed.
 func IsFullStackPassed() bool {
-	// First check env var (allows external override)
-	if os.Getenv("E2E_FULLSTACK_PASSED") == "true" {
-		return true
-	}
 	testResultsLock.Lock()
 	defer testResultsLock.Unlock()
 	return fullStackPassed
