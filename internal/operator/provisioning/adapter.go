@@ -492,12 +492,15 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 		},
 
 		// Worker configuration
+		// IMPORTANT: Workers are created by the reconciliation loop (scaleUpWorkers),
+		// NOT by the compute provisioner. Set Count=0 here to avoid duplicate workers.
+		// The reconciliation loop handles worker scaling based on CRD spec.Workers.Count.
 		Workers: []config.WorkerNodePool{
 			{
-				Name:       "worker",
+				Name:       "workers",
 				Location:   spec.Region,
 				ServerType: normalizeServerSize(spec.Workers.Size),
-				Count:      spec.Workers.Count,
+				Count:      0, // Workers created by reconcileWorkers, not compute provisioner
 			},
 		},
 
