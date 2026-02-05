@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	"github.com/imamik/k8zner/internal/util/naming"
 )
 
 // TestE2EHAOperations is Test 2: HA scaling & failure recovery.
@@ -47,9 +48,8 @@ func TestE2EHAOperations(t *testing.T) {
 		t.Skip("HCLOUD_TOKEN not set, skipping E2E test")
 	}
 
-	// Generate unique cluster name
-	timestamp := time.Now().Unix()
-	clusterName := fmt.Sprintf("e2e-ha-ops-%d", timestamp)
+	// Generate unique cluster name (short for Hetzner resource limits)
+	clusterName := naming.E2ECluster(naming.E2EHA) // e.g., e2e-ha-abc12
 
 	t.Logf("=== Starting HA Operations E2E Test: %s ===", clusterName)
 	t.Log("=== Config: 3 CP + 2 workers, minimal addons ===")
@@ -163,8 +163,8 @@ func TestE2EHAOperations(t *testing.T) {
 	// =========================================================================
 	var targetCP string
 	t.Run("08_SimulateCPFailure", func(t *testing.T) {
-		// Power off control-plane-3 (keeping quorum with 2 remaining)
-		targetCP = fmt.Sprintf("%s-control-plane-3", state.ClusterName)
+		// Power off cp-3 (keeping quorum with 2 remaining)
+		targetCP = naming.ControlPlaneWithID(state.ClusterName, "3")
 		t.Logf("Simulating failure of: %s", targetCP)
 
 		err := SimulateNodeFailure(ctx, t, state, targetCP)
@@ -257,7 +257,7 @@ func verifyEtcdHealth(t *testing.T, kubeconfigPath string) {
 
 // verifyWorkerDeleted verifies a worker was deleted from Hetzner.
 func verifyWorkerDeleted(ctx context.Context, t *testing.T, state *OperatorTestContext, workerNumber int) {
-	workerName := fmt.Sprintf("%s-workers-%d", state.ClusterName, workerNumber)
+	workerName := naming.WorkerWithID(state.ClusterName, fmt.Sprintf("%d", workerNumber))
 
 	// Try to get the server - should not exist
 	servers, err := state.HCloudClient.GetServersByLabel(ctx, map[string]string{

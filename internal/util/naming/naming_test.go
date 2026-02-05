@@ -70,10 +70,10 @@ func TestKubeAPILoadBalancer(t *testing.T) {
 		cluster  string
 		expected string
 	}{
-		{"simple cluster name", "my-cluster", "my-cluster-lb"},
-		{"single word", "production", "production-lb"},
-		{"with numbers", "cluster-01", "cluster-01-lb"},
-		{"empty string", "", "-lb"},
+		{"simple cluster name", "my-cluster", "my-cluster-kube"},
+		{"single word", "production", "production-kube"},
+		{"with numbers", "cluster-01", "cluster-01-kube"},
+		{"empty string", "", "-kube"},
 	}
 
 	for _, tt := range tests {
@@ -92,8 +92,8 @@ func TestIngressLoadBalancer(t *testing.T) {
 		cluster  string
 		expected string
 	}{
-		{"simple cluster name", "my-cluster", "my-cluster-lb-ingress"},
-		{"single word", "production", "production-lb-ingress"},
+		{"simple cluster name", "my-cluster", "my-cluster-ingress"},
+		{"single word", "production", "production-ingress"},
 	}
 
 	for _, tt := range tests {
@@ -372,6 +372,37 @@ func TestIsWorker(t *testing.T) {
 			result := IsWorker(tt.name)
 			if result != tt.expected {
 				t.Errorf("IsWorker(%q) = %v, want %v", tt.name, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestE2ECluster(t *testing.T) {
+	tests := []struct {
+		name   string
+		prefix string
+	}{
+		{"fullstack", E2EFullStack},
+		{"ha", E2EHA},
+		{"upgrade", E2EUpgrade},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := E2ECluster(tt.prefix)
+			if !strings.HasPrefix(result, tt.prefix+"-") {
+				t.Errorf("E2ECluster(%q) = %q, should start with %q-", tt.prefix, result, tt.prefix)
+			}
+			// Should be prefix-{5char}
+			parts := strings.Split(result, "-")
+			expectedParts := len(strings.Split(tt.prefix, "-")) + 1
+			if len(parts) != expectedParts {
+				t.Errorf("E2ECluster(%q) = %q, expected %d parts got %d", tt.prefix, result, expectedParts, len(parts))
+			}
+			// Last part should be 5 chars
+			lastPart := parts[len(parts)-1]
+			if len(lastPart) != IDLength {
+				t.Errorf("E2ECluster() ID part = %q, expected length %d", lastPart, IDLength)
 			}
 		})
 	}

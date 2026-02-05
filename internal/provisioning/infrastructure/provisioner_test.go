@@ -439,8 +439,8 @@ func TestProvisionLoadBalancers_WithIngress(t *testing.T) {
 	var capturedAlgorithm hcloud.LoadBalancerAlgorithmType
 	mockInfra.EnsureLoadBalancerFunc = func(_ context.Context, name, _ string, _ string, algorithm hcloud.LoadBalancerAlgorithmType, _ map[string]string) (*hcloud.LoadBalancer, error) {
 		lbNames = append(lbNames, name)
-		// New naming: {cluster}-lb-ingress
-		if name == "test-cluster-lb-ingress" {
+		// New naming: {cluster}-ingress
+		if name == "test-cluster-ingress" {
 			capturedAlgorithm = algorithm
 		}
 		return &hcloud.LoadBalancer{
@@ -465,8 +465,8 @@ func TestProvisionLoadBalancers_WithIngress(t *testing.T) {
 	err := p.ProvisionLoadBalancers(ctx)
 
 	assert.NoError(t, err)
-	// New naming: {cluster}-lb and {cluster}-lb-ingress
-	assert.Contains(t, lbNames, "test-cluster-lb")
-	assert.Contains(t, lbNames, "test-cluster-lb-ingress")
+	// New naming: {cluster}-kube and {cluster}-ingress
+	assert.Contains(t, lbNames, "test-cluster-kube")
+	assert.Contains(t, lbNames, "test-cluster-ingress")
 	assert.Equal(t, hcloud.LoadBalancerAlgorithmTypeLeastConnections, capturedAlgorithm)
 }
