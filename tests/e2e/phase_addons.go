@@ -56,32 +56,13 @@ func waitForPod(t *testing.T, kubeconfigPath, namespace, selector string, timeou
 	for {
 		select {
 		case <-ctx.Done():
-			// Timeout - gather diagnostics before failing
-			t.Logf("Timeout waiting for pod - gathering diagnostics...")
+			// Timeout - collect comprehensive diagnostics
+			t.Logf("Timeout waiting for pod - collecting comprehensive diagnostics...")
 
-			// Get pod status with node info
-			podsCmd := exec.CommandContext(context.Background(), "kubectl",
-				"--kubeconfig", kubeconfigPath,
-				"get", "pods", "-n", namespace, "-l", selector, "-o", "wide")
-			if podsOutput, _ := podsCmd.CombinedOutput(); len(podsOutput) > 0 {
-				t.Logf("Pod status with node info:\n%s", string(podsOutput))
-			}
-
-			// Get pod details
-			descCmd := exec.CommandContext(context.Background(), "kubectl",
-				"--kubeconfig", kubeconfigPath,
-				"describe", "pod", "-n", namespace, "-l", selector)
-			if descOutput, _ := descCmd.CombinedOutput(); len(descOutput) > 0 {
-				t.Logf("Pod description:\n%s", string(descOutput))
-			}
-
-			// Get namespace events
-			eventsCmd := exec.CommandContext(context.Background(), "kubectl",
-				"--kubeconfig", kubeconfigPath,
-				"get", "events", "-n", namespace, "--sort-by=.lastTimestamp")
-			if eventsOutput, _ := eventsCmd.CombinedOutput(); len(eventsOutput) > 0 {
-				t.Logf("Namespace events:\n%s", string(eventsOutput))
-			}
+			diag := NewDiagnosticCollector(t, kubeconfigPath, namespace, selector)
+			diag.WithComponentName(selector)
+			diag.Collect()
+			diag.Report()
 
 			t.Fatalf("Timeout waiting for pod with selector %s in namespace %s", selector, namespace)
 		case <-ticker.C:
@@ -119,15 +100,13 @@ func waitForDaemonSet(t *testing.T, kubeconfigPath, namespace, selector string, 
 	for {
 		select {
 		case <-ctx.Done():
-			// Timeout - gather diagnostics
-			t.Logf("Timeout waiting for daemonset - gathering diagnostics...")
+			// Timeout - collect comprehensive diagnostics
+			t.Logf("Timeout waiting for daemonset - collecting comprehensive diagnostics...")
 
-			dsCmd := exec.CommandContext(context.Background(), "kubectl",
-				"--kubeconfig", kubeconfigPath,
-				"get", "daemonset", "-n", namespace, "-l", selector, "-o", "wide")
-			if dsOutput, _ := dsCmd.CombinedOutput(); len(dsOutput) > 0 {
-				t.Logf("DaemonSet status:\n%s", string(dsOutput))
-			}
+			diag := NewDiagnosticCollector(t, kubeconfigPath, namespace, selector)
+			diag.WithComponentName("DaemonSet: " + selector)
+			diag.Collect()
+			diag.Report()
 
 			t.Fatalf("Timeout waiting for daemonset with selector %s in namespace %s", selector, namespace)
 		case <-ticker.C:
@@ -342,22 +321,14 @@ func waitForCSIReady(t *testing.T, kubeconfigPath string, timeout time.Duration)
 	for {
 		select {
 		case <-ctx.Done():
-			// Timeout - gather diagnostics
-			t.Logf("Timeout waiting for CSI controller - gathering diagnostics...")
+			// Timeout - collect comprehensive diagnostics
+			t.Logf("Timeout waiting for CSI controller - collecting comprehensive diagnostics...")
 
-			cmd := exec.CommandContext(context.Background(), "kubectl",
-				"--kubeconfig", kubeconfigPath,
-				"get", "deployment", "hcloud-csi-controller", "-n", "kube-system", "-o", "wide")
-			if output, _ := cmd.CombinedOutput(); len(output) > 0 {
-				t.Logf("CSI controller deployment status:\n%s", string(output))
-			}
-
-			cmd = exec.CommandContext(context.Background(), "kubectl",
-				"--kubeconfig", kubeconfigPath,
-				"get", "pods", "-n", "kube-system", "-l", "app.kubernetes.io/name=hcloud-csi,app.kubernetes.io/component=controller", "-o", "wide")
-			if output, _ := cmd.CombinedOutput(); len(output) > 0 {
-				t.Logf("CSI controller pods:\n%s", string(output))
-			}
+			diag := NewDiagnosticCollector(t, kubeconfigPath, "kube-system",
+				"app.kubernetes.io/name=hcloud-csi,app.kubernetes.io/component=controller")
+			diag.WithComponentName("hcloud-csi-controller")
+			diag.Collect()
+			diag.Report()
 
 			t.Fatalf("Timeout waiting for CSI controller to be ready after %v", timeout)
 		case <-ticker.C:
