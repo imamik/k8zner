@@ -475,7 +475,8 @@ func waitForTalosCRDWithTimeout(ctx context.Context, client k8sclient.Client, ti
 // IngressClass wait time constants
 const (
 	// DefaultIngressClassWaitTime is the default time to wait for an IngressClass to be ready.
-	DefaultIngressClassWaitTime = 2 * time.Minute
+	// Increased to 5 minutes to allow time for Traefik DaemonSet to fully deploy.
+	DefaultIngressClassWaitTime = 5 * time.Minute
 
 	// IngressClassCheckInterval is how often to check for IngressClass availability.
 	IngressClassCheckInterval = 5 * time.Second
