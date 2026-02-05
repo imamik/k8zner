@@ -132,7 +132,13 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
+	By("stopping the manager by canceling context")
 	cancel()
+
+	// Give the manager time to gracefully shut down
+	// This prevents "timeout waiting for process kube-apiserver to stop" errors
+	time.Sleep(2 * time.Second)
+
 	By("tearing down the test environment")
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
