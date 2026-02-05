@@ -24,6 +24,23 @@ import (
 //
 // See: https://argo-cd.readthedocs.io/
 func applyArgoCD(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
+	argoCDCfg := cfg.Addons.ArgoCD
+
+	// Wait for IngressClass if ingress is enabled
+	// This ensures Traefik (or another ingress controller) is ready before creating Ingress resources
+	if argoCDCfg.IngressEnabled && argoCDCfg.IngressHost != "" {
+		ingressClass := argoCDCfg.IngressClassName
+		if ingressClass == "" {
+			ingressClass = "traefik" // Default to Traefik
+		}
+
+		if err := waitForIngressClass(ctx, client, ingressClass, DefaultIngressClassWaitTime); err != nil {
+			log.Printf("[ArgoCD] WARNING: IngressClass %q not ready, ingress may not work: %v", ingressClass, err)
+			log.Printf("[ArgoCD] Continuing installation - Ingress will become functional when IngressClass is available")
+			// Continue anyway - Ingress resource will be created and become functional once the controller is ready
+		}
+	}
+
 	// Create namespace first
 	namespaceYAML := createArgoCDNamespace()
 	if err := applyManifests(ctx, client, "argocd-namespace", []byte(namespaceYAML)); err != nil {

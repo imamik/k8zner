@@ -279,12 +279,21 @@ func (r *ClusterReconciler) reconcileAddonsPhase(...) {
 
 ---
 
-## Phase 4: ArgoCD Ingress Dependencies (MEDIUM)
+## Phase 4: ArgoCD Ingress Dependencies (DONE)
+
+**Status: Implemented**
 
 ### Problem
 ArgoCD ingress may fail if Traefik IngressClass isn't ready.
 
 ### Solution: Add Dependency Checks Before Installation
+
+### Implementation Summary
+1. Added `HasIngressClass()` method to k8sclient interface and implementation
+2. Added `waitForIngressClass()` function with configurable timeout (default 2 min)
+3. Updated `applyArgoCD()` to wait for IngressClass before installation
+4. Clear logging when IngressClass is not ready (warns but continues)
+5. Updated test mock to include new method
 
 ### Files to Modify
 
@@ -500,7 +509,7 @@ t.Run("07_Verify_MetricsServer", func(t *testing.T) {
 | 1 | Monitoring Stack | CRITICAL | DONE | - |
 | 2 | Backup Credentials | CRITICAL | DONE | Phase 1 |
 | 3 | Talos CRD Timeout | HIGH | DONE | Phase 2 |
-| 4 | ArgoCD Dependencies | MEDIUM | Low | Phase 1 |
+| 4 | ArgoCD Dependencies | MEDIUM | DONE | Phase 1 |
 | 5 | E2E Test Timing | MEDIUM | Low | All above |
 
 ---

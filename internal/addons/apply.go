@@ -471,3 +471,55 @@ func waitForTalosCRDWithTimeout(ctx context.Context, client k8sclient.Client, ti
 	elapsed := time.Since(startTime).Round(time.Second)
 	return fmt.Errorf("timeout after %v waiting for Talos API CRD - ensure kubernetesTalosAPIAccess is enabled in machine config", elapsed)
 }
+
+// IngressClass wait time constants
+const (
+	// DefaultIngressClassWaitTime is the default time to wait for an IngressClass to be ready.
+	DefaultIngressClassWaitTime = 2 * time.Minute
+
+	// IngressClassCheckInterval is how often to check for IngressClass availability.
+	IngressClassCheckInterval = 5 * time.Second
+)
+
+// waitForIngressClass waits for an IngressClass to be available.
+// This is useful for addons that create Ingress resources and need Traefik/nginx to be ready.
+func waitForIngressClass(ctx context.Context, client k8sclient.Client, name string, timeout time.Duration) error {
+	if timeout <= 0 {
+		timeout = DefaultIngressClassWaitTime
+	}
+
+	deadline := time.Now().Add(timeout)
+	attempt := 0
+	startTime := time.Now()
+
+	log.Printf("[addons] Waiting up to %v for IngressClass %q to be available...", timeout, name)
+
+	for time.Now().Before(deadline) {
+		attempt++
+
+		exists, err := client.HasIngressClass(ctx, name)
+		if err != nil {
+			log.Printf("[addons] Error checking for IngressClass %q (attempt %d): %v", name, attempt, err)
+		} else if exists {
+			elapsed := time.Since(startTime).Round(time.Second)
+			log.Printf("[addons] IngressClass %q is available (after %v)", name, elapsed)
+			return nil
+		}
+
+		// Log progress every 30 seconds
+		if attempt%6 == 0 {
+			elapsed := time.Since(startTime).Round(time.Second)
+			log.Printf("[addons] Still waiting for IngressClass %q (elapsed: %v)...", name, elapsed)
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(IngressClassCheckInterval):
+			// Continue waiting
+		}
+	}
+
+	elapsed := time.Since(startTime).Round(time.Second)
+	return fmt.Errorf("timeout after %v waiting for IngressClass %q - ensure Traefik/ingress controller is installed", elapsed, name)
+}
