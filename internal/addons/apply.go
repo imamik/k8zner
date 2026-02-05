@@ -195,13 +195,14 @@ func ApplyWithoutCilium(ctx context.Context, cfg *config.Config, kubeconfig []by
 	}
 
 	log.Printf("[addons] Starting addon installation (networkID=%d)", networkID)
-	log.Printf("[addons] Enabled addons: CCM=%v, CSI=%v, MetricsServer=%v, CertManager=%v, Traefik=%v, ArgoCD=%v, TalosBackup=%v",
+	log.Printf("[addons] Enabled addons: CCM=%v, CSI=%v, MetricsServer=%v, CertManager=%v, Traefik=%v, ArgoCD=%v, Monitoring=%v, TalosBackup=%v",
 		cfg.Addons.CCM.Enabled,
 		cfg.Addons.CSI.Enabled,
 		cfg.Addons.MetricsServer.Enabled,
 		cfg.Addons.CertManager.Enabled,
 		cfg.Addons.Traefik.Enabled,
 		cfg.Addons.ArgoCD.Enabled,
+		cfg.Addons.KubePrometheusStack.Enabled,
 		cfg.Addons.TalosBackup.Enabled,
 	)
 

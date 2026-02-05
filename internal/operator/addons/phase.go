@@ -168,13 +168,23 @@ func getAddonOrder(name string) int {
 
 // IsAddonEnabled checks if an addon is enabled in the cluster spec.
 func IsAddonEnabled(cluster *k8znerv1alpha1.K8znerCluster, name string) bool {
+	// Core addons are always enabled
+	switch name {
+	case k8znerv1alpha1.AddonNameCilium, k8znerv1alpha1.AddonNameCCM, k8znerv1alpha1.AddonNameCSI:
+		return true
+	}
+
+	// TalosBackup is configured via spec.Backup, not spec.Addons
+	if name == k8znerv1alpha1.AddonNameTalosBackup {
+		return cluster.Spec.Backup != nil && cluster.Spec.Backup.Enabled
+	}
+
+	// All other addons require spec.Addons to be set
 	if cluster.Spec.Addons == nil {
 		return false
 	}
 
 	switch name {
-	case k8znerv1alpha1.AddonNameCilium, k8znerv1alpha1.AddonNameCCM, k8znerv1alpha1.AddonNameCSI:
-		return true // Always enabled
 	case k8znerv1alpha1.AddonNameMetricsServer:
 		return cluster.Spec.Addons.MetricsServer
 	case k8znerv1alpha1.AddonNameCertManager:
@@ -185,6 +195,8 @@ func IsAddonEnabled(cluster *k8znerv1alpha1.K8znerCluster, name string) bool {
 		return cluster.Spec.Addons.ExternalDNS
 	case k8znerv1alpha1.AddonNameArgoCD:
 		return cluster.Spec.Addons.ArgoCD
+	case k8znerv1alpha1.AddonNameMonitoring:
+		return cluster.Spec.Addons.Monitoring
 	default:
 		return false
 	}
