@@ -73,12 +73,14 @@ func TestBuildCSIValues(t *testing.T) {
 			require.True(t, ok)
 			assert.Contains(t, nodeSelector, "node-role.kubernetes.io/control-plane")
 
-			// Check tolerations (should have control-plane and CCM uninitialized)
+			// Check tolerations (control-plane, uninitialized, and not-ready)
+			// All three are required for CSI to schedule during bootstrap
 			tolerations, ok := controller["tolerations"].([]helm.Values)
 			require.True(t, ok)
-			assert.Len(t, tolerations, 2)
+			assert.Len(t, tolerations, 3)
 			assert.Equal(t, "node-role.kubernetes.io/control-plane", tolerations[0]["key"])
 			assert.Equal(t, "node.cloudprovider.kubernetes.io/uninitialized", tolerations[1]["key"])
+			assert.Equal(t, "node.kubernetes.io/not-ready", tolerations[2]["key"])
 
 			// Check storage classes - we now have two: encrypted (default) and non-encrypted
 			storageClasses, ok := values["storageClasses"].([]helm.Values)

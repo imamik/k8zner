@@ -300,6 +300,11 @@ func buildCiliumHubbleConfig(cfg *config.Config) helm.Values {
 					"key":      "node.cloudprovider.kubernetes.io/uninitialized",
 					"operator": "Exists",
 				},
+				{
+					// Tolerate not-ready nodes to ensure Hubble relay can start during bootstrap
+					"key":      "node.kubernetes.io/not-ready",
+					"operator": "Exists",
+				},
 			},
 		}
 	}
