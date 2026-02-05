@@ -46,14 +46,17 @@ type ConfigOption func(*testConfigOptions)
 
 // testConfigOptions holds all configuration options for cluster creation.
 type testConfigOptions struct {
-	workerCount   int
-	workerSize    string
-	cpSize        string
-	domain        string
-	argoSubdomain string
-	backup        bool
-	monitoring    bool
-	region        string
+	workerCount      int
+	workerSize       string
+	cpSize           string
+	domain           string
+	argoSubdomain    string
+	grafanaSubdomain string
+	backup           bool
+	monitoring       bool
+	region           string
+	minimalAddons    bool
+	cpCount          int
 }
 
 // defaultConfigOptions returns the default configuration options.
@@ -122,6 +125,27 @@ func WithRegion(region string) ConfigOption {
 	}
 }
 
+// WithGrafanaSubdomain sets the Grafana subdomain for monitoring.
+func WithGrafanaSubdomain(subdomain string) ConfigOption {
+	return func(o *testConfigOptions) {
+		o.grafanaSubdomain = subdomain
+	}
+}
+
+// WithMinimalAddons enables minimal addon mode (only Cilium + CCM).
+func WithMinimalAddons(minimal bool) ConfigOption {
+	return func(o *testConfigOptions) {
+		o.minimalAddons = minimal
+	}
+}
+
+// WithCPCount sets the control plane count (for HA mode).
+func WithCPCount(count int) ConfigOption {
+	return func(o *testConfigOptions) {
+		o.cpCount = count
+	}
+}
+
 // Mode represents the cluster mode.
 type Mode string
 
@@ -150,6 +174,9 @@ func CreateTestConfig(t *testing.T, name string, mode Mode, opts ...ConfigOption
 	content.WriteString("\n")
 	content.WriteString("control_plane:\n")
 	content.WriteString(fmt.Sprintf("  size: %s\n", options.cpSize))
+	if options.cpCount > 0 {
+		content.WriteString(fmt.Sprintf("  count: %d\n", options.cpCount))
+	}
 
 	if options.domain != "" {
 		content.WriteString("\n")
@@ -157,10 +184,21 @@ func CreateTestConfig(t *testing.T, name string, mode Mode, opts ...ConfigOption
 		if options.argoSubdomain != "" {
 			content.WriteString(fmt.Sprintf("argo_subdomain: %s\n", options.argoSubdomain))
 		}
+		if options.grafanaSubdomain != "" {
+			content.WriteString(fmt.Sprintf("grafana_subdomain: %s\n", options.grafanaSubdomain))
+		}
 	}
 
 	if options.backup {
 		content.WriteString("\nbackup: true\n")
+	}
+
+	if options.monitoring {
+		content.WriteString("\nmonitoring: true\n")
+	}
+
+	if options.minimalAddons {
+		content.WriteString("\nminimal_addons: true\n")
 	}
 
 	tmpFile, err := os.CreateTemp("", "k8zner-e2e-*.yaml")
