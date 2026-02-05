@@ -523,9 +523,11 @@ func (d *DiagnosticCollector) collectComponentLogs() {
 				"logs", "-n", d.namespace, podName, "-c", container,
 				"--tail=20")
 			logOutput, err := logCmd.CombinedOutput()
-			if err == nil && len(logOutput) > 0 {
-				key := fmt.Sprintf("%s/%s", podName, container)
+			key := fmt.Sprintf("%s/%s", podName, container)
+			if err == nil && len(strings.TrimSpace(string(logOutput))) > 0 {
 				d.results.ComponentLogs[key] = strings.TrimSpace(string(logOutput))
+			} else if err == nil {
+				d.results.ComponentLogs[key] = "(no logs - container may have crashed before producing output)"
 			}
 
 			// Also try to get previous logs if container crashed
@@ -559,7 +561,7 @@ func (d *DiagnosticCollector) collectNamespaceState() {
 		"get", "events", "-n", d.namespace,
 		"--sort-by=.lastTimestamp",
 		"-o", "custom-columns=TIME:.lastTimestamp,TYPE:.type,REASON:.reason,OBJECT:.involvedObject.name,MESSAGE:.message",
-		"--tail=15")
+	)
 	eventsOutput, _ := eventsCmd.CombinedOutput()
 	d.results.NamespaceEvents = strings.TrimSpace(string(eventsOutput))
 }

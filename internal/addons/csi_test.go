@@ -68,6 +68,9 @@ func TestBuildCSIValues(t *testing.T) {
 			assert.Equal(t, "kubernetes.io/hostname", tsc[0]["topologyKey"])
 			assert.Equal(t, "DoNotSchedule", tsc[0]["whenUnsatisfiable"])
 
+			// Check dnsPolicy - must use host DNS to avoid CoreDNS dependency during bootstrap
+			assert.Equal(t, "Default", controller["dnsPolicy"])
+
 			// Check node selector
 			nodeSelector, ok := controller["nodeSelector"].(helm.Values)
 			require.True(t, ok)
