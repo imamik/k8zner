@@ -292,13 +292,8 @@ func buildArgoCDIngress(cfg *config.Config, workerIPs []string) helm.Values {
 	argoCDCfg := cfg.Addons.ArgoCD
 
 	ingress := helm.Values{
-		"enabled": true,
-		"hosts": []string{
-			argoCDCfg.IngressHost,
-		},
-		// ArgoCD runs in insecure mode - Traefik handles TLS termination
-		// https: false means the ingress talks HTTP to the backend
-		"https": false,
+		"enabled":  true,
+		"hostname": argoCDCfg.IngressHost,
 	}
 
 	// Set ingress class if specified
@@ -307,15 +302,10 @@ func buildArgoCDIngress(cfg *config.Config, workerIPs []string) helm.Values {
 	}
 
 	// Configure TLS if enabled
+	// The v9.x chart uses tls: true (boolean) and derives the secret name
+	// from the hostname automatically (argocd-server-tls)
 	if argoCDCfg.IngressTLS {
-		ingress["tls"] = []helm.Values{
-			{
-				"hosts": []string{
-					argoCDCfg.IngressHost,
-				},
-				"secretName": "argocd-server-tls",
-			},
-		}
+		ingress["tls"] = true
 
 		// Build annotations for TLS and DNS
 		annotations := helm.Values{}

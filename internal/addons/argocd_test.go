@@ -317,22 +317,18 @@ func TestBuildArgoCDIngress(t *testing.T) {
 
 			assert.Equal(t, true, ingress["enabled"])
 
-			hosts, ok := ingress["hosts"].([]string)
+			hostname, ok := ingress["hostname"].(string)
 			require.True(t, ok)
-			require.Len(t, hosts, 1)
-			assert.Equal(t, tt.expectedHost, hosts[0])
+			assert.Equal(t, tt.expectedHost, hostname)
 
 			if tt.expectedClassName != "" {
 				assert.Equal(t, tt.expectedClassName, ingress["ingressClassName"])
 			}
 
 			if tt.expectTLS {
-				tls, ok := ingress["tls"].([]helm.Values)
+				tls, ok := ingress["tls"].(bool)
 				require.True(t, ok)
-				require.Len(t, tls, 1)
-				tlsHosts, ok := tls[0]["hosts"].([]string)
-				require.True(t, ok)
-				assert.Contains(t, tlsHosts, tt.expectedHost)
+				assert.True(t, tls)
 
 				// Check cluster issuer annotation
 				annotations, ok := ingress["annotations"].(helm.Values)
