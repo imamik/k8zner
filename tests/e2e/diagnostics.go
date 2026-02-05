@@ -1,5 +1,8 @@
 //go:build e2e
 
+// Package e2e provides end-to-end test utilities.
+//
+//nolint:gosec // E2E test code uses exec.Command with variables and InsecureSkipVerify for self-signed certs
 package e2e
 
 import (
@@ -33,10 +36,10 @@ type DiagnosticCollector struct {
 	componentName  string
 
 	// Optional endpoints for external checks
-	lbIP         string
-	lbPort       int
-	talosIP      string
-	talosconfig  string
+	lbIP        string
+	lbPort      int
+	talosIP     string
+	talosconfig string
 
 	// Collected diagnostics
 	results *DiagnosticResults
@@ -55,18 +58,18 @@ type DiagnosticResults struct {
 	Nodes []NodeDiagnostic
 
 	// Target component
-	ComponentPods      []PodDiagnostic
-	ComponentEvents    string
-	ComponentLogs      map[string]string // container name -> logs
+	ComponentPods   []PodDiagnostic
+	ComponentEvents string
+	ComponentLogs   map[string]string // container name -> logs
 
 	// Namespace state
 	AllPodsInNamespace string
 	NamespaceEvents    string
 
 	// External connectivity (via LB)
-	LBReachable     bool
-	LBLatency       time.Duration
-	LBError         string
+	LBReachable bool
+	LBLatency   time.Duration
+	LBError     string
 
 	// Talos-level diagnostics
 	TalosReachable  bool
@@ -109,7 +112,7 @@ func NewDiagnosticCollector(t *testing.T, kubeconfigPath, namespace, selector st
 		namespace:      namespace,
 		selector:       selector,
 		componentName:  selector,
-		results:        &DiagnosticResults{
+		results: &DiagnosticResults{
 			ComponentLogs: make(map[string]string),
 		},
 	}
@@ -593,7 +596,7 @@ func (d *DiagnosticCollector) collectLBConnectivity() {
 		d.results.LBError = err.Error()
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	d.results.LBReachable = resp.StatusCode == 200
 	if !d.results.LBReachable {
