@@ -131,9 +131,11 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 	// Install kube-prometheus-stack (full monitoring: Prometheus, Grafana, Alertmanager)
 	// Must be installed after ingress controllers and external-dns for subdomain exposure
 	if cfg.Addons.KubePrometheusStack.Enabled {
+		log.Printf("[addons] Installing kube-prometheus-stack (Prometheus, Grafana, Alertmanager)...")
 		if err := applyKubePrometheusStack(ctx, client, cfg); err != nil {
 			return fmt.Errorf("failed to install kube-prometheus-stack: %w", err)
 		}
+		log.Printf("[addons] kube-prometheus-stack installed successfully")
 	}
 
 	// Install Talos Backup (etcd backup to S3)
@@ -318,9 +320,11 @@ func ApplyWithoutCilium(ctx context.Context, cfg *config.Config, kubeconfig []by
 	// Install kube-prometheus-stack (full monitoring: Prometheus, Grafana, Alertmanager)
 	// Must be installed after ingress controllers and external-dns for subdomain exposure
 	if cfg.Addons.KubePrometheusStack.Enabled {
+		log.Printf("[addons] Installing kube-prometheus-stack (Prometheus, Grafana, Alertmanager)...")
 		if err := applyKubePrometheusStack(ctx, client, cfg); err != nil {
 			return fmt.Errorf("failed to install kube-prometheus-stack: %w", err)
 		}
+		log.Printf("[addons] kube-prometheus-stack installed successfully")
 	}
 
 	// Install Talos Backup (etcd backup to S3)
