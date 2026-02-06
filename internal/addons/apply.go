@@ -139,6 +139,13 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		}
 	}
 
+	// Install k8zner-operator (self-healing)
+	if cfg.Addons.Operator.Enabled {
+		if err := applyOperator(ctx, client, cfg); err != nil {
+			return fmt.Errorf("failed to install k8zner-operator: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -157,7 +164,7 @@ func hasEnabledAddons(cfg *config.Config) bool {
 		a.TalosCCM.Enabled || a.Cilium.Enabled || a.CCM.Enabled || a.CSI.Enabled ||
 		a.MetricsServer.Enabled || a.CertManager.Enabled || a.Traefik.Enabled ||
 		a.ArgoCD.Enabled || a.Cloudflare.Enabled || a.ExternalDNS.Enabled ||
-		a.TalosBackup.Enabled || a.KubePrometheusStack.Enabled
+		a.TalosBackup.Enabled || a.KubePrometheusStack.Enabled || a.Operator.Enabled
 }
 
 // validateAddonConfig performs pre-flight validation of addon configuration.
@@ -169,9 +176,9 @@ func hasEnabledAddons(cfg *config.Config) bool {
 func validateAddonConfig(cfg *config.Config) error {
 	a := &cfg.Addons
 
-	// CCM/CSI require HCloud token
-	if (a.CCM.Enabled || a.CSI.Enabled) && cfg.HCloudToken == "" {
-		return fmt.Errorf("ccm/csi addons require hcloud_token to be set")
+	// CCM/CSI/Operator require HCloud token
+	if (a.CCM.Enabled || a.CSI.Enabled || a.Operator.Enabled) && cfg.HCloudToken == "" {
+		return fmt.Errorf("ccm/csi/operator addons require hcloud_token to be set")
 	}
 
 	// Cloudflare addons require API token

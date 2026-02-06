@@ -150,3 +150,13 @@ func ClearMemoryCache() {
 	chartCache = make(map[string]*chart.Chart)
 	chartCacheMu.Unlock()
 }
+
+// LoadChartFromPath loads a Helm chart from a local filesystem path.
+// This is useful for charts embedded in the application or during development.
+func LoadChartFromPath(chartPath string) (*chart.Chart, error) {
+	loadedChart, err := loader.Load(chartPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load chart from %s: %w", chartPath, err)
+	}
+	return loadedChart, nil
+}

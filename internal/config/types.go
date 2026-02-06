@@ -513,6 +513,7 @@ type AddonsConfig struct {
 	TalosCCM               TalosCCMConfig               `mapstructure:"talos_ccm" yaml:"talos_ccm"`
 	Cloudflare             CloudflareConfig             `mapstructure:"cloudflare" yaml:"cloudflare"`
 	ExternalDNS            ExternalDNSConfig            `mapstructure:"external_dns" yaml:"external_dns"`
+	Operator               OperatorConfig               `mapstructure:"operator" yaml:"operator"`
 }
 
 // CCMConfig defines the Hetzner Cloud Controller Manager configuration.
@@ -1190,4 +1191,17 @@ type ExternalDNSConfig struct {
 	// Default: ["ingress"]
 	// Options: ingress, service, gateway-httproute, etc.
 	Sources []string `mapstructure:"sources" yaml:"sources"`
+}
+
+// OperatorConfig defines the k8zner-operator addon configuration.
+// The operator provides self-healing functionality for the cluster.
+type OperatorConfig struct {
+	// Enabled enables the k8zner-operator for self-healing.
+	// When enabled, the operator monitors node health and automatically
+	// replaces failed nodes.
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Version specifies the operator image version.
+	// Default: "main" (latest from main branch)
+	Version string `mapstructure:"version" yaml:"version"`
 }
