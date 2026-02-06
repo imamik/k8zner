@@ -60,6 +60,12 @@ spec:
             - name: DEBUG
               value: "true"
             {{- end }}
+            {{- if .Values.hostNetwork }}
+            - name: KUBERNETES_SERVICE_HOST
+              value: "localhost"
+            - name: KUBERNETES_SERVICE_PORT
+              value: "6443"
+            {{- end }}
           ports:
             - name: metrics
               containerPort: {{ .Values.metrics.port }}
