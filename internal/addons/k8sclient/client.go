@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/discovery"
@@ -41,6 +42,10 @@ type Client interface {
 	// GetWorkerExternalIPs returns the external IPs of worker nodes.
 	// This is useful for DNS configuration when using hostNetwork mode.
 	GetWorkerExternalIPs(ctx context.Context) ([]string, error)
+
+	// HasIngressClass checks if an IngressClass with the given name exists.
+	// This is useful for checking Traefik/nginx readiness before creating Ingress resources.
+	HasIngressClass(ctx context.Context, name string) (bool, error)
 }
 
 // client implements the Client interface using k8s.io/client-go.
@@ -255,4 +260,21 @@ func (c *client) GetWorkerExternalIPs(ctx context.Context) ([]string, error) {
 	}
 
 	return externalIPs, nil
+}
+
+// HasIngressClass checks if an IngressClass with the given name exists.
+func (c *client) HasIngressClass(ctx context.Context, name string) (bool, error) {
+	if len(c.kubeconfig) == 0 {
+		return true, nil // For test clients, assume IngressClass exists
+	}
+
+	_, err := c.clientset.NetworkingV1().IngressClasses().Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to check IngressClass %s: %w", name, err)
+	}
+
+	return true, nil
 }

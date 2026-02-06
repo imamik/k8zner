@@ -459,7 +459,8 @@ func parseCIDRs(cidrs []string) []net.IPNet {
 // createBootstrapServer creates the first control plane server attached to the network.
 // Uses an ephemeral SSH key to avoid Hetzner password emails, then deletes it after provisioning.
 func createBootstrapServer(ctx context.Context, hclient hcloudInternal.InfrastructureManager, cfg *config.Config, snapshotID int64, infra *InfrastructureInfo) (*BootstrapServerInfo, error) {
-	serverName := naming.Server(cfg.ClusterName, "control-plane", 0)
+	// Use deterministic ID "1" for the first/bootstrap control plane for idempotency
+	serverName := naming.ControlPlaneWithID(cfg.ClusterName, "1")
 
 	// Check if server already exists
 	existingIP, err := hclient.GetServerIP(ctx, serverName)
@@ -869,7 +870,7 @@ func printDryRunPlan(cfg *config.Config) {
 	fmt.Printf("  1. Load Balancer: %s-kube-api (lb11)\n", cfg.ClusterName)
 	fmt.Printf("  2. Network: %s (%s)\n", cfg.ClusterName, cfg.Network.IPv4CIDR)
 	fmt.Printf("  3. Firewall: %s\n", cfg.ClusterName)
-	fmt.Printf("  4. Control Plane: %s-control-plane-0 (%s)\n\n",
+	fmt.Printf("  4. Control Plane: %s-cp-1 (%s)\n\n",
 		cfg.ClusterName, cfg.ControlPlane.NodePools[0].ServerType)
 
 	fmt.Println("Operator will then create:")

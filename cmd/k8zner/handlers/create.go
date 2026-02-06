@@ -368,6 +368,14 @@ func createClusterCRDForCreate(ctx context.Context, cfg *config.Config, pCtx *pr
 		return fmt.Errorf("failed to create credentials secret: %w", err)
 	}
 
+	// Create backup S3 Secret if backup is enabled with credentials
+	if backupSecret := createBackupS3Secret(cfg, cfg.ClusterName); backupSecret != nil {
+		if err := k8sClient.Create(ctx, backupSecret); err != nil && !isAlreadyExists(err) {
+			return fmt.Errorf("failed to create backup S3 secret: %w", err)
+		}
+		log.Printf("Created backup S3 secret: %s", backupSecret.Name)
+	}
+
 	// Get bootstrap node info - use deterministic selection by sorting names
 	bootstrapName, bootstrapID, bootstrapIP := getBootstrapNode(pCtx)
 
@@ -443,6 +451,7 @@ func buildK8znerClusterForCreate(cfg *config.Config, _ *provisioning.Context, in
 				PublicIP:        bootstrapIP,
 			},
 			Addons: buildAddonSpec(cfg),
+			Backup: buildBackupSpec(cfg, cfg.ClusterName),
 		},
 		Status: k8znerv1alpha1.K8znerClusterStatus{
 			Phase:             k8znerv1alpha1.ClusterPhaseProvisioning,
@@ -491,6 +500,65 @@ func buildAddonSpec(cfg *config.Config) *k8znerv1alpha1.AddonSpec {
 		ExternalDNS:   cfg.Addons.ExternalDNS.Enabled,
 		ArgoCD:        cfg.Addons.ArgoCD.Enabled,
 		MetricsServer: cfg.Addons.MetricsServer.Enabled,
+		Monitoring:    cfg.Addons.KubePrometheusStack.Enabled,
+	}
+}
+
+// buildBackupSpec creates the backup spec from config.
+// Returns nil if backup is not enabled or S3 credentials are missing.
+func buildBackupSpec(cfg *config.Config, clusterName string) *k8znerv1alpha1.BackupSpec {
+	if !cfg.Addons.TalosBackup.Enabled {
+		return nil
+	}
+
+	// Require S3 credentials for backup to work
+	if cfg.Addons.TalosBackup.S3AccessKey == "" || cfg.Addons.TalosBackup.S3SecretKey == "" {
+		return nil
+	}
+
+	return &k8znerv1alpha1.BackupSpec{
+		Enabled:   true,
+		Schedule:  cfg.Addons.TalosBackup.Schedule,
+		Retention: "168h", // Default 7 days
+		S3SecretRef: &k8znerv1alpha1.SecretReference{
+			Name: backupS3SecretName(clusterName),
+		},
+	}
+}
+
+// backupS3SecretName returns the name of the Secret containing backup S3 credentials.
+func backupS3SecretName(clusterName string) string {
+	return clusterName + "-backup-s3"
+}
+
+// createBackupS3Secret creates the Secret containing S3 credentials for backup.
+// Returns nil if backup is not enabled.
+func createBackupS3Secret(cfg *config.Config, clusterName string) *corev1.Secret {
+	if !cfg.Addons.TalosBackup.Enabled {
+		return nil
+	}
+
+	// Require S3 credentials
+	if cfg.Addons.TalosBackup.S3AccessKey == "" || cfg.Addons.TalosBackup.S3SecretKey == "" {
+		return nil
+	}
+
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      backupS3SecretName(clusterName),
+			Namespace: k8znerNamespace,
+			Labels: map[string]string{
+				"cluster": clusterName,
+				"purpose": "backup",
+			},
+		},
+		StringData: map[string]string{
+			"access-key": cfg.Addons.TalosBackup.S3AccessKey,
+			"secret-key": cfg.Addons.TalosBackup.S3SecretKey,
+			"endpoint":   cfg.Addons.TalosBackup.S3Endpoint,
+			"bucket":     cfg.Addons.TalosBackup.S3Bucket,
+			"region":     cfg.Addons.TalosBackup.S3Region,
+		},
 	}
 }
 

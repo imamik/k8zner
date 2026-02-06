@@ -130,8 +130,15 @@ func TestProvisionCallsCleanupWithCorrectLabels(t *testing.T) {
 	// Verify the captured labels
 	require.NotNil(t, capturedLabels)
 	assert.Equal(t, "production-cluster", capturedLabels["cluster"])
+	assert.Equal(t, "production-cluster", capturedLabels["k8zner.io/cluster"])
 
 	// Test ID should not be present
 	_, hasTestID := capturedLabels["test-id"]
 	assert.False(t, hasTestID, "test-id should not be present when not configured")
+
+	// IMPORTANT: managed-by should NOT be present in cleanup labels
+	// This ensures we clean up both CLI-created (managed-by: k8zner) and
+	// operator-created (managed-by: k8zner-operator) resources
+	_, hasManagedBy := capturedLabels["k8zner.io/managed-by"]
+	assert.False(t, hasManagedBy, "k8zner.io/managed-by should NOT be present - cleanup should match all cluster resources regardless of manager")
 }

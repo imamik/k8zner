@@ -17,6 +17,7 @@ import (
 	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/platform/talos"
 	"github.com/imamik/k8zner/internal/provisioning/image"
+	"github.com/imamik/k8zner/internal/util/naming"
 
 	"github.com/stretchr/testify/require"
 )
@@ -43,8 +44,8 @@ func TestE2EUpgradeStandalone(t *testing.T) {
 		t.Skip("HCLOUD_TOKEN not set, skipping E2E upgrade test")
 	}
 
-	// Configuration
-	clusterName := fmt.Sprintf("e2e-upg-%d", time.Now().Unix())
+	// Configuration (short cluster name for Hetzner resource limits)
+	clusterName := naming.E2ECluster(naming.E2EUpgrade) // e.g., e2e-up-abc12
 	initialTalosVersion := "v1.8.2"
 	targetTalosVersion := "v1.8.3"
 	initialK8sVersion := "v1.30.0"

@@ -25,11 +25,13 @@ const (
 
 // Infrastructure type suffixes
 const (
-	SuffixNetwork      = "net"
-	SuffixFirewall     = "fw"
-	SuffixLoadBalancer = "lb"
-	SuffixSSHKey       = "key"
-	SuffixState        = "state"
+	SuffixNetwork        = "net"
+	SuffixFirewall       = "fw"
+	SuffixKubeAPI        = "kube"    // Load balancer for kubectl/talosctl
+	SuffixIngress        = "ingress" // Load balancer for HTTP(S) ingress
+	SuffixSSHKey         = "key"
+	SuffixState          = "state"
+	SuffixPlacementGroup = "pg"
 )
 
 // IDLength is the length of random IDs for servers
@@ -64,15 +66,15 @@ func Network(cluster string) string {
 }
 
 // KubeAPILoadBalancer returns the name for the Kubernetes API load balancer.
-// Format: {cluster}-lb
+// Format: {cluster}-kube (for kubectl and talosctl access)
 func KubeAPILoadBalancer(cluster string) string {
-	return fmt.Sprintf("%s-%s", cluster, SuffixLoadBalancer)
+	return fmt.Sprintf("%s-%s", cluster, SuffixKubeAPI)
 }
 
 // IngressLoadBalancer returns the name for the ingress load balancer.
-// Format: {cluster}-lb-ingress
+// Format: {cluster}-ingress (for HTTP/HTTPS worker traffic)
 func IngressLoadBalancer(cluster string) string {
-	return fmt.Sprintf("%s-%s-ingress", cluster, SuffixLoadBalancer)
+	return fmt.Sprintf("%s-%s", cluster, SuffixIngress)
 }
 
 // Firewall returns the name for the cluster firewall.
@@ -189,4 +191,17 @@ func roleAbbrev(role string) string {
 		}
 		return strings.ToLower(role)
 	}
+}
+
+// E2E test cluster name prefixes
+const (
+	E2EFullStack = "e2e-fs"
+	E2EHA        = "e2e-ha"
+	E2EUpgrade   = "e2e-up"
+)
+
+// E2ECluster generates a short E2E test cluster name.
+// Format: {prefix}-{5char} (e.g., e2e-fs-abc12)
+func E2ECluster(prefix string) string {
+	return fmt.Sprintf("%s-%s", prefix, GenerateID(IDLength))
 }

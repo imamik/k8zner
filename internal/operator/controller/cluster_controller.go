@@ -1109,6 +1109,24 @@ func (r *ClusterReconciler) reconcileAddonsPhase(ctx context.Context, cluster *k
 			InstallOrder:       k8znerv1alpha1.AddonOrderArgoCD,
 		}
 	}
+	if cfg.Addons.KubePrometheusStack.Enabled {
+		cluster.Status.Addons[k8znerv1alpha1.AddonNameMonitoring] = k8znerv1alpha1.AddonStatus{
+			Installed:          true,
+			Healthy:            true,
+			Phase:              k8znerv1alpha1.AddonPhaseInstalled,
+			LastTransitionTime: &now,
+			InstallOrder:       k8znerv1alpha1.AddonOrderMonitoring,
+		}
+	}
+	if cfg.Addons.TalosBackup.Enabled {
+		cluster.Status.Addons[k8znerv1alpha1.AddonNameTalosBackup] = k8znerv1alpha1.AddonStatus{
+			Installed:          true,
+			Healthy:            true,
+			Phase:              k8znerv1alpha1.AddonPhaseInstalled,
+			LastTransitionTime: &now,
+			InstallOrder:       k8znerv1alpha1.AddonOrderTalosBackup,
+		}
+	}
 
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonAddonsReady,
 		"All addons installed successfully")

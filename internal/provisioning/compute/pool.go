@@ -50,8 +50,14 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 	configs := make([]serverConfig, spec.Count)
 
 	for j := 1; j <= spec.Count; j++ {
-		// Name: <cluster>-<pool>-<index> (e.g. cluster-control-plane-1)
-		srvName := naming.Server(ctx.Config.ClusterName, spec.Name, j)
+		// Name: <cluster>-<role>-<index> (e.g. cluster-cp-1 or cluster-w-1)
+		// Uses deterministic naming for idempotency during initial provisioning
+		var srvName string
+		if spec.Role == "control-plane" {
+			srvName = naming.ControlPlaneWithID(ctx.Config.ClusterName, fmt.Sprintf("%d", j))
+		} else {
+			srvName = naming.WorkerWithID(ctx.Config.ClusterName, fmt.Sprintf("%d", j))
+		}
 
 		// Calculate global index for subnet calculations
 		// For CP: 10 * np_index + cp_index + 1

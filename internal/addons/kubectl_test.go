@@ -54,6 +54,11 @@ func (m *mockK8sClient) GetWorkerExternalIPs(ctx context.Context) ([]string, err
 	return args.Get(0).([]string), args.Error(1)
 }
 
+func (m *mockK8sClient) HasIngressClass(ctx context.Context, name string) (bool, error) {
+	args := m.Called(ctx, name)
+	return args.Bool(0), args.Error(1)
+}
+
 func TestApplyManifests(t *testing.T) {
 	tests := []struct {
 		name        string
