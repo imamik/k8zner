@@ -173,6 +173,13 @@ func buildOperatorValues(cfg *config.Config) helm.Values {
 		// Talos control plane nodes have both the label and taint
 	}
 
+	// Enable hostNetwork mode for running before CNI is installed
+	// This allows the operator to run on the bootstrap node before Cilium is deployed
+	if cfg.Addons.Operator.HostNetwork {
+		values["hostNetwork"] = true
+		values["dnsPolicy"] = "ClusterFirstWithHostNet"
+	}
+
 	// Enable ServiceMonitor if monitoring is enabled
 	if cfg.Addons.KubePrometheusStack.Enabled {
 		values["metrics"] = helm.Values{

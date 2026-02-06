@@ -1204,4 +1204,10 @@ type OperatorConfig struct {
 	// Version specifies the operator image version.
 	// Default: "main" (latest from main branch)
 	Version string `mapstructure:"version" yaml:"version"`
+
+	// HostNetwork enables hostNetwork mode for the operator pod.
+	// This is required when deploying the operator before CNI (Cilium) is installed.
+	// When true, the operator uses the host's network namespace directly.
+	// Default: false
+	HostNetwork bool `mapstructure:"host_network" yaml:"host_network"`
 }

@@ -25,6 +25,7 @@ func Expand(cfg *Config) (*config.Config, error) {
 		// Basic cluster info
 		ClusterName: cfg.Name,
 		Location:    string(cfg.Region),
+		HCloudToken: os.Getenv("HCLOUD_TOKEN"),
 
 		// Access configuration
 		ClusterAccess:             "public", // LB is public, nodes are IPv6-only
@@ -71,11 +72,12 @@ func Expand(cfg *Config) (*config.Config, error) {
 
 func expandNetwork(cfg *Config) config.NetworkConfig {
 	return config.NetworkConfig{
-		IPv4CIDR:        NetworkCIDR,
-		NodeIPv4CIDR:    NodeCIDR,
-		ServiceIPv4CIDR: ServiceCIDR,
-		PodIPv4CIDR:     PodCIDR,
-		Zone:            NetworkZone(cfg.Region),
+		IPv4CIDR:           NetworkCIDR,
+		NodeIPv4CIDR:       NodeCIDR,
+		ServiceIPv4CIDR:    ServiceCIDR,
+		PodIPv4CIDR:        PodCIDR,
+		Zone:               NetworkZone(cfg.Region),
+		NodeIPv4SubnetMask: 25, // /25 subnets for each role (126 IPs per subnet)
 	}
 }
 

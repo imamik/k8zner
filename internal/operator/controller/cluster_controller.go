@@ -17,6 +17,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -44,9 +46,13 @@ const (
 	defaultEtcdUnhealthyThreshold = 2 * time.Minute
 
 	// Server creation timeouts.
-	serverIPTimeout    = 2 * time.Minute
-	nodeReadyTimeout   = 5 * time.Minute
-	serverIPRetryDelay = 5 * time.Second
+	serverIPTimeout  = 2 * time.Minute
+	nodeReadyTimeout = 5 * time.Minute
+
+	// Status update retry settings.
+	statusUpdateRetries = 3
+	statusRetryInterval = 100 * time.Millisecond
+	serverIPRetryDelay  = 5 * time.Second
 
 	// Event reasons.
 	EventReasonReconciling         = "Reconciling"
@@ -72,6 +78,12 @@ const (
 	EventReasonComputeFailed         = "ComputeFailed"
 	EventReasonBootstrapComplete     = "BootstrapComplete"
 	EventReasonBootstrapFailed       = "BootstrapFailed"
+	EventReasonCNIInstalling         = "CNIInstalling"
+	EventReasonCNIReady              = "CNIReady"
+	EventReasonCNIFailed             = "CNIFailed"
+	EventReasonAddonsInstalling      = "AddonsInstalling"
+	EventReasonAddonsReady           = "AddonsReady"
+	EventReasonAddonsFailed          = "AddonsFailed"
 	EventReasonConfiguringComplete   = "ConfiguringComplete"
 	EventReasonConfiguringFailed     = "ConfiguringFailed"
 	EventReasonProvisioningComplete  = "ProvisioningComplete"
@@ -230,11 +242,11 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Run the reconciliation phases
 	result, err := r.reconcile(ctx, cluster)
 
-	// Update status
+	// Update status with retry for conflict handling
 	cluster.Status.LastReconcileTime = &metav1.Time{Time: time.Now()}
 	cluster.Status.ObservedGeneration = cluster.Generation
 
-	if statusErr := r.Status().Update(ctx, cluster); statusErr != nil {
+	if statusErr := r.updateStatusWithRetry(ctx, cluster); statusErr != nil {
 		logger.Error(statusErr, "failed to update status")
 		if err == nil {
 			err = statusErr
@@ -253,6 +265,39 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	return result, err
+}
+
+// updateStatusWithRetry updates the cluster status with retry on conflict.
+// This handles the case where another reconcile has modified the object.
+func (r *ClusterReconciler) updateStatusWithRetry(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) error {
+	logger := log.FromContext(ctx)
+
+	for i := 0; i < statusUpdateRetries; i++ {
+		err := r.Status().Update(ctx, cluster)
+		if err == nil {
+			return nil
+		}
+
+		if !apierrors.IsConflict(err) {
+			return err
+		}
+
+		// On conflict, re-fetch the latest version and re-apply our status changes
+		logger.V(1).Info("status update conflict, retrying", "attempt", i+1)
+
+		latest := &k8znerv1alpha1.K8znerCluster{}
+		if getErr := r.Get(ctx, client.ObjectKeyFromObject(cluster), latest); getErr != nil {
+			return fmt.Errorf("failed to get latest cluster for retry: %w", getErr)
+		}
+
+		// Preserve our status changes on the latest version
+		latest.Status = cluster.Status
+		cluster = latest
+
+		time.Sleep(statusRetryInterval)
+	}
+
+	return fmt.Errorf("failed to update status after %d retries", statusUpdateRetries)
 }
 
 // reconcile runs the main reconciliation logic.
@@ -298,7 +343,14 @@ func (r *ClusterReconciler) reconcileWithStateMachine(ctx context.Context, clust
 	case k8znerv1alpha1.PhaseBootstrap:
 		return r.reconcileBootstrapPhase(ctx, cluster)
 
+	case k8znerv1alpha1.PhaseCNI:
+		return r.reconcileCNIPhase(ctx, cluster)
+
+	case k8znerv1alpha1.PhaseAddons:
+		return r.reconcileAddonsPhase(ctx, cluster)
+
 	case k8znerv1alpha1.PhaseConfiguring:
+		// Legacy phase - redirect to CNI for new operator-centric flow
 		return r.reconcileConfiguringPhase(ctx, cluster)
 
 	case k8znerv1alpha1.PhaseComplete:
@@ -485,8 +537,18 @@ func (r *ClusterReconciler) reconcileComputePhase(ctx context.Context, cluster *
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonComputeProvisioned,
 		"Compute resources provisioned")
 
-	// Transition to bootstrap phase
-	cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseBootstrap
+	// For CLI-bootstrapped clusters (coming from Addons phase), go directly to Complete
+	// For operator-managed clusters (coming from Image phase), go to Bootstrap
+	if cluster.Spec.Bootstrap != nil && cluster.Spec.Bootstrap.Completed {
+		// CLI already bootstrapped, we just created additional nodes
+		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseComplete
+		cluster.Status.Phase = k8znerv1alpha1.ClusterPhaseRunning
+		r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonProvisioningComplete,
+			"Cluster provisioning complete")
+	} else {
+		// Transition to bootstrap phase for operator-managed clusters
+		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseBootstrap
+	}
 	return ctrl.Result{Requeue: true}, nil
 }
 
@@ -524,8 +586,8 @@ func (r *ClusterReconciler) reconcileBootstrapPhase(ctx context.Context, cluster
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonBootstrapComplete,
 		"Cluster bootstrapped successfully")
 
-	// Transition to configuring phase
-	cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseConfiguring
+	// Transition to CNI phase (operator-centric flow installs Cilium first)
+	cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseCNI
 	return ctrl.Result{Requeue: true}, nil
 }
 
@@ -586,6 +648,290 @@ func (r *ClusterReconciler) reconcileConfiguringPhase(ctx context.Context, clust
 		"Cluster provisioning complete")
 
 	return ctrl.Result{Requeue: true}, nil
+}
+
+// reconcileCNIPhase installs Cilium CNI as the first addon.
+// This must complete before any other pods can be scheduled (except hostNetwork pods).
+func (r *ClusterReconciler) reconcileCNIPhase(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	logger.Info("reconciling CNI phase")
+
+	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonCNIInstalling,
+		"Installing Cilium CNI")
+
+	// Load credentials
+	creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
+	if err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCredentialsError,
+			"Failed to load credentials: %v", err)
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+	}
+
+	// Convert CRD spec to config for CNI installation
+	cfg, err := operatorprov.SpecToConfig(cluster, creds)
+	if err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCNIFailed,
+			"Failed to convert spec to config: %v", err)
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+	}
+
+	// Get kubeconfig from Talos
+	kubeconfig, err := r.getKubeconfigFromTalos(ctx, cluster, creds)
+	if err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCNIFailed,
+			"Failed to get kubeconfig: %v", err)
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+	}
+
+	// Install Cilium CNI only
+	logger.Info("installing Cilium CNI")
+	if err := addons.ApplyCilium(ctx, cfg, kubeconfig); err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCNIFailed,
+			"Failed to install Cilium: %v", err)
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+	}
+
+	// Update addon status
+	now := metav1.Now()
+	if cluster.Status.Addons == nil {
+		cluster.Status.Addons = make(map[string]k8znerv1alpha1.AddonStatus)
+	}
+	cluster.Status.Addons[k8znerv1alpha1.AddonNameCilium] = k8znerv1alpha1.AddonStatus{
+		Installed:          true,
+		Healthy:            false, // Will be updated when we verify readiness
+		Phase:              k8znerv1alpha1.AddonPhaseInstalling,
+		LastTransitionTime: &now,
+		InstallOrder:       k8znerv1alpha1.AddonOrderCilium,
+	}
+
+	// Wait for Cilium to be ready
+	logger.Info("waiting for Cilium to be ready")
+	if err := r.waitForCiliumReady(ctx, kubeconfig); err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCNIFailed,
+			"Cilium not ready: %v", err)
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	// Update status to installed
+	cluster.Status.Addons[k8znerv1alpha1.AddonNameCilium] = k8znerv1alpha1.AddonStatus{
+		Installed:          true,
+		Healthy:            true,
+		Phase:              k8znerv1alpha1.AddonPhaseInstalled,
+		LastTransitionTime: &now,
+		InstallOrder:       k8znerv1alpha1.AddonOrderCilium,
+	}
+
+	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonCNIReady,
+		"Cilium CNI is ready")
+
+	// Transition to addons phase
+	cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseAddons
+	return ctrl.Result{Requeue: true}, nil
+}
+
+// waitForCiliumReady waits for Cilium pods to be ready.
+func (r *ClusterReconciler) waitForCiliumReady(ctx context.Context, kubeconfig []byte) error {
+	// Create a client from kubeconfig
+	restConfig, err := clientConfigFromKubeconfig(kubeconfig)
+	if err != nil {
+		return fmt.Errorf("failed to create rest config: %w", err)
+	}
+
+	k8sClient, err := client.New(restConfig, client.Options{})
+	if err != nil {
+		return fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+
+	// Check for Cilium daemonset readiness
+	// Use a timeout context
+	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-checkCtx.Done():
+			return fmt.Errorf("timeout waiting for Cilium to be ready")
+		case <-ticker.C:
+			// Check Cilium pods in kube-system namespace
+			podList := &corev1.PodList{}
+			if err := k8sClient.List(ctx, podList, client.InNamespace("kube-system"), client.MatchingLabels{"k8s-app": "cilium"}); err != nil {
+				continue // Retry on error
+			}
+
+			if len(podList.Items) == 0 {
+				continue // No pods yet
+			}
+
+			// Check if all Cilium pods are ready
+			allReady := true
+			for _, pod := range podList.Items {
+				if pod.Status.Phase != corev1.PodRunning {
+					allReady = false
+					break
+				}
+				for _, cond := range pod.Status.Conditions {
+					if cond.Type == corev1.PodReady && cond.Status != corev1.ConditionTrue {
+						allReady = false
+						break
+					}
+				}
+			}
+
+			if allReady {
+				return nil
+			}
+		}
+	}
+}
+
+// reconcileAddonsPhase installs remaining addons after CNI is ready.
+func (r *ClusterReconciler) reconcileAddonsPhase(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	logger.Info("reconciling addons phase")
+
+	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonAddonsInstalling,
+		"Installing cluster addons")
+
+	// Load credentials
+	creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
+	if err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCredentialsError,
+			"Failed to load credentials: %v", err)
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+	}
+
+	// Convert CRD spec to config for addon installation
+	cfg, err := operatorprov.SpecToConfig(cluster, creds)
+	if err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonAddonsFailed,
+			"Failed to convert spec to config: %v", err)
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+	}
+
+	// Ensure HCloud token is set (required for CCM/CSI)
+	cfg.HCloudToken = creds.HCloudToken
+
+	// Get kubeconfig from Talos
+	kubeconfig, err := r.getKubeconfigFromTalos(ctx, cluster, creds)
+	if err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonAddonsFailed,
+			"Failed to get kubeconfig: %v", err)
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+	}
+
+	// Get network ID from status
+	networkID := cluster.Status.Infrastructure.NetworkID
+
+	// Install remaining addons (Cilium already installed in CNI phase)
+	logger.Info("installing addons", "networkID", networkID)
+	if err := addons.ApplyWithoutCilium(ctx, cfg, kubeconfig, networkID); err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonAddonsFailed,
+			"Failed to install addons: %v", err)
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+	}
+
+	// Update addon statuses
+	now := metav1.Now()
+	if cluster.Status.Addons == nil {
+		cluster.Status.Addons = make(map[string]k8znerv1alpha1.AddonStatus)
+	}
+
+	// Mark core addons as installed
+	cluster.Status.Addons[k8znerv1alpha1.AddonNameCCM] = k8znerv1alpha1.AddonStatus{
+		Installed:          true,
+		Healthy:            true,
+		Phase:              k8znerv1alpha1.AddonPhaseInstalled,
+		LastTransitionTime: &now,
+		InstallOrder:       k8znerv1alpha1.AddonOrderCCM,
+	}
+	cluster.Status.Addons[k8znerv1alpha1.AddonNameCSI] = k8znerv1alpha1.AddonStatus{
+		Installed:          true,
+		Healthy:            true,
+		Phase:              k8znerv1alpha1.AddonPhaseInstalled,
+		LastTransitionTime: &now,
+		InstallOrder:       k8znerv1alpha1.AddonOrderCSI,
+	}
+
+	// Update optional addons based on spec
+	if cfg.Addons.MetricsServer.Enabled {
+		cluster.Status.Addons[k8znerv1alpha1.AddonNameMetricsServer] = k8znerv1alpha1.AddonStatus{
+			Installed:          true,
+			Healthy:            true,
+			Phase:              k8znerv1alpha1.AddonPhaseInstalled,
+			LastTransitionTime: &now,
+			InstallOrder:       k8znerv1alpha1.AddonOrderMetricsServer,
+		}
+	}
+	if cfg.Addons.CertManager.Enabled {
+		cluster.Status.Addons[k8znerv1alpha1.AddonNameCertManager] = k8znerv1alpha1.AddonStatus{
+			Installed:          true,
+			Healthy:            true,
+			Phase:              k8znerv1alpha1.AddonPhaseInstalled,
+			LastTransitionTime: &now,
+			InstallOrder:       k8znerv1alpha1.AddonOrderCertManager,
+		}
+	}
+	if cfg.Addons.Traefik.Enabled {
+		cluster.Status.Addons[k8znerv1alpha1.AddonNameTraefik] = k8znerv1alpha1.AddonStatus{
+			Installed:          true,
+			Healthy:            true,
+			Phase:              k8znerv1alpha1.AddonPhaseInstalled,
+			LastTransitionTime: &now,
+			InstallOrder:       k8znerv1alpha1.AddonOrderTraefik,
+		}
+	}
+	if cfg.Addons.ExternalDNS.Enabled {
+		cluster.Status.Addons[k8znerv1alpha1.AddonNameExternalDNS] = k8znerv1alpha1.AddonStatus{
+			Installed:          true,
+			Healthy:            true,
+			Phase:              k8znerv1alpha1.AddonPhaseInstalled,
+			LastTransitionTime: &now,
+			InstallOrder:       k8znerv1alpha1.AddonOrderExternalDNS,
+		}
+	}
+	if cfg.Addons.ArgoCD.Enabled {
+		cluster.Status.Addons[k8znerv1alpha1.AddonNameArgoCD] = k8znerv1alpha1.AddonStatus{
+			Installed:          true,
+			Healthy:            true,
+			Phase:              k8znerv1alpha1.AddonPhaseInstalled,
+			LastTransitionTime: &now,
+			InstallOrder:       k8znerv1alpha1.AddonOrderArgoCD,
+		}
+	}
+
+	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonAddonsReady,
+		"All addons installed successfully")
+
+	// Check if we need to create additional nodes (CLI-bootstrapped clusters start with 1 CP)
+	needsMoreNodes := cluster.Spec.ControlPlanes.Count > len(cluster.Status.ControlPlanes.Nodes) ||
+		cluster.Spec.Workers.Count > len(cluster.Status.Workers.Nodes)
+
+	if needsMoreNodes {
+		// Transition to compute phase to create remaining CPs and workers
+		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseCompute
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// All nodes already exist, transition to complete phase
+	cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseComplete
+	cluster.Status.Phase = k8znerv1alpha1.ClusterPhaseRunning
+
+	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonProvisioningComplete,
+		"Cluster provisioning complete")
+
+	return ctrl.Result{Requeue: true}, nil
+}
+
+// clientConfigFromKubeconfig creates a rest.Config from kubeconfig bytes.
+func clientConfigFromKubeconfig(kubeconfig []byte) (*rest.Config, error) {
+	clientConfig, err := clientcmd.NewClientConfigFromBytes(kubeconfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create client config: %w", err)
+	}
+	return clientConfig.ClientConfig()
 }
 
 // getKubeconfigFromTalos retrieves the kubeconfig from the Talos API.
