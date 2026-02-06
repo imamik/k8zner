@@ -623,28 +623,14 @@ func (r *ClusterReconciler) reconcileComputePhase(ctx context.Context, cluster *
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonComputeProvisioned,
 		"Compute resources provisioned")
 
-	// For CLI-bootstrapped clusters, we need to configure any new nodes that were just created.
-	// The bootstrap phase handles this by detecting that the cluster is already initialized
-	// and configuring only the new nodes in maintenance mode.
+	// For CLI-bootstrapped clusters, the cluster is already initialized and new servers
+	// get their Talos config via server user data during creation. Skip bootstrap and
+	// proceed directly to addon installation.
 	if cluster.Spec.Bootstrap != nil && cluster.Spec.Bootstrap.Completed {
-		logger.Info("CLI-bootstrapped cluster - will configure new nodes in bootstrap phase")
-
-		// Count how many new nodes need configuration
-		existingCPs := 1 // Bootstrap always starts with 1 CP
-		desiredCPs := cluster.Spec.ControlPlanes.Count
-		desiredWorkers := cluster.Spec.Workers.Count
-
-		logger.V(1).Info("checking for new nodes to configure",
-			"existingCPs", existingCPs,
-			"desiredCPs", desiredCPs,
-			"desiredWorkers", desiredWorkers,
-		)
-
-		// Always go through bootstrap phase to configure new nodes
-		// The cluster provisioner will detect it's already bootstrapped and only configure new nodes
-		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseBootstrap
+		logger.Info("CLI-bootstrapped cluster - compute done, proceeding to addons")
+		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseAddons
 		r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonProvisioningPhase,
-			"Configuring additional nodes")
+			"Compute complete, installing addons")
 	} else {
 		// Transition to bootstrap phase for operator-managed clusters (fresh bootstrap)
 		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseBootstrap
@@ -684,15 +670,6 @@ func (r *ClusterReconciler) reconcileBootstrapPhase(ctx context.Context, cluster
 
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonBootstrapComplete,
 		"Cluster bootstrapped successfully")
-
-	// For CLI-bootstrapped clusters, nodes are now configured - proceed to addons
-	if cluster.Spec.Bootstrap != nil && cluster.Spec.Bootstrap.Completed {
-		logger.Info("CLI-bootstrapped cluster - nodes configured, transitioning to addons")
-		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseAddons
-		r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonProvisioningPhase,
-			"Nodes configured, installing addons")
-		return ctrl.Result{Requeue: true}, nil
-	}
 
 	// For fresh operator-managed clusters, transition to CNI phase
 	cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseCNI
