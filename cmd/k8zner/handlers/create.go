@@ -415,6 +415,7 @@ func buildK8znerClusterForCreate(cfg *config.Config, _ *provisioning.Context, in
 		},
 		Spec: k8znerv1alpha1.K8znerClusterSpec{
 			Region: cfg.Location,
+			Domain: cfg.Addons.Cloudflare.Domain,
 			ControlPlanes: k8znerv1alpha1.ControlPlaneSpec{
 				Count: cfg.ControlPlane.NodePools[0].Count,
 				Size:  cfg.ControlPlane.NodePools[0].ServerType,
@@ -494,7 +495,7 @@ func buildK8znerClusterForCreate(cfg *config.Config, _ *provisioning.Context, in
 
 // buildAddonSpec creates the addon spec from config.
 func buildAddonSpec(cfg *config.Config) *k8znerv1alpha1.AddonSpec {
-	return &k8znerv1alpha1.AddonSpec{
+	spec := &k8znerv1alpha1.AddonSpec{
 		Traefik:       cfg.Addons.Traefik.Enabled,
 		CertManager:   cfg.Addons.CertManager.Enabled,
 		ExternalDNS:   cfg.Addons.ExternalDNS.Enabled,
@@ -502,6 +503,26 @@ func buildAddonSpec(cfg *config.Config) *k8znerv1alpha1.AddonSpec {
 		MetricsServer: cfg.Addons.MetricsServer.Enabled,
 		Monitoring:    cfg.Addons.KubePrometheusStack.Enabled,
 	}
+
+	// Extract subdomain overrides from IngressHost if domain is set
+	domain := cfg.Addons.Cloudflare.Domain
+	if domain != "" {
+		suffix := "." + domain
+		if host := cfg.Addons.ArgoCD.IngressHost; host != "" && strings.HasSuffix(host, suffix) {
+			sub := strings.TrimSuffix(host, suffix)
+			if sub != "argo" {
+				spec.ArgoSubdomain = sub
+			}
+		}
+		if host := cfg.Addons.KubePrometheusStack.Grafana.IngressHost; host != "" && strings.HasSuffix(host, suffix) {
+			sub := strings.TrimSuffix(host, suffix)
+			if sub != "grafana" {
+				spec.GrafanaSubdomain = sub
+			}
+		}
+	}
+
+	return spec
 }
 
 // buildBackupSpec creates the backup spec from config.

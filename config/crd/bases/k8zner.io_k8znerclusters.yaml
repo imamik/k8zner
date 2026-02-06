@@ -58,6 +58,11 @@ spec:
               addons:
                 description: Addons specifies which addons should be installed
                 properties:
+                  argoSubdomain:
+                    description: |-
+                      ArgoSubdomain overrides the default "argo" subdomain for ArgoCD ingress.
+                      The full host will be "{argoSubdomain}.{domain}".
+                    type: string
                   argocd:
                     description: ArgoCD for GitOps
                     type: boolean
@@ -68,9 +73,18 @@ spec:
                   externalDns:
                     description: ExternalDNS for automatic DNS management
                     type: boolean
+                  grafanaSubdomain:
+                    description: |-
+                      GrafanaSubdomain overrides the default "grafana" subdomain for Grafana ingress.
+                      The full host will be "{grafanaSubdomain}.{domain}".
+                    type: string
                   metricsServer:
                     default: true
                     description: MetricsServer for resource metrics
+                    type: boolean
+                  monitoring:
+                    description: Monitoring enables kube-prometheus-stack (Prometheus,
+                      Grafana, Alertmanager)
                     type: boolean
                   traefik:
                     default: true
@@ -88,6 +102,18 @@ spec:
                     description: 'Retention is how long to keep backups (default:
                       168h = 7 days)'
                     type: string
+                  s3SecretRef:
+                    description: |-
+                      S3SecretRef references a Secret containing S3 credentials for backup storage.
+                      The Secret must contain keys: access-key, secret-key, endpoint, bucket, region
+                      If not specified, backup will be skipped.
+                    properties:
+                      name:
+                        description: Name is the name of the Secret
+                        type: string
+                    required:
+                    - name
+                    type: object
                   schedule:
                     default: 0 * * * *
                     description: 'Schedule is the cron schedule for backups (default:
@@ -159,6 +185,11 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              domain:
+                description: |-
+                  Domain is the base domain for ingress resources (e.g., "example.com").
+                  When set, addons like ArgoCD and Grafana will have ingress automatically configured.
+                type: string
               firewall:
                 description: Firewall configures the cluster firewall rules
                 properties:
@@ -210,6 +241,12 @@ spec:
                     default: 10.0.0.0/16
                     description: IPv4CIDR is the network CIDR for the Hetzner private
                       network
+                    type: string
+                  nodeIPv4CIDR:
+                    description: |-
+                      NodeIPv4CIDR is the CIDR range for node IPs within the private network.
+                      This is used to calculate subnets for control planes, load balancers, and workers.
+                      If not set, defaults to "10.0.0.0/17" (lower half of the network CIDR).
                     type: string
                   podCIDR:
                     default: 10.244.0.0/16
@@ -569,6 +606,12 @@ spec:
                 - Degraded
                 - Healing
                 - Failed
+                type: string
+              phaseStartedAt:
+                description: |-
+                  PhaseStartedAt tracks when the current provisioning phase started.
+                  Used for timeout detection in long-running phases like addon installation.
+                format: date-time
                 type: string
               provisioningPhase:
                 description: ProvisioningPhase tracks the current provisioning stage
