@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -230,19 +231,64 @@ func Create(ctx context.Context, configPath string, wait bool) error {
 }
 
 // installOperatorOnly installs just the k8zner-operator addon.
+// Includes retry logic for transient API server errors.
 func installOperatorOnly(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID int64) error {
 	// Disable all other addons temporarily
 	savedAddons := cfg.Addons
 	cfg.Addons = config.AddonsConfig{
 		Operator: savedAddons.Operator,
 	}
+	defer func() {
+		cfg.Addons = savedAddons
+	}()
 
-	err := addons.Apply(ctx, cfg, kubeconfig, networkID)
+	// Retry with backoff for transient errors (API server just started)
+	const maxRetries = 5
+	var lastErr error
+	for i := 0; i < maxRetries; i++ {
+		if i > 0 {
+			delay := time.Duration(i*10) * time.Second
+			log.Printf("Retrying operator installation in %v (attempt %d/%d)...", delay, i+1, maxRetries)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(delay):
+			}
+		}
 
-	// Restore addons
-	cfg.Addons = savedAddons
+		lastErr = addons.Apply(ctx, cfg, kubeconfig, networkID)
+		if lastErr == nil {
+			return nil
+		}
 
-	return err
+		// Check if it's a transient error worth retrying
+		errStr := lastErr.Error()
+		if !isTransientError(errStr) {
+			return lastErr
+		}
+		log.Printf("Transient error during operator installation: %v", lastErr)
+	}
+
+	return fmt.Errorf("failed after %d retries: %w", maxRetries, lastErr)
+}
+
+// isTransientError checks if an error is likely transient and worth retrying.
+func isTransientError(errStr string) bool {
+	transientPatterns := []string{
+		"EOF",
+		"connection refused",
+		"connection reset",
+		"i/o timeout",
+		"no such host",
+		"TLS handshake timeout",
+		"context deadline exceeded",
+	}
+	for _, pattern := range transientPatterns {
+		if strings.Contains(errStr, pattern) {
+			return true
+		}
+	}
+	return false
 }
 
 // createClusterCRDForCreate creates the K8znerCluster CRD and credentials Secret.
