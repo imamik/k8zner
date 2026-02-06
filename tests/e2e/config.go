@@ -18,6 +18,7 @@ type E2EConfig struct {
 	SkipAddonsAdvanced bool
 	SkipMonitoring     bool
 	SkipScale          bool
+	SkipSelfHealing    bool
 	SkipUpgrade        bool
 
 	// Cluster reuse
@@ -48,6 +49,7 @@ func LoadE2EConfig() *E2EConfig {
 		SkipAddonsAdvanced: getEnvBool("E2E_SKIP_ADDONS_ADVANCED"),
 		SkipMonitoring:     getEnvBool("E2E_SKIP_MONITORING"),
 		SkipScale:          getEnvBool("E2E_SKIP_SCALE"),
+		SkipSelfHealing:    getEnvBool("E2E_SKIP_SELF_HEALING"),
 		SkipUpgrade:        getEnvBool("E2E_SKIP_UPGRADE"),
 
 		// Cluster reuse
@@ -100,6 +102,9 @@ func (c *E2EConfig) RunPhases() []string {
 	}
 	if !c.SkipScale {
 		phases = append(phases, "scale")
+	}
+	if !c.SkipSelfHealing {
+		phases = append(phases, "self-healing")
 	}
 	if !c.SkipUpgrade {
 		phases = append(phases, "upgrade")
