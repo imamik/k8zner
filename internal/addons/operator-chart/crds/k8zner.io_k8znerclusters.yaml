@@ -223,6 +223,21 @@ spec:
               paused:
                 description: Paused stops the operator from reconciling this cluster
                 type: boolean
+              placementGroup:
+                description: PlacementGroup configures server placement strategy
+                properties:
+                  enabled:
+                    default: true
+                    description: Enabled determines if a placement group should be
+                      created
+                    type: boolean
+                  type:
+                    default: spread
+                    description: Type is the placement group type (spread)
+                    enum:
+                    - spread
+                    type: string
+                type: object
               region:
                 description: Region is the Hetzner Cloud region (e.g., fsn1, nbg1,
                   hel1)
@@ -299,11 +314,30 @@ spec:
                     healthy:
                       description: Healthy indicates if the addon is healthy
                       type: boolean
+                    installOrder:
+                      description: InstallOrder is the order in which this addon should
+                        be installed
+                      type: integer
                     installed:
                       description: Installed indicates if the addon is installed
                       type: boolean
+                    lastTransitionTime:
+                      description: LastTransitionTime is when the addon phase last
+                        changed
+                      format: date-time
+                      type: string
                     message:
                       description: Message provides additional status information
+                      type: string
+                    phase:
+                      description: Phase is the current installation phase of the
+                        addon
+                      enum:
+                      - Pending
+                      - Installing
+                      - Installed
+                      - Failed
+                      - Upgrading
                       type: string
                     version:
                       description: Version is the installed version
@@ -404,11 +438,19 @@ spec:
                         phase:
                           description: Phase is the lifecycle phase of this node
                           enum:
-                          - Provisioning
-                          - Configuring
+                          - CreatingServer
+                          - WaitingForIP
+                          - WaitingForTalosAPI
+                          - ApplyingTalosConfig
+                          - RebootingWithConfig
+                          - WaitingForK8s
+                          - NodeInitializing
                           - Ready
                           - Unhealthy
-                          - Terminating
+                          - Draining
+                          - RemovingFromEtcd
+                          - DeletingServer
+                          - Failed
                           type: string
                         phaseReason:
                           description: PhaseReason provides additional context for
@@ -489,6 +531,14 @@ spec:
                     description: NetworkID is the Hetzner network ID
                     format: int64
                     type: integer
+                  placementGroupID:
+                    description: PlacementGroupID is the Hetzner placement group ID
+                    format: int64
+                    type: integer
+                  snapshotID:
+                    description: SnapshotID is the Hetzner Talos image snapshot ID
+                    format: int64
+                    type: integer
                   sshKeyID:
                     description: SSHKeyID is the Hetzner SSH key ID used for nodes
                     format: int64
@@ -547,11 +597,19 @@ spec:
                         phase:
                           description: Phase is the lifecycle phase of this node
                           enum:
-                          - Provisioning
-                          - Configuring
+                          - CreatingServer
+                          - WaitingForIP
+                          - WaitingForTalosAPI
+                          - ApplyingTalosConfig
+                          - RebootingWithConfig
+                          - WaitingForK8s
+                          - NodeInitializing
                           - Ready
                           - Unhealthy
-                          - Terminating
+                          - Draining
+                          - RemovingFromEtcd
+                          - DeletingServer
+                          - Failed
                           type: string
                         phaseReason:
                           description: PhaseReason provides additional context for

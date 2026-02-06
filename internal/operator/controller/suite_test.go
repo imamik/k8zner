@@ -82,16 +82,17 @@ var _ = BeforeSuite(func() {
 	err = k8znerv1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	// Create the test client
-	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
-	Expect(err).NotTo(HaveOccurred())
-	Expect(k8sClient).NotTo(BeNil())
-
 	// Create controller manager
 	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme.Scheme,
 	})
 	Expect(err).NotTo(HaveOccurred())
+
+	// Use the manager's client for tests - this ensures resources created by tests
+	// are visible to the controller's informers. Using a separate direct client
+	// can cause issues where created resources aren't seen by the cached client.
+	k8sClient = k8sManager.GetClient()
+	Expect(k8sClient).NotTo(BeNil())
 
 	// Initialize mock clients with default behavior
 	mockHCloud = &MockHCloudClient{}
@@ -114,6 +115,20 @@ var _ = BeforeSuite(func() {
 		err = k8sManager.Start(ctx)
 		Expect(err).NotTo(HaveOccurred())
 	}()
+
+	// Wait for the manager to be fully ready
+	// First wait for the cache to sync
+	By("waiting for manager cache to sync")
+	Eventually(func() bool {
+		return k8sManager.GetCache().WaitForCacheSync(ctx)
+	}, time.Second*30, time.Millisecond*500).Should(BeTrue(), "timed out waiting for cache sync")
+
+	// Then verify the manager can list K8znerClusters (proves controller is watching)
+	By("verifying controller is ready by listing clusters")
+	Eventually(func() error {
+		clusters := &k8znerv1alpha1.K8znerClusterList{}
+		return k8sManager.GetClient().List(ctx, clusters)
+	}, time.Second*10, time.Millisecond*100).Should(Succeed(), "controller not ready to list clusters")
 })
 
 var _ = AfterSuite(func() {
@@ -133,14 +148,21 @@ var _ = Describe("K8znerCluster Controller", func() {
 	// Helper to create unique cluster names for test isolation
 	var testClusterName string
 	var testNamespace string
+	var testNodes []*corev1.Node
 
 	BeforeEach(func() {
 		// Generate unique names to avoid test interference
 		testClusterName = fmt.Sprintf("test-cluster-%d", GinkgoRandomSeed())
 		testNamespace = "default"
+		testNodes = nil
 	})
 
 	AfterEach(func() {
+		// Cleanup: delete test nodes first
+		for _, node := range testNodes {
+			_ = k8sClient.Delete(ctx, node)
+		}
+
 		// Cleanup: delete any clusters created during the test
 		cluster := &k8znerv1alpha1.K8znerCluster{}
 		err := k8sClient.Get(ctx, types.NamespacedName{Name: testClusterName, Namespace: testNamespace}, cluster)
@@ -153,6 +175,9 @@ var _ = Describe("K8znerCluster Controller", func() {
 	})
 
 	// Helper function to create a basic K8znerCluster
+	// Note: Creates a cluster with 1 control plane and 1 worker (minimum valid values).
+	// Tests should create matching K8s nodes BEFORE creating the cluster to prevent
+	// the reconciler from trying to provision new infrastructure.
 	createCluster := func(name string, opts ...func(*k8znerv1alpha1.K8znerCluster)) *k8znerv1alpha1.K8znerCluster {
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
@@ -162,11 +187,11 @@ var _ = Describe("K8znerCluster Controller", func() {
 			Spec: k8znerv1alpha1.K8znerClusterSpec{
 				Region: "fsn1",
 				ControlPlanes: k8znerv1alpha1.ControlPlaneSpec{
-					Count: 1,
+					Count: 1, // Minimum valid value per CRD validation
 					Size:  "cx22",
 				},
 				Workers: k8znerv1alpha1.WorkerSpec{
-					Count: 2,
+					Count: 1, // Minimum valid value per CRD validation
 					Size:  "cx22",
 				},
 				// Required fields with validation patterns
@@ -184,6 +209,82 @@ var _ = Describe("K8znerCluster Controller", func() {
 		return cluster
 	}
 
+	// Helper function to create test K8s nodes that match a cluster's expectations
+	// This prevents the reconciler from trying to provision new nodes
+	createTestNodes := func(clusterName string, cpCount, workerCount int) []*corev1.Node {
+		var nodes []*corev1.Node
+
+		// Create control plane nodes
+		for i := 0; i < cpCount; i++ {
+			node := &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: fmt.Sprintf("%s-cp-%d", clusterName, i),
+					Labels: map[string]string{
+						"node-role.kubernetes.io/control-plane": "",
+						"node.kubernetes.io/instance-type":      "cx22",
+						"topology.kubernetes.io/region":         "fsn1",
+						"k8zner.io/cluster":                     clusterName,
+					},
+				},
+				Spec: corev1.NodeSpec{
+					ProviderID: fmt.Sprintf("hcloud://%d", 10000+i),
+				},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{
+							Type:               corev1.NodeReady,
+							Status:             corev1.ConditionTrue,
+							LastTransitionTime: metav1.Now(),
+						},
+					},
+					Addresses: []corev1.NodeAddress{
+						{Type: corev1.NodeInternalIP, Address: fmt.Sprintf("10.0.0.%d", 10+i)},
+						{Type: corev1.NodeExternalIP, Address: fmt.Sprintf("1.2.3.%d", 10+i)},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, node)).Should(Succeed())
+			nodes = append(nodes, node)
+		}
+
+		// Create worker nodes
+		for i := 0; i < workerCount; i++ {
+			node := &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: fmt.Sprintf("%s-worker-%d", clusterName, i),
+					Labels: map[string]string{
+						"node-role.kubernetes.io/worker":   "",
+						"node.kubernetes.io/instance-type": "cx22",
+						"topology.kubernetes.io/region":    "fsn1",
+						"k8zner.io/cluster":                clusterName,
+					},
+				},
+				Spec: corev1.NodeSpec{
+					ProviderID: fmt.Sprintf("hcloud://%d", 20000+i),
+				},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{
+							Type:               corev1.NodeReady,
+							Status:             corev1.ConditionTrue,
+							LastTransitionTime: metav1.Now(),
+						},
+					},
+					Addresses: []corev1.NodeAddress{
+						{Type: corev1.NodeInternalIP, Address: fmt.Sprintf("10.0.1.%d", 10+i)},
+						{Type: corev1.NodeExternalIP, Address: fmt.Sprintf("1.2.4.%d", 10+i)},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, node)).Should(Succeed())
+			nodes = append(nodes, node)
+		}
+
+		return nodes
+	}
+
+	// Note: cleanupTestNodes not needed - AfterEach handles cleanup via testNodes slice
+
 	// Helper function to wait for cluster to exist
 	getCluster := func(name string) *k8znerv1alpha1.K8znerCluster {
 		cluster := &k8znerv1alpha1.K8znerCluster{}
@@ -195,6 +296,9 @@ var _ = Describe("K8znerCluster Controller", func() {
 
 	Context("Cluster Creation", func() {
 		It("should create a K8znerCluster and reconcile it", func() {
+			By("Creating K8s nodes that match the cluster spec")
+			testNodes = createTestNodes(testClusterName, 1, 1)
+
 			By("Creating a new K8znerCluster")
 			cluster := createCluster(testClusterName)
 			Expect(k8sClient.Create(ctx, cluster)).Should(Succeed())
@@ -203,15 +307,30 @@ var _ = Describe("K8znerCluster Controller", func() {
 			createdCluster := getCluster(testClusterName)
 			Expect(createdCluster.Spec.Region).Should(Equal("fsn1"))
 			Expect(createdCluster.Spec.ControlPlanes.Count).Should(Equal(1))
-			Expect(createdCluster.Spec.Workers.Count).Should(Equal(2))
+			Expect(createdCluster.Spec.Workers.Count).Should(Equal(1))
 		})
 
 		It("should update cluster status after reconciliation", func() {
+			By("Creating K8s nodes that match the cluster spec")
+			testNodes = createTestNodes(testClusterName, 1, 1)
+
 			By("Creating a K8znerCluster")
 			cluster := createCluster(testClusterName)
 			Expect(k8sClient.Create(ctx, cluster)).Should(Succeed())
 
 			By("Waiting for the controller to reconcile and update status")
+			// First check if LastReconcileTime is set (proves reconciliation happened)
+			Eventually(func() bool {
+				c := &k8znerv1alpha1.K8znerCluster{}
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: testClusterName, Namespace: testNamespace}, c)
+				if err != nil {
+					return false
+				}
+				// Check if any status was updated - reconciliation sets LastReconcileTime
+				return c.Status.LastReconcileTime != nil
+			}, timeout, interval).Should(BeTrue(), "reconciliation did not update LastReconcileTime")
+
+			// Then verify Phase is set
 			Eventually(func() string {
 				c := &k8znerv1alpha1.K8znerCluster{}
 				err := k8sClient.Get(ctx, types.NamespacedName{Name: testClusterName, Namespace: testNamespace}, c)
@@ -225,6 +344,9 @@ var _ = Describe("K8znerCluster Controller", func() {
 
 	Context("Paused Clusters", func() {
 		It("should skip reconciliation when cluster is paused", func() {
+			By("Creating K8s nodes that match the cluster spec")
+			testNodes = createTestNodes(testClusterName, 1, 1)
+
 			By("Creating a paused K8znerCluster")
 			cluster := createCluster(testClusterName, func(c *k8znerv1alpha1.K8znerCluster) {
 				c.Spec.Paused = true
@@ -243,6 +365,9 @@ var _ = Describe("K8znerCluster Controller", func() {
 		})
 
 		It("should resume reconciliation when cluster is unpaused", func() {
+			By("Creating K8s nodes that match the cluster spec")
+			testNodes = createTestNodes(testClusterName, 1, 1)
+
 			By("Creating a paused K8znerCluster")
 			cluster := createCluster(testClusterName, func(c *k8znerv1alpha1.K8znerCluster) {
 				c.Spec.Paused = true
@@ -280,6 +405,9 @@ var _ = Describe("K8znerCluster Controller", func() {
 
 	Context("Node Health Detection", func() {
 		It("should detect unhealthy nodes and update cluster status", func() {
+			By("Creating K8s nodes that match the cluster spec")
+			testNodes = createTestNodes(testClusterName, 1, 1)
+
 			By("Creating a K8znerCluster")
 			cluster := createCluster(testClusterName)
 			Expect(k8sClient.Create(ctx, cluster)).Should(Succeed())
@@ -345,6 +473,9 @@ var _ = Describe("K8znerCluster Controller", func() {
 
 	Context("Cluster Deletion", func() {
 		It("should handle cluster deletion gracefully", func() {
+			By("Creating K8s nodes that match the cluster spec")
+			testNodes = createTestNodes(testClusterName, 1, 1)
+
 			By("Creating a K8znerCluster")
 			cluster := createCluster(testClusterName)
 			Expect(k8sClient.Create(ctx, cluster)).Should(Succeed())
@@ -366,7 +497,10 @@ var _ = Describe("K8znerCluster Controller", func() {
 
 	Context("Spec Changes", func() {
 		It("should reconcile when worker count changes", func() {
-			By("Creating a K8znerCluster with 2 workers")
+			By("Creating K8s nodes that match the cluster spec")
+			testNodes = createTestNodes(testClusterName, 1, 1)
+
+			By("Creating a K8znerCluster")
 			cluster := createCluster(testClusterName)
 			Expect(k8sClient.Create(ctx, cluster)).Should(Succeed())
 
@@ -377,13 +511,13 @@ var _ = Describe("K8znerCluster Controller", func() {
 				return string(c.Status.Phase)
 			}, timeout, interval).ShouldNot(BeEmpty())
 
-			By("Increasing worker count to 3")
+			By("Changing worker count from 1 to 2")
 			Eventually(func() error {
 				c := &k8znerv1alpha1.K8znerCluster{}
 				if err := k8sClient.Get(ctx, types.NamespacedName{Name: testClusterName, Namespace: testNamespace}, c); err != nil {
 					return err
 				}
-				c.Spec.Workers.Count = 3
+				c.Spec.Workers.Count = 2
 				return k8sClient.Update(ctx, c)
 			}, timeout, interval).Should(Succeed())
 
@@ -395,7 +529,7 @@ var _ = Describe("K8znerCluster Controller", func() {
 					return 0
 				}
 				return c.Spec.Workers.Count
-			}, timeout, interval).Should(Equal(3))
+			}, timeout, interval).Should(Equal(2))
 		})
 	})
 })

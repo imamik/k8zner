@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/siderolabs/talos/pkg/machinery/api/machine"
@@ -196,6 +197,10 @@ func (c *RealTalosClient) WaitForNodeReady(ctx context.Context, nodeIP string, t
 }
 
 // waitForTalosAPI waits for the Talos API port to become available.
+// It accepts both successful Version() responses AND "maintenance mode" errors
+// as indicators that the API is ready, since Talos in maintenance mode returns
+// "API is not implemented in maintenance mode" for Version() calls but can still
+// accept ApplyConfiguration() calls.
 func waitForTalosAPI(ctx context.Context, nodeIP string, timeout time.Duration) error {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
@@ -221,6 +226,16 @@ func waitForTalosAPI(ctx context.Context, nodeIP string, timeout time.Duration) 
 			_, err = talosClient.Version(ctx)
 			_ = talosClient.Close()
 			if err == nil {
+				return nil
+			}
+
+			// Check if the error indicates maintenance mode
+			// In Talos maintenance mode, the Version API returns an error like
+			// "API is not implemented in maintenance mode" - this means the API
+			// is actually reachable and ready to accept ApplyConfiguration()
+			errStr := err.Error()
+			if strings.Contains(errStr, "maintenance mode") ||
+				strings.Contains(errStr, "not implemented") {
 				return nil
 			}
 		case <-ctx.Done():
