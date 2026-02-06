@@ -126,7 +126,7 @@ func TestSpecToConfig_DomainIngress(t *testing.T) {
 		assert.Equal(t, []string{"ingress"}, cfg.Addons.ExternalDNS.Sources)
 	})
 
-	t.Run("CertManager Cloudflare enabled when ExternalDNS and CertManager both enabled", func(t *testing.T) {
+	t.Run("CertManager Cloudflare enabled with production and email", func(t *testing.T) {
 		cluster := newTestCluster("test-cluster", "example.com", &k8znerv1alpha1.AddonSpec{
 			ExternalDNS: true,
 			CertManager: true,
@@ -136,5 +136,25 @@ func TestSpecToConfig_DomainIngress(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.True(t, cfg.Addons.CertManager.Cloudflare.Enabled)
+		assert.True(t, cfg.Addons.CertManager.Cloudflare.Production)
+		assert.Equal(t, "admin@example.com", cfg.Addons.CertManager.Cloudflare.Email)
+	})
+
+	t.Run("Traefik uses DaemonSet with hostNetwork", func(t *testing.T) {
+		cluster := newTestCluster("test-cluster", "example.com", &k8znerv1alpha1.AddonSpec{
+			Traefik:     true,
+			ExternalDNS: true,
+			CertManager: true,
+		})
+
+		cfg, err := SpecToConfig(cluster, baseCreds)
+		require.NoError(t, err)
+
+		assert.True(t, cfg.Addons.Traefik.Enabled)
+		assert.Equal(t, "DaemonSet", cfg.Addons.Traefik.Kind)
+		require.NotNil(t, cfg.Addons.Traefik.HostNetwork)
+		assert.True(t, *cfg.Addons.Traefik.HostNetwork)
+		assert.Equal(t, "Local", cfg.Addons.Traefik.ExternalTrafficPolicy)
+		assert.Equal(t, "traefik", cfg.Addons.Traefik.IngressClass)
 	})
 }
