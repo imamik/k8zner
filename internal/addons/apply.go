@@ -120,9 +120,11 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 	}
 
 	if cfg.Addons.ArgoCD.Enabled {
+		log.Printf("[addons] Installing ArgoCD...")
 		if err := applyArgoCD(ctx, client, cfg); err != nil {
 			return fmt.Errorf("failed to install ArgoCD: %w", err)
 		}
+		log.Printf("[addons] ArgoCD installed successfully")
 	}
 
 	// Install kube-prometheus-stack (full monitoring: Prometheus, Grafana, Alertmanager)
@@ -135,9 +137,12 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 
 	// Install Talos Backup (etcd backup to S3)
 	if cfg.Addons.TalosBackup.Enabled {
+		log.Printf("[addons] Installing Talos Backup (schedule=%s, bucket=%s)...",
+			cfg.Addons.TalosBackup.Schedule, cfg.Addons.TalosBackup.S3Bucket)
 		if err := applyTalosBackup(ctx, client, cfg); err != nil {
 			return fmt.Errorf("failed to install Talos Backup: %w", err)
 		}
+		log.Printf("[addons] Talos Backup installed successfully")
 	}
 
 	// Install k8zner-operator (self-healing)
@@ -293,9 +298,11 @@ func ApplyWithoutCilium(ctx context.Context, cfg *config.Config, kubeconfig []by
 	}
 
 	if cfg.Addons.ArgoCD.Enabled {
+		log.Printf("[addons] Installing ArgoCD...")
 		if err := applyArgoCD(ctx, client, cfg); err != nil {
 			return fmt.Errorf("failed to install ArgoCD: %w", err)
 		}
+		log.Printf("[addons] ArgoCD installed successfully")
 	}
 
 	// Install kube-prometheus-stack (full monitoring: Prometheus, Grafana, Alertmanager)
@@ -308,9 +315,12 @@ func ApplyWithoutCilium(ctx context.Context, cfg *config.Config, kubeconfig []by
 
 	// Install Talos Backup (etcd backup to S3)
 	if cfg.Addons.TalosBackup.Enabled {
+		log.Printf("[addons] Installing Talos Backup (schedule=%s, bucket=%s)...",
+			cfg.Addons.TalosBackup.Schedule, cfg.Addons.TalosBackup.S3Bucket)
 		if err := applyTalosBackup(ctx, client, cfg); err != nil {
 			return fmt.Errorf("failed to install Talos Backup: %w", err)
 		}
+		log.Printf("[addons] Talos Backup installed successfully")
 	}
 
 	// Skip operator installation - it's already running if we're in this flow

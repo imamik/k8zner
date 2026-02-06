@@ -40,8 +40,8 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 			return fmt.Errorf("failed to ensure API load balancer: %w", err)
 		}
 
-		// Service: 6443
-		service := hcloudgo.LoadBalancerAddServiceOpts{
+		// Service: 6443 (Kubernetes API)
+		kubeAPIService := hcloudgo.LoadBalancerAddServiceOpts{
 			Protocol:        hcloudgo.LoadBalancerServiceProtocolTCP,
 			ListenPort:      hcloudgo.Ptr(6443),
 			DestinationPort: hcloudgo.Ptr(6443),
@@ -58,7 +58,27 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 				},
 			},
 		}
-		err = ctx.Infra.ConfigureService(ctx, apiLB, service)
+		err = ctx.Infra.ConfigureService(ctx, apiLB, kubeAPIService)
+		if err != nil {
+			return err
+		}
+
+		// Service: 50000 (Talos API) - Enables CLI communication with control planes
+		// via the LB, allowing private-first architecture where servers have no public IPv4.
+		// This is used during bootstrap and for ongoing Talos operations (upgrades, etc.)
+		talosAPIService := hcloudgo.LoadBalancerAddServiceOpts{
+			Protocol:        hcloudgo.LoadBalancerServiceProtocolTCP,
+			ListenPort:      hcloudgo.Ptr(50000),
+			DestinationPort: hcloudgo.Ptr(50000),
+			HealthCheck: &hcloudgo.LoadBalancerAddServiceOptsHealthCheck{
+				Protocol: hcloudgo.LoadBalancerServiceProtocolTCP,
+				Port:     hcloudgo.Ptr(50000),
+				Interval: hcloudgo.Ptr(time.Second * 5),
+				Timeout:  hcloudgo.Ptr(time.Second * 3),
+				Retries:  hcloudgo.Ptr(2),
+			},
+		}
+		err = ctx.Infra.ConfigureService(ctx, apiLB, talosAPIService)
 		if err != nil {
 			return err
 		}

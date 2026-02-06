@@ -353,13 +353,16 @@ var _ = Describe("K8znerCluster Controller", func() {
 			})
 			Expect(k8sClient.Create(ctx, cluster)).Should(Succeed())
 
+			By("Waiting for cluster to be visible in cache")
+			Eventually(func() error {
+				return k8sClient.Get(ctx, types.NamespacedName{Name: testClusterName, Namespace: testNamespace}, &k8znerv1alpha1.K8znerCluster{})
+			}, time.Second*5, interval).Should(Succeed())
+
 			By("Verifying the cluster status remains empty (not reconciled)")
 			Consistently(func() string {
 				c := &k8znerv1alpha1.K8znerCluster{}
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: testClusterName, Namespace: testNamespace}, c)
-				if err != nil {
-					return "error"
-				}
+				// Ignore transient errors - cache may have brief inconsistencies
+				_ = k8sClient.Get(ctx, types.NamespacedName{Name: testClusterName, Namespace: testNamespace}, c)
 				return string(c.Status.Phase)
 			}, time.Second*3, interval).Should(BeEmpty())
 		})

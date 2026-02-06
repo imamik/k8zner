@@ -50,6 +50,8 @@ func (p *Provisioner) ProvisionWorkers(ctx *provisioning.Context) error {
 					PoolIndex:        poolIndex,
 					RDNSIPv4:         rdnsIPv4,
 					RDNSIPv6:         rdnsIPv6,
+					EnablePublicIPv4: ctx.Config.ShouldEnablePublicIPv4(),
+					EnablePublicIPv6: ctx.Config.ShouldEnablePublicIPv6(),
 				})
 				if err != nil {
 					return err

@@ -507,7 +507,11 @@ func VerifyClusterCleanup(ctx context.Context, t *testing.T, state *OperatorTest
 }
 
 // GetClusterStatus fetches the K8znerCluster CRD.
+// Returns nil if state or K8sClient is nil (e.g., cluster creation failed).
 func GetClusterStatus(ctx context.Context, state *OperatorTestContext) *k8znerv1alpha1.K8znerCluster {
+	if state == nil || state.K8sClient == nil {
+		return nil
+	}
 	cluster := &k8znerv1alpha1.K8znerCluster{}
 	key := client.ObjectKey{
 		Namespace: "k8zner-system",

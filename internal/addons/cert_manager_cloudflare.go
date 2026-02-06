@@ -12,8 +12,13 @@ import (
 	"github.com/imamik/k8zner/internal/config"
 )
 
+// defaultStagingEmail is used for staging ClusterIssuer when no email is provided.
+// Staging certificates don't require account recovery, so a placeholder is acceptable.
+const defaultStagingEmail = "staging@k8zner.local"
+
 // applyCertManagerCloudflare creates ClusterIssuers for Let's Encrypt with Cloudflare DNS01 solver.
 // This is applied after cert-manager is installed and Cloudflare secrets are created.
+// If no email is provided, only staging ClusterIssuer is created with a placeholder email.
 func applyCertManagerCloudflare(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	cfCfg := cfg.Addons.CertManager.Cloudflare
 
@@ -24,8 +29,15 @@ func applyCertManagerCloudflare(ctx context.Context, client k8sclient.Client, cf
 	}
 	log.Println("cert-manager CRDs and webhook are ready")
 
+	// Determine email for staging - use placeholder if not provided
+	stagingEmail := cfCfg.Email
+	if stagingEmail == "" {
+		stagingEmail = defaultStagingEmail
+		log.Printf("No email provided, using placeholder '%s' for staging certificates", stagingEmail)
+	}
+
 	// Create staging ClusterIssuer with retry logic
-	stagingManifest, err := buildClusterIssuerManifest(cfCfg.Email, false)
+	stagingManifest, err := buildClusterIssuerManifest(stagingEmail, false)
 	if err != nil {
 		return fmt.Errorf("failed to build staging ClusterIssuer manifest: %w", err)
 	}
@@ -33,13 +45,18 @@ func applyCertManagerCloudflare(ctx context.Context, client k8sclient.Client, cf
 		return fmt.Errorf("failed to apply staging ClusterIssuer: %w", err)
 	}
 
-	// Create production ClusterIssuer with retry logic
-	productionManifest, err := buildClusterIssuerManifest(cfCfg.Email, true)
-	if err != nil {
-		return fmt.Errorf("failed to build production ClusterIssuer manifest: %w", err)
-	}
-	if err := applyClusterIssuerWithRetry(ctx, client, "letsencrypt-cloudflare-production", productionManifest); err != nil {
-		return fmt.Errorf("failed to apply production ClusterIssuer: %w", err)
+	// Only create production ClusterIssuer if a real email is provided
+	// Production Let's Encrypt requires a valid email for account recovery
+	if cfCfg.Email != "" {
+		productionManifest, err := buildClusterIssuerManifest(cfCfg.Email, true)
+		if err != nil {
+			return fmt.Errorf("failed to build production ClusterIssuer manifest: %w", err)
+		}
+		if err := applyClusterIssuerWithRetry(ctx, client, "letsencrypt-cloudflare-production", productionManifest); err != nil {
+			return fmt.Errorf("failed to apply production ClusterIssuer: %w", err)
+		}
+	} else {
+		log.Println("Skipping production ClusterIssuer (no email provided - staging certificates only)")
 	}
 
 	return nil

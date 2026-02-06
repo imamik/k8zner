@@ -32,9 +32,10 @@ import (
 
 // Credentials holds the secrets needed for provisioning.
 type Credentials struct {
-	HCloudToken  string
-	TalosSecrets []byte
-	TalosConfig  []byte
+	HCloudToken        string
+	TalosSecrets       []byte
+	TalosConfig        []byte
+	CloudflareAPIToken string // Optional, for DNS/TLS integration
 }
 
 // PhaseAdapter wraps existing CLI provisioners for operator use.
@@ -96,10 +97,16 @@ func (a *PhaseAdapter) LoadCredentials(ctx context.Context, k8sCluster *k8znerv1
 		creds.TalosConfig = cfg
 	}
 
+	// Cloudflare API token (optional, for DNS/TLS integration)
+	if cfToken, ok := secret.Data[k8znerv1alpha1.CredentialsKeyCloudflareAPIToken]; ok {
+		creds.CloudflareAPIToken = string(cfToken)
+	}
+
 	logger.V(1).Info("loaded credentials from secret",
 		"secret", key.Name,
 		"hasTalosSecrets", len(creds.TalosSecrets) > 0,
 		"hasTalosConfig", len(creds.TalosConfig) > 0,
+		"hasCloudflareToken", len(creds.CloudflareAPIToken) > 0,
 	)
 
 	return creds, nil
@@ -517,6 +524,35 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 				Enabled: spec.Addons != nil && spec.Addons.ArgoCD,
 			},
 		},
+	}
+
+	// Map backup configuration from spec.Backup to cfg.Addons.TalosBackup
+	// Note: S3 credentials must be provided separately via environment or secrets
+	// The CRD only configures enabled state, schedule, and retention
+	if spec.Backup != nil && spec.Backup.Enabled {
+		cfg.Addons.TalosBackup = config.TalosBackupConfig{
+			Enabled:  true,
+			Schedule: spec.Backup.Schedule,
+		}
+		// Note: Retention is not directly supported in TalosBackupConfig
+		// The backup job handles retention via the age of backups in S3
+	}
+
+	// Enable Cloudflare when ExternalDNS is enabled
+	// ExternalDNS requires Cloudflare for DNS provider functionality
+	// The API token comes from the credentials secret (cf-api-token key)
+	if cfg.Addons.ExternalDNS.Enabled {
+		cfg.Addons.Cloudflare = config.CloudflareConfig{
+			Enabled:  true,
+			APIToken: creds.CloudflareAPIToken,
+		}
+		// Also enable CertManager Cloudflare integration if cert-manager is enabled
+		// This allows automatic DNS-01 challenge for TLS certificates
+		if cfg.Addons.CertManager.Enabled {
+			cfg.Addons.CertManager.Cloudflare = config.CertManagerCloudflareConfig{
+				Enabled: true,
+			}
+		}
 	}
 
 	// Calculate derived network configuration (NodeIPv4CIDR, etc.)

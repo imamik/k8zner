@@ -34,6 +34,7 @@ import (
 	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning"
 	"github.com/imamik/k8zner/internal/util/keygen"
+	"github.com/imamik/k8zner/internal/util/labels"
 	"github.com/imamik/k8zner/internal/util/naming"
 )
 
@@ -918,33 +919,54 @@ func (r *ClusterReconciler) reconcileAddonsPhase(ctx context.Context, cluster *k
 	logger.Info("reconciling addons phase")
 
 	// Track when addon installation started (for timeout detection)
+	// We only set PhaseStartedAt once when first entering Addons phase.
+	// The timer persists across reconcile loops until we either:
+	// 1. Complete addon installation and move to next phase
+	// 2. Hit the timeout and force-advance to next phase
 	now := metav1.Now()
-	if cluster.Status.PhaseStartedAt == nil || cluster.Status.ProvisioningPhase != k8znerv1alpha1.PhaseAddons {
+	if cluster.Status.PhaseStartedAt == nil {
 		cluster.Status.PhaseStartedAt = &now
-		logger.V(1).Info("addon installation started", "startTime", now.Time)
+		logger.Info("addon installation timer started",
+			"startTime", now.Time,
+			"timeout", addonInstallationTimeout,
+		)
 	}
 
 	// Check for addon installation timeout
 	if cluster.Status.PhaseStartedAt != nil {
 		elapsed := time.Since(cluster.Status.PhaseStartedAt.Time)
-		if elapsed > addonInstallationTimeout {
-			logger.Error(nil, "addon installation timeout exceeded - proceeding to compute phase",
+		remaining := addonInstallationTimeout - elapsed
+
+		// Log progress at INFO level every minute, DEBUG otherwise
+		if elapsed.Truncate(time.Minute) != (elapsed - 10*time.Second).Truncate(time.Minute) {
+			logger.Info("addon installation in progress",
 				"elapsed", elapsed.Round(time.Second),
 				"timeout", addonInstallationTimeout,
+				"remaining", remaining.Round(time.Second),
+				"startedAt", cluster.Status.PhaseStartedAt.Time,
+			)
+		} else {
+			logger.V(1).Info("addon installation in progress",
+				"elapsed", elapsed.Round(time.Second),
+				"remaining", remaining.Round(time.Second),
+			)
+		}
+
+		if elapsed > addonInstallationTimeout {
+			logger.Error(nil, "ADDON TIMEOUT: installation exceeded timeout - forcing transition to compute phase",
+				"elapsed", elapsed.Round(time.Second),
+				"timeout", addonInstallationTimeout,
+				"startedAt", cluster.Status.PhaseStartedAt.Time,
 			)
 			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonAddonsTimeout,
-				"Addon installation exceeded %s timeout - proceeding with available addons", addonInstallationTimeout)
+				"Addon installation exceeded %s timeout (started at %s) - proceeding with available addons",
+				addonInstallationTimeout, cluster.Status.PhaseStartedAt.Format(time.RFC3339))
 
 			// Clear the phase timer and proceed to compute phase
 			cluster.Status.PhaseStartedAt = nil
 			cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseCompute
 			return ctrl.Result{Requeue: true}, nil
 		}
-		logger.V(1).Info("addon installation in progress",
-			"elapsed", elapsed.Round(time.Second),
-			"timeout", addonInstallationTimeout,
-			"remaining", (addonInstallationTimeout - elapsed).Round(time.Second),
-		)
 	}
 
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonAddonsInstalling,
@@ -1710,11 +1732,11 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 		// Generate a unique server name with random ID
 		newServerName := naming.Worker(cluster.Name)
 
-		serverLabels := map[string]string{
-			"cluster": cluster.Name,
-			"role":    "worker",
-			"pool":    "workers",
-		}
+		serverLabels := labels.NewLabelBuilder(cluster.Name).
+			WithRole("worker").
+			WithPool("workers").
+			WithManagedBy(labels.ManagedByOperator).
+			Build()
 
 		serverType := normalizeServerSize(cluster.Spec.Workers.Size)
 		logger.Info("creating new worker server",
@@ -2300,11 +2322,11 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 
 	// Step 6: Create new server
 	newServerName := r.generateReplacementServerName(cluster, "control-plane", node.Name)
-	serverLabels := map[string]string{
-		"cluster": cluster.Name,
-		"role":    "control-plane",
-		"pool":    "control-plane",
-	}
+	serverLabels := labels.NewLabelBuilder(cluster.Name).
+		WithRole("control-plane").
+		WithPool("control-plane").
+		WithManagedBy(labels.ManagedByOperator).
+		Build()
 
 	// Track new node phase: CreatingServer
 	r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
@@ -2687,11 +2709,11 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 
 	// Step 7: Create new server
 	newServerName := r.generateReplacementServerName(cluster, "worker", node.Name)
-	serverLabels := map[string]string{
-		"cluster": cluster.Name,
-		"role":    "worker",
-		"pool":    "workers",
-	}
+	serverLabels := labels.NewLabelBuilder(cluster.Name).
+		WithRole("worker").
+		WithPool("workers").
+		WithManagedBy(labels.ManagedByOperator).
+		Build()
 
 	// Track new node phase: CreatingServer
 	r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{

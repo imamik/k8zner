@@ -360,6 +360,10 @@ func createClusterCRDForCreate(ctx context.Context, cfg *config.Config, pCtx *pr
 			k8znerv1alpha1.CredentialsKeyTalosConfig:  talosConfigData,
 		},
 	}
+	// Add Cloudflare API token if configured (for DNS/TLS integration)
+	if cfg.Addons.Cloudflare.APIToken != "" {
+		credSecret.Data[k8znerv1alpha1.CredentialsKeyCloudflareAPIToken] = []byte(cfg.Addons.Cloudflare.APIToken)
+	}
 	if err := k8sClient.Create(ctx, credSecret); err != nil && !isAlreadyExists(err) {
 		return fmt.Errorf("failed to create credentials secret: %w", err)
 	}

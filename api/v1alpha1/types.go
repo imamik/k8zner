@@ -595,6 +595,8 @@ const (
 	CredentialsKeyTalosSecrets = "talos-secrets"
 	// CredentialsKeyTalosConfig is the key for the talosconfig in the credentials Secret
 	CredentialsKeyTalosConfig = "talosconfig"
+	// CredentialsKeyCloudflareAPIToken is the key for the Cloudflare API token in the credentials Secret
+	CredentialsKeyCloudflareAPIToken = "cf-api-token" //nolint:gosec // This is a secret key name, not a credential value
 )
 
 // Addon names used for status tracking

@@ -27,6 +27,8 @@ type NodePoolSpec struct {
 	PoolIndex        int
 	RDNSIPv4         string // RDNS template for IPv4
 	RDNSIPv6         string // RDNS template for IPv6
+	EnablePublicIPv4 bool   // Enable public IPv4 (set from config.ShouldEnablePublicIPv4())
+	EnablePublicIPv6 bool   // Enable public IPv6 (set from config.ShouldEnablePublicIPv6())
 }
 
 // NodePoolResult holds the results of provisioning a node pool.
@@ -141,18 +143,20 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 			Name: fmt.Sprintf("server-%s", cfg.name),
 			Func: func(_ context.Context) error {
 				info, err := p.ensureServer(ctx, ServerSpec{
-					Name:           cfg.name,
-					Type:           spec.ServerType,
-					Location:       spec.Location,
-					Image:          spec.Image,
-					Role:           spec.Role,
-					Pool:           spec.Name,
-					ExtraLabels:    spec.ExtraLabels,
-					UserData:       spec.UserData,
-					PlacementGroup: cfg.pgID,
-					PrivateIP:      cfg.privateIP,
-					RDNSIPv4:       spec.RDNSIPv4,
-					RDNSIPv6:       spec.RDNSIPv6,
+					Name:             cfg.name,
+					Type:             spec.ServerType,
+					Location:         spec.Location,
+					Image:            spec.Image,
+					Role:             spec.Role,
+					Pool:             spec.Name,
+					ExtraLabels:      spec.ExtraLabels,
+					UserData:         spec.UserData,
+					PlacementGroup:   cfg.pgID,
+					PrivateIP:        cfg.privateIP,
+					RDNSIPv4:         spec.RDNSIPv4,
+					RDNSIPv6:         spec.RDNSIPv6,
+					EnablePublicIPv4: spec.EnablePublicIPv4,
+					EnablePublicIPv6: spec.EnablePublicIPv6,
 				})
 				if err != nil {
 					return err

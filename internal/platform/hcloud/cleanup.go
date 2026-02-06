@@ -140,6 +140,13 @@ func (c *RealClient) CleanupByLabel(ctx context.Context, labelSelector map[strin
 		cleanupErrs.Add(fmt.Errorf("load balancers: %w", err))
 	}
 
+	// Also delete CCM-created LoadBalancers (they don't have k8zner labels)
+	// CCM creates LBs with "hcloud-ccm/service-uid" label for K8s LoadBalancer Services
+	if err := c.DeleteCCMLoadBalancers(ctx); err != nil {
+		log.Printf("[Cleanup] Warning: Failed to delete CCM load balancers: %v", err)
+		cleanupErrs.Add(fmt.Errorf("CCM load balancers: %w", err))
+	}
+
 	if err := c.deleteFirewallsByLabel(ctx, labelString); err != nil {
 		log.Printf("[Cleanup] Warning: Failed to delete firewalls: %v", err)
 		cleanupErrs.Add(fmt.Errorf("firewalls: %w", err))
@@ -252,8 +259,52 @@ func (c *RealClient) deleteLoadBalancersByLabel(ctx context.Context, labelSelect
 	)
 }
 
+// DeleteCCMLoadBalancers deletes load balancers created by the Hetzner CCM.
+// CCM-created LBs have the label "hcloud-ccm/service-uid" and don't have k8zner labels.
+// This should be called before cluster destruction to clean up LBs that CCM created
+// for Kubernetes LoadBalancer Services.
+func (c *RealClient) DeleteCCMLoadBalancers(ctx context.Context) error {
+	log.Printf("[Cleanup] Looking for CCM-created load balancers...")
+
+	// List all load balancers (no label filter - CCM LBs don't have k8zner labels)
+	allLBs, err := c.client.LoadBalancer.All(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list all load balancers: %w", err)
+	}
+
+	var ccmLBs []*hcloud.LoadBalancer
+	for _, lb := range allLBs {
+		// CCM-created LBs have "hcloud-ccm/service-uid" label
+		if _, hasCCMLabel := lb.Labels["hcloud-ccm/service-uid"]; hasCCMLabel {
+			ccmLBs = append(ccmLBs, lb)
+		}
+	}
+
+	if len(ccmLBs) == 0 {
+		log.Printf("[Cleanup] No CCM-created load balancers found")
+		return nil
+	}
+
+	log.Printf("[Cleanup] Found %d CCM-created load balancers to delete", len(ccmLBs))
+
+	var deleteErrs []error
+	for _, lb := range ccmLBs {
+		log.Printf("[Cleanup] Deleting CCM load balancer: %s (ID: %d)", lb.Name, lb.ID)
+		if _, err := c.client.LoadBalancer.Delete(ctx, lb); err != nil {
+			log.Printf("[Cleanup] Warning: Failed to delete CCM load balancer %s: %v", lb.Name, err)
+			deleteErrs = append(deleteErrs, fmt.Errorf("CCM LB %q: %w", lb.Name, err))
+		}
+	}
+
+	if len(deleteErrs) > 0 {
+		return errors.Join(deleteErrs...)
+	}
+	return nil
+}
+
 // deleteFirewallsByLabel deletes all firewalls matching the label selector.
-// It retries if the firewall is still in use (e.g., servers being deleted).
+// It first removes all resource associations (label selectors, servers) to avoid
+// "resource_in_use" errors, then deletes the firewall.
 func (c *RealClient) deleteFirewallsByLabel(ctx context.Context, labelSelector string) error {
 	firewalls, err := c.client.Firewall.AllWithOpts(ctx, hcloud.FirewallListOpts{
 		ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
@@ -265,7 +316,39 @@ func (c *RealClient) deleteFirewallsByLabel(ctx context.Context, labelSelector s
 	for _, fw := range firewalls {
 		log.Printf("[Cleanup] Deleting firewall: %s (ID: %d)", fw.Name, fw.ID)
 
-		// Retry up to 30 times (2.5 minutes) in case firewall is still in use
+		// First, remove all resource associations (label selectors and servers)
+		// This prevents "resource_in_use" errors when deleting
+		if len(fw.AppliedTo) > 0 {
+			log.Printf("[Cleanup] Removing %d resource associations from firewall %s", len(fw.AppliedTo), fw.Name)
+			resourcesToRemove := make([]hcloud.FirewallResource, len(fw.AppliedTo))
+			for i, applied := range fw.AppliedTo {
+				resourcesToRemove[i] = hcloud.FirewallResource{
+					Type: applied.Type,
+				}
+				if applied.Server != nil {
+					resourcesToRemove[i].Server = &hcloud.FirewallResourceServer{ID: applied.Server.ID}
+				}
+				if applied.LabelSelector != nil {
+					resourcesToRemove[i].LabelSelector = &hcloud.FirewallResourceLabelSelector{
+						Selector: applied.LabelSelector.Selector,
+					}
+				}
+			}
+
+			actions, _, err := c.client.Firewall.RemoveResources(ctx, fw, resourcesToRemove)
+			if err != nil {
+				log.Printf("[Cleanup] Warning: Failed to remove resources from firewall %s: %v", fw.Name, err)
+			} else if len(actions) > 0 {
+				// Wait for the removal actions to complete
+				if err := c.client.Action.WaitFor(ctx, actions...); err != nil {
+					log.Printf("[Cleanup] Warning: Failed to wait for resource removal from firewall %s: %v", fw.Name, err)
+				}
+			}
+			// Small delay to let HCloud process the removal
+			time.Sleep(2 * time.Second)
+		}
+
+		// Now delete the firewall with retry logic
 		for i := 0; i < 30; i++ {
 			select {
 			case <-ctx.Done():
@@ -275,6 +358,7 @@ func (c *RealClient) deleteFirewallsByLabel(ctx context.Context, labelSelector s
 
 			_, err := c.client.Firewall.Delete(ctx, fw)
 			if err == nil {
+				log.Printf("[Cleanup] Successfully deleted firewall %s", fw.Name)
 				break
 			}
 
