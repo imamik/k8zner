@@ -564,16 +564,9 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 			Traefik: config.TraefikConfig{
 				Enabled: spec.Addons != nil && spec.Addons.Traefik,
 			},
-			ExternalDNS: config.ExternalDNSConfig{
-				Enabled: spec.Addons != nil && spec.Addons.ExternalDNS,
-			},
-			ArgoCD: config.ArgoCDConfig{
-				Enabled: spec.Addons != nil && spec.Addons.ArgoCD,
-			},
-			// Monitoring stack (Prometheus, Grafana, Alertmanager)
-			KubePrometheusStack: config.KubePrometheusStackConfig{
-				Enabled: spec.Addons != nil && spec.Addons.Monitoring,
-			},
+			ExternalDNS:         expandExternalDNSFromSpec(spec),
+			ArgoCD:              expandArgoCDFromSpec(spec),
+			KubePrometheusStack: expandMonitoringFromSpec(spec),
 		},
 	}
 
@@ -603,7 +596,9 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 		cfg.Addons.Cloudflare = config.CloudflareConfig{
 			Enabled:  true,
 			APIToken: creds.CloudflareAPIToken,
+			Domain:   spec.Domain,
 		}
+		cfg.Addons.ExternalDNS.TXTOwnerID = k8sCluster.Name
 		// Also enable CertManager Cloudflare integration if cert-manager is enabled
 		// This allows automatic DNS-01 challenge for TLS certificates
 		if cfg.Addons.CertManager.Enabled {
@@ -634,6 +629,68 @@ func normalizeServerSize(size string) string {
 		return newSize
 	}
 	return size
+}
+
+// expandArgoCDFromSpec derives ArgoCD config from the CRD spec.
+// When a domain is configured, ingress is automatically enabled.
+func expandArgoCDFromSpec(spec *k8znerv1alpha1.K8znerClusterSpec) config.ArgoCDConfig {
+	argoCfg := config.ArgoCDConfig{
+		Enabled: spec.Addons != nil && spec.Addons.ArgoCD,
+	}
+
+	if spec.Domain != "" && argoCfg.Enabled {
+		subdomain := "argo"
+		if spec.Addons != nil && spec.Addons.ArgoSubdomain != "" {
+			subdomain = spec.Addons.ArgoSubdomain
+		}
+		argoCfg.IngressEnabled = true
+		argoCfg.IngressHost = subdomain + "." + spec.Domain
+		argoCfg.IngressClassName = "traefik"
+		argoCfg.IngressTLS = true
+	}
+
+	return argoCfg
+}
+
+// expandMonitoringFromSpec derives kube-prometheus-stack config from the CRD spec.
+// When a domain is configured, Grafana ingress is automatically enabled.
+func expandMonitoringFromSpec(spec *k8znerv1alpha1.K8znerClusterSpec) config.KubePrometheusStackConfig {
+	promCfg := config.KubePrometheusStackConfig{
+		Enabled: spec.Addons != nil && spec.Addons.Monitoring,
+	}
+
+	if !promCfg.Enabled {
+		return promCfg
+	}
+
+	if spec.Domain != "" {
+		subdomain := "grafana"
+		if spec.Addons != nil && spec.Addons.GrafanaSubdomain != "" {
+			subdomain = spec.Addons.GrafanaSubdomain
+		}
+		promCfg.Grafana.IngressEnabled = true
+		promCfg.Grafana.IngressHost = subdomain + "." + spec.Domain
+		promCfg.Grafana.IngressClassName = "traefik"
+		promCfg.Grafana.IngressTLS = true
+	}
+
+	return promCfg
+}
+
+// expandExternalDNSFromSpec derives ExternalDNS config from the CRD spec.
+// Sets standard defaults for Policy and Sources. TXTOwnerID is set separately
+// in SpecToConfig using the cluster name.
+func expandExternalDNSFromSpec(spec *k8znerv1alpha1.K8znerClusterSpec) config.ExternalDNSConfig {
+	dnsCfg := config.ExternalDNSConfig{
+		Enabled: spec.Addons != nil && spec.Addons.ExternalDNS,
+	}
+
+	if dnsCfg.Enabled {
+		dnsCfg.Policy = "sync"
+		dnsCfg.Sources = []string{"ingress"}
+	}
+
+	return dnsCfg
 }
 
 // defaultString returns the value if non-empty, otherwise the default.
