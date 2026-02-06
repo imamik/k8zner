@@ -248,3 +248,32 @@ func TestTalosBackupVersion(t *testing.T) {
 		t.Errorf("Expected talos backup version to start with 'v', got %s", version)
 	}
 }
+
+func TestGenerateTalosBackupCronJob_Tolerations(t *testing.T) {
+	// Tolerations are critical for the backup CronJob to schedule on control plane nodes.
+	// Without the uninitialized toleration, the job may fail to schedule during bootstrap.
+	cfg := &config.Config{
+		ClusterName: "test-cluster",
+		Addons: config.AddonsConfig{
+			TalosBackup: config.TalosBackupConfig{
+				Enabled:    true,
+				Schedule:   "0 * * * *",
+				S3Bucket:   "test-bucket",
+				S3Region:   "fsn1",
+				S3Endpoint: "https://fsn1.your-objectstorage.com",
+			},
+		},
+	}
+
+	cronjob := generateTalosBackupCronJob(cfg)
+
+	// Verify control-plane toleration exists
+	if !strings.Contains(cronjob, "node-role.kubernetes.io/control-plane") {
+		t.Error("Expected control-plane toleration")
+	}
+
+	// Verify uninitialized toleration exists (critical for bootstrap)
+	if !strings.Contains(cronjob, "node.cloudprovider.kubernetes.io/uninitialized") {
+		t.Error("Expected uninitialized node toleration for CCM bootstrap compatibility")
+	}
+}

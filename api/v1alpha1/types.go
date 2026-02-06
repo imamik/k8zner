@@ -83,6 +83,12 @@ type NetworkSpec struct {
 	// +optional
 	IPv4CIDR string `json:"ipv4CIDR,omitempty"`
 
+	// NodeIPv4CIDR is the CIDR range for node IPs within the private network.
+	// This is used to calculate subnets for control planes, load balancers, and workers.
+	// If not set, defaults to "10.0.0.0/17" (lower half of the network CIDR).
+	// +optional
+	NodeIPv4CIDR string `json:"nodeIPv4CIDR,omitempty"`
+
 	// PodCIDR is the CIDR range for pod IPs
 	// +kubebuilder:default="10.244.0.0/16"
 	// +optional

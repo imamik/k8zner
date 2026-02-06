@@ -416,9 +416,10 @@ func buildK8znerClusterForCreate(cfg *config.Config, _ *provisioning.Context, in
 				Size:  getWorkerSize(cfg),
 			},
 			Network: k8znerv1alpha1.NetworkSpec{
-				IPv4CIDR:    cfg.Network.IPv4CIDR,
-				PodCIDR:     cfg.Network.PodIPv4CIDR,
-				ServiceCIDR: cfg.Network.ServiceIPv4CIDR,
+				IPv4CIDR:     cfg.Network.IPv4CIDR,
+				NodeIPv4CIDR: cfg.Network.NodeIPv4CIDR,
+				PodCIDR:      cfg.Network.PodIPv4CIDR,
+				ServiceCIDR:  cfg.Network.ServiceIPv4CIDR,
 			},
 			Firewall: k8znerv1alpha1.FirewallSpec{
 				Enabled: true,

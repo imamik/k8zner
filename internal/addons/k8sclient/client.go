@@ -133,8 +133,9 @@ func (c *client) RefreshDiscovery(ctx context.Context) error {
 	return nil
 }
 
-// HasCRD checks if a specific API resource exists (e.g., "cert-manager.io/v1/ClusterIssuer").
-// The crdName parameter is in the format "group/version/kind" (e.g., "cert-manager.io/v1/ClusterIssuer").
+// HasCRD checks if a specific API resource exists.
+// The crdName parameter is in the format "group/version/kind" (e.g., "cert-manager.io/v1/ClusterIssuer")
+// or just "group/version" to check if the API group exists (e.g., "talos.dev/v1alpha1").
 func (c *client) HasCRD(ctx context.Context, crdName string) (bool, error) {
 	if len(c.kubeconfig) == 0 {
 		return true, nil // For test clients, assume CRDs exist
@@ -159,12 +160,29 @@ func (c *client) HasCRD(ctx context.Context, crdName string) (bool, error) {
 		}
 	}
 
+	// Parse the crdName to extract group/version and optionally kind
+	// Format: "group/version" or "group/version/kind"
+	parts := splitCRDName(crdName)
+	if len(parts) < 2 {
+		return false, fmt.Errorf("invalid CRD name format: %s (expected group/version or group/version/kind)", crdName)
+	}
+
+	groupVersion := parts[0] + "/" + parts[1]
+	var kind string
+	if len(parts) >= 3 {
+		kind = parts[2]
+	}
+
 	// Look for the specified API resource
-	// For cert-manager, we check for the cert-manager.io API group
 	for _, list := range apiResourceLists {
-		if list.GroupVersion == "cert-manager.io/v1" {
+		if list.GroupVersion == groupVersion {
+			// If no kind specified, just check if the API group exists
+			if kind == "" {
+				return true, nil
+			}
+			// Check for specific kind
 			for _, resource := range list.APIResources {
-				if resource.Kind == "ClusterIssuer" {
+				if resource.Kind == kind {
 					return true, nil
 				}
 			}
@@ -172,6 +190,27 @@ func (c *client) HasCRD(ctx context.Context, crdName string) (bool, error) {
 	}
 
 	return false, nil
+}
+
+// splitCRDName splits a CRD name like "talos.dev/v1alpha1/ServiceAccount" into parts.
+func splitCRDName(crdName string) []string {
+	var parts []string
+	start := 0
+	slashCount := 0
+
+	for i, c := range crdName {
+		if c == '/' {
+			parts = append(parts, crdName[start:i])
+			start = i + 1
+			slashCount++
+		}
+	}
+	// Add the last part
+	if start < len(crdName) {
+		parts = append(parts, crdName[start:])
+	}
+
+	return parts
 }
 
 // HasReadyEndpoints checks if a service has at least one ready endpoint.

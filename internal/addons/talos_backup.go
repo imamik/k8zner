@@ -121,8 +121,12 @@ func generateTalosBackupCronJob(cfg *config.Config) string {
 			{"emptyDir": map[string]any{}, "name": "tmp"},
 			{"name": "talos-secrets", "secret": map[string]any{"secretName": "talos-backup-secrets"}},
 		},
+		// Tolerations for control plane and uninitialized nodes.
+		// The uninitialized toleration is required because CCM may not have
+		// finished initializing nodes when this CronJob is first scheduled.
 		"tolerations": []map[string]any{
 			{"key": "node-role.kubernetes.io/control-plane", "operator": "Exists", "effect": "NoSchedule"},
+			{"key": "node.cloudprovider.kubernetes.io/uninitialized", "operator": "Exists", "effect": "NoSchedule"},
 		},
 	}
 
