@@ -185,9 +185,9 @@ func TestBuildK8znerClusterForCreate_PopulatesDomain(t *testing.T) {
 		Talos:      config.TalosConfig{Version: "v1.10.2"},
 		Addons: config.AddonsConfig{
 			ArgoCD: config.ArgoCDConfig{
-				Enabled:      true,
-				IngressHost:  "argo.example.com",
-				IngressTLS:   true,
+				Enabled:        true,
+				IngressHost:    "argo.example.com",
+				IngressTLS:     true,
 				IngressEnabled: true,
 			},
 			Cloudflare: config.CloudflareConfig{
