@@ -20,6 +20,7 @@ import (
 	"github.com/imamik/k8zner/internal/config"
 	configv2 "github.com/imamik/k8zner/internal/config/v2"
 	hcloudInternal "github.com/imamik/k8zner/internal/platform/hcloud"
+	"github.com/imamik/k8zner/internal/platform/talos"
 	"github.com/imamik/k8zner/internal/provisioning"
 	"github.com/imamik/k8zner/internal/provisioning/cluster"
 	"github.com/imamik/k8zner/internal/provisioning/compute"
@@ -97,6 +98,9 @@ func Create(ctx context.Context, configPath string, wait bool) error {
 	if err != nil {
 		return err
 	}
+
+	// Set machine config options (CoreDNS, encryption, network settings, etc.)
+	talosGen.SetMachineConfigOptions(talos.NewMachineConfigOptions(cfg))
 
 	// Write Talos config and secrets early
 	if err := writeTalosFiles(talosGen); err != nil {
