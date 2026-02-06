@@ -675,6 +675,69 @@ func TestConfig_ArgoHost(t *testing.T) {
 	}
 }
 
+func TestConfig_HasMonitoring(t *testing.T) {
+	tests := []struct {
+		name       string
+		monitoring bool
+		want       bool
+	}{
+		{"monitoring enabled", true, true},
+		{"monitoring disabled", false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := Config{Monitoring: tt.monitoring}
+			if got := c.HasMonitoring(); got != tt.want {
+				t.Errorf("Config.HasMonitoring() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConfig_GetGrafanaSubdomain(t *testing.T) {
+	tests := []struct {
+		name             string
+		grafanaSubdomain string
+		want             string
+	}{
+		{"default", "", "grafana"},
+		{"custom", "metrics", "metrics"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := Config{GrafanaSubdomain: tt.grafanaSubdomain}
+			if got := c.GetGrafanaSubdomain(); got != tt.want {
+				t.Errorf("Config.GetGrafanaSubdomain() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConfig_GrafanaHost(t *testing.T) {
+	tests := []struct {
+		name             string
+		domain           string
+		grafanaSubdomain string
+		want             string
+	}{
+		{"default subdomain", "example.com", "", "grafana.example.com"},
+		{"custom subdomain", "example.com", "metrics", "metrics.example.com"},
+		{"no domain", "", "", ""},
+		{"no domain with subdomain", "", "metrics", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := Config{Domain: tt.domain, GrafanaSubdomain: tt.grafanaSubdomain}
+			if got := c.GrafanaHost(); got != tt.want {
+				t.Errorf("Config.GrafanaHost() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 // Helper function
 func containsString(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstring(s, substr))

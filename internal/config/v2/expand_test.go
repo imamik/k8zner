@@ -743,3 +743,132 @@ func TestExpand_BackupEncryptionDisabled(t *testing.T) {
 		t.Error("TalosBackup.EncryptionDisabled should be true for v2 config")
 	}
 }
+
+func TestExpand_MonitoringDisabledByDefault(t *testing.T) {
+	cfg := &Config{
+		Name:   "monitoring-test",
+		Region: RegionNuremberg,
+		Mode:   ModeDev,
+		Workers: Worker{
+			Count: 2,
+			Size:  SizeCX22,
+		},
+	}
+
+	expanded, err := Expand(cfg)
+	if err != nil {
+		t.Fatalf("Expand() error = %v", err)
+	}
+
+	// Monitoring should be disabled by default
+	if expanded.Addons.KubePrometheusStack.Enabled {
+		t.Error("KubePrometheusStack should be disabled by default")
+	}
+}
+
+func TestExpand_MonitoringEnabledWithoutDomain(t *testing.T) {
+	cfg := &Config{
+		Name:   "monitoring-test",
+		Region: RegionNuremberg,
+		Mode:   ModeDev,
+		Workers: Worker{
+			Count: 2,
+			Size:  SizeCX22,
+		},
+		Monitoring: true,
+	}
+
+	expanded, err := Expand(cfg)
+	if err != nil {
+		t.Fatalf("Expand() error = %v", err)
+	}
+
+	// Monitoring should be enabled
+	if !expanded.Addons.KubePrometheusStack.Enabled {
+		t.Error("KubePrometheusStack should be enabled when Monitoring is true")
+	}
+
+	// Grafana ingress should NOT be enabled without domain
+	if expanded.Addons.KubePrometheusStack.Grafana.IngressEnabled {
+		t.Error("Grafana ingress should not be enabled without domain")
+	}
+
+	// Prometheus persistence should be enabled by default
+	if !expanded.Addons.KubePrometheusStack.Prometheus.Persistence.Enabled {
+		t.Error("Prometheus persistence should be enabled by default")
+	}
+	if expanded.Addons.KubePrometheusStack.Prometheus.Persistence.Size != "50Gi" {
+		t.Errorf("Prometheus persistence size = %s, want 50Gi", expanded.Addons.KubePrometheusStack.Prometheus.Persistence.Size)
+	}
+}
+
+func TestExpand_MonitoringEnabledWithDomain(t *testing.T) {
+	os.Setenv("CF_API_TOKEN", "test-cf-token")
+	defer os.Unsetenv("CF_API_TOKEN")
+
+	cfg := &Config{
+		Name:   "monitoring-test",
+		Region: RegionNuremberg,
+		Mode:   ModeHA,
+		Workers: Worker{
+			Count: 3,
+			Size:  SizeCX32,
+		},
+		Domain:     "example.com",
+		Monitoring: true,
+	}
+
+	expanded, err := Expand(cfg)
+	if err != nil {
+		t.Fatalf("Expand() error = %v", err)
+	}
+
+	// Monitoring should be enabled
+	if !expanded.Addons.KubePrometheusStack.Enabled {
+		t.Error("KubePrometheusStack should be enabled")
+	}
+
+	// Grafana ingress should be enabled with domain
+	grafana := expanded.Addons.KubePrometheusStack.Grafana
+	if !grafana.IngressEnabled {
+		t.Error("Grafana ingress should be enabled with domain")
+	}
+	if grafana.IngressHost != "grafana.example.com" {
+		t.Errorf("Grafana ingress host = %s, want grafana.example.com", grafana.IngressHost)
+	}
+	if grafana.IngressClassName != "traefik" {
+		t.Errorf("Grafana ingress class = %s, want traefik", grafana.IngressClassName)
+	}
+	if !grafana.IngressTLS {
+		t.Error("Grafana ingress TLS should be enabled")
+	}
+}
+
+func TestExpand_MonitoringCustomGrafanaSubdomain(t *testing.T) {
+	os.Setenv("CF_API_TOKEN", "test-cf-token")
+	defer os.Unsetenv("CF_API_TOKEN")
+
+	cfg := &Config{
+		Name:   "monitoring-test",
+		Region: RegionNuremberg,
+		Mode:   ModeDev,
+		Workers: Worker{
+			Count: 2,
+			Size:  SizeCX22,
+		},
+		Domain:           "example.com",
+		GrafanaSubdomain: "metrics",
+		Monitoring:       true,
+	}
+
+	expanded, err := Expand(cfg)
+	if err != nil {
+		t.Fatalf("Expand() error = %v", err)
+	}
+
+	// Custom subdomain should be used
+	if expanded.Addons.KubePrometheusStack.Grafana.IngressHost != "metrics.example.com" {
+		t.Errorf("Grafana ingress host = %s, want metrics.example.com",
+			expanded.Addons.KubePrometheusStack.Grafana.IngressHost)
+	}
+}

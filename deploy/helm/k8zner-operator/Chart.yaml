@@ -1,0 +1,18 @@
+apiVersion: v2
+name: k8zner-operator
+description: Kubernetes operator for self-healing K8zner clusters
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - kubernetes
+  - operator
+  - hetzner
+  - talos
+  - self-healing
+home: https://github.com/imamik/k8zner
+sources:
+  - https://github.com/imamik/k8zner
+maintainers:
+  - name: imamik
+    url: https://github.com/imamik

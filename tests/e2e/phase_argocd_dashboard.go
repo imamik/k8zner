@@ -308,17 +308,19 @@ func testArgoCDHTTPSConnectivity(t *testing.T, hostname string, timeout time.Dur
 				t.Logf("      HTTPS request failed: %v", err)
 				continue
 			}
-			defer resp.Body.Close()
+
+			statusCode := resp.StatusCode
+			_ = resp.Body.Close()
 
 			// ArgoCD returns 200 for the main page, or 302/307 redirect to login
-			if resp.StatusCode == http.StatusOK ||
-				resp.StatusCode == http.StatusFound ||
-				resp.StatusCode == http.StatusTemporaryRedirect {
-				t.Logf("      HTTPS connectivity verified (status: %d)", resp.StatusCode)
+			if statusCode == http.StatusOK ||
+				statusCode == http.StatusFound ||
+				statusCode == http.StatusTemporaryRedirect {
+				t.Logf("      HTTPS connectivity verified (status: %d)", statusCode)
 				return
 			}
 
-			t.Logf("      HTTPS response: %d, waiting...", resp.StatusCode)
+			t.Logf("      HTTPS response: %d, waiting...", statusCode)
 		}
 	}
 }

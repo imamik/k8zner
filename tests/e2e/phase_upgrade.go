@@ -43,14 +43,14 @@ func phaseUpgrade(t *testing.T, state *E2EState) {
 	if err := saveConfigToFile(cfg, configPath); err != nil {
 		t.Fatalf("Failed to save upgrade config: %v", err)
 	}
-	defer os.Remove(configPath)
+	defer func() { _ = os.Remove(configPath) }()
 
 	// Create secrets file for upgrade (required for authentication)
 	secretsPath := "secrets.yaml"
 	if err := copySecretsFile(state.TalosSecretsPath, secretsPath); err != nil {
 		t.Fatalf("Failed to copy secrets file: %v", err)
 	}
-	defer os.Remove(secretsPath)
+	defer func() { _ = os.Remove(secretsPath) }()
 
 	// Test 1: Dry run upgrade
 	t.Run("DryRun", func(t *testing.T) {

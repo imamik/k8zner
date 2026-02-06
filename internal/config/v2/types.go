@@ -47,6 +47,16 @@ type Config struct {
 	// Requires HETZNER_S3_ACCESS_KEY and HETZNER_S3_SECRET_KEY environment variables.
 	// Creates bucket "{cluster-name}-etcd-backups" automatically.
 	Backup bool `yaml:"backup,omitempty"`
+
+	// Monitoring enables the kube-prometheus-stack (Prometheus, Grafana, Alertmanager).
+	// When Domain is set, Grafana will be accessible at {GrafanaSubdomain}.{Domain}.
+	// Default: false
+	Monitoring bool `yaml:"monitoring,omitempty"`
+
+	// GrafanaSubdomain is the subdomain for Grafana dashboard (default: "grafana").
+	// Only used when both Monitoring and Domain are set.
+	// Example: with Domain="example.com", Grafana is at grafana.example.com
+	GrafanaSubdomain string `yaml:"grafana_subdomain,omitempty"`
 }
 
 // Region is a Hetzner datacenter location.
@@ -350,6 +360,28 @@ func (c *Config) ArgoHost() string {
 		return ""
 	}
 	return c.GetArgoSubdomain() + "." + c.Domain
+}
+
+// GetGrafanaSubdomain returns the subdomain for Grafana (default: "grafana").
+func (c *Config) GetGrafanaSubdomain() string {
+	if c.GrafanaSubdomain == "" {
+		return "grafana"
+	}
+	return c.GrafanaSubdomain
+}
+
+// GrafanaHost returns the full Grafana hostname (e.g., "grafana.example.com").
+// Returns empty string if no domain is configured.
+func (c *Config) GrafanaHost() string {
+	if c.Domain == "" {
+		return ""
+	}
+	return c.GetGrafanaSubdomain() + "." + c.Domain
+}
+
+// HasMonitoring returns true if monitoring is enabled.
+func (c *Config) HasMonitoring() bool {
+	return c.Monitoring
 }
 
 // GetCertEmail returns the email address for Let's Encrypt certificates.

@@ -532,7 +532,7 @@ spec:
 	t.Logf("  ✓ CCM provisioned LB with IP: %s", externalIP)
 
 	// Cleanup
-	exec.CommandContext(context.Background(), "kubectl",
+	_ = exec.CommandContext(context.Background(), "kubectl",
 		"--kubeconfig", state.KubeconfigPath,
 		"delete", "svc", testLBName).Run()
 
@@ -640,10 +640,10 @@ spec:
 	}
 
 	// Cleanup
-	exec.CommandContext(context.Background(), "kubectl",
+	_ = exec.CommandContext(context.Background(), "kubectl",
 		"--kubeconfig", state.KubeconfigPath,
 		"delete", "pod", podName, "--force", "--grace-period=0").Run()
-	exec.CommandContext(context.Background(), "kubectl",
+	_ = exec.CommandContext(context.Background(), "kubectl",
 		"--kubeconfig", state.KubeconfigPath,
 		"delete", "pvc", pvcName).Run()
 
@@ -830,7 +830,7 @@ spec:
 	}
 
 	// Cleanup
-	exec.CommandContext(context.Background(), "kubectl",
+	_ = exec.CommandContext(context.Background(), "kubectl",
 		"--kubeconfig", state.KubeconfigPath,
 		"delete", "pod", testPodName, "--force", "--grace-period=0").Run()
 

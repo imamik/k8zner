@@ -729,7 +729,7 @@ spec:
 	}
 
 	// Cleanup
-	exec.CommandContext(context.Background(), "kubectl",
+	_ = exec.CommandContext(context.Background(), "kubectl",
 		"--kubeconfig", state.KubeconfigPath,
 		"delete", "svc", testLBName).Run()
 

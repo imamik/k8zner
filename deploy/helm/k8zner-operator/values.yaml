@@ -1,0 +1,87 @@
+# Default values for k8zner-operator
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/imamik/k8zner-operator
+  pullPolicy: IfNotPresent
+  tag: ""  # Defaults to chart appVersion
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Leader election settings
+leaderElection:
+  enabled: true
+  resourceName: k8zner-operator
+
+# Credentials (required)
+credentials:
+  # Hetzner Cloud API token
+  hcloudToken: ""
+  # Reference to existing secret (alternative to hcloudToken)
+  existingSecret: ""
+  existingSecretKey: "hcloud-token"
+
+# Pod configuration
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65532
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Run on control plane nodes with tolerations
+nodeSelector:
+  node-role.kubernetes.io/control-plane: ""
+
+tolerations:
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule
+
+# Spread across control plane nodes
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: k8zner-operator
+          topologyKey: kubernetes.io/hostname
+
+# Metrics and health probes
+metrics:
+  enabled: true
+  port: 8080
+
+healthProbe:
+  port: 8081
+
+# Log level (debug, info, error)
+logLevel: info

@@ -1,0 +1,399 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.0
+  name: k8znerclusters.k8zner.io
+spec:
+  group: k8zner.io
+  names:
+    kind: K8znerCluster
+    listKind: K8znerClusterList
+    plural: k8znerclusters
+    shortNames:
+    - k8z
+    singular: k8znercluster
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.controlPlanes.ready
+      name: CPs
+      type: string
+    - jsonPath: .status.workers.ready
+      name: Workers
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: K8znerCluster is the Schema for the k8znerclusters API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: K8znerClusterSpec defines the desired state of a K8zner-managed
+              cluster.
+            properties:
+              addons:
+                description: Addons specifies which addons should be installed
+                properties:
+                  argocd:
+                    description: ArgoCD for GitOps
+                    type: boolean
+                  certManager:
+                    default: true
+                    description: CertManager for TLS certificates
+                    type: boolean
+                  externalDns:
+                    description: ExternalDNS for automatic DNS management
+                    type: boolean
+                  metricsServer:
+                    default: true
+                    description: MetricsServer for resource metrics
+                    type: boolean
+                  traefik:
+                    default: true
+                    description: Traefik ingress controller
+                    type: boolean
+                type: object
+              backup:
+                description: Backup configures automated etcd backups
+                properties:
+                  enabled:
+                    description: Enabled turns on automated backups
+                    type: boolean
+                  retention:
+                    default: 168h
+                    description: 'Retention is how long to keep backups (default:
+                      168h = 7 days)'
+                    type: string
+                  schedule:
+                    default: 0 * * * *
+                    description: 'Schedule is the cron schedule for backups (default:
+                      hourly)'
+                    type: string
+                required:
+                - enabled
+                type: object
+              controlPlanes:
+                description: ControlPlanes defines the control plane configuration
+                properties:
+                  count:
+                    default: 1
+                    description: Count is the number of control plane nodes (1 for
+                      dev, 3 for HA)
+                    enum:
+                    - 1
+                    - 3
+                    - 5
+                    type: integer
+                  size:
+                    default: cx22
+                    description: Size is the Hetzner server type (e.g., cx22, cx32)
+                    type: string
+                required:
+                - count
+                - size
+                type: object
+              healthCheck:
+                description: HealthCheck configures health monitoring thresholds
+                properties:
+                  etcdUnhealthyThreshold:
+                    default: 2m
+                    description: EtcdUnhealthyThreshold is how long etcd can be unhealthy
+                      before CP replacement
+                    type: string
+                  nodeNotReadyThreshold:
+                    default: 5m
+                    description: NodeNotReadyThreshold is how long a node can be NotReady
+                      before replacement
+                    type: string
+                type: object
+              paused:
+                description: Paused stops the operator from reconciling this cluster
+                type: boolean
+              region:
+                description: Region is the Hetzner Cloud region (e.g., fsn1, nbg1,
+                  hel1)
+                enum:
+                - fsn1
+                - nbg1
+                - hel1
+                - ash
+                - hil
+                type: string
+              workers:
+                description: Workers defines the worker node configuration
+                properties:
+                  count:
+                    description: Count is the desired number of worker nodes
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                  maxCount:
+                    default: 10
+                    description: MaxCount is the maximum number of workers (for safety)
+                    maximum: 100
+                    type: integer
+                  minCount:
+                    default: 1
+                    description: MinCount is the minimum number of workers (for safety)
+                    minimum: 0
+                    type: integer
+                  size:
+                    default: cx22
+                    description: Size is the Hetzner server type (e.g., cx22, cx32,
+                      cx42)
+                    type: string
+                required:
+                - count
+                - size
+                type: object
+            required:
+            - controlPlanes
+            - region
+            - workers
+            type: object
+          status:
+            description: K8znerClusterStatus defines the observed state of K8znerCluster.
+            properties:
+              addons:
+                additionalProperties:
+                  description: AddonStatus represents the status of an installed addon.
+                  properties:
+                    healthy:
+                      description: Healthy indicates if the addon is healthy
+                      type: boolean
+                    installed:
+                      description: Installed indicates if the addon is installed
+                      type: boolean
+                    message:
+                      description: Message provides additional status information
+                      type: string
+                    version:
+                      description: Version is the installed version
+                      type: string
+                  required:
+                  - healthy
+                  - installed
+                  type: object
+                description: Addons shows the status of installed addons
+                type: object
+              conditions:
+                description: Conditions represent the latest available observations
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              controlPlanes:
+                description: ControlPlanes shows the status of control plane nodes
+                properties:
+                  desired:
+                    description: Desired is the desired number of nodes
+                    type: integer
+                  nodes:
+                    description: Nodes is the detailed status of each node
+                    items:
+                      description: NodeStatus represents the status of a single node.
+                      properties:
+                        etcdMemberID:
+                          description: EtcdMemberID is the etcd member ID (for control
+                            planes)
+                          type: string
+                        healthy:
+                          description: Healthy indicates if the node is healthy
+                          type: boolean
+                        lastHealthCheck:
+                          description: LastHealthCheck is when health was last checked
+                          format: date-time
+                          type: string
+                        name:
+                          description: Name is the Kubernetes node name
+                          type: string
+                        privateIP:
+                          description: PrivateIP is the private network IP
+                          type: string
+                        publicIP:
+                          description: PublicIP is the public IP (if any)
+                          type: string
+                        serverID:
+                          description: ServerID is the Hetzner server ID
+                          format: int64
+                          type: integer
+                        unhealthyReason:
+                          description: UnhealthyReason explains why the node is unhealthy
+                          type: string
+                        unhealthySince:
+                          description: UnhealthySince is when the node became unhealthy
+                          format: date-time
+                          type: string
+                      required:
+                      - healthy
+                      - name
+                      - serverID
+                      type: object
+                    type: array
+                  ready:
+                    description: Ready is the number of healthy nodes
+                    type: integer
+                  unhealthy:
+                    description: Unhealthy is the number of unhealthy nodes
+                    type: integer
+                required:
+                - desired
+                - ready
+                type: object
+              lastReconcileTime:
+                description: LastReconcileTime is when the operator last reconciled
+                  this cluster
+                format: date-time
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the last observed generation
+                format: int64
+                type: integer
+              phase:
+                description: Phase is the overall cluster phase
+                enum:
+                - Provisioning
+                - Running
+                - Degraded
+                - Healing
+                - Failed
+                type: string
+              workers:
+                description: Workers shows the status of worker nodes
+                properties:
+                  desired:
+                    description: Desired is the desired number of nodes
+                    type: integer
+                  nodes:
+                    description: Nodes is the detailed status of each node
+                    items:
+                      description: NodeStatus represents the status of a single node.
+                      properties:
+                        etcdMemberID:
+                          description: EtcdMemberID is the etcd member ID (for control
+                            planes)
+                          type: string
+                        healthy:
+                          description: Healthy indicates if the node is healthy
+                          type: boolean
+                        lastHealthCheck:
+                          description: LastHealthCheck is when health was last checked
+                          format: date-time
+                          type: string
+                        name:
+                          description: Name is the Kubernetes node name
+                          type: string
+                        privateIP:
+                          description: PrivateIP is the private network IP
+                          type: string
+                        publicIP:
+                          description: PublicIP is the public IP (if any)
+                          type: string
+                        serverID:
+                          description: ServerID is the Hetzner server ID
+                          format: int64
+                          type: integer
+                        unhealthyReason:
+                          description: UnhealthyReason explains why the node is unhealthy
+                          type: string
+                        unhealthySince:
+                          description: UnhealthySince is when the node became unhealthy
+                          format: date-time
+                          type: string
+                      required:
+                      - healthy
+                      - name
+                      - serverID
+                      type: object
+                    type: array
+                  ready:
+                    description: Ready is the number of healthy nodes
+                    type: integer
+                  unhealthy:
+                    description: Unhealthy is the number of unhealthy nodes
+                    type: integer
+                required:
+                - desired
+                - ready
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

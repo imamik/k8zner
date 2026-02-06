@@ -59,4 +59,9 @@ var DefaultChartSpecs = map[string]ChartSpec{
 		Name:       "external-dns",
 		Version:    "1.15.0",
 	},
+	"kube-prometheus-stack": {
+		Repository: "https://prometheus-community.github.io/helm-charts",
+		Name:       "kube-prometheus-stack",
+		Version:    "72.6.2",
+	},
 }
