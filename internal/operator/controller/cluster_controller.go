@@ -951,6 +951,27 @@ func (r *ClusterReconciler) reconcileAddonsPhase(ctx context.Context, cluster *k
 		}
 	}
 
+	// Ensure workers are ready before installing addons.
+	// Workers are created by scaleUpWorkers (normally in running phase), but addons like
+	// ArgoCD need worker IPs for ExternalDNS target annotations.
+	desiredWorkers := cluster.Spec.Workers.Count
+	readyWorkers := cluster.Status.Workers.Ready
+	if desiredWorkers > 0 && readyWorkers < desiredWorkers {
+		// Trigger worker creation if not already done
+		currentWorkerNodes := len(cluster.Status.Workers.Nodes)
+		if currentWorkerNodes < desiredWorkers && r.hcloudClient != nil {
+			toCreate := desiredWorkers - currentWorkerNodes
+			logger.Info("creating workers before addon installation",
+				"desired", desiredWorkers, "current", currentWorkerNodes, "toCreate", toCreate)
+			if err := r.scaleUpWorkers(ctx, cluster, toCreate); err != nil {
+				logger.Error(err, "failed to create workers for addon phase")
+			}
+		}
+		logger.Info("waiting for workers to be ready before installing addons",
+			"ready", readyWorkers, "desired", desiredWorkers)
+		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+	}
+
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonAddonsInstalling,
 		"Installing cluster addons")
 
