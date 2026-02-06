@@ -562,7 +562,11 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 				Enabled: spec.Addons != nil && spec.Addons.CertManager,
 			},
 			Traefik: config.TraefikConfig{
-				Enabled: spec.Addons != nil && spec.Addons.Traefik,
+				Enabled:               spec.Addons != nil && spec.Addons.Traefik,
+				Kind:                  "DaemonSet",
+				HostNetwork:           boolPtr(true),
+				ExternalTrafficPolicy: "Local",
+				IngressClass:          "traefik",
 			},
 			ExternalDNS:         expandExternalDNSFromSpec(spec),
 			ArgoCD:              expandArgoCDFromSpec(spec),
@@ -602,8 +606,15 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 		// Also enable CertManager Cloudflare integration if cert-manager is enabled
 		// This allows automatic DNS-01 challenge for TLS certificates
 		if cfg.Addons.CertManager.Enabled {
+			// Derive cert email from domain (matches v2 GetCertEmail behavior)
+			certEmail := ""
+			if spec.Domain != "" {
+				certEmail = "admin@" + spec.Domain
+			}
 			cfg.Addons.CertManager.Cloudflare = config.CertManagerCloudflareConfig{
-				Enabled: true,
+				Enabled:    true,
+				Production: true,
+				Email:      certEmail,
 			}
 		}
 	}
@@ -692,6 +703,9 @@ func expandExternalDNSFromSpec(spec *k8znerv1alpha1.K8znerClusterSpec) config.Ex
 
 	return dnsCfg
 }
+
+// boolPtr returns a pointer to a boolean value.
+func boolPtr(b bool) *bool { return &b }
 
 // defaultString returns the value if non-empty, otherwise the default.
 func defaultString(value, defaultValue string) string {
