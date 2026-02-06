@@ -52,12 +52,14 @@ func TestE2EFullStackDev(t *testing.T) {
 			t.Skipf("Skipping %s: previous subtest failed", name)
 			return
 		}
-		t.Run(name, func(t *testing.T) {
-			fn(t)
-			if t.Failed() {
-				allSubtestsPassed = false
-			}
-		})
+		// IMPORTANT: Use t.Run()'s return value to detect failures.
+		// We cannot check t.Failed() after fn(t) because when fn(t) calls
+		// t.Fatal()/require.NoError()/etc., it triggers runtime.Goexit() which
+		// terminates the goroutine before any code after fn(t) can execute.
+		passed := t.Run(name, fn)
+		if !passed {
+			allSubtestsPassed = false
+		}
 	}
 	// Validate required environment variables
 	token := os.Getenv("HCLOUD_TOKEN")

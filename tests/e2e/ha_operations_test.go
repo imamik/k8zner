@@ -23,24 +23,20 @@ import (
 // - Config: 3 CP + 2 workers initially, mode=ha, minimal addons (Cilium + CCM only)
 // - Timeout: 90 minutes
 //
-// This test should only run AFTER TestE2EFullStackDev passes. It will skip
-// automatically if E2E_FULLSTACK_PASSED is not "true".
+// IMPORTANT: This test will ONLY run if TestE2EFullStackDev passes first.
+// There is NO override - if FullStack fails, HA test is skipped. Period.
 //
 // Required environment variables:
 //   - HCLOUD_TOKEN - Hetzner Cloud API token
-//   - E2E_FULLSTACK_PASSED=true (or pass TestE2EFullStackDev first)
 //
 // Example:
 //
-//	# Run both tests (Test 2 auto-skips if Test 1 fails)
+//	# Run both tests (HA auto-skips if FullStack fails)
 //	go test -v -timeout=3h -tags=e2e -run "TestE2E(FullStackDev|HAOperations)" ./tests/e2e/
-//
-//	# Run Test 2 independently (dev mode)
-//	E2E_FULLSTACK_PASSED=true go test -v -timeout=90m -tags=e2e -run TestE2EHAOperations ./tests/e2e/
 func TestE2EHAOperations(t *testing.T) {
-	// Skip logic: only run if TestE2EFullStackDev passed
+	// Skip logic: only run if TestE2EFullStackDev passed - NO OVERRIDE
 	if !IsFullStackPassed() {
-		t.Skip("Skipping: TestE2EFullStackDev did not pass (set E2E_FULLSTACK_PASSED=true to override)")
+		t.Skip("Skipping: TestE2EFullStackDev did not pass")
 	}
 
 	token := os.Getenv("HCLOUD_TOKEN")
