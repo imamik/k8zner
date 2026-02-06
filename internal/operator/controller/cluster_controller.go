@@ -623,28 +623,14 @@ func (r *ClusterReconciler) reconcileComputePhase(ctx context.Context, cluster *
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonComputeProvisioned,
 		"Compute resources provisioned")
 
-	// For CLI-bootstrapped clusters, we need to configure any new nodes that were just created.
-	// The bootstrap phase handles this by detecting that the cluster is already initialized
-	// and configuring only the new nodes in maintenance mode.
+	// For CLI-bootstrapped clusters, the cluster is already initialized and new servers
+	// get their Talos config via server user data during creation. Skip bootstrap and
+	// proceed directly to addon installation.
 	if cluster.Spec.Bootstrap != nil && cluster.Spec.Bootstrap.Completed {
-		logger.Info("CLI-bootstrapped cluster - will configure new nodes in bootstrap phase")
-
-		// Count how many new nodes need configuration
-		existingCPs := 1 // Bootstrap always starts with 1 CP
-		desiredCPs := cluster.Spec.ControlPlanes.Count
-		desiredWorkers := cluster.Spec.Workers.Count
-
-		logger.V(1).Info("checking for new nodes to configure",
-			"existingCPs", existingCPs,
-			"desiredCPs", desiredCPs,
-			"desiredWorkers", desiredWorkers,
-		)
-
-		// Always go through bootstrap phase to configure new nodes
-		// The cluster provisioner will detect it's already bootstrapped and only configure new nodes
-		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseBootstrap
+		logger.Info("CLI-bootstrapped cluster - compute done, proceeding to addons")
+		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseAddons
 		r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonProvisioningPhase,
-			"Configuring additional nodes")
+			"Compute complete, installing addons")
 	} else {
 		// Transition to bootstrap phase for operator-managed clusters (fresh bootstrap)
 		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseBootstrap
@@ -684,16 +670,6 @@ func (r *ClusterReconciler) reconcileBootstrapPhase(ctx context.Context, cluster
 
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonBootstrapComplete,
 		"Cluster bootstrapped successfully")
-
-	// For CLI-bootstrapped clusters, CNI and addons are already installed - go directly to Complete
-	if cluster.Spec.Bootstrap != nil && cluster.Spec.Bootstrap.Completed {
-		logger.Info("CLI-bootstrapped cluster - addons already installed, transitioning to complete")
-		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseComplete
-		cluster.Status.Phase = k8znerv1alpha1.ClusterPhaseRunning
-		r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonProvisioningComplete,
-			"Cluster provisioning complete (additional nodes configured)")
-		return ctrl.Result{Requeue: true}, nil
-	}
 
 	// For fresh operator-managed clusters, transition to CNI phase
 	cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseCNI
@@ -850,8 +826,13 @@ func (r *ClusterReconciler) reconcileCNIPhase(ctx context.Context, cluster *k8zn
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonCNIReady,
 		"Cilium CNI is ready")
 
-	// Transition to addons phase
-	cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseAddons
+	// For CLI-bootstrapped clusters, workers don't exist yet - go through compute/bootstrap first
+	if cluster.Spec.Bootstrap != nil && cluster.Spec.Bootstrap.Completed {
+		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseCompute
+	} else {
+		// For operator-managed clusters, compute/bootstrap already ran - proceed to addons
+		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseAddons
+	}
 	return ctrl.Result{Requeue: true}, nil
 }
 
@@ -953,7 +934,7 @@ func (r *ClusterReconciler) reconcileAddonsPhase(ctx context.Context, cluster *k
 		}
 
 		if elapsed > addonInstallationTimeout {
-			logger.Error(nil, "ADDON TIMEOUT: installation exceeded timeout - forcing transition to compute phase",
+			logger.Error(nil, "ADDON TIMEOUT: installation exceeded timeout - forcing transition to complete phase",
 				"elapsed", elapsed.Round(time.Second),
 				"timeout", addonInstallationTimeout,
 				"startedAt", cluster.Status.PhaseStartedAt.Time,
@@ -962,11 +943,33 @@ func (r *ClusterReconciler) reconcileAddonsPhase(ctx context.Context, cluster *k
 				"Addon installation exceeded %s timeout (started at %s) - proceeding with available addons",
 				addonInstallationTimeout, cluster.Status.PhaseStartedAt.Format(time.RFC3339))
 
-			// Clear the phase timer and proceed to compute phase
+			// Clear the phase timer and proceed to complete phase (compute/bootstrap already done)
 			cluster.Status.PhaseStartedAt = nil
-			cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseCompute
+			cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseComplete
+			cluster.Status.Phase = k8znerv1alpha1.ClusterPhaseRunning
 			return ctrl.Result{Requeue: true}, nil
 		}
+	}
+
+	// Ensure workers are ready before installing addons.
+	// Workers are created by scaleUpWorkers (normally in running phase), but addons like
+	// ArgoCD need worker IPs for ExternalDNS target annotations.
+	desiredWorkers := cluster.Spec.Workers.Count
+	readyWorkers := cluster.Status.Workers.Ready
+	if desiredWorkers > 0 && readyWorkers < desiredWorkers {
+		// Trigger worker creation if not already done
+		currentWorkerNodes := len(cluster.Status.Workers.Nodes)
+		if currentWorkerNodes < desiredWorkers && r.hcloudClient != nil {
+			toCreate := desiredWorkers - currentWorkerNodes
+			logger.Info("creating workers before addon installation",
+				"desired", desiredWorkers, "current", currentWorkerNodes, "toCreate", toCreate)
+			if err := r.scaleUpWorkers(ctx, cluster, toCreate); err != nil {
+				logger.Error(err, "failed to create workers for addon phase")
+			}
+		}
+		logger.Info("waiting for workers to be ready before installing addons",
+			"ready", readyWorkers, "desired", desiredWorkers)
+		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
 	}
 
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonAddonsInstalling,
@@ -1134,25 +1137,7 @@ func (r *ClusterReconciler) reconcileAddonsPhase(ctx context.Context, cluster *k
 	// Clear phase timer since addons installed successfully
 	cluster.Status.PhaseStartedAt = nil
 
-	// Check if we need to create additional nodes (CLI-bootstrapped clusters start with 1 CP)
-	needsMoreNodes := cluster.Spec.ControlPlanes.Count > len(cluster.Status.ControlPlanes.Nodes) ||
-		cluster.Spec.Workers.Count > len(cluster.Status.Workers.Nodes)
-
-	logger.V(1).Info("checking if additional nodes needed",
-		"desiredCPs", cluster.Spec.ControlPlanes.Count,
-		"currentCPs", len(cluster.Status.ControlPlanes.Nodes),
-		"desiredWorkers", cluster.Spec.Workers.Count,
-		"currentWorkers", len(cluster.Status.Workers.Nodes),
-		"needsMoreNodes", needsMoreNodes,
-	)
-
-	if needsMoreNodes {
-		// Transition to compute phase to create remaining CPs and workers
-		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseCompute
-		return ctrl.Result{Requeue: true}, nil
-	}
-
-	// All nodes already exist, transition to complete phase
+	// Addons installed - transition to complete (compute/bootstrap already done)
 	cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseComplete
 	cluster.Status.Phase = k8znerv1alpha1.ClusterPhaseRunning
 
