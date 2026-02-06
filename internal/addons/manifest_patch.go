@@ -105,12 +105,24 @@ func patchHostNetworkAPIAccess(manifests []byte, resourceName string) ([]byte, e
 					continue
 				}
 
+				// Remove existing entries to avoid duplicates (upstream manifests
+				// may already define these vars, e.g., Talos CCM).
 				env, _, _ := unstructured.NestedSlice(container, "env")
-				env = append(env,
+				filtered := make([]interface{}, 0, len(env)+2)
+				for _, e := range env {
+					if em, ok := e.(map[string]interface{}); ok {
+						name, _ := em["name"].(string)
+						if name == "KUBERNETES_SERVICE_HOST" || name == "KUBERNETES_SERVICE_PORT" {
+							continue
+						}
+					}
+					filtered = append(filtered, e)
+				}
+				filtered = append(filtered,
 					map[string]interface{}{"name": "KUBERNETES_SERVICE_HOST", "value": "localhost"},
 					map[string]interface{}{"name": "KUBERNETES_SERVICE_PORT", "value": "6443"},
 				)
-				container["env"] = env
+				container["env"] = filtered
 				containers[i] = container
 			}
 
