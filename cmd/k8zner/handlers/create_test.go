@@ -169,6 +169,92 @@ func TestBuildAddonSpec(t *testing.T) {
 	assert.True(t, spec.MetricsServer)
 }
 
+func TestBuildK8znerClusterForCreate_PopulatesDomain(t *testing.T) {
+	cfg := &config.Config{
+		ClusterName: "test-cluster",
+		Location:    "fsn1",
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{
+				{Count: 1, ServerType: "cx23"},
+			},
+		},
+		Workers: []config.WorkerNodePool{
+			{Count: 1, ServerType: "cx23"},
+		},
+		Kubernetes: config.KubernetesConfig{Version: "1.32.2"},
+		Talos:      config.TalosConfig{Version: "v1.10.2"},
+		Addons: config.AddonsConfig{
+			ArgoCD: config.ArgoCDConfig{
+				Enabled:      true,
+				IngressHost:  "argo.example.com",
+				IngressTLS:   true,
+				IngressEnabled: true,
+			},
+			Cloudflare: config.CloudflareConfig{
+				Domain: "example.com",
+			},
+		},
+	}
+
+	infraInfo := &InfrastructureInfo{
+		NetworkID:      1,
+		LoadBalancerIP: "1.2.3.4",
+	}
+
+	cluster := buildK8znerClusterForCreate(cfg, nil, infraInfo, "cp-1", 100, "5.6.7.8")
+
+	assert.Equal(t, "example.com", cluster.Spec.Domain)
+	assert.True(t, cluster.Spec.Addons.ArgoCD)
+	// Default subdomain "argo" should not be stored
+	assert.Empty(t, cluster.Spec.Addons.ArgoSubdomain)
+}
+
+func TestBuildK8znerClusterForCreate_CustomSubdomain(t *testing.T) {
+	cfg := &config.Config{
+		ClusterName: "test-cluster",
+		Location:    "fsn1",
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{
+				{Count: 1, ServerType: "cx23"},
+			},
+		},
+		Workers: []config.WorkerNodePool{
+			{Count: 1, ServerType: "cx23"},
+		},
+		Kubernetes: config.KubernetesConfig{Version: "1.32.2"},
+		Talos:      config.TalosConfig{Version: "v1.10.2"},
+		Addons: config.AddonsConfig{
+			ArgoCD: config.ArgoCDConfig{
+				Enabled:        true,
+				IngressHost:    "gitops.example.com",
+				IngressTLS:     true,
+				IngressEnabled: true,
+			},
+			KubePrometheusStack: config.KubePrometheusStackConfig{
+				Enabled: true,
+				Grafana: config.KubePrometheusGrafanaConfig{
+					IngressHost:    "metrics.example.com",
+					IngressEnabled: true,
+				},
+			},
+			Cloudflare: config.CloudflareConfig{
+				Domain: "example.com",
+			},
+		},
+	}
+
+	infraInfo := &InfrastructureInfo{
+		NetworkID:      1,
+		LoadBalancerIP: "1.2.3.4",
+	}
+
+	cluster := buildK8znerClusterForCreate(cfg, nil, infraInfo, "cp-1", 100, "5.6.7.8")
+
+	assert.Equal(t, "example.com", cluster.Spec.Domain)
+	assert.Equal(t, "gitops", cluster.Spec.Addons.ArgoSubdomain)
+	assert.Equal(t, "metrics", cluster.Spec.Addons.GrafanaSubdomain)
+}
+
 func TestCreate_MissingHCloudToken(t *testing.T) {
 	// Save and restore env
 	origToken := os.Getenv("HCLOUD_TOKEN")

@@ -54,6 +54,11 @@ type K8znerClusterSpec struct {
 	// Talos specifies the Talos configuration
 	Talos TalosSpec `json:"talos"`
 
+	// Domain is the base domain for ingress resources (e.g., "example.com").
+	// When set, addons like ArgoCD and Grafana will have ingress automatically configured.
+	// +optional
+	Domain string `json:"domain,omitempty"`
+
 	// CredentialsRef references the Secret containing HCloud token and Talos secrets
 	CredentialsRef corev1.LocalObjectReference `json:"credentialsRef"`
 
@@ -267,6 +272,16 @@ type AddonSpec struct {
 	// Monitoring enables kube-prometheus-stack (Prometheus, Grafana, Alertmanager)
 	// +optional
 	Monitoring bool `json:"monitoring,omitempty"`
+
+	// ArgoSubdomain overrides the default "argo" subdomain for ArgoCD ingress.
+	// The full host will be "{argoSubdomain}.{domain}".
+	// +optional
+	ArgoSubdomain string `json:"argoSubdomain,omitempty"`
+
+	// GrafanaSubdomain overrides the default "grafana" subdomain for Grafana ingress.
+	// The full host will be "{grafanaSubdomain}.{domain}".
+	// +optional
+	GrafanaSubdomain string `json:"grafanaSubdomain,omitempty"`
 }
 
 // K8znerClusterStatus defines the observed state of K8znerCluster.
