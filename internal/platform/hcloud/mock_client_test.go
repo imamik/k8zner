@@ -382,45 +382,6 @@ func TestMockClient_GetPlacementGroup_Default(t *testing.T) {
 	}
 }
 
-func TestMockClient_EnsureFloatingIP_Default(t *testing.T) {
-	m := &MockClient{}
-	ctx := context.Background()
-
-	fip, err := m.EnsureFloatingIP(ctx, "test-fip", "fsn1", "ipv4", nil)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-	if fip == nil {
-		t.Fatal("expected floating IP, got nil")
-	}
-	if fip.ID != 1 { //nolint:staticcheck // t.Fatal above ensures fip is not nil
-		t.Errorf("expected ID 1, got %d", fip.ID)
-	}
-}
-
-func TestMockClient_DeleteFloatingIP_Default(t *testing.T) {
-	m := &MockClient{}
-	ctx := context.Background()
-
-	err := m.DeleteFloatingIP(ctx, "test-fip")
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestMockClient_GetFloatingIP_Default(t *testing.T) {
-	m := &MockClient{}
-	ctx := context.Background()
-
-	fip, err := m.GetFloatingIP(ctx, "test-fip")
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-	if fip != nil {
-		t.Errorf("expected nil, got %v", fip)
-	}
-}
-
 func TestMockClient_EnsureCertificate_Default(t *testing.T) {
 	m := &MockClient{}
 	ctx := context.Background()
@@ -890,48 +851,6 @@ func TestMockClient_CustomFuncs(t *testing.T) {
 		}
 		if pg.ID != 42 {
 			t.Errorf("expected ID 42, got %d", pg.ID)
-		}
-	})
-
-	t.Run("EnsureFloatingIP custom func", func(t *testing.T) {
-		m := &MockClient{
-			EnsureFloatingIPFunc: func(_ context.Context, _, _, _ string, _ map[string]string) (*hcloud.FloatingIP, error) {
-				return &hcloud.FloatingIP{ID: 42}, nil
-			},
-		}
-		fip, err := m.EnsureFloatingIP(ctx, "fip", "fsn1", "ipv4", nil)
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-		if fip.ID != 42 {
-			t.Errorf("expected ID 42, got %d", fip.ID)
-		}
-	})
-
-	t.Run("DeleteFloatingIP custom func", func(t *testing.T) {
-		m := &MockClient{
-			DeleteFloatingIPFunc: func(_ context.Context, _ string) error {
-				return customErr
-			},
-		}
-		err := m.DeleteFloatingIP(ctx, "fip")
-		if !errors.Is(err, customErr) {
-			t.Errorf("expected custom error, got %v", err)
-		}
-	})
-
-	t.Run("GetFloatingIP custom func", func(t *testing.T) {
-		m := &MockClient{
-			GetFloatingIPFunc: func(_ context.Context, _ string) (*hcloud.FloatingIP, error) {
-				return &hcloud.FloatingIP{ID: 42}, nil
-			},
-		}
-		fip, err := m.GetFloatingIP(ctx, "fip")
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-		if fip.ID != 42 {
-			t.Errorf("expected ID 42, got %d", fip.ID)
 		}
 	})
 

@@ -319,6 +319,36 @@ func shouldUpdatePhase(current, newPhase k8znerv1alpha1.NodePhase) bool {
 	return newOrder > currentOrder
 }
 
+// isNodeInEarlyProvisioningPhase returns true if the node is in a provisioning phase
+// that indicates it's still being created and set up. This is used to prevent
+// duplicate server creation from concurrent reconciles.
+func isNodeInEarlyProvisioningPhase(phase k8znerv1alpha1.NodePhase) bool {
+	switch phase {
+	case k8znerv1alpha1.NodePhaseCreatingServer,
+		k8znerv1alpha1.NodePhaseWaitingForIP,
+		k8znerv1alpha1.NodePhaseWaitingForTalosAPI,
+		k8znerv1alpha1.NodePhaseApplyingTalosConfig,
+		k8znerv1alpha1.NodePhaseRebootingWithConfig,
+		k8znerv1alpha1.NodePhaseWaitingForK8s,
+		k8znerv1alpha1.NodePhaseNodeInitializing:
+		return true
+	default:
+		return false
+	}
+}
+
+// countWorkersInEarlyProvisioning returns the count of workers currently being provisioned.
+// This helps prevent duplicate server creation when concurrent reconciles see stale status.
+func countWorkersInEarlyProvisioning(nodes []k8znerv1alpha1.NodeStatus) int {
+	count := 0
+	for _, node := range nodes {
+		if isNodeInEarlyProvisioningPhase(node.Phase) {
+			count++
+		}
+	}
+	return count
+}
+
 // getPrivateIPFromServer retrieves the private IP from HCloud for a server.
 func (r *ClusterReconciler) getPrivateIPFromServer(ctx context.Context, serverName string) (string, error) {
 	server, err := r.hcloudClient.GetServerByName(ctx, serverName)

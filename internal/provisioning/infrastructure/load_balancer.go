@@ -95,6 +95,17 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 		if err := p.applyLoadBalancerRDNS(ctx, apiLB.ID, lbName, ipv4, ipv6, "kube-api"); err != nil {
 			ctx.Logger.Printf("[%s] Warning: Failed to set RDNS for %s: %v", phase, lbName, err)
 		}
+
+		// Refresh LB from API to get updated info (private network IPs, etc.)
+		// The local apiLB object doesn't have PrivateNet populated after AttachToNetwork
+		refreshedLB, err := ctx.Infra.GetLoadBalancer(ctx, lbName)
+		if err != nil {
+			ctx.Logger.Printf("[%s] Warning: Failed to refresh LB after configuration: %v", phase, err)
+			// Fall back to the local object
+			ctx.State.LoadBalancer = apiLB
+		} else {
+			ctx.State.LoadBalancer = refreshedLB
+		}
 	}
 
 	// Ingress Load Balancer

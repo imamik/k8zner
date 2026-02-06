@@ -167,6 +167,7 @@ func detectInfrastructure(ctx context.Context, infraClient hcloudInternal.Infras
 		info.LoadBalancerID = lb.ID
 		info.LoadBalancerName = lb.Name
 		info.LoadBalancerIP = hcloudInternal.LoadBalancerIPv4(lb)
+		info.LoadBalancerPrivateIP = hcloudInternal.LoadBalancerPrivateIP(lb)
 	}
 
 	return info, nil
@@ -303,11 +304,12 @@ func buildMigrationCRD(cfg *config.Config, infra *InfrastructureInfo, cpNodes, w
 				Nodes:   workerNodes,
 			},
 			Infrastructure: k8znerv1alpha1.InfrastructureStatus{
-				NetworkID:      infra.NetworkID,
-				FirewallID:     infra.FirewallID,
-				LoadBalancerID: infra.LoadBalancerID,
-				LoadBalancerIP: infra.LoadBalancerIP,
-				SSHKeyID:       infra.SSHKeyID,
+				NetworkID:             infra.NetworkID,
+				FirewallID:            infra.FirewallID,
+				LoadBalancerID:        infra.LoadBalancerID,
+				LoadBalancerIP:        infra.LoadBalancerIP,
+				LoadBalancerPrivateIP: infra.LoadBalancerPrivateIP,
+				SSHKeyID:              infra.SSHKeyID,
 			},
 		},
 	}

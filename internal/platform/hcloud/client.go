@@ -81,13 +81,6 @@ type PlacementGroupManager interface {
 	GetPlacementGroup(ctx context.Context, name string) (*hcloud.PlacementGroup, error)
 }
 
-// FloatingIPManager defines the interface for managing floating IPs.
-type FloatingIPManager interface {
-	EnsureFloatingIP(ctx context.Context, name, homeLocation, ipType string, labels map[string]string) (*hcloud.FloatingIP, error)
-	DeleteFloatingIP(ctx context.Context, name string) error
-	GetFloatingIP(ctx context.Context, name string) (*hcloud.FloatingIP, error)
-}
-
 // CertificateManager defines the interface for managing certificates.
 type CertificateManager interface {
 	EnsureCertificate(ctx context.Context, name, certificate, privateKey string, labels map[string]string) (*hcloud.Certificate, error)
@@ -110,7 +103,6 @@ type InfrastructureManager interface {
 	FirewallManager
 	LoadBalancerManager
 	PlacementGroupManager
-	FloatingIPManager
 	CertificateManager
 	RDNSManager
 	GetPublicIP(ctx context.Context) (string, error)

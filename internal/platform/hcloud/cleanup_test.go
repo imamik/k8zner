@@ -89,12 +89,6 @@ func TestGetResourceInfo(t *testing.T) {
 			expectID:   2,
 		},
 		{
-			name:       "floating IP",
-			resource:   &hcloud.FloatingIP{ID: 3, Name: "fip-1"},
-			expectName: "fip-1",
-			expectID:   3,
-		},
-		{
 			name:       "firewall",
 			resource:   &hcloud.Firewall{ID: 4, Name: "fw-1"},
 			expectName: "fw-1",
@@ -134,8 +128,6 @@ func TestGetResourceInfo(t *testing.T) {
 				info = getResourceInfo(v)
 			case *hcloud.LoadBalancer:
 				info = getResourceInfo(v)
-			case *hcloud.FloatingIP:
-				info = getResourceInfo(v)
 			case *hcloud.Firewall:
 				info = getResourceInfo(v)
 			case *hcloud.Network:
@@ -173,10 +165,6 @@ func TestRealClient_CleanupByLabel_WithHTTPMock(t *testing.T) {
 
 	ts.handleFunc("/load_balancers", func(w http.ResponseWriter, _ *http.Request) {
 		jsonResponse(w, http.StatusOK, schema.LoadBalancerListResponse{LoadBalancers: []schema.LoadBalancer{}})
-	})
-
-	ts.handleFunc("/floating_ips", func(w http.ResponseWriter, _ *http.Request) {
-		jsonResponse(w, http.StatusOK, schema.FloatingIPListResponse{FloatingIPs: []schema.FloatingIP{}})
 	})
 
 	ts.handleFunc("/firewalls", func(w http.ResponseWriter, _ *http.Request) {
@@ -298,34 +286,6 @@ func TestRealClient_DeleteLoadBalancersByLabel_WithHTTPMock(t *testing.T) {
 	ctx := context.Background()
 
 	err := client.deleteLoadBalancersByLabel(ctx, "cluster=test")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestRealClient_DeleteFloatingIPsByLabel_WithHTTPMock(t *testing.T) {
-	ts := newTestServer()
-	defer ts.close()
-
-	ts.handleFunc("/floating_ips", func(w http.ResponseWriter, r *http.Request) {
-		jsonResponse(w, http.StatusOK, schema.FloatingIPListResponse{
-			FloatingIPs: []schema.FloatingIP{
-				{ID: 1, Name: "fip-1", Labels: map[string]string{"cluster": "test"}},
-			},
-		})
-	})
-
-	ts.handleFunc("/floating_ips/1", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodDelete {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-	})
-
-	client := ts.realClient()
-	ctx := context.Background()
-
-	err := client.deleteFloatingIPsByLabel(ctx, "cluster=test")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -518,10 +478,6 @@ func TestRealClient_CountResourcesByLabel_WithHTTPMock(t *testing.T) {
 
 	ts.handleFunc("/load_balancers", func(w http.ResponseWriter, _ *http.Request) {
 		jsonResponse(w, http.StatusOK, schema.LoadBalancerListResponse{LoadBalancers: []schema.LoadBalancer{}})
-	})
-
-	ts.handleFunc("/floating_ips", func(w http.ResponseWriter, _ *http.Request) {
-		jsonResponse(w, http.StatusOK, schema.FloatingIPListResponse{FloatingIPs: []schema.FloatingIP{}})
 	})
 
 	ts.handleFunc("/firewalls", func(w http.ResponseWriter, _ *http.Request) {

@@ -192,11 +192,26 @@ func Create(ctx context.Context, configPath string, wait bool) error {
 		return createErr
 	}
 
-	// Get infrastructure details for CRD
-	lbName := naming.KubeAPILoadBalancer(cfg.ClusterName)
-	lb, err := infraClient.GetLoadBalancer(ctx, lbName)
-	if err != nil {
-		log.Printf("Warning: failed to get load balancer info: %v", err)
+	// Get infrastructure details for CRD - prefer state LB, fallback to API lookup
+	lb := pCtx.State.LoadBalancer
+	log.Printf("[DEBUG] pCtx.State.LoadBalancer = %v", lb)
+	if lb == nil {
+		// Fallback to API lookup if state LB not available
+		lbName := naming.KubeAPILoadBalancer(cfg.ClusterName)
+		log.Printf("[DEBUG] State LB is nil, looking up LB by name: %s", lbName)
+		var err error
+		lb, err = infraClient.GetLoadBalancer(ctx, lbName)
+		if err != nil {
+			log.Printf("Warning: failed to get load balancer info: %v", err)
+		} else if lb == nil {
+			log.Printf("Warning: load balancer %s not found", lbName)
+		} else {
+			log.Printf("[DEBUG] Found LB via API: ID=%d, Name=%s, PublicNet=%+v, PrivateNet=%+v",
+				lb.ID, lb.Name, lb.PublicNet, lb.PrivateNet)
+		}
+	} else {
+		log.Printf("[DEBUG] Using state LB: ID=%d, Name=%s, PublicNet=%+v, PrivateNet=%+v",
+			lb.ID, lb.Name, lb.PublicNet, lb.PrivateNet)
 	}
 
 	infraInfo := &InfrastructureInfo{
@@ -212,7 +227,11 @@ func Create(ctx context.Context, configPath string, wait bool) error {
 		infraInfo.LoadBalancerID = lb.ID
 		infraInfo.LoadBalancerName = lb.Name
 		infraInfo.LoadBalancerIP = hcloudInternal.LoadBalancerIPv4(lb)
+		infraInfo.LoadBalancerPrivateIP = hcloudInternal.LoadBalancerPrivateIP(lb)
 	}
+
+	log.Printf("[DEBUG] infraInfo: NetworkID=%d, FirewallID=%d, LoadBalancerID=%d, LoadBalancerIP=%s, LoadBalancerPrivateIP=%s, SSHKeyID=%d",
+		infraInfo.NetworkID, infraInfo.FirewallID, infraInfo.LoadBalancerID, infraInfo.LoadBalancerIP, infraInfo.LoadBalancerPrivateIP, infraInfo.SSHKeyID)
 
 	// Phase 6: Create CRD
 	log.Println("Phase 6: Creating K8znerCluster CRD...")
@@ -439,11 +458,12 @@ func buildK8znerClusterForCreate(cfg *config.Config, _ *provisioning.Context, in
 				Desired: getWorkerCount(cfg),
 			},
 			Infrastructure: k8znerv1alpha1.InfrastructureStatus{
-				NetworkID:      infraInfo.NetworkID,
-				FirewallID:     infraInfo.FirewallID,
-				LoadBalancerID: infraInfo.LoadBalancerID,
-				LoadBalancerIP: infraInfo.LoadBalancerIP,
-				SSHKeyID:       infraInfo.SSHKeyID,
+				NetworkID:             infraInfo.NetworkID,
+				FirewallID:            infraInfo.FirewallID,
+				LoadBalancerID:        infraInfo.LoadBalancerID,
+				LoadBalancerIP:        infraInfo.LoadBalancerIP,
+				LoadBalancerPrivateIP: infraInfo.LoadBalancerPrivateIP,
+				SSHKeyID:              infraInfo.SSHKeyID,
 			},
 			ControlPlaneEndpoint: infraInfo.LoadBalancerIP,
 		},

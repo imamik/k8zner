@@ -110,6 +110,10 @@ type ClusterReconciler struct {
 	enableMetrics      bool
 	maxConcurrentHeals int
 
+	// nodeReadyWaiter is called to wait for a node to become ready after config is applied.
+	// Defaults to waitForK8sNodeReady. Can be overridden in tests.
+	nodeReadyWaiter func(ctx context.Context, nodeName string, timeout time.Duration) error
+
 	// Provisioning adapter for operator-driven provisioning.
 	phaseAdapter *operatorprov.PhaseAdapter
 }
@@ -159,6 +163,14 @@ func WithMaxConcurrentHeals(maxHeals int) Option {
 	}
 }
 
+// WithNodeReadyWaiter sets a custom function for waiting for nodes to become ready.
+// This is primarily used for testing to avoid waiting for actual Kubernetes nodes.
+func WithNodeReadyWaiter(waiter func(ctx context.Context, nodeName string, timeout time.Duration) error) Option {
+	return func(r *ClusterReconciler) {
+		r.nodeReadyWaiter = waiter
+	}
+}
+
 // NewClusterReconciler creates a new ClusterReconciler with the given options.
 func NewClusterReconciler(c client.Client, scheme *runtime.Scheme, recorder record.EventRecorder, opts ...Option) *ClusterReconciler {
 	r := &ClusterReconciler{
@@ -172,6 +184,11 @@ func NewClusterReconciler(c client.Client, scheme *runtime.Scheme, recorder reco
 
 	for _, opt := range opts {
 		opt(r)
+	}
+
+	// Set default nodeReadyWaiter if not overridden
+	if r.nodeReadyWaiter == nil {
+		r.nodeReadyWaiter = r.waitForK8sNodeReady
 	}
 
 	return r
@@ -1091,7 +1108,39 @@ func (r *ClusterReconciler) buildProvisioningContext(ctx context.Context, cluste
 	// Create HCloud infrastructure manager
 	infraManager := hcloud.NewRealClient(creds.HCloudToken)
 
+	// IMPORTANT: Discover infrastructure from HCloud BEFORE creating Talos generator
+	// The Talos generator needs the control plane endpoint (LB IP) to generate configs
+	// This is critical for CLI-bootstrapped clusters where the CRD status may not have all infra info
+
+	// Discover and populate LoadBalancer info if missing
+	if cluster.Status.Infrastructure.LoadBalancerID == 0 {
+		lbName := naming.KubeAPILoadBalancer(cluster.Name)
+		lb, err := infraManager.GetLoadBalancer(ctx, lbName)
+		if err == nil && lb != nil {
+			cluster.Status.Infrastructure.LoadBalancerID = lb.ID
+			if lb.PublicNet.Enabled && lb.PublicNet.IPv4.IP.String() != "<nil>" {
+				cluster.Status.Infrastructure.LoadBalancerIP = lb.PublicNet.IPv4.IP.String()
+			}
+			// Get private IP from the first attached private network
+			if len(lb.PrivateNet) > 0 && lb.PrivateNet[0].IP != nil {
+				cluster.Status.Infrastructure.LoadBalancerPrivateIP = lb.PrivateNet[0].IP.String()
+			}
+		}
+		// Ignore error - LB might not exist yet if operator is creating infrastructure
+	}
+
+	// Discover and populate Firewall info if missing
+	if cluster.Status.Infrastructure.FirewallID == 0 {
+		fwName := naming.Firewall(cluster.Name)
+		fw, err := infraManager.GetFirewall(ctx, fwName)
+		if err == nil && fw != nil {
+			cluster.Status.Infrastructure.FirewallID = fw.ID
+		}
+		// Ignore error - Firewall might not exist yet
+	}
+
 	// Create Talos config producer from stored secrets
+	// Now that we've discovered LB info, the generator can find a valid endpoint
 	talosProducer, err := r.phaseAdapter.CreateTalosGenerator(cluster, creds)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create talos generator: %w", err)
@@ -1358,7 +1407,19 @@ func (r *ClusterReconciler) reconcileWorkers(ctx context.Context, cluster *k8zne
 
 	// Check if scaling is needed
 	currentCount := len(cluster.Status.Workers.Nodes)
+	provisioningCount := countWorkersInEarlyProvisioning(cluster.Status.Workers.Nodes)
 	desiredCount := cluster.Spec.Workers.Count
+
+	// Skip scaling if workers are already provisioning to prevent duplicate server creation
+	// from concurrent reconciles seeing stale status
+	if provisioningCount > 0 {
+		logger.Info("workers currently provisioning, skipping scaling check",
+			"provisioning", provisioningCount,
+			"current", currentCount,
+			"desired", desiredCount,
+		)
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	}
 
 	if currentCount < desiredCount {
 		logger.Info("scaling up workers", "current", currentCount, "desired", desiredCount)
@@ -1422,6 +1483,31 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 			logger.Error(err, "failed to load credentials for Talos config generation")
 			// Continue without Talos config - server will be created but not configured
 		} else {
+			// IMPORTANT: Discover LB info from HCloud before creating Talos generator
+			// The Talos generator needs the control plane endpoint (LB IP) to generate valid configs
+			// This is critical when the cluster status doesn't have all infrastructure info yet
+			if cluster.Status.Infrastructure.LoadBalancerID == 0 || cluster.Status.Infrastructure.LoadBalancerIP == "" {
+				// Create a temporary infraManager to look up LB info
+				infraManager := hcloud.NewRealClient(creds.HCloudToken)
+				lbName := naming.KubeAPILoadBalancer(cluster.Name)
+				lb, lbErr := infraManager.GetLoadBalancer(ctx, lbName)
+				if lbErr == nil && lb != nil {
+					cluster.Status.Infrastructure.LoadBalancerID = lb.ID
+					if lb.PublicNet.Enabled && lb.PublicNet.IPv4.IP.String() != "<nil>" {
+						cluster.Status.Infrastructure.LoadBalancerIP = lb.PublicNet.IPv4.IP.String()
+					}
+					// Get private IP from the first attached private network
+					if len(lb.PrivateNet) > 0 && lb.PrivateNet[0].IP != nil {
+						cluster.Status.Infrastructure.LoadBalancerPrivateIP = lb.PrivateNet[0].IP.String()
+					}
+					logger.Info("discovered LB info for worker scaling",
+						"lbID", lb.ID,
+						"lbIP", cluster.Status.Infrastructure.LoadBalancerIP,
+						"lbPrivateIP", cluster.Status.Infrastructure.LoadBalancerPrivateIP,
+					)
+				}
+			}
+
 			// Create Talos config generator if not injected
 			if talosConfigGen == nil {
 				generator, err := r.phaseAdapter.CreateTalosGenerator(cluster, creds)
@@ -1554,6 +1640,12 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 			RecordHCloudAPICall("create_server", "success", time.Since(startTime).Seconds())
 		}
 		logger.Info("created worker server", "name", newServerName)
+
+		// CRITICAL: Persist status immediately to prevent duplicate server creation
+		// from concurrent reconciles seeing stale status without this node
+		if err := r.persistClusterStatus(ctx, cluster); err != nil {
+			logger.Error(err, "failed to persist status after server creation", "name", newServerName)
+		}
 
 		// Step 5: Wait for server IP assignment
 		r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
@@ -1694,7 +1786,10 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 				Reason: "Waiting for kubelet to register node with Kubernetes",
 			})
 
-			if err := talosClient.WaitForNodeReady(ctx, talosIP, int(nodeReadyTimeout.Seconds())); err != nil {
+			// After config is applied, the node reboots with NEW TLS certificates.
+			// The old Talos API connection won't work anymore, so we check Kubernetes directly
+			// for node readiness instead of polling via Talos API.
+			if err := r.nodeReadyWaiter(ctx, newServerName, nodeReadyTimeout); err != nil {
 				logger.Error(err, "worker node not ready in time", "name", newServerName)
 				r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonNodeReadyTimeout,
 					"Worker node %s not ready in time: %v", newServerName, err)
@@ -2892,6 +2987,53 @@ func (r *ClusterReconciler) waitForServerIP(ctx context.Context, serverName stri
 			}
 			if ip != "" {
 				return ip, nil
+			}
+		}
+	}
+}
+
+// waitForK8sNodeReady waits for a Kubernetes node to appear and become Ready.
+// This is more reliable than polling Talos API after config is applied, because
+// the node reboots with new TLS certificates that the old Talos client can't authenticate to.
+func (r *ClusterReconciler) waitForK8sNodeReady(ctx context.Context, nodeName string, timeout time.Duration) error {
+	logger := log.FromContext(ctx)
+
+	// Initial delay to allow reboot to begin
+	time.Sleep(10 * time.Second)
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timeout waiting for node %s to become ready", nodeName)
+		case <-ticker.C:
+			// Try to get the node from Kubernetes
+			node := &corev1.Node{}
+			err := r.Get(ctx, types.NamespacedName{Name: nodeName}, node)
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					logger.V(1).Info("node not yet registered in Kubernetes", "node", nodeName)
+					continue
+				}
+				logger.V(1).Info("error getting node", "node", nodeName, "error", err)
+				continue
+			}
+
+			// Check if the node is Ready
+			for _, condition := range node.Status.Conditions {
+				if condition.Type == corev1.NodeReady {
+					if condition.Status == corev1.ConditionTrue {
+						logger.Info("node is ready in Kubernetes", "node", nodeName)
+						return nil
+					}
+					logger.V(1).Info("node exists but not ready", "node", nodeName, "status", condition.Status)
+					break
+				}
 			}
 		}
 	}

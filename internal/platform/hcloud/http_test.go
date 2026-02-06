@@ -386,38 +386,6 @@ func TestRealClient_GetPlacementGroup_WithHTTPMock(t *testing.T) {
 	}
 }
 
-func TestRealClient_GetFloatingIP_WithHTTPMock(t *testing.T) {
-	ts := newTestServer()
-	defer ts.close()
-
-	ts.handleFunc("/floating_ips", func(w http.ResponseWriter, r *http.Request) {
-		name := r.URL.Query().Get("name")
-		if name == "test-fip" {
-			jsonResponse(w, http.StatusOK, schema.FloatingIPListResponse{
-				FloatingIPs: []schema.FloatingIP{
-					{ID: 500, Name: "test-fip", IP: "1.2.3.4"},
-				},
-			})
-			return
-		}
-		jsonResponse(w, http.StatusOK, schema.FloatingIPListResponse{FloatingIPs: []schema.FloatingIP{}})
-	})
-
-	client := ts.realClient()
-	ctx := context.Background()
-
-	fip, err := client.GetFloatingIP(ctx, "test-fip")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if fip == nil {
-		t.Fatal("expected floating IP, got nil")
-	}
-	if fip.ID != 500 {
-		t.Errorf("expected ID 500, got %d", fip.ID)
-	}
-}
-
 func TestRealClient_GetCertificate_WithHTTPMock(t *testing.T) {
 	ts := newTestServer()
 	defer ts.close()
@@ -1206,89 +1174,6 @@ func TestRealClient_DeleteLoadBalancer_WithHTTPMock(t *testing.T) {
 	ctx := context.Background()
 
 	err := client.DeleteLoadBalancer(ctx, "lb-to-delete")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestRealClient_EnsureFloatingIP_WithHTTPMock(t *testing.T) {
-	ts := newTestServer()
-	defer ts.close()
-
-	ts.handleFunc("/floating_ips", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			jsonResponse(w, http.StatusCreated, schema.FloatingIPCreateResponse{
-				FloatingIP: schema.FloatingIP{
-					ID:   501,
-					Name: "test-fip",
-					IP:   "1.2.3.4",
-					Type: "ipv4",
-				},
-			})
-			return
-		}
-		// GET request
-		jsonResponse(w, http.StatusOK, schema.FloatingIPListResponse{FloatingIPs: []schema.FloatingIP{}})
-	})
-
-	ts.handleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
-		// SDK uses GET /locations?name=nbg1
-		name := r.URL.Query().Get("name")
-		if name == "nbg1" {
-			jsonResponse(w, http.StatusOK, schema.LocationListResponse{
-				Locations: []schema.Location{
-					{ID: 1, Name: "nbg1"},
-				},
-			})
-			return
-		}
-		jsonResponse(w, http.StatusOK, schema.LocationListResponse{Locations: []schema.Location{}})
-	})
-
-	client := ts.realClient()
-	ctx := context.Background()
-
-	fip, err := client.EnsureFloatingIP(ctx, "test-fip", "nbg1", "ipv4", map[string]string{"test": "true"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if fip == nil {
-		t.Fatal("expected floating IP, got nil")
-	}
-	if fip.ID != 501 {
-		t.Errorf("expected ID 501, got %d", fip.ID)
-	}
-}
-
-func TestRealClient_DeleteFloatingIP_WithHTTPMock(t *testing.T) {
-	ts := newTestServer()
-	defer ts.close()
-
-	ts.handleFunc("/floating_ips", func(w http.ResponseWriter, r *http.Request) {
-		name := r.URL.Query().Get("name")
-		if name == "fip-to-delete" {
-			jsonResponse(w, http.StatusOK, schema.FloatingIPListResponse{
-				FloatingIPs: []schema.FloatingIP{
-					{ID: 550, Name: "fip-to-delete"},
-				},
-			})
-			return
-		}
-		jsonResponse(w, http.StatusOK, schema.FloatingIPListResponse{FloatingIPs: []schema.FloatingIP{}})
-	})
-
-	ts.handleFunc("/floating_ips/550", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodDelete {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	})
-
-	client := ts.realClient()
-	ctx := context.Background()
-
-	err := client.DeleteFloatingIP(ctx, "fip-to-delete")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

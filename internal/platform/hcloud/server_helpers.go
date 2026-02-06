@@ -205,3 +205,12 @@ func LoadBalancerIPv6(lb *hcloud.LoadBalancer) string {
 	}
 	return ""
 }
+
+// LoadBalancerPrivateIP extracts the private IP address from a load balancer's first private network.
+// Returns empty string if the load balancer has no private networks attached.
+func LoadBalancerPrivateIP(lb *hcloud.LoadBalancer) string {
+	if lb != nil && len(lb.PrivateNet) > 0 && lb.PrivateNet[0].IP != nil {
+		return lb.PrivateNet[0].IP.String()
+	}
+	return ""
+}

@@ -542,13 +542,41 @@ func (a *PhaseAdapter) CreateTalosGenerator(
 		return nil, fmt.Errorf("failed to parse talos secrets: %w", err)
 	}
 
-	// Determine the endpoint
-	// Priority: 1. Load balancer IP (if exists), 2. Bootstrap public IP, 3. Cluster name
-	endpoint := k8sCluster.Name
-	if k8sCluster.Status.ControlPlaneEndpoint != "" {
-		endpoint = k8sCluster.Status.ControlPlaneEndpoint
-	} else if k8sCluster.Spec.Bootstrap != nil && k8sCluster.Spec.Bootstrap.PublicIP != "" {
-		endpoint = k8sCluster.Spec.Bootstrap.PublicIP
+	// Determine the endpoint - prefer private IPs for internal cluster communication
+	// Priority: 1. LB Private IP (internal), 2. ControlPlaneEndpoint (if already URL), 3. LB Public IP, 4. First CP node private IP, 5. First CP node public IP
+	// Note: The endpoint must be a full URL (https://host:6443) for Talos config generation
+	var endpoint string
+	var endpointIP string
+
+	if k8sCluster.Status.Infrastructure.LoadBalancerPrivateIP != "" {
+		// Prefer private IP for internal cluster communication (faster, more secure)
+		endpointIP = k8sCluster.Status.Infrastructure.LoadBalancerPrivateIP
+	} else if k8sCluster.Status.ControlPlaneEndpoint != "" {
+		// ControlPlaneEndpoint might already be a URL - use it directly if it looks like one
+		if strings.HasPrefix(k8sCluster.Status.ControlPlaneEndpoint, "https://") {
+			endpoint = k8sCluster.Status.ControlPlaneEndpoint
+		} else {
+			endpointIP = k8sCluster.Status.ControlPlaneEndpoint
+		}
+	} else if k8sCluster.Status.Infrastructure.LoadBalancerIP != "" {
+		endpointIP = k8sCluster.Status.Infrastructure.LoadBalancerIP
+	} else if len(k8sCluster.Status.ControlPlanes.Nodes) > 0 {
+		// Fallback to first control plane node - prefer private IP
+		cp := k8sCluster.Status.ControlPlanes.Nodes[0]
+		if cp.PrivateIP != "" {
+			endpointIP = cp.PrivateIP
+		} else if cp.PublicIP != "" {
+			endpointIP = cp.PublicIP
+		}
+	}
+
+	// Format as URL if we have an IP but not a full endpoint URL yet
+	if endpoint == "" && endpointIP != "" {
+		endpoint = fmt.Sprintf("https://%s:%d", endpointIP, config.KubeAPIPort)
+	}
+
+	if endpoint == "" {
+		return nil, fmt.Errorf("cannot create talos generator: no valid control plane endpoint found (LoadBalancerPrivateIP, ControlPlaneEndpoint, LoadBalancerIP, or CP node IP required)")
 	}
 
 	// Create the generator
@@ -658,3 +686,4 @@ func (o *OperatorObserver) WithFields(fields map[string]string) provisioning.Obs
 		fields: newFields,
 	}
 }
+

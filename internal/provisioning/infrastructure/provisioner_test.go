@@ -150,28 +150,6 @@ func TestProvisionLoadBalancers_Success(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestProvisionFloatingIPs_Disabled(t *testing.T) {
-	mockInfra := &hcloud_internal.MockClient{}
-	cfg := &config.Config{
-		ClusterName: "test-cluster",
-		Location:    "nbg1",
-		Network: config.NetworkConfig{
-			IPv4CIDR: "10.0.0.0/16",
-			Zone:     "eu-central",
-		},
-		ControlPlane: config.ControlPlaneConfig{
-			PublicVIPIPv4Enabled:  false,
-			PrivateVIPIPv4Enabled: false,
-		},
-	}
-
-	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err := p.ProvisionFloatingIPs(ctx)
-	assert.NoError(t, err)
-}
-
 func TestGetNetwork(t *testing.T) {
 	mockInfra := &hcloud_internal.MockClient{}
 	cfg := &config.Config{
@@ -355,32 +333,6 @@ func TestNewIngressService(t *testing.T) {
 		assert.Equal(t, 20, int(result.HealthCheck.Timeout.Seconds()))
 		assert.Equal(t, 5, *result.HealthCheck.Retries)
 	})
-}
-
-func TestProvisionFloatingIPs_Enabled(t *testing.T) {
-	mockInfra := &hcloud_internal.MockClient{}
-	cfg := &config.Config{
-		ClusterName: "test-cluster",
-		Location:    "nbg1",
-		ControlPlane: config.ControlPlaneConfig{
-			PublicVIPIPv4Enabled: true,
-		},
-	}
-
-	var capturedName string
-	mockInfra.EnsureFloatingIPFunc = func(_ context.Context, name, _, _ string, _ map[string]string) (*hcloud.FloatingIP, error) {
-		capturedName = name
-		return &hcloud.FloatingIP{ID: 1, Name: name}, nil
-	}
-
-	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err := p.ProvisionFloatingIPs(ctx)
-	assert.NoError(t, err)
-	assert.Contains(t, capturedName, "test-cluster")
-	// New naming: {cluster}-cp-ip
-	assert.Contains(t, capturedName, "cp-ip")
 }
 
 func TestProvisionNetwork_WithWorkers(t *testing.T) {

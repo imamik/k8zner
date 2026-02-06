@@ -28,10 +28,11 @@ func (l *DefaultLogger) Printf(format string, v ...interface{}) {
 // to subsequent phases that need earlier results.
 type State struct {
 	// Infrastructure results (populated by infrastructure provisioner)
-	Network  *hcloud.Network
-	Firewall *hcloud.Firewall
-	PublicIP string // Current execution environment's public IPv4
-	SSHKeyID int64  // SSH key ID (for autoscaler addon)
+	Network      *hcloud.Network
+	Firewall     *hcloud.Firewall
+	LoadBalancer *hcloud.LoadBalancer // API load balancer (for control plane)
+	PublicIP     string               // Current execution environment's public IPv4
+	SSHKeyID     int64                // SSH key ID (for autoscaler addon)
 
 	// Compute results (populated by compute provisioner)
 	ControlPlaneIPs       map[string]string // nodeName -> publicIP

@@ -33,7 +33,7 @@ func (p *Provisioner) Provision(ctx *provisioning.Context) error {
 	provisioning.LogResourceDeleting(ctx.Observer, "destroy", "cluster", ctx.Config.ClusterName)
 
 	// Delete all cluster resources by label
-	// This includes: servers, load balancers, floating IPs, firewalls, networks,
+	// This includes: servers, load balancers, firewalls, networks,
 	// placement groups, SSH keys, and certificates
 	if err := ctx.Infra.CleanupByLabel(ctx, clusterLabels); err != nil {
 		return fmt.Errorf("failed to cleanup cluster resources: %w", err)

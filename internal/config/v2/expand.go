@@ -126,8 +126,6 @@ func expandControlPlane(cfg *Config) config.ControlPlaneConfig {
 				},
 			},
 		},
-		// Enable public VIP for HA clusters
-		PublicVIPIPv4Enabled: cfg.Mode == ModeHA,
 	}
 }
 

@@ -106,27 +106,6 @@ func TestIngressLoadBalancer(t *testing.T) {
 	}
 }
 
-func TestControlPlaneFloatingIP(t *testing.T) {
-	tests := []struct {
-		name     string
-		cluster  string
-		expected string
-	}{
-		{"simple cluster name", "my-cluster", "my-cluster-cp-ip"},
-		{"single word", "production", "production-cp-ip"},
-		{"with numbers", "cluster-01", "cluster-01-cp-ip"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := ControlPlaneFloatingIP(tt.cluster)
-			if result != tt.expected {
-				t.Errorf("ControlPlaneFloatingIP(%q) = %q, want %q", tt.cluster, result, tt.expected)
-			}
-		})
-	}
-}
-
 func TestFirewall(t *testing.T) {
 	tests := []struct {
 		name     string
