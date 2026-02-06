@@ -102,9 +102,8 @@ func TestE2EHAOperations(t *testing.T) {
 	// SUBTEST 03: Verify CCM
 	// =========================================================================
 	t.Run("03_Verify_CCM", func(t *testing.T) {
-		cluster := GetClusterStatus(ctx, state)
-		ccm, ok := cluster.Status.Addons[k8znerv1alpha1.AddonNameCCM]
-		require.True(t, ok && ccm.Installed, "CCM should be installed")
+		err := WaitForAddonInstalled(ctx, t, state, k8znerv1alpha1.AddonNameCCM, 2*time.Minute)
+		require.NoError(t, err, "CCM should be installed")
 
 		// LoadBalancer test
 		legacyState := state.ToE2EState()

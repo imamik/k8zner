@@ -50,10 +50,6 @@ const (
 	serverIPTimeout  = 2 * time.Minute
 	nodeReadyTimeout = 5 * time.Minute
 
-	// Addon installation timeout - if addons don't install within this time,
-	// proceed to compute phase anyway to avoid blocking cluster provisioning
-	addonInstallationTimeout = 10 * time.Minute
-
 	// Status update retry settings.
 	statusUpdateRetries = 3
 	statusRetryInterval = 100 * time.Millisecond
@@ -326,8 +322,13 @@ func (r *ClusterReconciler) updateStatusWithRetry(ctx context.Context, cluster *
 			return fmt.Errorf("failed to get latest cluster for retry: %w", getErr)
 		}
 
-		// Preserve our status changes on the latest version
+		// Preserve our status changes on the latest version, but keep
+		// addon statuses that may have been set by a prior reconcile.
+		savedAddons := latest.Status.Addons
 		latest.Status = cluster.Status
+		if latest.Status.Addons == nil && savedAddons != nil {
+			latest.Status.Addons = savedAddons
+		}
 		cluster = latest
 
 		time.Sleep(statusRetryInterval)
@@ -895,61 +896,11 @@ func (r *ClusterReconciler) waitForCiliumReady(ctx context.Context, kubeconfig [
 }
 
 // reconcileAddonsPhase installs remaining addons after CNI is ready.
+// Addons are installed one-at-a-time per reconcile cycle, updating the CRD
+// status after each so that progress is visible externally.
 func (r *ClusterReconciler) reconcileAddonsPhase(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	logger.Info("reconciling addons phase")
-
-	// Track when addon installation started (for timeout detection)
-	// We only set PhaseStartedAt once when first entering Addons phase.
-	// The timer persists across reconcile loops until we either:
-	// 1. Complete addon installation and move to next phase
-	// 2. Hit the timeout and force-advance to next phase
-	now := metav1.Now()
-	if cluster.Status.PhaseStartedAt == nil {
-		cluster.Status.PhaseStartedAt = &now
-		logger.Info("addon installation timer started",
-			"startTime", now.Time,
-			"timeout", addonInstallationTimeout,
-		)
-	}
-
-	// Check for addon installation timeout
-	if cluster.Status.PhaseStartedAt != nil {
-		elapsed := time.Since(cluster.Status.PhaseStartedAt.Time)
-		remaining := addonInstallationTimeout - elapsed
-
-		// Log progress at INFO level every minute, DEBUG otherwise
-		if elapsed.Truncate(time.Minute) != (elapsed - 10*time.Second).Truncate(time.Minute) {
-			logger.Info("addon installation in progress",
-				"elapsed", elapsed.Round(time.Second),
-				"timeout", addonInstallationTimeout,
-				"remaining", remaining.Round(time.Second),
-				"startedAt", cluster.Status.PhaseStartedAt.Time,
-			)
-		} else {
-			logger.V(1).Info("addon installation in progress",
-				"elapsed", elapsed.Round(time.Second),
-				"remaining", remaining.Round(time.Second),
-			)
-		}
-
-		if elapsed > addonInstallationTimeout {
-			logger.Error(nil, "ADDON TIMEOUT: installation exceeded timeout - forcing transition to complete phase",
-				"elapsed", elapsed.Round(time.Second),
-				"timeout", addonInstallationTimeout,
-				"startedAt", cluster.Status.PhaseStartedAt.Time,
-			)
-			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonAddonsTimeout,
-				"Addon installation exceeded %s timeout (started at %s) - proceeding with available addons",
-				addonInstallationTimeout, cluster.Status.PhaseStartedAt.Format(time.RFC3339))
-
-			// Clear the phase timer and proceed to complete phase (compute/bootstrap already done)
-			cluster.Status.PhaseStartedAt = nil
-			cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseComplete
-			cluster.Status.Phase = k8znerv1alpha1.ClusterPhaseRunning
-			return ctrl.Result{Requeue: true}, nil
-		}
-	}
 
 	// Ensure workers are ready before installing addons.
 	// Workers are created by scaleUpWorkers (normally in running phase), but addons like
@@ -972,9 +923,6 @@ func (r *ClusterReconciler) reconcileAddonsPhase(ctx context.Context, cluster *k
 		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
 	}
 
-	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonAddonsInstalling,
-		"Installing cluster addons")
-
 	// Load credentials
 	creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
 	if err != nil {
@@ -988,8 +936,6 @@ func (r *ClusterReconciler) reconcileAddonsPhase(ctx context.Context, cluster *k
 		r.logAndRecordError(ctx, cluster, err, EventReasonAddonsFailed, "Failed to convert spec to config")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
-
-	// Ensure HCloud token is set (required for CCM/CSI)
 	cfg.HCloudToken = creds.HCloudToken
 
 	// Get kubeconfig from Talos
@@ -1002,7 +948,6 @@ func (r *ClusterReconciler) reconcileAddonsPhase(ctx context.Context, cluster *k
 	// Get network ID from status, or look it up from HCloud if not set
 	networkID := cluster.Status.Infrastructure.NetworkID
 	if networkID == 0 {
-		// Network ID not in status - look it up from HCloud by cluster name
 		logger.Info("networkID not in status, looking up from HCloud", "clusterName", cluster.Name)
 		network, err := r.hcloudClient.GetNetwork(ctx, cluster.Name)
 		if err != nil {
@@ -1015,129 +960,62 @@ func (r *ClusterReconciler) reconcileAddonsPhase(ctx context.Context, cluster *k
 			return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 		}
 		networkID = network.ID
-		// Update the status with the network ID for future reconciles
 		cluster.Status.Infrastructure.NetworkID = networkID
 		logger.Info("found network ID from HCloud", "networkID", networkID)
 	}
 
-	// Validate required credentials before installing CCM/CSI
-	// These addons will fail silently without valid credentials
 	if cfg.HCloudToken == "" {
 		err := fmt.Errorf("HCloud token is empty")
 		r.logAndRecordError(ctx, cluster, err, EventReasonAddonsFailed, "CCM/CSI addons require valid credentials")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
-	// Log addon installation details for debugging
-	logger.V(1).Info("addon installation prerequisites validated",
-		"networkID", networkID,
-		"hasHCloudToken", cfg.HCloudToken != "",
-		"tokenLength", len(cfg.HCloudToken),
-		"ccmEnabled", cfg.Addons.CCM.Enabled,
-		"csiEnabled", cfg.Addons.CSI.Enabled,
-	)
-
-	// Install remaining addons (Cilium already installed in CNI phase)
-	logger.Info("installing addons", "networkID", networkID)
-	if err := addons.ApplyWithoutCilium(ctx, cfg, kubeconfig, networkID); err != nil {
-		r.logAndRecordError(ctx, cluster, err, EventReasonAddonsFailed, "Failed to install addons")
-		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
-	}
-
-	// Update addon statuses
-	now = metav1.Now()
+	// Initialize addon status map
 	if cluster.Status.Addons == nil {
 		cluster.Status.Addons = make(map[string]k8znerv1alpha1.AddonStatus)
 	}
 
-	// Mark core addons as installed
-	cluster.Status.Addons[k8znerv1alpha1.AddonNameCCM] = k8znerv1alpha1.AddonStatus{
-		Installed:          true,
-		Healthy:            true,
-		Phase:              k8znerv1alpha1.AddonPhaseInstalled,
-		LastTransitionTime: &now,
-		InstallOrder:       k8znerv1alpha1.AddonOrderCCM,
-	}
-	cluster.Status.Addons[k8znerv1alpha1.AddonNameCSI] = k8znerv1alpha1.AddonStatus{
-		Installed:          true,
-		Healthy:            true,
-		Phase:              k8znerv1alpha1.AddonPhaseInstalled,
-		LastTransitionTime: &now,
-		InstallOrder:       k8znerv1alpha1.AddonOrderCSI,
+	// Install addons one-at-a-time. Each reconcile installs the next pending addon,
+	// updates the CRD status, and requeues immediately for the next one.
+	steps := addons.EnabledSteps(cfg)
+	for _, step := range steps {
+		if _, installed := cluster.Status.Addons[step.Name]; installed {
+			continue // Already installed in a previous reconcile
+		}
+
+		// Found the next addon to install
+		logger.Info("installing addon", "addon", step.Name, "order", step.Order)
+		r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonAddonsInstalling,
+			"Installing addon: %s", step.Name)
+
+		if err := addons.InstallStep(ctx, step.Name, cfg, kubeconfig, networkID); err != nil {
+			r.logAndRecordError(ctx, cluster, err, EventReasonAddonsFailed,
+				fmt.Sprintf("Failed to install addon: %s", step.Name))
+			return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+		}
+
+		// Mark this addon as installed in the CRD status
+		now := metav1.Now()
+		cluster.Status.Addons[step.Name] = k8znerv1alpha1.AddonStatus{
+			Installed:          true,
+			Healthy:            true,
+			Phase:              k8znerv1alpha1.AddonPhaseInstalled,
+			LastTransitionTime: &now,
+			InstallOrder:       step.Order,
+		}
+
+		logger.Info("addon installed successfully", "addon", step.Name)
+
+		// Requeue immediately to install the next addon.
+		// Status update happens in the outer Reconcile() after we return.
+		return ctrl.Result{Requeue: true}, nil
 	}
 
-	// Update optional addons based on spec
-	if cfg.Addons.MetricsServer.Enabled {
-		cluster.Status.Addons[k8znerv1alpha1.AddonNameMetricsServer] = k8znerv1alpha1.AddonStatus{
-			Installed:          true,
-			Healthy:            true,
-			Phase:              k8znerv1alpha1.AddonPhaseInstalled,
-			LastTransitionTime: &now,
-			InstallOrder:       k8znerv1alpha1.AddonOrderMetricsServer,
-		}
-	}
-	if cfg.Addons.CertManager.Enabled {
-		cluster.Status.Addons[k8znerv1alpha1.AddonNameCertManager] = k8znerv1alpha1.AddonStatus{
-			Installed:          true,
-			Healthy:            true,
-			Phase:              k8znerv1alpha1.AddonPhaseInstalled,
-			LastTransitionTime: &now,
-			InstallOrder:       k8znerv1alpha1.AddonOrderCertManager,
-		}
-	}
-	if cfg.Addons.Traefik.Enabled {
-		cluster.Status.Addons[k8znerv1alpha1.AddonNameTraefik] = k8znerv1alpha1.AddonStatus{
-			Installed:          true,
-			Healthy:            true,
-			Phase:              k8znerv1alpha1.AddonPhaseInstalled,
-			LastTransitionTime: &now,
-			InstallOrder:       k8znerv1alpha1.AddonOrderTraefik,
-		}
-	}
-	if cfg.Addons.ExternalDNS.Enabled {
-		cluster.Status.Addons[k8znerv1alpha1.AddonNameExternalDNS] = k8znerv1alpha1.AddonStatus{
-			Installed:          true,
-			Healthy:            true,
-			Phase:              k8znerv1alpha1.AddonPhaseInstalled,
-			LastTransitionTime: &now,
-			InstallOrder:       k8znerv1alpha1.AddonOrderExternalDNS,
-		}
-	}
-	if cfg.Addons.ArgoCD.Enabled {
-		cluster.Status.Addons[k8znerv1alpha1.AddonNameArgoCD] = k8znerv1alpha1.AddonStatus{
-			Installed:          true,
-			Healthy:            true,
-			Phase:              k8znerv1alpha1.AddonPhaseInstalled,
-			LastTransitionTime: &now,
-			InstallOrder:       k8znerv1alpha1.AddonOrderArgoCD,
-		}
-	}
-	if cfg.Addons.KubePrometheusStack.Enabled {
-		cluster.Status.Addons[k8znerv1alpha1.AddonNameMonitoring] = k8znerv1alpha1.AddonStatus{
-			Installed:          true,
-			Healthy:            true,
-			Phase:              k8znerv1alpha1.AddonPhaseInstalled,
-			LastTransitionTime: &now,
-			InstallOrder:       k8znerv1alpha1.AddonOrderMonitoring,
-		}
-	}
-	if cfg.Addons.TalosBackup.Enabled {
-		cluster.Status.Addons[k8znerv1alpha1.AddonNameTalosBackup] = k8znerv1alpha1.AddonStatus{
-			Installed:          true,
-			Healthy:            true,
-			Phase:              k8znerv1alpha1.AddonPhaseInstalled,
-			LastTransitionTime: &now,
-			InstallOrder:       k8znerv1alpha1.AddonOrderTalosBackup,
-		}
-	}
-
+	// All addons installed!
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonAddonsReady,
 		"All addons installed successfully")
 
-	// Clear phase timer since addons installed successfully
 	cluster.Status.PhaseStartedAt = nil
-
-	// Addons installed - transition to complete (compute/bootstrap already done)
 	cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseComplete
 	cluster.Status.Phase = k8znerv1alpha1.ClusterPhaseRunning
 

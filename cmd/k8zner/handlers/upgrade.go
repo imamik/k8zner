@@ -79,6 +79,9 @@ func Upgrade(ctx context.Context, opts UpgradeOptions) error {
 		sb,
 	)
 
+	// Set machine config options (CoreDNS, encryption, network settings, etc.)
+	talosGen.SetMachineConfigOptions(talos.NewMachineConfigOptions(cfg))
+
 	// Create provisioning context
 	pCtx := newProvisioningContext(ctx, cfg, infraClient, talosGen)
 

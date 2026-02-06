@@ -176,10 +176,9 @@ func TestE2EFullStackDev(t *testing.T) {
 	// SUBTEST 04: Verify CCM
 	// =========================================================================
 	runSubtest("04_Verify_CCM", func(t *testing.T) {
-		// Check addon status
-		cluster := GetClusterStatus(ctx, state)
-		ccm, ok := cluster.Status.Addons[k8znerv1alpha1.AddonNameCCM]
-		require.True(t, ok && ccm.Installed, "CCM should be installed")
+		// Wait for addon status (appears after the addon's reconcile cycle)
+		err := WaitForAddonInstalled(ctx, t, state, k8znerv1alpha1.AddonNameCCM, 2*time.Minute)
+		require.NoError(t, err, "CCM should be installed")
 
 		// LoadBalancer provisioning test
 		legacyState := state.ToE2EState()
@@ -190,10 +189,9 @@ func TestE2EFullStackDev(t *testing.T) {
 	// SUBTEST 05: Verify CSI
 	// =========================================================================
 	runSubtest("05_Verify_CSI", func(t *testing.T) {
-		// Check addon status
-		cluster := GetClusterStatus(ctx, state)
-		csi, ok := cluster.Status.Addons[k8znerv1alpha1.AddonNameCSI]
-		require.True(t, ok && csi.Installed, "CSI should be installed")
+		// Wait for addon status (appears after the addon's reconcile cycle)
+		err := WaitForAddonInstalled(ctx, t, state, k8znerv1alpha1.AddonNameCSI, 2*time.Minute)
+		require.NoError(t, err, "CSI should be installed")
 
 		// Volume provisioning + mount test
 		legacyState := state.ToE2EState()
