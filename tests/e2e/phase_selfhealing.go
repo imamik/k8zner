@@ -114,11 +114,14 @@ func createK8znerClusterResource(t *testing.T, state *E2EState) {
 	workerCount := len(state.WorkerIPs)
 
 	// Build the K8znerCluster manifest
+	// Include SSH key annotation so operator can create new servers
 	manifest := fmt.Sprintf(`apiVersion: k8zner.io/v1alpha1
 kind: K8znerCluster
 metadata:
   name: %s
   namespace: k8zner-system
+  annotations:
+    k8zner.io/ssh-keys: "%s"
 spec:
   region: nbg1
   controlPlanes:
@@ -129,7 +132,7 @@ spec:
     size: cx22
   healthCheck:
     nodeNotReadyThreshold: "2m"
-`, state.ClusterName, cpCount, workerCount)
+`, state.ClusterName, state.SSHKeyName, cpCount, workerCount)
 
 	// Apply via kubectl
 	// #nosec G204 -- E2E test with controlled command arguments

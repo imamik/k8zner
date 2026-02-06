@@ -13,6 +13,7 @@ type MockClient struct {
 	DeleteServerFunc      func(ctx context.Context, name string) error
 	GetServerIPFunc       func(ctx context.Context, name string) (string, error)
 	GetServerIDFunc       func(ctx context.Context, name string) (string, error)
+	GetServerByNameFunc   func(ctx context.Context, name string) (*hcloud.Server, error)
 	GetServersByLabelFunc func(ctx context.Context, labels map[string]string) ([]*hcloud.Server, error)
 	EnableRescueFunc      func(ctx context.Context, serverID string, sshKeyIDs []string) (string, error)
 	ResetServerFunc       func(ctx context.Context, serverID string) error
@@ -103,6 +104,14 @@ func (m *MockClient) GetServerID(ctx context.Context, name string) (string, erro
 		return m.GetServerIDFunc(ctx, name)
 	}
 	return "123", nil
+}
+
+// GetServerByName mocks getting full server object by name.
+func (m *MockClient) GetServerByName(ctx context.Context, name string) (*hcloud.Server, error) {
+	if m.GetServerByNameFunc != nil {
+		return m.GetServerByNameFunc(ctx, name)
+	}
+	return nil, nil // Return nil to indicate server not found
 }
 
 // GetServersByLabel mocks getting servers by label.
