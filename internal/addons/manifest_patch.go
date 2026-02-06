@@ -67,3 +67,77 @@ func patchDeploymentDNSPolicy(manifests []byte, deploymentName, dnsPolicy string
 
 	return buf.Bytes(), nil
 }
+
+// patchHostNetworkAPIAccess injects KUBERNETES_SERVICE_HOST=localhost and
+// KUBERNETES_SERVICE_PORT=6443 env vars into all containers of a named
+// DaemonSet or Deployment. This is required for pods that run with
+// hostNetwork:true when kube-proxy is disabled (Cilium replaces it),
+// because the Kubernetes service IP is not routable without kube-proxy/Cilium.
+func patchHostNetworkAPIAccess(manifests []byte, resourceName string) ([]byte, error) {
+	decoder := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(manifests), 4096)
+
+	var docs [][]byte
+	patched := false
+
+	for {
+		var raw unstructured.Unstructured
+		if err := decoder.Decode(&raw); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, fmt.Errorf("failed to decode YAML document: %w", err)
+		}
+
+		if len(raw.Object) == 0 {
+			continue
+		}
+
+		kind := raw.GetKind()
+		if (kind == "DaemonSet" || kind == "Deployment") && raw.GetName() == resourceName {
+			containers, found, err := unstructured.NestedSlice(raw.Object, "spec", "template", "spec", "containers")
+			if err != nil || !found || len(containers) == 0 {
+				return nil, fmt.Errorf("no containers found in %s/%s", kind, resourceName)
+			}
+
+			for i, c := range containers {
+				container, ok := c.(map[string]interface{})
+				if !ok {
+					continue
+				}
+
+				env, _, _ := unstructured.NestedSlice(container, "env")
+				env = append(env,
+					map[string]interface{}{"name": "KUBERNETES_SERVICE_HOST", "value": "localhost"},
+					map[string]interface{}{"name": "KUBERNETES_SERVICE_PORT", "value": "6443"},
+				)
+				container["env"] = env
+				containers[i] = container
+			}
+
+			if err := unstructured.SetNestedSlice(raw.Object, containers, "spec", "template", "spec", "containers"); err != nil {
+				return nil, fmt.Errorf("failed to set containers on %s/%s: %w", kind, resourceName, err)
+			}
+			patched = true
+		}
+
+		out, err := sigsyaml.Marshal(raw.Object)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal YAML document: %w", err)
+		}
+		docs = append(docs, out)
+	}
+
+	if !patched {
+		return nil, fmt.Errorf("%s not found in manifests", resourceName)
+	}
+
+	var buf bytes.Buffer
+	for i, doc := range docs {
+		if i > 0 {
+			buf.WriteString("---\n")
+		}
+		buf.Write(doc)
+	}
+
+	return buf.Bytes(), nil
+}
