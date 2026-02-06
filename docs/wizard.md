@@ -72,19 +72,28 @@ Enter the number of worker nodes (1-10):
 
 Select worker node size:
 
+**CX Series - Dedicated vCPU (Default)**
 | Size | vCPU | RAM | Best For |
 |------|------|-----|----------|
-| cx22 | 2 | 4GB | Small workloads |
-| cx32 | 4 | 8GB | Medium workloads |
-| cx42 | 8 | 16GB | Larger workloads |
-| cx52 | 16 | 32GB | Heavy workloads |
+| cx23 | 2 | 4GB | Small workloads |
+| cx33 | 4 | 8GB | Medium workloads |
+| cx43 | 8 | 16GB | Larger workloads |
+| cx53 | 16 | 32GB | Heavy workloads |
+
+**CPX Series - Shared vCPU**
+| Size | vCPU | RAM | Best For |
+|------|------|-----|----------|
+| cpx22 | 2 | 4GB | Dev/test |
+| cpx32 | 4 | 8GB | Medium workloads |
+| cpx42 | 8 | 16GB | Larger workloads |
+| cpx52 | 16 | 32GB | Heavy workloads |
 
 ```
 ? Worker size: [Use arrows to move, type to filter]
-  cx22 (2 vCPU, 4GB RAM)
-> cx32 (4 vCPU, 8GB RAM)
-  cx42 (8 vCPU, 16GB RAM)
-  cx52 (16 vCPU, 32GB RAM)
+  cx23 (2 vCPU, 4GB RAM)
+> cx33 (4 vCPU, 8GB RAM)
+  cx43 (8 vCPU, 16GB RAM)
+  cpx32 (4 vCPU, 8GB RAM, shared)
 ```
 
 ### 6. Domain (Optional)
@@ -109,7 +118,7 @@ region: fsn1
 mode: ha
 workers:
   count: 3
-  size: cx32
+  size: cx33
 domain: example.com
 ```
 
@@ -126,11 +135,11 @@ Cluster Summary:
   Mode: ha (3 control planes, 2 separate LBs)
 
 Resources:
-  Control Planes: 3 x cx22
-  Workers: 3 x cx32
+  Control Planes: 3 x cx23
+  Workers: 3 x cx33
   Load Balancers: 2 x lb11
 
-Estimated Monthly Cost: €63.88 (incl. 19% VAT)
+Estimated Monthly Cost: €50.14 (incl. 19% VAT)
 ```
 
 ## Opinionated Defaults
@@ -139,7 +148,7 @@ The simplified config automatically includes:
 
 ### Infrastructure
 - IPv6-only nodes (saves IPv4 costs, better security)
-- Dedicated control plane servers (cx22)
+- Dedicated vCPU control plane servers (cx23 by default)
 - Hetzner Cloud integration (CCM, CSI)
 
 ### Networking
@@ -166,14 +175,14 @@ The simplified config automatically includes:
 
 ```bash
 k8zner init -o dev.yaml
-# Select: dev mode, 1 worker, cx22
+# Select: dev mode, 1 worker, cx23
 ```
 
 ### Production Cluster
 
 ```bash
 k8zner init -o production.yaml
-# Select: ha mode, 3 workers, cx32, add domain
+# Select: ha mode, 3 workers, cx33, add domain
 ```
 
 ## Next Steps

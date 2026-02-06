@@ -120,7 +120,8 @@ func TestBuildTraefikValues(t *testing.T) {
 			// Check Hetzner LB annotations
 			annotations, ok := service["annotations"].(helm.Values)
 			require.True(t, ok)
-			assert.Equal(t, "test-cluster-ingress", annotations["load-balancer.hetzner.cloud/name"])
+			// New naming: {cluster}-lb-ingress
+			assert.Equal(t, "test-cluster-lb-ingress", annotations["load-balancer.hetzner.cloud/name"])
 			assert.Equal(t, "true", annotations["load-balancer.hetzner.cloud/use-private-ip"])
 			assert.Equal(t, "true", annotations["load-balancer.hetzner.cloud/uses-proxyprotocol"])
 

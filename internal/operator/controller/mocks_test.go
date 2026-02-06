@@ -18,6 +18,8 @@ type MockHCloudClient struct {
 	GetServerIDFunc         func(ctx context.Context, name string) (string, error)
 	GetServerByNameFunc     func(ctx context.Context, name string) (*hcloudgo.Server, error)
 	GetServersByLabelFunc   func(ctx context.Context, labels map[string]string) ([]*hcloudgo.Server, error)
+	CreateSSHKeyFunc        func(ctx context.Context, name, publicKey string, labels map[string]string) (string, error)
+	DeleteSSHKeyFunc        func(ctx context.Context, name string) error
 	GetNetworkFunc          func(ctx context.Context, name string) (*hcloudgo.Network, error)
 	GetSnapshotByLabelsFunc func(ctx context.Context, labels map[string]string) (*hcloudgo.Image, error)
 
@@ -27,8 +29,17 @@ type MockHCloudClient struct {
 	GetServerIPCalls         []string
 	GetServerIDCalls         []string
 	GetServerByNameCalls     []string
+	CreateSSHKeyCalls        []CreateSSHKeyCall
+	DeleteSSHKeyCalls        []string
 	GetNetworkCalls          []string
 	GetSnapshotByLabelsCalls []map[string]string
+}
+
+// CreateSSHKeyCall tracks arguments to CreateSSHKey.
+type CreateSSHKeyCall struct {
+	Name      string
+	PublicKey string
+	Labels    map[string]string
 }
 
 // CreateServerCall tracks arguments to CreateServer.
@@ -120,6 +131,36 @@ func (m *MockHCloudClient) GetServersByLabel(ctx context.Context, labels map[str
 		return m.GetServersByLabelFunc(ctx, labels)
 	}
 	return nil, nil
+}
+
+func (m *MockHCloudClient) CreateSSHKey(ctx context.Context, name, publicKey string, labels map[string]string) (string, error) {
+	m.mu.Lock()
+	labelsCopy := make(map[string]string, len(labels))
+	for k, v := range labels {
+		labelsCopy[k] = v
+	}
+	m.CreateSSHKeyCalls = append(m.CreateSSHKeyCalls, CreateSSHKeyCall{
+		Name:      name,
+		PublicKey: publicKey,
+		Labels:    labelsCopy,
+	})
+	m.mu.Unlock()
+
+	if m.CreateSSHKeyFunc != nil {
+		return m.CreateSSHKeyFunc(ctx, name, publicKey, labels)
+	}
+	return "12345", nil
+}
+
+func (m *MockHCloudClient) DeleteSSHKey(ctx context.Context, name string) error {
+	m.mu.Lock()
+	m.DeleteSSHKeyCalls = append(m.DeleteSSHKeyCalls, name)
+	m.mu.Unlock()
+
+	if m.DeleteSSHKeyFunc != nil {
+		return m.DeleteSSHKeyFunc(ctx, name)
+	}
+	return nil
 }
 
 func (m *MockHCloudClient) GetNetwork(ctx context.Context, name string) (*hcloudgo.Network, error) {

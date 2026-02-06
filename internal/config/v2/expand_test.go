@@ -57,8 +57,8 @@ func TestExpand_ControlPlane_DevMode(t *testing.T) {
 	if cp.Count != 1 {
 		t.Errorf("ControlPlane count = %d, want 1", cp.Count)
 	}
-	if cp.ServerType != ControlPlaneServerType {
-		t.Errorf("ControlPlane type = %q, want %q", cp.ServerType, ControlPlaneServerType)
+	if cp.ServerType != DefaultControlPlaneServerType {
+		t.Errorf("ControlPlane type = %q, want %q", cp.ServerType, DefaultControlPlaneServerType)
 	}
 	if cp.Location != "nbg1" {
 		t.Errorf("ControlPlane location = %q, want %q", cp.Location, "nbg1")

@@ -9,15 +9,16 @@ import (
 
 // MockClient is a mock implementation of InfrastructureManager.
 type MockClient struct {
-	CreateServerFunc      func(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string, enablePublicIPv4, enablePublicIPv6 bool) (string, error)
-	DeleteServerFunc      func(ctx context.Context, name string) error
-	GetServerIPFunc       func(ctx context.Context, name string) (string, error)
-	GetServerIDFunc       func(ctx context.Context, name string) (string, error)
-	GetServerByNameFunc   func(ctx context.Context, name string) (*hcloud.Server, error)
-	GetServersByLabelFunc func(ctx context.Context, labels map[string]string) ([]*hcloud.Server, error)
-	EnableRescueFunc      func(ctx context.Context, serverID string, sshKeyIDs []string) (string, error)
-	ResetServerFunc       func(ctx context.Context, serverID string) error
-	PoweroffServerFunc    func(ctx context.Context, serverID string) error
+	CreateServerFunc          func(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string, enablePublicIPv4, enablePublicIPv6 bool) (string, error)
+	DeleteServerFunc          func(ctx context.Context, name string) error
+	GetServerIPFunc           func(ctx context.Context, name string) (string, error)
+	GetServerIDFunc           func(ctx context.Context, name string) (string, error)
+	GetServerByNameFunc       func(ctx context.Context, name string) (*hcloud.Server, error)
+	GetServersByLabelFunc     func(ctx context.Context, labels map[string]string) ([]*hcloud.Server, error)
+	EnableRescueFunc          func(ctx context.Context, serverID string, sshKeyIDs []string) (string, error)
+	ResetServerFunc           func(ctx context.Context, serverID string) error
+	PoweroffServerFunc        func(ctx context.Context, serverID string) error
+	AttachServerToNetworkFunc func(ctx context.Context, serverName string, networkID int64, privateIP string) error
 
 	CreateSnapshotFunc      func(ctx context.Context, serverID, snapshotDescription string, labels map[string]string) (string, error)
 	DeleteImageFunc         func(ctx context.Context, imageID string) error
@@ -142,6 +143,14 @@ func (m *MockClient) ResetServer(ctx context.Context, serverID string) error {
 func (m *MockClient) PoweroffServer(ctx context.Context, serverID string) error {
 	if m.PoweroffServerFunc != nil {
 		return m.PoweroffServerFunc(ctx, serverID)
+	}
+	return nil
+}
+
+// AttachServerToNetwork mocks attaching a server to a network.
+func (m *MockClient) AttachServerToNetwork(ctx context.Context, serverName string, networkID int64, privateIP string) error {
+	if m.AttachServerToNetworkFunc != nil {
+		return m.AttachServerToNetworkFunc(ctx, serverName, networkID, privateIP)
 	}
 	return nil
 }

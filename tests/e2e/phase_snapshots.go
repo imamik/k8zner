@@ -126,7 +126,7 @@ func createVerificationSSHKey(ctx context.Context, t *testing.T, state *E2EState
 func verifySnapshot(ctx context.Context, t *testing.T, state *E2EState, arch, snapshotID, sshKeyName string) {
 	serverName := fmt.Sprintf("%s-verify-%s-%d", state.ClusterName, arch, time.Now().Unix())
 
-	serverType := "cx23" // Must match disk size of image builder server
+	serverType := "cpx22" // Must match disk size of image builder server - better availability than cx23
 	if arch == "arm64" {
 		serverType = "cax11"
 	}

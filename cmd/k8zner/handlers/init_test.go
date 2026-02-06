@@ -86,7 +86,7 @@ func TestPrintInitSuccess(t *testing.T) {
 		assert.Contains(t, output, "ha")
 		assert.Contains(t, output, "3 x cx42")
 		assert.Contains(t, output, "example.com")
-		// HA mode has 3 control planes (cx23 is the standard type)
+		// HA mode has 3 control planes (cx23 is the default type)
 		assert.Contains(t, output, "3 x cx23")
 	})
 

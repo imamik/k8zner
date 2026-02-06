@@ -21,6 +21,10 @@ type HCloudClient interface {
 	GetServerByName(ctx context.Context, name string) (*hcloudgo.Server, error)
 	GetServersByLabel(ctx context.Context, labels map[string]string) ([]*hcloudgo.Server, error)
 
+	// SSH Key operations (for ephemeral keys to avoid password emails)
+	CreateSSHKey(ctx context.Context, name, publicKey string, labels map[string]string) (string, error)
+	DeleteSSHKey(ctx context.Context, name string) error
+
 	// Network operations
 	GetNetwork(ctx context.Context, name string) (*hcloudgo.Network, error)
 

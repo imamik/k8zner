@@ -72,7 +72,7 @@ Worker node configuration:
 | Field | Description | Valid Values |
 |-------|-------------|--------------|
 | `count` | Number of worker nodes | 1-5 |
-| `size` | Worker server size | cx23, cx33, cx43, cx53 |
+| `size` | Worker server size | cx23-53, cpx22-52 |
 
 ```yaml
 workers:
@@ -84,12 +84,25 @@ workers:
 
 #### Available Sizes
 
+##### CX Series - Dedicated vCPU (Default)
+Consistent performance, recommended for production:
+
 | Size | vCPU | RAM | Best For |
 |------|------|-----|----------|
 | `cx23` | 2 | 4GB | Small workloads |
 | `cx33` | 4 | 8GB | Medium workloads |
 | `cx43` | 8 | 16GB | Larger workloads |
 | `cx53` | 16 | 32GB | Heavy workloads |
+
+##### CPX Series - Shared vCPU
+Better availability, suitable for dev/test:
+
+| Size | vCPU | RAM | Best For |
+|------|------|-----|----------|
+| `cpx22` | 2 | 4GB | Dev/test |
+| `cpx32` | 4 | 8GB | Medium workloads |
+| `cpx42` | 8 | 16GB | Larger workloads |
+| `cpx52` | 16 | 32GB | Heavy workloads |
 
 Note: Hetzner renamed server types in 2024 (cx22→cx23, etc.). Both old and new names are accepted for backwards compatibility.
 
@@ -171,13 +184,13 @@ aws s3 rb s3://{cluster-name}-etcd-backups --force \
 The simplified config automatically includes production-ready settings:
 
 ### Architecture & Regions
-- **x86-64 only**: All nodes run on amd64 architecture (CX server types)
-- **EU regions only**: Nuremberg, Falkenstein, Helsinki (where CX instances are available)
+- **x86-64 only**: All nodes run on amd64 architecture (CX/CPX server types)
+- **EU regions only**: Nuremberg, Falkenstein, Helsinki (where CX/CPX instances are available)
 - **No ARM support**: CAX (Ampere) servers are not supported
 
 ### Infrastructure
 - **IPv6-only nodes**: No public IPv4 (saves costs, better security)
-- **Control planes**: cx23 servers (cost-effective for control plane workloads)
+- **Control planes**: cx23 servers by default (2 dedicated vCPU, 4GB RAM - sufficient for etcd + API server)
 - **Disk encryption**: LUKS2 encryption for state and ephemeral partitions
 
 ### Networking

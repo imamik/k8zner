@@ -4,6 +4,7 @@
 package v1alpha1
 
 import (
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/scheme"
 )
@@ -17,8 +18,14 @@ var (
 
 	// AddToScheme adds the types in this group-version to the given scheme
 	AddToScheme = SchemeBuilder.AddToScheme
+
+	// Scheme is the runtime scheme containing the registered types
+	Scheme = runtime.NewScheme()
 )
 
 func init() {
 	SchemeBuilder.Register(&K8znerCluster{}, &K8znerClusterList{})
+
+	// Add our types to the Scheme
+	_ = AddToScheme(Scheme)
 }

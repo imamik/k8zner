@@ -150,13 +150,17 @@ func setupSSHKeyForCluster(ctx context.Context, t *testing.T, state *E2EState) e
 // Uses the simplified v2 config format and expands it to full internal config.
 func createInitialClusterConfig(state *E2EState) *config.Config {
 	// Create simplified v2 config (dev mode = 1 CP, 1 worker)
+	// Use CPX22 (shared vCPU) for better availability in E2E tests
 	v2Cfg := &v2.Config{
 		Name:   state.ClusterName,
 		Region: v2.RegionNuremberg,
 		Mode:   v2.ModeDev,
+		ControlPlane: &v2.ControlPlane{
+			Size: v2.SizeCPX22, // Shared vCPU for better availability in tests
+		},
 		Workers: v2.Worker{
 			Count: 1,
-			Size:  v2.SizeCX22,
+			Size:  v2.SizeCPX22, // Shared vCPU for better availability in tests
 		},
 	}
 

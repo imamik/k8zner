@@ -59,7 +59,7 @@ region: fsn1
 mode: dev
 workers:
   count: 1
-  size: cx22
+  size: cx23
 `
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "k8zner.yaml")
@@ -86,7 +86,7 @@ region: fsn1
 mode: dev
 workers:
   count: 1
-  size: cx22
+  size: cx23
 `
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "k8zner.yaml")

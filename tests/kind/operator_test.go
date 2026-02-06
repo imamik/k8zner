@@ -109,7 +109,7 @@ spec:
                     size:
                       type: string
                       description: Hetzner server type
-                      default: cx22
+                      default: cx23
                 workers:
                   type: object
                   description: Workers defines the worker node configuration
@@ -125,7 +125,7 @@ spec:
                     size:
                       type: string
                       description: Hetzner server type
-                      default: cx22
+                      default: cx23
                     minCount:
                       type: integer
                       description: Minimum number of workers
@@ -214,10 +214,10 @@ spec:
   region: invalid-region
   controlPlanes:
     count: 1
-    size: cx22
+    size: cx23
   workers:
     count: 2
-    size: cx22
+    size: cx23
 `
 	_, err := fw.Kubectl("apply", "-f", "-", "--dry-run=server", "--validate=true")
 	if err == nil {
@@ -241,10 +241,10 @@ spec:
   region: fsn1
   controlPlanes:
     count: 2
-    size: cx22
+    size: cx23
   workers:
     count: 2
-    size: cx22
+    size: cx23
 `
 	cmd := fmt.Sprintf("echo '%s' | kubectl --kubeconfig %s apply -f - --dry-run=server 2>&1", invalidCount, fw.KubeconfigPath())
 	output, _ := runShell(cmd)
@@ -278,10 +278,10 @@ spec:
   region: fsn1
   controlPlanes:
     count: 1
-    size: cx22
+    size: cx23
   workers:
     count: 2
-    size: cx22
+    size: cx23
 `
 	fw.KubectlApply(t, validCluster)
 

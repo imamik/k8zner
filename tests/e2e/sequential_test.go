@@ -147,13 +147,22 @@ func TestE2ELifecycle(t *testing.T) {
 		t.Log("Skipping Phase 3c: Monitoring (E2E_SKIP_MONITORING=true)")
 	}
 
-	// Phase 4: Scale
+	// Phase 4: Scale (CLI-driven)
 	if !e2eConfig.SkipScale {
 		t.Run("Phase4_Scale", func(t *testing.T) {
 			phaseScale(t, state)
 		})
 	} else {
 		t.Log("Skipping Phase 4: Scale (E2E_SKIP_SCALE=true)")
+	}
+
+	// Phase 4b: Operator Scale (CRD-driven) - validates operator-centric architecture
+	if !e2eConfig.SkipOperatorScale {
+		t.Run("Phase4b_OperatorScale", func(t *testing.T) {
+			phaseOperatorScale(t, state)
+		})
+	} else {
+		t.Log("Skipping Phase 4b: Operator Scale (E2E_SKIP_OPERATOR_SCALE=true)")
 	}
 
 	// Phase 5: Upgrade

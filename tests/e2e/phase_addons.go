@@ -309,11 +309,22 @@ func waitForPod(t *testing.T, kubeconfigPath, namespace, selector string, timeou
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
+	startTime := time.Now()
+	lastProgressLog := time.Now()
+
 	for {
 		select {
 		case <-ctx.Done():
 			// Timeout - gather diagnostics before failing
 			t.Logf("Timeout waiting for pod - gathering diagnostics...")
+
+			// Get pod status with node info
+			podsCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "pods", "-n", namespace, "-l", selector, "-o", "wide")
+			if podsOutput, _ := podsCmd.CombinedOutput(); len(podsOutput) > 0 {
+				t.Logf("Pod status with node info:\n%s", string(podsOutput))
+			}
 
 			// Get pod details
 			descCmd := exec.CommandContext(context.Background(), "kubectl",
@@ -331,6 +342,14 @@ func waitForPod(t *testing.T, kubeconfigPath, namespace, selector string, timeou
 				t.Logf("Namespace events:\n%s", string(eventsOutput))
 			}
 
+			// Get node status to check for node issues
+			nodesCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "nodes", "-o", "wide")
+			if nodesOutput, _ := nodesCmd.CombinedOutput(); len(nodesOutput) > 0 {
+				t.Logf("Node status:\n%s", string(nodesOutput))
+			}
+
 			t.Fatalf("Timeout waiting for pod with selector %s in namespace %s", selector, namespace)
 		case <-ticker.C:
 			cmd := exec.CommandContext(context.Background(), "kubectl",
@@ -342,7 +361,13 @@ func waitForPod(t *testing.T, kubeconfigPath, namespace, selector string, timeou
 				t.Logf("  ✓ Pod %s is Running", selector)
 				return
 			}
-			t.Logf("  Waiting for pod (phase: %s)...", string(output))
+
+			// Log progress every 30 seconds during long waits
+			if time.Since(lastProgressLog) >= 30*time.Second {
+				elapsed := time.Since(startTime).Round(time.Second)
+				t.Logf("  [%s] Waiting for pod %s (phase: %s)...", elapsed, selector, string(output))
+				lastProgressLog = time.Now()
+			}
 		}
 	}
 }
@@ -766,9 +791,55 @@ func waitForDaemonSet(t *testing.T, kubeconfigPath, namespace, selector string, 
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
+	startTime := time.Now()
+	lastProgressLog := time.Now()
+
 	for {
 		select {
 		case <-ctx.Done():
+			// Timeout - gather diagnostics before failing
+			t.Logf("Timeout waiting for daemonset - gathering diagnostics...")
+
+			// Get daemonset status
+			dsCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "daemonset", "-n", namespace, "-l", selector, "-o", "wide")
+			if dsOutput, _ := dsCmd.CombinedOutput(); len(dsOutput) > 0 {
+				t.Logf("DaemonSet status:\n%s", string(dsOutput))
+			}
+
+			// Get pods from daemonset with node info
+			podsCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "pods", "-n", namespace, "-l", selector, "-o", "wide")
+			if podsOutput, _ := podsCmd.CombinedOutput(); len(podsOutput) > 0 {
+				t.Logf("DaemonSet pods with node info:\n%s", string(podsOutput))
+			}
+
+			// Describe the daemonset
+			descCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"describe", "daemonset", "-n", namespace, "-l", selector)
+			if descOutput, _ := descCmd.CombinedOutput(); len(descOutput) > 0 {
+				t.Logf("DaemonSet description:\n%s", string(descOutput))
+			}
+
+			// Get namespace events
+			eventsCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "events", "-n", namespace, "--sort-by=.lastTimestamp")
+			if eventsOutput, _ := eventsCmd.CombinedOutput(); len(eventsOutput) > 0 {
+				t.Logf("Namespace events:\n%s", string(eventsOutput))
+			}
+
+			// Get node status
+			nodesCmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "nodes", "-o", "wide")
+			if nodesOutput, _ := nodesCmd.CombinedOutput(); len(nodesOutput) > 0 {
+				t.Logf("Node status:\n%s", string(nodesOutput))
+			}
+
 			t.Fatalf("Timeout waiting for daemonset with selector %s in namespace %s", selector, namespace)
 		case <-ticker.C:
 			cmd := exec.CommandContext(context.Background(), "kubectl",
@@ -780,7 +851,19 @@ func waitForDaemonSet(t *testing.T, kubeconfigPath, namespace, selector string, 
 				t.Logf("  ✓ DaemonSet %s has ready pods", selector)
 				return
 			}
-			t.Logf("  Waiting for daemonset (ready: %s)...", string(output))
+
+			// Log progress every 30 seconds during long waits
+			if time.Since(lastProgressLog) >= 30*time.Second {
+				elapsed := time.Since(startTime).Round(time.Second)
+				// Get desired vs ready counts
+				statusCmd := exec.CommandContext(context.Background(), "kubectl",
+					"--kubeconfig", kubeconfigPath,
+					"get", "daemonset", "-n", namespace, "-l", selector,
+					"-o", "jsonpath={.items[0].status.desiredNumberScheduled}/{.items[0].status.numberReady}")
+				statusOutput, _ := statusCmd.CombinedOutput()
+				t.Logf("  [%s] Waiting for daemonset %s (desired/ready: %s)...", elapsed, selector, string(statusOutput))
+				lastProgressLog = time.Now()
+			}
 		}
 	}
 }
