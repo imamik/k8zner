@@ -265,12 +265,13 @@ func installOperatorOnly(ctx context.Context, cfg *config.Config, kubeconfig []b
 		cfg.Addons = savedAddons
 	}()
 
-	// Retry with backoff for transient errors (API server just started)
-	const maxRetries = 5
+	// Retry with backoff for transient errors (API server just started,
+	// LB health checks may take up to 5 minutes to mark backend healthy)
+	const maxRetries = 10
 	var lastErr error
 	for i := 0; i < maxRetries; i++ {
 		if i > 0 {
-			delay := time.Duration(i*10) * time.Second
+			delay := time.Duration(15) * time.Second
 			log.Printf("Retrying operator installation in %v (attempt %d/%d)...", delay, i+1, maxRetries)
 			select {
 			case <-ctx.Done():
