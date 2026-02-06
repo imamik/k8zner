@@ -481,6 +481,11 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 		},
 	}
 
+	// Calculate derived network configuration (NodeIPv4CIDR, etc.)
+	if err := cfg.CalculateSubnets(); err != nil {
+		return nil, fmt.Errorf("failed to calculate network subnets: %w", err)
+	}
+
 	return cfg, nil
 }
 

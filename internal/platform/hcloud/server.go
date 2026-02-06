@@ -13,11 +13,9 @@ import (
 
 // CreateServer creates a new server with the given specifications.
 // The enablePublicIPv4 and enablePublicIPv6 parameters control public IP assignment.
+// If networkID is provided without privateIP, HCloud will automatically assign an IP from the network's subnet.
 func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string, enablePublicIPv4, enablePublicIPv6 bool) (string, error) {
-	// Validate network parameters: both must be provided together or both empty
-	if (networkID != 0) != (privateIP != "") {
-		return "", fmt.Errorf("networkID and privateIP must both be provided or both be empty")
-	}
+	// Note: networkID can be provided without privateIP - HCloud will auto-assign an IP
 
 	ctx, cancel := context.WithTimeout(ctx, c.timeouts.ServerCreate)
 	defer cancel()
@@ -35,7 +33,8 @@ func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverTy
 	}
 
 	// Attach to network if requested
-	if networkID != 0 && privateIP != "" {
+	// If privateIP is empty, HCloud will auto-assign an IP from the network's subnet
+	if networkID != 0 {
 		if err := c.attachServerToNetwork(ctx, result.Server, networkID, privateIP); err != nil {
 			return "", err
 		}
@@ -74,8 +73,9 @@ func (c *RealClient) buildServerCreateOpts(ctx context.Context, name, imageType,
 	}
 
 	// Determine if server should start after creation
+	// If attaching to a network, don't start automatically - we'll power on after network attachment
 	var startAfterCreate *bool
-	if networkID != 0 && privateIP != "" {
+	if networkID != 0 {
 		startAfterCreate = hcloud.Ptr(false)
 	}
 

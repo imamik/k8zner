@@ -4,7 +4,7 @@ replicaCount: 2
 
 image:
   repository: ghcr.io/imamik/k8zner-operator
-  pullPolicy: IfNotPresent
+  pullPolicy: Always  # Always pull to ensure latest image is used
   tag: ""  # Defaults to chart appVersion
 
 imagePullSecrets: []

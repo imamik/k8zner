@@ -298,7 +298,7 @@ type MockTalosConfigGenerator struct {
 	GenerateControlPlaneConfigFunc func(sans []string, hostname string, serverID int64) ([]byte, error)
 	GenerateWorkerConfigFunc       func(hostname string, serverID int64) ([]byte, error)
 	SetEndpointFunc                func(endpoint string)
-	GetTalosconfigFunc             func() ([]byte, error)
+	GetClientConfigFunc            func() ([]byte, error)
 
 	// Call tracking
 	GenerateControlPlaneConfigCalls []GenerateControlPlaneConfigCall
@@ -358,9 +358,9 @@ func (m *MockTalosConfigGenerator) SetEndpoint(endpoint string) {
 	}
 }
 
-func (m *MockTalosConfigGenerator) GetTalosconfig() ([]byte, error) {
-	if m.GetTalosconfigFunc != nil {
-		return m.GetTalosconfigFunc()
+func (m *MockTalosConfigGenerator) GetClientConfig() ([]byte, error) {
+	if m.GetClientConfigFunc != nil {
+		return m.GetClientConfigFunc()
 	}
 	return []byte("mock-talosconfig"), nil
 }

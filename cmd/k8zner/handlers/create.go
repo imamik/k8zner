@@ -354,6 +354,19 @@ func createClusterCRDForCreate(ctx context.Context, cfg *config.Config, pCtx *pr
 		return fmt.Errorf("failed to create K8znerCluster: %w", err)
 	}
 
+	// Kubernetes ignores status during create (it's a subresource), so we need to update it separately
+	// Fetch the created resource to get the latest resourceVersion
+	createdCluster := &k8znerv1alpha1.K8znerCluster{}
+	if err := k8sClient.Get(ctx, client.ObjectKey{Name: k8znerCluster.Name, Namespace: k8znerCluster.Namespace}, createdCluster); err != nil {
+		return fmt.Errorf("failed to get created K8znerCluster: %w", err)
+	}
+
+	// Set the status fields that were prepared in buildK8znerClusterForCreate
+	createdCluster.Status = k8znerCluster.Status
+	if err := k8sClient.Status().Update(ctx, createdCluster); err != nil {
+		return fmt.Errorf("failed to update K8znerCluster status: %w", err)
+	}
+
 	return nil
 }
 
