@@ -49,6 +49,10 @@ const (
 	serverIPTimeout  = 2 * time.Minute
 	nodeReadyTimeout = 5 * time.Minute
 
+	// Addon installation timeout - if addons don't install within this time,
+	// proceed to compute phase anyway to avoid blocking cluster provisioning
+	addonInstallationTimeout = 10 * time.Minute
+
 	// Status update retry settings.
 	statusUpdateRetries = 3
 	statusRetryInterval = 100 * time.Millisecond
@@ -88,6 +92,7 @@ const (
 	EventReasonConfiguringFailed     = "ConfiguringFailed"
 	EventReasonProvisioningComplete  = "ProvisioningComplete"
 	EventReasonCredentialsError      = "CredentialsError"
+	EventReasonAddonsTimeout         = "AddonsTimeout"
 )
 
 // normalizeServerSize converts legacy server type names to current Hetzner names.
@@ -120,6 +125,19 @@ type ClusterReconciler struct {
 
 // Option configures a ClusterReconciler.
 type Option func(*ClusterReconciler)
+
+// logAndRecordError logs an error and records a Kubernetes event.
+// This ensures errors are visible in both operator logs (for kubectl logs) and
+// Kubernetes events (for kubectl describe/get events).
+func (r *ClusterReconciler) logAndRecordError(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, err error, reason, message string) {
+	logger := log.FromContext(ctx)
+	logger.Error(err, message,
+		"cluster", cluster.Name,
+		"phase", cluster.Status.ProvisioningPhase,
+		"reason", reason,
+	)
+	r.Recorder.Eventf(cluster, corev1.EventTypeWarning, reason, "%s: %v", message, err)
+}
 
 // WithHCloudClient sets a custom HCloud client.
 func WithHCloudClient(c HCloudClient) Option {
@@ -348,6 +366,22 @@ func (r *ClusterReconciler) reconcile(ctx context.Context, cluster *k8znerv1alph
 		// Continue with reconciliation - this is not fatal
 	}
 
+	// Step 3: Run health check to update Ready counts
+	// This ensures cluster.Status.ControlPlanes.Ready and cluster.Status.Workers.Ready
+	// are always current, regardless of which provisioning phase we're in.
+	// Without this, Ready counts stay at 0 during CNI/Addons/Compute phases.
+	if err := r.reconcileHealthCheck(ctx, cluster); err != nil {
+		logger.V(1).Info("health check failed during reconciliation", "error", err)
+		// Continue with reconciliation - health check failures shouldn't block provisioning
+	} else {
+		logger.V(1).Info("health check complete",
+			"cpReady", cluster.Status.ControlPlanes.Ready,
+			"cpDesired", cluster.Status.ControlPlanes.Desired,
+			"workersReady", cluster.Status.Workers.Ready,
+			"workersDesired", cluster.Status.Workers.Desired,
+		)
+	}
+
 	// Check if this cluster needs provisioning (has credentialsRef set)
 	if cluster.Spec.CredentialsRef.Name != "" {
 		// This is an operator-managed cluster - use state machine
@@ -362,6 +396,17 @@ func (r *ClusterReconciler) reconcile(ctx context.Context, cluster *k8znerv1alph
 func (r *ClusterReconciler) reconcileWithStateMachine(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
+	// Debug: Log cluster state at start of reconciliation
+	logger.V(1).Info("state machine reconciliation starting",
+		"currentPhase", cluster.Status.ProvisioningPhase,
+		"clusterPhase", cluster.Status.Phase,
+		"cpReady", cluster.Status.ControlPlanes.Ready,
+		"cpDesired", cluster.Status.ControlPlanes.Desired,
+		"workersReady", cluster.Status.Workers.Ready,
+		"workersDesired", cluster.Status.Workers.Desired,
+		"bootstrapCompleted", cluster.Spec.Bootstrap != nil && cluster.Spec.Bootstrap.Completed,
+	)
+
 	// Determine current phase (empty means start from beginning)
 	currentPhase := cluster.Status.ProvisioningPhase
 	if currentPhase == "" {
@@ -373,6 +418,7 @@ func (r *ClusterReconciler) reconcileWithStateMachine(ctx context.Context, clust
 		} else {
 			// New cluster - start with infrastructure phase
 			currentPhase = k8znerv1alpha1.PhaseInfrastructure
+			logger.Info("new cluster, starting from infrastructure phase")
 		}
 	}
 
@@ -476,23 +522,20 @@ func (r *ClusterReconciler) reconcileInfrastructurePhase(ctx context.Context, cl
 	// Load credentials
 	creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
 	if err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCredentialsError,
-			"Failed to load credentials: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonCredentialsError, "Failed to load credentials")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
 	// Build provisioning context
 	pCtx, err := r.buildProvisioningContext(ctx, cluster, creds)
 	if err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonInfrastructureFailed,
-			"Failed to build provisioning context: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonInfrastructureFailed, "Failed to build provisioning context")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
 	// Run infrastructure provisioning
 	if err := r.phaseAdapter.ReconcileInfrastructure(pCtx, cluster); err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonInfrastructureFailed,
-			"Infrastructure provisioning failed: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonInfrastructureFailed, "Infrastructure provisioning failed")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
@@ -523,23 +566,20 @@ func (r *ClusterReconciler) reconcileImagePhase(ctx context.Context, cluster *k8
 	// Load credentials
 	creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
 	if err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCredentialsError,
-			"Failed to load credentials: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonCredentialsError, "Failed to load credentials")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
 	// Build provisioning context
 	pCtx, err := r.buildProvisioningContext(ctx, cluster, creds)
 	if err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonImageFailed,
-			"Failed to build provisioning context: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonImageFailed, "Failed to build provisioning context")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
 	// Run image provisioning
 	if err := r.phaseAdapter.ReconcileImage(pCtx, cluster); err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonImageFailed,
-			"Image provisioning failed: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonImageFailed, "Image provisioning failed")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
@@ -562,39 +602,50 @@ func (r *ClusterReconciler) reconcileComputePhase(ctx context.Context, cluster *
 	// Load credentials
 	creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
 	if err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCredentialsError,
-			"Failed to load credentials: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonCredentialsError, "Failed to load credentials")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
 	// Build provisioning context
 	pCtx, err := r.buildProvisioningContext(ctx, cluster, creds)
 	if err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonComputeFailed,
-			"Failed to build provisioning context: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonComputeFailed, "Failed to build provisioning context")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
 	// Run compute provisioning
 	if err := r.phaseAdapter.ReconcileCompute(pCtx, cluster); err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonComputeFailed,
-			"Compute provisioning failed: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonComputeFailed, "Compute provisioning failed")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonComputeProvisioned,
 		"Compute resources provisioned")
 
-	// For CLI-bootstrapped clusters (coming from Addons phase), go directly to Complete
-	// For operator-managed clusters (coming from Image phase), go to Bootstrap
+	// For CLI-bootstrapped clusters, we need to configure any new nodes that were just created.
+	// The bootstrap phase handles this by detecting that the cluster is already initialized
+	// and configuring only the new nodes in maintenance mode.
 	if cluster.Spec.Bootstrap != nil && cluster.Spec.Bootstrap.Completed {
-		// CLI already bootstrapped, we just created additional nodes
-		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseComplete
-		cluster.Status.Phase = k8znerv1alpha1.ClusterPhaseRunning
-		r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonProvisioningComplete,
-			"Cluster provisioning complete")
+		logger.Info("CLI-bootstrapped cluster - will configure new nodes in bootstrap phase")
+
+		// Count how many new nodes need configuration
+		existingCPs := 1 // Bootstrap always starts with 1 CP
+		desiredCPs := cluster.Spec.ControlPlanes.Count
+		desiredWorkers := cluster.Spec.Workers.Count
+
+		logger.V(1).Info("checking for new nodes to configure",
+			"existingCPs", existingCPs,
+			"desiredCPs", desiredCPs,
+			"desiredWorkers", desiredWorkers,
+		)
+
+		// Always go through bootstrap phase to configure new nodes
+		// The cluster provisioner will detect it's already bootstrapped and only configure new nodes
+		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseBootstrap
+		r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonProvisioningPhase,
+			"Configuring additional nodes")
 	} else {
-		// Transition to bootstrap phase for operator-managed clusters
+		// Transition to bootstrap phase for operator-managed clusters (fresh bootstrap)
 		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseBootstrap
 	}
 	return ctrl.Result{Requeue: true}, nil
@@ -611,30 +662,39 @@ func (r *ClusterReconciler) reconcileBootstrapPhase(ctx context.Context, cluster
 	// Load credentials
 	creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
 	if err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCredentialsError,
-			"Failed to load credentials: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonCredentialsError, "Failed to load credentials")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
 	// Build provisioning context
 	pCtx, err := r.buildProvisioningContext(ctx, cluster, creds)
 	if err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonBootstrapFailed,
-			"Failed to build provisioning context: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonBootstrapFailed, "Failed to build provisioning context")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
 	// Run cluster bootstrap
+	// For CLI-bootstrapped clusters, this will detect the state marker and only configure new nodes
+	// For fresh clusters, this will do the full bootstrap sequence
 	if err := r.phaseAdapter.ReconcileBootstrap(pCtx, cluster); err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonBootstrapFailed,
-			"Cluster bootstrap failed: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonBootstrapFailed, "Cluster bootstrap failed")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonBootstrapComplete,
 		"Cluster bootstrapped successfully")
 
-	// Transition to CNI phase (operator-centric flow installs Cilium first)
+	// For CLI-bootstrapped clusters, CNI and addons are already installed - go directly to Complete
+	if cluster.Spec.Bootstrap != nil && cluster.Spec.Bootstrap.Completed {
+		logger.Info("CLI-bootstrapped cluster - addons already installed, transitioning to complete")
+		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseComplete
+		cluster.Status.Phase = k8znerv1alpha1.ClusterPhaseRunning
+		r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonProvisioningComplete,
+			"Cluster provisioning complete (additional nodes configured)")
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// For fresh operator-managed clusters, transition to CNI phase
 	cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseCNI
 	return ctrl.Result{Requeue: true}, nil
 }
@@ -650,16 +710,14 @@ func (r *ClusterReconciler) reconcileConfiguringPhase(ctx context.Context, clust
 	// Load credentials
 	creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
 	if err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCredentialsError,
-			"Failed to load credentials: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonCredentialsError, "Failed to load credentials")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
 	// Convert CRD spec to config for addon installation
 	cfg, err := operatorprov.SpecToConfig(cluster, creds)
 	if err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfiguringFailed,
-			"Failed to convert spec to config: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonConfiguringFailed, "Failed to convert spec to config")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
@@ -669,8 +727,7 @@ func (r *ClusterReconciler) reconcileConfiguringPhase(ctx context.Context, clust
 	// Get kubeconfig from Talos
 	kubeconfig, err := r.getKubeconfigFromTalos(ctx, cluster, creds)
 	if err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfiguringFailed,
-			"Failed to get kubeconfig: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonConfiguringFailed, "Failed to get kubeconfig")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
@@ -681,8 +738,7 @@ func (r *ClusterReconciler) reconcileConfiguringPhase(ctx context.Context, clust
 		logger.Info("networkID not in status, looking up from HCloud", "clusterName", cluster.Name)
 		network, err := r.hcloudClient.GetNetwork(ctx, cluster.Name)
 		if err != nil {
-			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfiguringFailed,
-				"Failed to get network from HCloud: %v", err)
+			r.logAndRecordError(ctx, cluster, err, EventReasonConfiguringFailed, "Failed to get network from HCloud")
 			return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 		}
 		if network == nil {
@@ -699,8 +755,7 @@ func (r *ClusterReconciler) reconcileConfiguringPhase(ctx context.Context, clust
 	// Install addons
 	logger.Info("installing addons", "networkID", networkID)
 	if err := addons.Apply(ctx, cfg, kubeconfig, networkID); err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfiguringFailed,
-			"Failed to install addons: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonConfiguringFailed, "Failed to install addons")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
@@ -727,34 +782,37 @@ func (r *ClusterReconciler) reconcileCNIPhase(ctx context.Context, cluster *k8zn
 		"Installing Cilium CNI")
 
 	// Load credentials
+	logger.V(1).Info("loading credentials for CNI installation")
 	creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
 	if err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCredentialsError,
-			"Failed to load credentials: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonCredentialsError, "Failed to load credentials")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
+	logger.V(1).Info("credentials loaded successfully",
+		"hasTalosSecrets", len(creds.TalosSecrets) > 0,
+		"hasTalosConfig", len(creds.TalosConfig) > 0,
+	)
 
 	// Convert CRD spec to config for CNI installation
 	cfg, err := operatorprov.SpecToConfig(cluster, creds)
 	if err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCNIFailed,
-			"Failed to convert spec to config: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonCNIFailed, "Failed to convert spec to config")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
 	// Get kubeconfig from Talos
+	logger.V(1).Info("getting kubeconfig from Talos")
 	kubeconfig, err := r.getKubeconfigFromTalos(ctx, cluster, creds)
 	if err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCNIFailed,
-			"Failed to get kubeconfig: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonCNIFailed, "Failed to get kubeconfig")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
+	logger.V(1).Info("kubeconfig retrieved successfully", "kubeconfigLength", len(kubeconfig))
 
 	// Install Cilium CNI only
 	logger.Info("installing Cilium CNI")
 	if err := addons.ApplyCilium(ctx, cfg, kubeconfig); err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCNIFailed,
-			"Failed to install Cilium: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonCNIFailed, "Failed to install Cilium")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
@@ -859,22 +917,50 @@ func (r *ClusterReconciler) reconcileAddonsPhase(ctx context.Context, cluster *k
 	logger := log.FromContext(ctx)
 	logger.Info("reconciling addons phase")
 
+	// Track when addon installation started (for timeout detection)
+	now := metav1.Now()
+	if cluster.Status.PhaseStartedAt == nil || cluster.Status.ProvisioningPhase != k8znerv1alpha1.PhaseAddons {
+		cluster.Status.PhaseStartedAt = &now
+		logger.V(1).Info("addon installation started", "startTime", now.Time)
+	}
+
+	// Check for addon installation timeout
+	if cluster.Status.PhaseStartedAt != nil {
+		elapsed := time.Since(cluster.Status.PhaseStartedAt.Time)
+		if elapsed > addonInstallationTimeout {
+			logger.Error(nil, "addon installation timeout exceeded - proceeding to compute phase",
+				"elapsed", elapsed.Round(time.Second),
+				"timeout", addonInstallationTimeout,
+			)
+			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonAddonsTimeout,
+				"Addon installation exceeded %s timeout - proceeding with available addons", addonInstallationTimeout)
+
+			// Clear the phase timer and proceed to compute phase
+			cluster.Status.PhaseStartedAt = nil
+			cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseCompute
+			return ctrl.Result{Requeue: true}, nil
+		}
+		logger.V(1).Info("addon installation in progress",
+			"elapsed", elapsed.Round(time.Second),
+			"timeout", addonInstallationTimeout,
+			"remaining", (addonInstallationTimeout - elapsed).Round(time.Second),
+		)
+	}
+
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonAddonsInstalling,
 		"Installing cluster addons")
 
 	// Load credentials
 	creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
 	if err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCredentialsError,
-			"Failed to load credentials: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonCredentialsError, "Failed to load credentials")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
 	// Convert CRD spec to config for addon installation
 	cfg, err := operatorprov.SpecToConfig(cluster, creds)
 	if err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonAddonsFailed,
-			"Failed to convert spec to config: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonAddonsFailed, "Failed to convert spec to config")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
@@ -884,8 +970,7 @@ func (r *ClusterReconciler) reconcileAddonsPhase(ctx context.Context, cluster *k
 	// Get kubeconfig from Talos
 	kubeconfig, err := r.getKubeconfigFromTalos(ctx, cluster, creds)
 	if err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonAddonsFailed,
-			"Failed to get kubeconfig: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonAddonsFailed, "Failed to get kubeconfig")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
@@ -896,8 +981,7 @@ func (r *ClusterReconciler) reconcileAddonsPhase(ctx context.Context, cluster *k
 		logger.Info("networkID not in status, looking up from HCloud", "clusterName", cluster.Name)
 		network, err := r.hcloudClient.GetNetwork(ctx, cluster.Name)
 		if err != nil {
-			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonAddonsFailed,
-				"Failed to get network from HCloud: %v", err)
+			r.logAndRecordError(ctx, cluster, err, EventReasonAddonsFailed, "Failed to get network from HCloud")
 			return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 		}
 		if network == nil {
@@ -911,16 +995,32 @@ func (r *ClusterReconciler) reconcileAddonsPhase(ctx context.Context, cluster *k
 		logger.Info("found network ID from HCloud", "networkID", networkID)
 	}
 
+	// Validate required credentials before installing CCM/CSI
+	// These addons will fail silently without valid credentials
+	if cfg.HCloudToken == "" {
+		err := fmt.Errorf("HCloud token is empty")
+		r.logAndRecordError(ctx, cluster, err, EventReasonAddonsFailed, "CCM/CSI addons require valid credentials")
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+	}
+
+	// Log addon installation details for debugging
+	logger.V(1).Info("addon installation prerequisites validated",
+		"networkID", networkID,
+		"hasHCloudToken", cfg.HCloudToken != "",
+		"tokenLength", len(cfg.HCloudToken),
+		"ccmEnabled", cfg.Addons.CCM.Enabled,
+		"csiEnabled", cfg.Addons.CSI.Enabled,
+	)
+
 	// Install remaining addons (Cilium already installed in CNI phase)
 	logger.Info("installing addons", "networkID", networkID)
 	if err := addons.ApplyWithoutCilium(ctx, cfg, kubeconfig, networkID); err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonAddonsFailed,
-			"Failed to install addons: %v", err)
+		r.logAndRecordError(ctx, cluster, err, EventReasonAddonsFailed, "Failed to install addons")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
 	// Update addon statuses
-	now := metav1.Now()
+	now = metav1.Now()
 	if cluster.Status.Addons == nil {
 		cluster.Status.Addons = make(map[string]k8znerv1alpha1.AddonStatus)
 	}
@@ -991,9 +1091,20 @@ func (r *ClusterReconciler) reconcileAddonsPhase(ctx context.Context, cluster *k
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonAddonsReady,
 		"All addons installed successfully")
 
+	// Clear phase timer since addons installed successfully
+	cluster.Status.PhaseStartedAt = nil
+
 	// Check if we need to create additional nodes (CLI-bootstrapped clusters start with 1 CP)
 	needsMoreNodes := cluster.Spec.ControlPlanes.Count > len(cluster.Status.ControlPlanes.Nodes) ||
 		cluster.Spec.Workers.Count > len(cluster.Status.Workers.Nodes)
+
+	logger.V(1).Info("checking if additional nodes needed",
+		"desiredCPs", cluster.Spec.ControlPlanes.Count,
+		"currentCPs", len(cluster.Status.ControlPlanes.Nodes),
+		"desiredWorkers", cluster.Spec.Workers.Count,
+		"currentWorkers", len(cluster.Status.Workers.Nodes),
+		"needsMoreNodes", needsMoreNodes,
+	)
 
 	if needsMoreNodes {
 		// Transition to compute phase to create remaining CPs and workers
@@ -1180,15 +1291,30 @@ func (r *ClusterReconciler) reconcileHealthCheck(ctx context.Context, cluster *k
 		return fmt.Errorf("failed to list nodes: %w", err)
 	}
 
+	logger.V(1).Info("health check: listing nodes", "totalNodes", len(nodeList.Items))
+
 	// Categorize nodes by role
 	var cpNodes, workerNodes []corev1.Node
 	for _, node := range nodeList.Items {
+		isReady := isNodeReady(&node)
+		logger.V(1).Info("health check: examining node",
+			"name", node.Name,
+			"isReady", isReady,
+			"providerID", node.Spec.ProviderID,
+			"labels", node.Labels,
+		)
+
 		if _, isCP := node.Labels["node-role.kubernetes.io/control-plane"]; isCP {
 			cpNodes = append(cpNodes, node)
 		} else {
 			workerNodes = append(workerNodes, node)
 		}
 	}
+
+	logger.V(1).Info("health check: nodes categorized",
+		"cpNodes", len(cpNodes),
+		"workerNodes", len(workerNodes),
+	)
 
 	// Update control plane status
 	cluster.Status.ControlPlanes = r.buildNodeGroupStatus(ctx, cluster, cpNodes, cluster.Spec.ControlPlanes.Count, "control-plane")

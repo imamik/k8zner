@@ -19,6 +19,9 @@ var sharedCtx *SharedTestContext
 
 // E2EState holds the cluster state as it progresses through test phases.
 // Each phase reads from and updates this state, building on previous phases.
+//
+// DEPRECATED: For new tests, use OperatorTestContext from operator_helpers.go instead.
+// E2EState is retained for backward compatibility with existing verification functions.
 type E2EState struct {
 	// Cluster Identity
 	ClusterName string
@@ -58,6 +61,8 @@ type E2EState struct {
 }
 
 // NewE2EState creates a new state object for the E2E test lifecycle.
+//
+// DEPRECATED: For new tests, use CreateClusterViaOperator() from operator_helpers.go instead.
 func NewE2EState(clusterName string, client *hcloud.RealClient) *E2EState {
 	return &E2EState{
 		ClusterName:     clusterName,

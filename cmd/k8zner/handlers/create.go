@@ -201,7 +201,7 @@ func Create(ctx context.Context, configPath string, wait bool) error {
 		log.Printf("[DEBUG] State LB is nil, looking up LB by name: %s", lbName)
 		var err error
 		lb, err = infraClient.GetLoadBalancer(ctx, lbName)
-		if err != nil {
+		if err != nil { //nolint:gocritic // if-else chain is clearer for distinct error cases
 			log.Printf("Warning: failed to get load balancer info: %v", err)
 		} else if lb == nil {
 			log.Printf("Warning: load balancer %s not found", lbName)

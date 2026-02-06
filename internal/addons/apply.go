@@ -4,6 +4,7 @@ package addons
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/imamik/k8zner/internal/addons/k8sclient"
 	"github.com/imamik/k8zner/internal/config"
@@ -179,19 +180,33 @@ func ApplyWithoutCilium(ctx context.Context, cfg *config.Config, kubeconfig []by
 		return fmt.Errorf("kubeconfig is required for addon installation")
 	}
 
+	log.Printf("[addons] Starting addon installation (networkID=%d)", networkID)
+	log.Printf("[addons] Enabled addons: CCM=%v, CSI=%v, MetricsServer=%v, CertManager=%v, Traefik=%v, ArgoCD=%v, TalosBackup=%v",
+		cfg.Addons.CCM.Enabled,
+		cfg.Addons.CSI.Enabled,
+		cfg.Addons.MetricsServer.Enabled,
+		cfg.Addons.CertManager.Enabled,
+		cfg.Addons.Traefik.Enabled,
+		cfg.Addons.ArgoCD.Enabled,
+		cfg.Addons.TalosBackup.Enabled,
+	)
+
 	// Pre-flight validation: check addon configuration requirements
 	if err := validateAddonConfig(cfg); err != nil {
 		return fmt.Errorf("addon configuration validation failed: %w", err)
 	}
+	log.Printf("[addons] Pre-flight validation passed")
 
 	// Create k8s client from kubeconfig bytes
 	client, err := k8sclient.NewFromKubeconfig(kubeconfig)
 	if err != nil {
 		return fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
+	log.Printf("[addons] Kubernetes client created successfully")
 
 	// Install CRDs first (before addons that depend on them)
 	if cfg.Addons.GatewayAPICRDs.Enabled {
+		log.Printf("[addons] Installing Gateway API CRDs...")
 		if err := applyGatewayAPICRDs(ctx, client, cfg); err != nil {
 			return fmt.Errorf("failed to install Gateway API CRDs: %w", err)
 		}
@@ -214,21 +229,26 @@ func ApplyWithoutCilium(ctx context.Context, cfg *config.Config, kubeconfig []by
 
 	// Create hcloud secret if CCM or CSI are enabled
 	if cfg.Addons.CCM.Enabled || cfg.Addons.CSI.Enabled {
+		log.Printf("[addons] Creating hcloud secret for CCM/CSI (networkID=%d, tokenLength=%d)", networkID, len(cfg.HCloudToken))
 		if err := createHCloudSecret(ctx, client, cfg.HCloudToken, networkID); err != nil {
 			return fmt.Errorf("failed to create hcloud secret: %w", err)
 		}
 	}
 
 	if cfg.Addons.CCM.Enabled {
+		log.Printf("[addons] Installing Hetzner Cloud Controller Manager...")
 		if err := applyCCM(ctx, client, cfg, networkID); err != nil {
 			return fmt.Errorf("failed to install CCM: %w", err)
 		}
+		log.Printf("[addons] CCM installed successfully")
 	}
 
 	if cfg.Addons.CSI.Enabled {
+		log.Printf("[addons] Installing Hetzner CSI Driver...")
 		if err := applyCSI(ctx, client, cfg); err != nil {
 			return fmt.Errorf("failed to install CSI: %w", err)
 		}
+		log.Printf("[addons] CSI installed successfully")
 	}
 
 	if cfg.Addons.MetricsServer.Enabled {
