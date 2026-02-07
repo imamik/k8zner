@@ -3,8 +3,6 @@ package addons
 import (
 	"context"
 	"fmt"
-	"log"
-	"strings"
 
 	"github.com/imamik/k8zner/internal/addons/helm"
 	"github.com/imamik/k8zner/internal/addons/k8sclient"
@@ -25,16 +23,6 @@ func applyTraefik(ctx context.Context, client k8sclient.Client, cfg *config.Conf
 	// Build values matching the ingress-nginx configuration style
 	values := buildTraefikValues(cfg)
 
-	// Debug: log key Traefik config values
-	hostNetworkVal, hasHN := values["hostNetwork"]
-	log.Printf("[traefik] hostNetwork config: enabled=%v, HostNetwork ptr=%v, values[hostNetwork]=%v (present=%v)",
-		cfg.Addons.Traefik.Enabled,
-		cfg.Addons.Traefik.HostNetwork,
-		hostNetworkVal, hasHN)
-	if deployment, ok := values["deployment"].(helm.Values); ok {
-		log.Printf("[traefik] deployment: kind=%v, dnsPolicy=%v", deployment["kind"], deployment["dnsPolicy"])
-	}
-
 	// Get chart spec with any config overrides
 	spec := helm.GetChartSpec("traefik", cfg.Addons.Traefik.Helm)
 
@@ -42,14 +30,6 @@ func applyTraefik(ctx context.Context, client k8sclient.Client, cfg *config.Conf
 	manifestBytes, err := helm.RenderFromSpec(ctx, spec, "traefik", values)
 	if err != nil {
 		return fmt.Errorf("failed to render traefik chart: %w", err)
-	}
-
-	// Debug: check rendered manifest for hostNetwork
-	manifestStr := string(manifestBytes)
-	if strings.Contains(manifestStr, "hostNetwork: true") {
-		log.Printf("[traefik] rendered manifest contains hostNetwork: true")
-	} else {
-		log.Printf("[traefik] WARNING: rendered manifest does NOT contain hostNetwork: true")
 	}
 
 	// Apply all manifests
@@ -135,6 +115,17 @@ func buildTraefikValues(cfg *config.Config) helm.Values {
 				"maxUnavailable": 1,
 				"maxSurge":       0,
 			},
+		}
+		// Traefik chart drops ALL capabilities by default. When using hostNetwork with
+		// privileged ports (80/443), the container needs NET_BIND_SERVICE to bind to
+		// ports < 1024. Without this, Traefik starts but can't bind — causing
+		// "connection refused" on ingress traffic.
+		values["securityContext"] = helm.Values{
+			"capabilities": helm.Values{
+				"add":  []string{"NET_BIND_SERVICE"},
+				"drop": []string{"ALL"},
+			},
+			"readOnlyRootFilesystem": true,
 		}
 	}
 

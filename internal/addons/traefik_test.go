@@ -450,6 +450,15 @@ func TestBuildTraefikValuesHostNetwork(t *testing.T) {
 				// hostNetwork is a top-level value in Traefik chart v39+
 				assert.Equal(t, true, values["hostNetwork"], "top-level hostNetwork")
 				assert.Equal(t, "ClusterFirstWithHostNet", deployment["dnsPolicy"], "deployment dnsPolicy")
+
+				// NET_BIND_SERVICE capability is required for binding to ports 80/443
+				secCtx, ok := values["securityContext"].(helm.Values)
+				assert.True(t, ok, "securityContext must be set for hostNetwork")
+				caps, ok := secCtx["capabilities"].(helm.Values)
+				assert.True(t, ok, "securityContext.capabilities must be set")
+				addCaps, ok := caps["add"].([]string)
+				assert.True(t, ok, "capabilities.add must be a string slice")
+				assert.Contains(t, addCaps, "NET_BIND_SERVICE", "must add NET_BIND_SERVICE for privileged ports")
 			} else {
 				_, hasHostNetwork := values["hostNetwork"]
 				assert.False(t, hasHostNetwork, "should not have hostNetwork")
@@ -512,4 +521,5 @@ func TestTraefikChartRenderHostNetwork(t *testing.T) {
 	require.Contains(t, output, "dnsPolicy: ClusterFirstWithHostNet", "rendered manifest must set dnsPolicy")
 	require.Contains(t, output, "hostPort: 80", "rendered manifest must have hostPort 80")
 	require.Contains(t, output, "hostPort: 443", "rendered manifest must have hostPort 443")
+	require.Contains(t, output, "NET_BIND_SERVICE", "rendered manifest must have NET_BIND_SERVICE capability")
 }
