@@ -207,51 +207,46 @@ func verifyIngressClassExists(t *testing.T, kubeconfigPath, name string) {
 	t.Logf("  IngressClass %s exists", name)
 }
 
-// verifyTraefikHostNetwork checks that the Traefik DaemonSet has hostNetwork enabled.
-// This is critical for dev mode where Traefik binds directly to host ports 80/443.
-func verifyTraefikHostNetwork(t *testing.T, kubeconfigPath string) {
-	// Get the DaemonSet JSON to inspect hostNetwork
+// verifyTraefikLoadBalancer checks that Traefik is deployed as a Deployment with LoadBalancer service.
+func verifyTraefikLoadBalancer(t *testing.T, kubeconfigPath string) {
+	// Verify Traefik is a Deployment (not DaemonSet)
 	cmd := exec.CommandContext(context.Background(), "kubectl",
 		"--kubeconfig", kubeconfigPath,
 		"-n", "traefik",
-		"get", "daemonset", "-l", "app.kubernetes.io/name=traefik",
-		"-o", "jsonpath={.items[0].spec.template.spec.hostNetwork}")
+		"get", "deployment", "-l", "app.kubernetes.io/name=traefik",
+		"-o", "jsonpath={.items[0].metadata.name}")
 	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("Failed to get Traefik DaemonSet hostNetwork: %v (output: %s)", err, string(output))
+	if err != nil || strings.TrimSpace(string(output)) == "" {
+		t.Fatalf("Traefik Deployment not found: %v (output: %s)", err, string(output))
 	}
-	hostNet := strings.TrimSpace(string(output))
-	t.Logf("  Traefik DaemonSet hostNetwork=%s", hostNet)
-	if hostNet != "true" {
-		// Dump full DaemonSet spec for debugging
-		debugCmd := exec.CommandContext(context.Background(), "kubectl",
-			"--kubeconfig", kubeconfigPath,
-			"-n", "traefik",
-			"get", "daemonset", "-l", "app.kubernetes.io/name=traefik",
-			"-o", "yaml")
-		debugOut, _ := debugCmd.CombinedOutput()
-		t.Logf("  Full DaemonSet spec:\n%s", string(debugOut))
+	t.Logf("  Traefik Deployment: %s", strings.TrimSpace(string(output)))
 
-		// Also dump operator logs for traefik debug info
-		operatorCmd := exec.CommandContext(context.Background(), "kubectl",
-			"--kubeconfig", kubeconfigPath,
-			"-n", "k8zner-system",
-			"logs", "-l", "app.kubernetes.io/name=k8zner-operator",
-			"--tail=50")
-		operatorOut, _ := operatorCmd.CombinedOutput()
-		t.Logf("  Operator logs (last 50 lines):\n%s", string(operatorOut))
-
-		t.Fatalf("Traefik DaemonSet hostNetwork is %q, expected \"true\"", hostNet)
-	}
-
-	// Also verify pods have host IPs (not pod network IPs)
-	podCmd := exec.CommandContext(context.Background(), "kubectl",
+	// Verify service type is LoadBalancer
+	cmd = exec.CommandContext(context.Background(), "kubectl",
 		"--kubeconfig", kubeconfigPath,
 		"-n", "traefik",
-		"get", "pods", "-l", "app.kubernetes.io/name=traefik",
-		"-o", "jsonpath={.items[*].status.podIP}")
-	podOut, _ := podCmd.CombinedOutput()
-	t.Logf("  Traefik pod IPs: %s", string(podOut))
+		"get", "svc", "-l", "app.kubernetes.io/name=traefik",
+		"-o", "jsonpath={.items[0].spec.type}")
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Failed to get Traefik service type: %v", err)
+	}
+	svcType := strings.TrimSpace(string(output))
+	if svcType != "LoadBalancer" {
+		t.Fatalf("Traefik service type is %q, expected LoadBalancer", svcType)
+	}
+	t.Logf("  Traefik service type: %s", svcType)
+
+	// Verify LB annotation exists
+	cmd = exec.CommandContext(context.Background(), "kubectl",
+		"--kubeconfig", kubeconfigPath,
+		"-n", "traefik",
+		"get", "svc", "-l", "app.kubernetes.io/name=traefik",
+		"-o", "jsonpath={.items[0].metadata.annotations.load-balancer\\.hetzner\\.cloud/name}")
+	output, err = cmd.CombinedOutput()
+	if err == nil && len(output) > 0 {
+		t.Logf("  Hetzner LB name: %s", string(output))
+	}
 }
 
 // verifyClusterIssuerExists verifies a ClusterIssuer exists.

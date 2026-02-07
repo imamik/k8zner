@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
 
 	"github.com/imamik/k8zner/internal/addons/helm"
 	"github.com/imamik/k8zner/internal/addons/k8sclient"
@@ -47,21 +46,8 @@ func applyArgoCD(ctx context.Context, client k8sclient.Client, cfg *config.Confi
 		return fmt.Errorf("failed to create argocd namespace: %w", err)
 	}
 
-	// Get worker node external IPs for DNS targeting in hostNetwork mode.
-	// Wait for CCM to set ExternalIPs on worker nodes (race condition during bootstrap).
-	var workerIPs []string
-	if cfg.Addons.Traefik.HostNetwork != nil && *cfg.Addons.Traefik.HostNetwork {
-		ips, err := waitForWorkerExternalIPs(ctx, client, DefaultWorkerExternalIPWaitTime)
-		if err != nil {
-			log.Printf("[ArgoCD] Warning: failed to get worker IPs for DNS target: %v", err)
-		} else if len(ips) > 0 {
-			workerIPs = ips
-			log.Printf("[ArgoCD] Using worker IPs for DNS target: %v", workerIPs)
-		}
-	}
-
 	// Build values based on configuration
-	values := buildArgoCDValues(cfg, workerIPs)
+	values := buildArgoCDValues(cfg)
 
 	// Get chart spec with any config overrides
 	spec := helm.GetChartSpec("argo-cd", cfg.Addons.ArgoCD.Helm)
@@ -81,8 +67,7 @@ func applyArgoCD(ctx context.Context, client k8sclient.Client, cfg *config.Confi
 }
 
 // buildArgoCDValues creates helm values for ArgoCD configuration.
-// workerIPs are the external IPs of worker nodes, used for DNS targeting in hostNetwork mode.
-func buildArgoCDValues(cfg *config.Config, workerIPs []string) helm.Values {
+func buildArgoCDValues(cfg *config.Config) helm.Values {
 	argoCDCfg := cfg.Addons.ArgoCD
 
 	values := helm.Values{
@@ -111,8 +96,8 @@ func buildArgoCDValues(cfg *config.Config, workerIPs []string) helm.Values {
 		},
 		// Controller configuration
 		"controller": buildArgoCDController(argoCDCfg),
-		// Server configuration - pass full config and worker IPs for ingress annotations
-		"server": buildArgoCDServer(cfg, workerIPs),
+		// Server configuration
+		"server": buildArgoCDServer(cfg),
 		// Repo server configuration
 		"repoServer": buildArgoCDRepoServer(argoCDCfg),
 		// Redis configuration
@@ -184,8 +169,7 @@ func buildArgoCDController(cfg config.ArgoCDConfig) helm.Values {
 }
 
 // buildArgoCDServer creates the ArgoCD server configuration.
-// workerIPs are the external IPs of worker nodes, used for DNS targeting in hostNetwork mode.
-func buildArgoCDServer(cfg *config.Config, workerIPs []string) helm.Values {
+func buildArgoCDServer(cfg *config.Config) helm.Values {
 	argoCDCfg := cfg.Addons.ArgoCD
 	replicas := 1
 	if argoCDCfg.HA {
@@ -218,7 +202,7 @@ func buildArgoCDServer(cfg *config.Config, workerIPs []string) helm.Values {
 
 	// Configure ingress if enabled
 	if argoCDCfg.IngressEnabled && argoCDCfg.IngressHost != "" {
-		server["ingress"] = buildArgoCDIngress(cfg, workerIPs)
+		server["ingress"] = buildArgoCDIngress(cfg)
 	}
 
 	return server
@@ -288,8 +272,7 @@ func buildArgoCDRedis(cfg config.ArgoCDConfig) helm.Values {
 }
 
 // buildArgoCDIngress creates the ingress configuration for ArgoCD server.
-// workerIPs are the external IPs of worker nodes, used for DNS targeting in hostNetwork mode.
-func buildArgoCDIngress(cfg *config.Config, workerIPs []string) helm.Values {
+func buildArgoCDIngress(cfg *config.Config) helm.Values {
 	argoCDCfg := cfg.Addons.ArgoCD
 
 	ingress := helm.Values{
@@ -322,18 +305,11 @@ func buildArgoCDIngress(cfg *config.Config, workerIPs []string) helm.Values {
 		}
 		annotations["cert-manager.io/cluster-issuer"] = clusterIssuer
 
-		// Add external-dns annotations if Cloudflare/external-dns is enabled
+		// Add external-dns hostname annotation if Cloudflare/external-dns is enabled.
+		// external-dns auto-discovers the target IP from the Ingress status
+		// (set by Traefik's LoadBalancer service).
 		if cfg.Addons.Cloudflare.Enabled && cfg.Addons.ExternalDNS.Enabled {
 			annotations["external-dns.alpha.kubernetes.io/hostname"] = argoCDCfg.IngressHost
-
-			// When using hostNetwork mode, external-dns can't determine the target IP
-			// from the Ingress status. We need to provide it explicitly via annotation.
-			// See: https://github.com/kubernetes-sigs/external-dns/blob/master/docs/annotations/annotations.md
-			if len(workerIPs) > 0 {
-				// Use the first worker IP as the DNS target
-				// In hostNetwork mode, Traefik binds to host ports on worker nodes
-				annotations["external-dns.alpha.kubernetes.io/target"] = strings.Join(workerIPs, ",")
-			}
 		}
 
 		ingress["annotations"] = annotations

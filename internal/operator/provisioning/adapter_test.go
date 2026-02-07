@@ -140,7 +140,7 @@ func TestSpecToConfig_DomainIngress(t *testing.T) {
 		assert.Equal(t, "admin@example.com", cfg.Addons.CertManager.Cloudflare.Email)
 	})
 
-	t.Run("Traefik uses DaemonSet with hostNetwork", func(t *testing.T) {
+	t.Run("Traefik uses Deployment with LoadBalancer", func(t *testing.T) {
 		cluster := newTestCluster("test-cluster", "example.com", &k8znerv1alpha1.AddonSpec{
 			Traefik:     true,
 			ExternalDNS: true,
@@ -151,14 +151,13 @@ func TestSpecToConfig_DomainIngress(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.True(t, cfg.Addons.Traefik.Enabled)
-		assert.Equal(t, "DaemonSet", cfg.Addons.Traefik.Kind)
-		require.NotNil(t, cfg.Addons.Traefik.HostNetwork)
-		assert.True(t, *cfg.Addons.Traefik.HostNetwork)
+		assert.Equal(t, "Deployment", cfg.Addons.Traefik.Kind)
+		assert.Nil(t, cfg.Addons.Traefik.HostNetwork)
 		assert.Equal(t, "Local", cfg.Addons.Traefik.ExternalTrafficPolicy)
 		assert.Equal(t, "traefik", cfg.Addons.Traefik.IngressClass)
 	})
 
-	t.Run("firewall opens 80/443 when Traefik enabled", func(t *testing.T) {
+	t.Run("firewall has no extra rules for 80/443 (LB handles ingress)", func(t *testing.T) {
 		cluster := newTestCluster("test-cluster", "example.com", &k8znerv1alpha1.AddonSpec{
 			Traefik: true,
 		})
@@ -170,9 +169,7 @@ func TestSpecToConfig_DomainIngress(t *testing.T) {
 		assert.True(t, *cfg.Firewall.UseCurrentIPv4)
 		require.NotNil(t, cfg.Firewall.UseCurrentIPv6)
 		assert.True(t, *cfg.Firewall.UseCurrentIPv6)
-		require.Len(t, cfg.Firewall.ExtraRules, 2)
-		assert.Equal(t, "80", cfg.Firewall.ExtraRules[0].Port)
-		assert.Equal(t, "443", cfg.Firewall.ExtraRules[1].Port)
+		assert.Empty(t, cfg.Firewall.ExtraRules, "no extra rules needed - LB handles ingress traffic")
 	})
 
 	t.Run("firewall has no extra rules without Traefik", func(t *testing.T) {

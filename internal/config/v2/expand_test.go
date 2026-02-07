@@ -431,10 +431,9 @@ func TestExpand_Ingress_DevMode(t *testing.T) {
 		t.Fatalf("Expand() error = %v", err)
 	}
 
-	// Dev mode: No separate ingress LB (Traefik uses hostNetwork)
-	// This keeps costs low with only 1 API LB
+	// No separate ingress LB - Traefik's LoadBalancer Service creates the LB via CCM
 	if expanded.Ingress.Enabled {
-		t.Error("Ingress should be disabled in dev mode (no separate LB)")
+		t.Error("Ingress should be disabled (Traefik Service creates LB via CCM)")
 	}
 }
 
@@ -454,13 +453,12 @@ func TestExpand_Traefik_DevMode(t *testing.T) {
 		t.Fatalf("Expand() error = %v", err)
 	}
 
-	// Traefik always uses hostNetwork with DaemonSet (both modes)
-	// In dev mode, traffic goes directly to worker nodes or through shared API LB
-	if expanded.Addons.Traefik.HostNetwork == nil || !*expanded.Addons.Traefik.HostNetwork {
-		t.Error("Traefik.HostNetwork should be true")
+	// Traefik always uses Deployment with LoadBalancer service (no hostNetwork)
+	if expanded.Addons.Traefik.HostNetwork != nil {
+		t.Error("Traefik.HostNetwork should be nil (not set)")
 	}
-	if expanded.Addons.Traefik.Kind != "DaemonSet" {
-		t.Errorf("Traefik.Kind = %q, want %q", expanded.Addons.Traefik.Kind, "DaemonSet")
+	if expanded.Addons.Traefik.Kind != "Deployment" {
+		t.Errorf("Traefik.Kind = %q, want %q", expanded.Addons.Traefik.Kind, "Deployment")
 	}
 }
 
@@ -480,13 +478,12 @@ func TestExpand_Traefik_HAMode(t *testing.T) {
 		t.Fatalf("Expand() error = %v", err)
 	}
 
-	// Traefik always uses hostNetwork with DaemonSet (both modes)
-	// In HA mode, dedicated ingress LB routes to Traefik on workers
-	if expanded.Addons.Traefik.HostNetwork == nil || !*expanded.Addons.Traefik.HostNetwork {
-		t.Error("Traefik.HostNetwork should be true")
+	// Traefik always uses Deployment with LoadBalancer service (no hostNetwork)
+	if expanded.Addons.Traefik.HostNetwork != nil {
+		t.Error("Traefik.HostNetwork should be nil (not set)")
 	}
-	if expanded.Addons.Traefik.Kind != "DaemonSet" {
-		t.Errorf("Traefik.Kind = %q, want %q", expanded.Addons.Traefik.Kind, "DaemonSet")
+	if expanded.Addons.Traefik.Kind != "Deployment" {
+		t.Errorf("Traefik.Kind = %q, want %q", expanded.Addons.Traefik.Kind, "Deployment")
 	}
 }
 
@@ -506,12 +503,9 @@ func TestExpand_Ingress_HAMode(t *testing.T) {
 		t.Fatalf("Expand() error = %v", err)
 	}
 
-	// HA mode: Dedicated ingress LB for high availability
-	if !expanded.Ingress.Enabled {
-		t.Error("Ingress should be enabled in HA mode (dedicated LB)")
-	}
-	if expanded.Ingress.LoadBalancerType != LoadBalancerType {
-		t.Errorf("Ingress.LoadBalancerType = %q, want %q", expanded.Ingress.LoadBalancerType, LoadBalancerType)
+	// No separate ingress LB - Traefik's LoadBalancer Service creates the LB via CCM
+	if expanded.Ingress.Enabled {
+		t.Error("Ingress should be disabled (Traefik Service creates LB via CCM)")
 	}
 }
 

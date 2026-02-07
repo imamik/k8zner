@@ -39,10 +39,6 @@ type Client interface {
 	// This is useful for waiting for a service's backing pods to be ready.
 	HasReadyEndpoints(ctx context.Context, namespace, serviceName string) (bool, error)
 
-	// GetWorkerExternalIPs returns the external IPs of worker nodes.
-	// This is useful for DNS configuration when using hostNetwork mode.
-	GetWorkerExternalIPs(ctx context.Context) ([]string, error)
-
 	// HasIngressClass checks if an IngressClass with the given name exists.
 	// This is useful for checking Traefik/nginx readiness before creating Ingress resources.
 	HasIngressClass(ctx context.Context, name string) (bool, error)
@@ -233,33 +229,6 @@ func (c *client) HasReadyEndpoints(ctx context.Context, namespace, serviceName s
 	}
 
 	return false, nil
-}
-
-// GetWorkerExternalIPs returns the external IPs of worker nodes.
-// Worker nodes are identified by NOT having the control-plane role label.
-func (c *client) GetWorkerExternalIPs(ctx context.Context) ([]string, error) {
-	nodes, err := c.clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list nodes: %w", err)
-	}
-
-	var externalIPs []string
-	for _, node := range nodes.Items {
-		// Skip control plane nodes
-		if _, isControlPlane := node.Labels["node-role.kubernetes.io/control-plane"]; isControlPlane {
-			continue
-		}
-
-		// Get external IP from node addresses
-		for _, addr := range node.Status.Addresses {
-			if addr.Type == corev1.NodeExternalIP && addr.Address != "" {
-				externalIPs = append(externalIPs, addr.Address)
-				break // Only need one external IP per node
-			}
-		}
-	}
-
-	return externalIPs, nil
 }
 
 // HasIngressClass checks if an IngressClass with the given name exists.

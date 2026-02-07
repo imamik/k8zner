@@ -201,7 +201,6 @@ func installCloudflareForMonitoring(t *testing.T, state *E2EState, hcloudToken, 
 func installKubePrometheusStack(t *testing.T, state *E2EState, hcloudToken, cfAPIToken, cfDomain, grafanaSubdomain string, networkID int64) {
 	grafanaHost := fmt.Sprintf("%s.%s", grafanaSubdomain, cfDomain)
 	grafanaEnabled := true
-	hostNetworkEnabled := true
 
 	cfg := &config.Config{
 		ClusterName: state.ClusterName,
@@ -223,10 +222,6 @@ func installKubePrometheusStack(t *testing.T, state *E2EState, hcloudToken, cfAP
 					Email:      fmt.Sprintf("monitoring-test@%s", cfDomain),
 					Production: false, // Use staging
 				},
-			},
-			// Enable Traefik hostNetwork for worker IP targeting in DNS
-			Traefik: config.TraefikConfig{
-				HostNetwork: &hostNetworkEnabled,
 			},
 			// Main kube-prometheus-stack config
 			KubePrometheusStack: config.KubePrometheusStackConfig{

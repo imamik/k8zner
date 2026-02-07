@@ -485,7 +485,6 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 
 		// Firewall configuration
 		// UseCurrentIPv4/IPv6 auto-detects operator's IP for API access rules.
-		// ExtraRules opens 80/443 for hostNetwork Traefik ingress.
 		Firewall: expandFirewallFromSpec(spec),
 
 		// Network configuration
@@ -568,8 +567,7 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 			},
 			Traefik: config.TraefikConfig{
 				Enabled:               spec.Addons != nil && spec.Addons.Traefik,
-				Kind:                  "DaemonSet",
-				HostNetwork:           boolPtr(true),
+				Kind:                  "Deployment",
 				ExternalTrafficPolicy: "Local",
 				IngressClass:          "traefik",
 			},
@@ -648,36 +646,13 @@ func normalizeServerSize(size string) string {
 }
 
 // expandFirewallFromSpec derives firewall config from the CRD spec.
-// Opens ports 80/443 when Traefik is enabled (hostNetwork mode requires
-// firewall rules for ingress traffic).
+// No extra rules needed: Traefik uses LoadBalancer service, so the
+// Hetzner LB handles ingress traffic (not node ports 80/443).
 func expandFirewallFromSpec(spec *k8znerv1alpha1.K8znerClusterSpec) config.FirewallConfig {
-	fw := config.FirewallConfig{
+	return config.FirewallConfig{
 		UseCurrentIPv4: boolPtr(true),
 		UseCurrentIPv6: boolPtr(true),
 	}
-
-	// When Traefik runs in hostNetwork mode, it binds directly to ports 80/443
-	// on nodes, so the Hetzner Cloud firewall must allow this traffic.
-	if spec.Addons != nil && spec.Addons.Traefik {
-		fw.ExtraRules = []config.FirewallRule{
-			{
-				Description: "Allow HTTP traffic for ingress (hostNetwork mode)",
-				Direction:   "in",
-				Protocol:    "tcp",
-				Port:        "80",
-				SourceIPs:   []string{"0.0.0.0/0", "::/0"},
-			},
-			{
-				Description: "Allow HTTPS traffic for ingress (hostNetwork mode)",
-				Direction:   "in",
-				Protocol:    "tcp",
-				Port:        "443",
-				SourceIPs:   []string{"0.0.0.0/0", "::/0"},
-			},
-		}
-	}
-
-	return fw
 }
 
 // expandArgoCDFromSpec derives ArgoCD config from the CRD spec.

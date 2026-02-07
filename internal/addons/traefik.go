@@ -11,8 +11,9 @@ import (
 )
 
 // applyTraefik installs the Traefik Proxy ingress controller.
-// Traefik uses LoadBalancer service type for Kubernetes-native external IP discovery,
-// which allows external-dns to auto-discover the IP for DNS records.
+// Traefik uses a Deployment with a LoadBalancer service. CCM creates
+// a Hetzner LB automatically via annotations, and external-dns
+// auto-discovers the LB IP from the Ingress status for DNS records.
 func applyTraefik(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	// Create namespace first
 	namespaceYAML := createTraefikNamespace()
@@ -41,16 +42,13 @@ func applyTraefik(ctx context.Context, client k8sclient.Client, cfg *config.Conf
 }
 
 // buildTraefikValues creates helm values for Traefik configuration.
-// When hostNetwork is enabled (dev mode): uses DaemonSet with direct host port binding.
-// When hostNetwork is disabled (HA mode): uses LoadBalancer service with Hetzner LB.
+// Always uses Deployment with LoadBalancer service. CCM creates a Hetzner LB
+// via annotations, and proxy protocol preserves client IPs.
 func buildTraefikValues(cfg *config.Config) helm.Values {
 	traefikCfg := cfg.Addons.Traefik
 	workerCount := getWorkerCount(cfg)
 
-	// Check if hostNetwork mode is enabled (dev mode)
-	hostNetwork := traefikCfg.HostNetwork != nil && *traefikCfg.HostNetwork
-
-	// Determine replicas (not used for DaemonSet)
+	// Determine replicas
 	replicas := 2
 	if traefikCfg.Replicas != nil {
 		replicas = *traefikCfg.Replicas
@@ -58,18 +56,14 @@ func buildTraefikValues(cfg *config.Config) helm.Values {
 		replicas = 3
 	}
 
-	// Determine kind (default: Deployment, or DaemonSet for hostNetwork)
+	// Determine kind (default: Deployment)
 	kind := traefikCfg.Kind
 	if kind == "" {
-		if hostNetwork {
-			kind = "DaemonSet"
-		} else {
-			kind = "Deployment"
-		}
+		kind = "Deployment"
 	}
 
 	// Build the deployment configuration
-	deployment := buildTraefikDeployment(replicas, kind, hostNetwork)
+	deployment := buildTraefikDeployment(replicas, kind)
 
 	// External traffic policy - default to "Local" (preserves client IP)
 	externalTrafficPolicy := traefikCfg.ExternalTrafficPolicy
@@ -94,8 +88,8 @@ func buildTraefikValues(cfg *config.Config) helm.Values {
 		"ingressClass": buildTraefikIngressClass(ingressClassName),
 		"ingressRoute": buildTraefikIngressRoute(),
 		"providers":    buildTraefikProviders(),
-		"ports":        buildTraefikPorts(hostNetwork),
-		"service":      buildTraefikService(cfg.ClusterName, externalTrafficPolicy, location, hostNetwork),
+		"ports":        buildTraefikPorts(),
+		"service":      buildTraefikService(cfg.ClusterName, externalTrafficPolicy, location),
 		// Add tolerations for CCM uninitialized taint
 		// This allows Traefik to schedule before CCM has fully initialized nodes
 		"tolerations": []helm.Values{
@@ -104,42 +98,13 @@ func buildTraefikValues(cfg *config.Config) helm.Values {
 				"operator": "Exists",
 			},
 		},
-	}
-
-	// hostNetwork is a top-level value in Traefik chart v39+.
-	// updateStrategy.rollingUpdate.maxUnavailable must be > 0 when hostNetwork is true.
-	if hostNetwork {
-		values["hostNetwork"] = true
-		values["updateStrategy"] = helm.Values{
-			"rollingUpdate": helm.Values{
-				"maxUnavailable": 1,
-				"maxSurge":       0,
-			},
-		}
-		// Traefik chart drops ALL capabilities and sets allowPrivilegeEscalation=false
-		// by default. When using hostNetwork with privileged ports (80/443), we need:
-		// 1. NET_BIND_SERVICE capability to bind to ports < 1024
-		// 2. allowPrivilegeEscalation=true so the kernel applies the capability
-		//    (NO_NEW_PRIVS blocks capability use when allowPrivilegeEscalation=false)
-		values["securityContext"] = helm.Values{
-			"capabilities": helm.Values{
-				"add":  []string{"NET_BIND_SERVICE"},
-				"drop": []string{"ALL"},
-			},
-			"allowPrivilegeEscalation": true,
-			"readOnlyRootFilesystem":   true,
-		}
-	}
-
-	// Add proxy protocol args only for LoadBalancer mode (not hostNetwork)
-	if !hostNetwork {
-		values["additionalArguments"] = []string{
-			// Enable proxy protocol for proper client IP preservation with Hetzner LBs
+		// Proxy protocol for client IP preservation with Hetzner LBs
+		"additionalArguments": []string{
 			"--entryPoints.web.proxyProtocol.trustedIPs=127.0.0.1/32,10.0.0.0/8",
 			"--entryPoints.websecure.proxyProtocol.trustedIPs=127.0.0.1/32,10.0.0.0/8",
-		}
-		// Topology spread constraints for HA (not relevant for DaemonSet)
-		values["topologySpreadConstraints"] = buildTraefikTopologySpread(workerCount)
+		},
+		// Topology spread constraints for HA
+		"topologySpreadConstraints": buildTraefikTopologySpread(workerCount),
 	}
 
 	// Merge custom Helm values from config
@@ -147,8 +112,8 @@ func buildTraefikValues(cfg *config.Config) helm.Values {
 }
 
 // buildTraefikDeployment creates the deployment configuration.
-func buildTraefikDeployment(replicas int, kind string, hostNetwork bool) helm.Values {
-	deployment := helm.Values{
+func buildTraefikDeployment(replicas int, kind string) helm.Values {
+	return helm.Values{
 		"enabled":  true,
 		"kind":     kind,
 		"replicas": replicas,
@@ -157,15 +122,6 @@ func buildTraefikDeployment(replicas int, kind string, hostNetwork bool) helm.Va
 			"maxUnavailable": 1,
 		},
 	}
-
-	// When using hostNetwork, set dnsPolicy to ClusterFirstWithHostNet.
-	// Note: dnsPolicy is a deployment-level value in Traefik chart v39+,
-	// but hostNetwork is a top-level value (set in buildTraefikValues).
-	if hostNetwork {
-		deployment["dnsPolicy"] = "ClusterFirstWithHostNet"
-	}
-
-	return deployment
 }
 
 // buildTraefikIngressClass creates the IngressClass configuration.
@@ -206,40 +162,24 @@ func buildTraefikProviders() helm.Values {
 }
 
 // buildTraefikPorts creates the ports configuration.
-// When hostNetwork is true: uses hostPort for direct binding to 80/443.
-// When hostNetwork is false: uses standard service ports with proxy protocol.
+// Uses standard container ports with proxy protocol for client IP preservation.
 // Note: Traefik chart v39+ uses new schema where 'expose' is an object with 'default' key.
-func buildTraefikPorts(hostNetwork bool) helm.Values {
-	webPort := helm.Values{
-		"port":        8000,
-		"expose":      helm.Values{"default": true},
-		"exposedPort": 80,
-		"protocol":    "TCP",
-	}
-
-	websecurePort := helm.Values{
-		"port":        8443,
-		"expose":      helm.Values{"default": true},
-		"exposedPort": 443,
-		"protocol":    "TCP",
-	}
-
-	if hostNetwork {
-		// In hostNetwork mode, containerPort must match hostPort (chart v39 requirement).
-		// Set port (containerPort) to 80/443 so Traefik binds directly to these ports.
-		webPort["port"] = 80
-		webPort["hostPort"] = 80
-		websecurePort["port"] = 443
-		websecurePort["hostPort"] = 443
-	} else {
-		// In LoadBalancer mode, enable proxy protocol for client IP preservation
-		webPort["proxyProtocol"] = helm.Values{"enabled": true}
-		websecurePort["proxyProtocol"] = helm.Values{"enabled": true}
-	}
-
+func buildTraefikPorts() helm.Values {
 	return helm.Values{
-		"web":       webPort,
-		"websecure": websecurePort,
+		"web": helm.Values{
+			"port":          8000,
+			"expose":        helm.Values{"default": true},
+			"exposedPort":   80,
+			"protocol":      "TCP",
+			"proxyProtocol": helm.Values{"enabled": true},
+		},
+		"websecure": helm.Values{
+			"port":          8443,
+			"expose":        helm.Values{"default": true},
+			"exposedPort":   443,
+			"protocol":      "TCP",
+			"proxyProtocol": helm.Values{"enabled": true},
+		},
 		"traefik": helm.Values{
 			"port":   9000,
 			"expose": helm.Values{"default": false},
@@ -248,21 +188,11 @@ func buildTraefikPorts(hostNetwork bool) helm.Values {
 }
 
 // buildTraefikService creates the service configuration.
-// When hostNetwork is true: uses ClusterIP (no external LB needed).
-// When hostNetwork is false: uses LoadBalancer with Hetzner annotations.
-func buildTraefikService(clusterName, externalTrafficPolicy, location string, hostNetwork bool) helm.Values {
-	if hostNetwork {
-		// In hostNetwork mode, use ClusterIP - traffic goes directly to host ports
-		return helm.Values{
-			"enabled": true,
-			"type":    "ClusterIP",
-		}
-	}
-
+// Always uses LoadBalancer with Hetzner annotations. CCM creates the LB automatically.
+func buildTraefikService(clusterName, externalTrafficPolicy, location string) helm.Values {
 	// Use proper naming convention for the load balancer
 	lbName := naming.IngressLoadBalancer(clusterName)
 
-	// In LoadBalancer mode, create Hetzner LB with proxy protocol
 	return helm.Values{
 		"enabled": true,
 		"type":    "LoadBalancer",
@@ -314,17 +244,14 @@ func buildTraefikTopologySpread(workerCount int) []helm.Values {
 }
 
 // createTraefikNamespace returns the traefik namespace manifest.
-// The namespace has privileged PodSecurity labels to allow hostPort binding,
-// which is required when Traefik is deployed with hostNetwork mode.
 func createTraefikNamespace() string {
 	return `apiVersion: v1
 kind: Namespace
 metadata:
   name: traefik
   labels:
-    # Required for hostNetwork/hostPort to work with PodSecurity admission
-    pod-security.kubernetes.io/enforce: privileged
-    pod-security.kubernetes.io/audit: privileged
-    pod-security.kubernetes.io/warn: privileged
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
 `
 }

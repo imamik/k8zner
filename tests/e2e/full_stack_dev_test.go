@@ -215,8 +215,8 @@ func TestE2EFullStackDev(t *testing.T) {
 		// Traefik pods running
 		waitForPod(t, state.KubeconfigPath, "traefik", "app.kubernetes.io/name=traefik", 5*time.Minute)
 
-		// Debug: Check if hostNetwork is enabled on the DaemonSet
-		verifyTraefikHostNetwork(t, state.KubeconfigPath)
+		// Verify Traefik is using Deployment + LoadBalancer service
+		verifyTraefikLoadBalancer(t, state.KubeconfigPath)
 	})
 
 	// =========================================================================
@@ -249,9 +249,8 @@ func TestE2EFullStackDev(t *testing.T) {
 		// Verify ingress configured
 		verifyArgoCDIngressConfigured(t, state.KubeconfigPath, argoHost)
 
-		// Wait for DNS record
-		legacyState := state.ToE2EState()
-		waitForDNSRecord(t, argoHost, 8*time.Minute, legacyState.WorkerIPs...)
+		// Wait for DNS record (LB IP auto-discovered by external-dns from Ingress status)
+		waitForDNSRecord(t, argoHost, 8*time.Minute)
 
 		// Wait for TLS certificate
 		waitForArgoCDTLSCertificate(t, state.KubeconfigPath, 8*time.Minute)

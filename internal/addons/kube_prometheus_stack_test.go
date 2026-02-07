@@ -19,7 +19,7 @@ func TestBuildKubePrometheusStackValues(t *testing.T) {
 			},
 		}
 
-		values := buildKubePrometheusStackValues(cfg, nil)
+		values := buildKubePrometheusStackValues(cfg)
 
 		// Check default rules are enabled
 		defaultRules := values["defaultRules"].(helm.Values)
@@ -63,7 +63,7 @@ func TestBuildKubePrometheusStackValues(t *testing.T) {
 			},
 		}
 
-		values := buildKubePrometheusStackValues(cfg, []string{"1.2.3.4"})
+		values := buildKubePrometheusStackValues(cfg)
 
 		// Check Grafana configuration
 		grafana := values["grafana"].(helm.Values)
@@ -86,7 +86,6 @@ func TestBuildKubePrometheusStackValues(t *testing.T) {
 		annotations := ingress["annotations"].(helm.Values)
 		assert.Equal(t, "letsencrypt-cloudflare-production", annotations["cert-manager.io/cluster-issuer"])
 		assert.Equal(t, "grafana.example.com", annotations["external-dns.alpha.kubernetes.io/hostname"])
-		assert.Equal(t, "1.2.3.4", annotations["external-dns.alpha.kubernetes.io/target"])
 	})
 
 	t.Run("with prometheus persistence", func(t *testing.T) {
@@ -105,7 +104,7 @@ func TestBuildKubePrometheusStackValues(t *testing.T) {
 			},
 		}
 
-		values := buildKubePrometheusStackValues(cfg, nil)
+		values := buildKubePrometheusStackValues(cfg)
 
 		prometheus := values["prometheus"].(helm.Values)
 		promSpec := prometheus["prometheusSpec"].(helm.Values)
@@ -133,7 +132,7 @@ func TestBuildKubePrometheusStackValues(t *testing.T) {
 			},
 		}
 
-		values := buildKubePrometheusStackValues(cfg, nil)
+		values := buildKubePrometheusStackValues(cfg)
 
 		defaultRules := values["defaultRules"].(helm.Values)
 		assert.False(t, defaultRules["create"].(bool))
@@ -165,7 +164,7 @@ func TestBuildIngressAnnotations(t *testing.T) {
 			},
 		}
 
-		annotations := buildIngressAnnotations(cfg, "test.example.com", nil)
+		annotations := buildIngressAnnotations(cfg, "test.example.com")
 
 		assert.Equal(t, "letsencrypt-cloudflare-staging", annotations["cert-manager.io/cluster-issuer"])
 		assert.Equal(t, "test.example.com", annotations["external-dns.alpha.kubernetes.io/hostname"])
@@ -182,7 +181,7 @@ func TestBuildIngressAnnotations(t *testing.T) {
 			},
 		}
 
-		annotations := buildIngressAnnotations(cfg, "test.example.com", nil)
+		annotations := buildIngressAnnotations(cfg, "test.example.com")
 
 		// Should use default fallback issuer
 		assert.Equal(t, "letsencrypt-prod", annotations["cert-manager.io/cluster-issuer"])
@@ -219,7 +218,7 @@ func TestBuildPrometheusIngress(t *testing.T) {
 			},
 		}
 
-		ingress := buildPrometheusIngress(cfg, []string{"1.2.3.4", "5.6.7.8"})
+		ingress := buildPrometheusIngress(cfg)
 
 		assert.True(t, ingress["enabled"].(bool))
 		assert.Equal(t, "traefik", ingress["ingressClassName"])
@@ -234,7 +233,6 @@ func TestBuildPrometheusIngress(t *testing.T) {
 
 		annotations := ingress["annotations"].(helm.Values)
 		assert.Equal(t, "letsencrypt-cloudflare-production", annotations["cert-manager.io/cluster-issuer"])
-		assert.Equal(t, "1.2.3.4,5.6.7.8", annotations["external-dns.alpha.kubernetes.io/target"])
 	})
 
 	t.Run("with default ingress class", func(t *testing.T) {
@@ -250,7 +248,7 @@ func TestBuildPrometheusIngress(t *testing.T) {
 			},
 		}
 
-		ingress := buildPrometheusIngress(cfg, nil)
+		ingress := buildPrometheusIngress(cfg)
 
 		assert.Equal(t, "traefik", ingress["ingressClassName"]) // Default
 		_, hasTLS := ingress["tls"]
@@ -285,7 +283,7 @@ func TestBuildAlertmanagerIngress(t *testing.T) {
 			},
 		}
 
-		ingress := buildAlertmanagerIngress(cfg, nil)
+		ingress := buildAlertmanagerIngress(cfg)
 
 		assert.True(t, ingress["enabled"].(bool))
 		assert.Equal(t, "nginx", ingress["ingressClassName"])
@@ -325,7 +323,7 @@ func TestBuildAlertmanagerValues(t *testing.T) {
 			},
 		}
 
-		values := buildAlertmanagerValues(cfg, nil)
+		values := buildAlertmanagerValues(cfg)
 
 		assert.True(t, values["enabled"].(bool))
 		ingress := values["ingress"].(helm.Values)
@@ -344,7 +342,7 @@ func TestBuildAlertmanagerValues(t *testing.T) {
 			},
 		}
 
-		values := buildAlertmanagerValues(cfg, nil)
+		values := buildAlertmanagerValues(cfg)
 		assert.False(t, values["enabled"].(bool))
 	})
 }

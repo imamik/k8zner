@@ -82,33 +82,13 @@ func expandNetwork(cfg *Config) config.NetworkConfig {
 }
 
 func expandFirewall(cfg *Config) config.FirewallConfig {
-	fwConfig := config.FirewallConfig{
+	return config.FirewallConfig{
 		// Auto-detect current IP for API access
 		UseCurrentIPv4: boolPtr(true),
 		UseCurrentIPv6: boolPtr(true),
+		// No ExtraRules needed: Traefik uses LoadBalancer service,
+		// so the Hetzner LB handles ingress traffic (not node ports 80/443).
 	}
-
-	// Add HTTP/HTTPS rules for hostNetwork mode
-	// In hostNetwork mode, Traefik binds directly to ports 80/443 on worker nodes,
-	// so the firewall must allow incoming traffic on these ports from anywhere.
-	fwConfig.ExtraRules = []config.FirewallRule{
-		{
-			Description: "Allow HTTP traffic for ingress (hostNetwork mode)",
-			Direction:   "in",
-			Protocol:    "tcp",
-			Port:        "80",
-			SourceIPs:   []string{"0.0.0.0/0", "::/0"},
-		},
-		{
-			Description: "Allow HTTPS traffic for ingress (hostNetwork mode)",
-			Direction:   "in",
-			Protocol:    "tcp",
-			Port:        "443",
-			SourceIPs:   []string{"0.0.0.0/0", "::/0"},
-		},
-	}
-
-	return fwConfig
 }
 
 func expandControlPlane(cfg *Config) config.ControlPlaneConfig {
@@ -145,13 +125,10 @@ func expandWorkers(cfg *Config) []config.WorkerNodePool {
 }
 
 func expandIngress(cfg *Config) config.IngressConfig {
-	// Dev mode: No separate ingress LB - Traefik uses hostNetwork on workers
-	// HA mode: Dedicated ingress LB for high availability
+	// Ingress LB is not pre-provisioned; Traefik's LoadBalancer Service
+	// creates a Hetzner LB automatically via CCM annotations.
 	return config.IngressConfig{
-		Enabled:          cfg.Mode == ModeHA,
-		LoadBalancerType: LoadBalancerType,
-		PublicNetwork:    true,
-		Algorithm:        "round_robin",
+		Enabled: false,
 	}
 }
 
@@ -221,12 +198,11 @@ func expandAddons(cfg *Config, vm VersionMatrix) config.AddonsConfig {
 		},
 
 		// Traefik ingress - always enabled (replaces ingress-nginx)
-		// Uses DaemonSet with hostNetwork to bind directly to host ports 80/443.
-		// Infrastructure LBs route traffic to Traefik via the private network.
+		// Uses Deployment with LoadBalancer service; CCM creates a Hetzner LB
+		// automatically via annotations. No hostNetwork needed.
 		Traefik: config.TraefikConfig{
 			Enabled:               true,
-			Kind:                  "DaemonSet",
-			HostNetwork:           boolPtr(true),
+			Kind:                  "Deployment",
 			ExternalTrafficPolicy: "Local",
 			IngressClass:          "traefik",
 		},

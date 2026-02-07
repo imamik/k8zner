@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
 
 	"github.com/imamik/k8zner/internal/addons/helm"
 	"github.com/imamik/k8zner/internal/addons/k8sclient"
@@ -30,21 +29,8 @@ func applyKubePrometheusStack(ctx context.Context, client k8sclient.Client, cfg 
 		return fmt.Errorf("failed to create monitoring namespace: %w", err)
 	}
 
-	// Get worker node external IPs for DNS targeting in hostNetwork mode.
-	// Wait for CCM to set ExternalIPs on worker nodes (race condition during bootstrap).
-	var workerIPs []string
-	if cfg.Addons.Traefik.HostNetwork != nil && *cfg.Addons.Traefik.HostNetwork {
-		ips, err := waitForWorkerExternalIPs(ctx, client, DefaultWorkerExternalIPWaitTime)
-		if err != nil {
-			log.Printf("[KubePrometheusStack] Warning: failed to get worker IPs for DNS target: %v", err)
-		} else if len(ips) > 0 {
-			workerIPs = ips
-			log.Printf("[KubePrometheusStack] Using worker IPs for DNS target: %v", workerIPs)
-		}
-	}
-
 	// Build values based on configuration
-	values := buildKubePrometheusStackValues(cfg, workerIPs)
+	values := buildKubePrometheusStackValues(cfg)
 
 	// Get chart spec with any config overrides
 	spec := helm.GetChartSpec("kube-prometheus-stack", cfg.Addons.KubePrometheusStack.Helm)
@@ -65,7 +51,7 @@ func applyKubePrometheusStack(ctx context.Context, client k8sclient.Client, cfg 
 }
 
 // buildKubePrometheusStackValues creates helm values for kube-prometheus-stack configuration.
-func buildKubePrometheusStackValues(cfg *config.Config, workerIPs []string) helm.Values {
+func buildKubePrometheusStackValues(cfg *config.Config) helm.Values {
 	promCfg := cfg.Addons.KubePrometheusStack
 
 	values := helm.Values{
@@ -74,11 +60,11 @@ func buildKubePrometheusStackValues(cfg *config.Config, workerIPs []string) helm
 			"create": getBoolWithDefault(promCfg.DefaultRules, true),
 		},
 		// Prometheus configuration
-		"prometheus": buildPrometheusValues(cfg, workerIPs),
+		"prometheus": buildPrometheusValues(cfg),
 		// Grafana configuration
-		"grafana": buildGrafanaValues(cfg, workerIPs),
+		"grafana": buildGrafanaValues(cfg),
 		// Alertmanager configuration
-		"alertmanager": buildAlertmanagerValues(cfg, workerIPs),
+		"alertmanager": buildAlertmanagerValues(cfg),
 		// Node Exporter
 		"nodeExporter": helm.Values{
 			"enabled": getBoolWithDefault(promCfg.NodeExporter, true),
@@ -96,7 +82,7 @@ func buildKubePrometheusStackValues(cfg *config.Config, workerIPs []string) helm
 }
 
 // buildPrometheusValues creates the Prometheus server configuration.
-func buildPrometheusValues(cfg *config.Config, workerIPs []string) helm.Values {
+func buildPrometheusValues(cfg *config.Config) helm.Values {
 	promCfg := cfg.Addons.KubePrometheusStack.Prometheus
 
 	values := helm.Values{
@@ -139,14 +125,14 @@ func buildPrometheusValues(cfg *config.Config, workerIPs []string) helm.Values {
 
 	// Ingress configuration
 	if promCfg.IngressEnabled && promCfg.IngressHost != "" {
-		values["ingress"] = buildPrometheusIngress(cfg, workerIPs)
+		values["ingress"] = buildPrometheusIngress(cfg)
 	}
 
 	return values
 }
 
 // buildPrometheusIngress creates the ingress configuration for Prometheus.
-func buildPrometheusIngress(cfg *config.Config, workerIPs []string) helm.Values {
+func buildPrometheusIngress(cfg *config.Config) helm.Values {
 	promCfg := cfg.Addons.KubePrometheusStack.Prometheus
 
 	ingress := helm.Values{
@@ -174,7 +160,7 @@ func buildPrometheusIngress(cfg *config.Config, workerIPs []string) helm.Values 
 		}
 
 		// Build annotations for TLS and DNS
-		annotations := buildIngressAnnotations(cfg, promCfg.IngressHost, workerIPs)
+		annotations := buildIngressAnnotations(cfg, promCfg.IngressHost)
 		ingress["annotations"] = annotations
 	}
 
@@ -182,7 +168,7 @@ func buildPrometheusIngress(cfg *config.Config, workerIPs []string) helm.Values 
 }
 
 // buildGrafanaValues creates the Grafana configuration.
-func buildGrafanaValues(cfg *config.Config, workerIPs []string) helm.Values {
+func buildGrafanaValues(cfg *config.Config) helm.Values {
 	grafanaCfg := cfg.Addons.KubePrometheusStack.Grafana
 
 	values := helm.Values{
@@ -242,14 +228,14 @@ func buildGrafanaValues(cfg *config.Config, workerIPs []string) helm.Values {
 
 	// Ingress configuration
 	if grafanaCfg.IngressEnabled && grafanaCfg.IngressHost != "" {
-		values["ingress"] = buildGrafanaIngress(cfg, workerIPs)
+		values["ingress"] = buildGrafanaIngress(cfg)
 	}
 
 	return values
 }
 
 // buildGrafanaIngress creates the ingress configuration for Grafana.
-func buildGrafanaIngress(cfg *config.Config, workerIPs []string) helm.Values {
+func buildGrafanaIngress(cfg *config.Config) helm.Values {
 	grafanaCfg := cfg.Addons.KubePrometheusStack.Grafana
 
 	ingress := helm.Values{
@@ -277,7 +263,7 @@ func buildGrafanaIngress(cfg *config.Config, workerIPs []string) helm.Values {
 		}
 
 		// Build annotations for TLS and DNS
-		annotations := buildIngressAnnotations(cfg, grafanaCfg.IngressHost, workerIPs)
+		annotations := buildIngressAnnotations(cfg, grafanaCfg.IngressHost)
 		ingress["annotations"] = annotations
 	}
 
@@ -285,7 +271,7 @@ func buildGrafanaIngress(cfg *config.Config, workerIPs []string) helm.Values {
 }
 
 // buildAlertmanagerValues creates the Alertmanager configuration.
-func buildAlertmanagerValues(cfg *config.Config, workerIPs []string) helm.Values {
+func buildAlertmanagerValues(cfg *config.Config) helm.Values {
 	alertCfg := cfg.Addons.KubePrometheusStack.Alertmanager
 
 	values := helm.Values{
@@ -313,14 +299,14 @@ func buildAlertmanagerValues(cfg *config.Config, workerIPs []string) helm.Values
 
 	// Ingress configuration
 	if alertCfg.IngressEnabled && alertCfg.IngressHost != "" {
-		values["ingress"] = buildAlertmanagerIngress(cfg, workerIPs)
+		values["ingress"] = buildAlertmanagerIngress(cfg)
 	}
 
 	return values
 }
 
 // buildAlertmanagerIngress creates the ingress configuration for Alertmanager.
-func buildAlertmanagerIngress(cfg *config.Config, workerIPs []string) helm.Values {
+func buildAlertmanagerIngress(cfg *config.Config) helm.Values {
 	alertCfg := cfg.Addons.KubePrometheusStack.Alertmanager
 
 	ingress := helm.Values{
@@ -348,7 +334,7 @@ func buildAlertmanagerIngress(cfg *config.Config, workerIPs []string) helm.Value
 		}
 
 		// Build annotations for TLS and DNS
-		annotations := buildIngressAnnotations(cfg, alertCfg.IngressHost, workerIPs)
+		annotations := buildIngressAnnotations(cfg, alertCfg.IngressHost)
 		ingress["annotations"] = annotations
 	}
 
@@ -379,7 +365,9 @@ func buildPrometheusOperatorValues() helm.Values {
 }
 
 // buildIngressAnnotations builds common ingress annotations for TLS and DNS.
-func buildIngressAnnotations(cfg *config.Config, host string, workerIPs []string) helm.Values {
+// external-dns auto-discovers the target IP from the Ingress status
+// (set by Traefik's LoadBalancer service).
+func buildIngressAnnotations(cfg *config.Config, host string) helm.Values {
 	annotations := helm.Values{}
 
 	// Determine which ClusterIssuer to use based on cert-manager Cloudflare config
@@ -393,15 +381,9 @@ func buildIngressAnnotations(cfg *config.Config, host string, workerIPs []string
 	}
 	annotations["cert-manager.io/cluster-issuer"] = clusterIssuer
 
-	// Add external-dns annotations if Cloudflare/external-dns is enabled
+	// Add external-dns hostname annotation if Cloudflare/external-dns is enabled
 	if cfg.Addons.Cloudflare.Enabled && cfg.Addons.ExternalDNS.Enabled {
 		annotations["external-dns.alpha.kubernetes.io/hostname"] = host
-
-		// When using hostNetwork mode, external-dns can't determine the target IP
-		// from the Ingress status. We need to provide it explicitly via annotation.
-		if len(workerIPs) > 0 {
-			annotations["external-dns.alpha.kubernetes.io/target"] = strings.Join(workerIPs, ",")
-		}
 	}
 
 	return annotations

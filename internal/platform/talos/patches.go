@@ -401,7 +401,7 @@ func buildKubeletPatch(opts *MachineConfigOptions, isControlPlane bool, serverID
 // See: terraform/talos_config.tf control_plane_talos_config_patch.machine.sysctls
 func buildSysctlsPatch(opts *MachineConfigOptions) map[string]string {
 	sysctls := map[string]string{
-		"net.core.somaxconn":          "65535",
+		"net.core.somaxconn":         "65535",
 		"net.core.netdev_max_backlog": "4096",
 	}
 
