@@ -123,8 +123,22 @@ func (r *Renderer) renderChart(ch *chart.Chart, values Values) ([]byte, error) {
 		return nil, fmt.Errorf("failed to render templates: %w", err)
 	}
 
-	// Combine all rendered manifests
+	// Include CRDs from the chart's crds/ directory (Helm normally installs these
+	// separately during helm install, but we render everything as manifests)
 	var combined bytes.Buffer
+	for _, crd := range ch.CRDObjects() {
+		trimmed := strings.TrimSpace(string(crd.File.Data))
+		if trimmed == "" {
+			continue
+		}
+		if combined.Len() > 0 {
+			combined.WriteString("\n---\n")
+		}
+		combined.WriteString(trimmed)
+		combined.WriteString("\n")
+	}
+
+	// Combine all rendered template manifests
 	for name, content := range rendered {
 		// Skip NOTES.txt
 		if filepath.Base(name) == "NOTES.txt" {

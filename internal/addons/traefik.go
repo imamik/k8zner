@@ -139,12 +139,14 @@ func buildTraefikIngressRoute() helm.Values {
 }
 
 // buildTraefikProviders creates the providers configuration.
-// We disable kubernetesCRD and only use standard Kubernetes Ingress resources
-// to avoid requiring Traefik CRDs installation.
+// Both kubernetesCRD and kubernetesIngress are enabled:
+// - kubernetesCRD: manages TLS certificates and enables IngressRoute support
+// - kubernetesIngress: handles standard Kubernetes Ingress resources
 func buildTraefikProviders() helm.Values {
 	return helm.Values{
 		"kubernetesCRD": helm.Values{
-			"enabled": false,
+			"enabled":                   true,
+			"allowExternalNameServices": true,
 		},
 		"kubernetesIngress": helm.Values{
 			"enabled":                   true,
