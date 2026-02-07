@@ -194,9 +194,10 @@ func buildTraefikService(clusterName, externalTrafficPolicy, location string) he
 		},
 		// Hetzner LB annotations - CCM creates the LB automatically
 		"annotations": helm.Values{
-			"load-balancer.hetzner.cloud/name":           lbName,
-			"load-balancer.hetzner.cloud/use-private-ip": "true",
-			"load-balancer.hetzner.cloud/location":       location,
+			"load-balancer.hetzner.cloud/name":                    lbName,
+			"load-balancer.hetzner.cloud/use-private-ip":          "true",
+			"load-balancer.hetzner.cloud/disable-private-ingress": "true",
+			"load-balancer.hetzner.cloud/location":                location,
 		},
 	}
 }

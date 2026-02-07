@@ -255,6 +255,9 @@ func TestE2EFullStackDev(t *testing.T) {
 		// Wait for TLS certificate
 		waitForArgoCDTLSCertificate(t, state.KubeconfigPath, 8*time.Minute)
 
+		// Diagnostics: dump Traefik and ArgoCD state before HTTPS test
+		dumpTraefikDiagnostics(t, state.KubeconfigPath)
+
 		// Test HTTPS access
 		testArgoCDHTTPSAccess(t, argoHost, 3*time.Minute)
 		t.Logf("  ArgoCD Dashboard accessible at https://%s", argoHost)
@@ -628,6 +631,36 @@ func cleanupS3Bucket(ctx context.Context, s3Client *s3.Client, bucketName string
 	}
 
 	return nil
+}
+
+// dumpTraefikDiagnostics logs detailed info about Traefik and ingress state for debugging.
+func dumpTraefikDiagnostics(t *testing.T, kubeconfigPath string) {
+	t.Helper()
+
+	cmds := []struct {
+		label string
+		args  []string
+	}{
+		{"Traefik pods", []string{"get", "pods", "-n", "traefik", "-o", "wide"}},
+		{"Traefik service", []string{"get", "svc", "-n", "traefik", "-o", "yaml"}},
+		{"Traefik endpoints", []string{"get", "endpoints", "-n", "traefik", "traefik"}},
+		{"All ingresses", []string{"get", "ingress", "-A", "-o", "wide"}},
+		{"ArgoCD ingress detail", []string{"describe", "ingress", "-n", "argocd"}},
+		{"ArgoCD service", []string{"get", "svc", "-n", "argocd", "argo-cd-argocd-server", "-o", "yaml"}},
+		{"ArgoCD endpoints", []string{"get", "endpoints", "-n", "argocd", "argo-cd-argocd-server"}},
+		{"Traefik logs (last 30)", []string{"logs", "-n", "traefik", "-l", "app.kubernetes.io/name=traefik", "--tail=30"}},
+		{"Nodes", []string{"get", "nodes", "-o", "wide"}},
+	}
+
+	for _, c := range cmds {
+		cmd := exec.CommandContext(context.Background(), "kubectl", append([]string{"--kubeconfig", kubeconfigPath}, c.args...)...)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Logf("  [DIAG] %s: error: %v", c.label, err)
+		} else {
+			t.Logf("  [DIAG] %s:\n%s", c.label, string(output))
+		}
+	}
 }
 
 // testArgoCDHTTPSAccess tests HTTPS connectivity to ArgoCD dashboard.
