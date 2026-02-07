@@ -437,7 +437,7 @@ func waitForArgoCDTLSCertificate(t *testing.T, kubeconfigPath string, timeout ti
 			}
 
 			if len(output) > 0 {
-				t.Log("  TLS certificate issued (staging)")
+				t.Log("  TLS certificate issued")
 				return
 			}
 		}

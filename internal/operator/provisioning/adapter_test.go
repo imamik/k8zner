@@ -157,4 +157,34 @@ func TestSpecToConfig_DomainIngress(t *testing.T) {
 		assert.Equal(t, "Local", cfg.Addons.Traefik.ExternalTrafficPolicy)
 		assert.Equal(t, "traefik", cfg.Addons.Traefik.IngressClass)
 	})
+
+	t.Run("firewall opens 80/443 when Traefik enabled", func(t *testing.T) {
+		cluster := newTestCluster("test-cluster", "example.com", &k8znerv1alpha1.AddonSpec{
+			Traefik: true,
+		})
+
+		cfg, err := SpecToConfig(cluster, baseCreds)
+		require.NoError(t, err)
+
+		require.NotNil(t, cfg.Firewall.UseCurrentIPv4)
+		assert.True(t, *cfg.Firewall.UseCurrentIPv4)
+		require.NotNil(t, cfg.Firewall.UseCurrentIPv6)
+		assert.True(t, *cfg.Firewall.UseCurrentIPv6)
+		require.Len(t, cfg.Firewall.ExtraRules, 2)
+		assert.Equal(t, "80", cfg.Firewall.ExtraRules[0].Port)
+		assert.Equal(t, "443", cfg.Firewall.ExtraRules[1].Port)
+	})
+
+	t.Run("firewall has no extra rules without Traefik", func(t *testing.T) {
+		cluster := newTestCluster("test-cluster", "", &k8znerv1alpha1.AddonSpec{
+			ArgoCD: true,
+		})
+
+		cfg, err := SpecToConfig(cluster, baseCreds)
+		require.NoError(t, err)
+
+		require.NotNil(t, cfg.Firewall.UseCurrentIPv4)
+		assert.True(t, *cfg.Firewall.UseCurrentIPv4)
+		assert.Empty(t, cfg.Firewall.ExtraRules)
+	})
 }
