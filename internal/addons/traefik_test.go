@@ -447,10 +447,11 @@ func TestBuildTraefikValuesHostNetwork(t *testing.T) {
 			assert.Equal(t, tt.expectedKind, deployment["kind"], "deployment kind")
 
 			if tt.expectedHostNetwork {
-				assert.Equal(t, true, deployment["hostNetwork"], "deployment hostNetwork")
+				// hostNetwork is a top-level value in Traefik chart v39+
+				assert.Equal(t, true, values["hostNetwork"], "top-level hostNetwork")
 				assert.Equal(t, "ClusterFirstWithHostNet", deployment["dnsPolicy"], "deployment dnsPolicy")
 			} else {
-				_, hasHostNetwork := deployment["hostNetwork"]
+				_, hasHostNetwork := values["hostNetwork"]
 				assert.False(t, hasHostNetwork, "should not have hostNetwork")
 			}
 

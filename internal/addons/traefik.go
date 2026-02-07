@@ -106,6 +106,18 @@ func buildTraefikValues(cfg *config.Config) helm.Values {
 		},
 	}
 
+	// hostNetwork is a top-level value in Traefik chart v39+.
+	// updateStrategy.rollingUpdate.maxUnavailable must be > 0 when hostNetwork is true.
+	if hostNetwork {
+		values["hostNetwork"] = true
+		values["updateStrategy"] = helm.Values{
+			"rollingUpdate": helm.Values{
+				"maxUnavailable": 1,
+				"maxSurge":       0,
+			},
+		}
+	}
+
 	// Add proxy protocol args only for LoadBalancer mode (not hostNetwork)
 	if !hostNetwork {
 		values["additionalArguments"] = []string{
@@ -133,10 +145,10 @@ func buildTraefikDeployment(replicas int, kind string, hostNetwork bool) helm.Va
 		},
 	}
 
-	// Enable hostNetwork mode for direct port binding (dev mode)
+	// When using hostNetwork, set dnsPolicy to ClusterFirstWithHostNet.
+	// Note: dnsPolicy is a deployment-level value in Traefik chart v39+,
+	// but hostNetwork is a top-level value (set in buildTraefikValues).
 	if hostNetwork {
-		deployment["hostNetwork"] = true
-		// When using hostNetwork, set dnsPolicy to ClusterFirstWithHostNet
 		deployment["dnsPolicy"] = "ClusterFirstWithHostNet"
 	}
 
@@ -200,8 +212,11 @@ func buildTraefikPorts(hostNetwork bool) helm.Values {
 	}
 
 	if hostNetwork {
-		// In hostNetwork mode, bind directly to host ports
+		// In hostNetwork mode, containerPort must match hostPort (chart v39 requirement).
+		// Set port (containerPort) to 80/443 so Traefik binds directly to these ports.
+		webPort["port"] = 80
 		webPort["hostPort"] = 80
+		websecurePort["port"] = 443
 		websecurePort["hostPort"] = 443
 	} else {
 		// In LoadBalancer mode, enable proxy protocol for client IP preservation
