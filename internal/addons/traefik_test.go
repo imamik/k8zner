@@ -476,3 +476,40 @@ func TestBuildTraefikValuesHostNetwork(t *testing.T) {
 		})
 	}
 }
+
+func TestTraefikChartRenderHostNetwork(t *testing.T) {
+	cfg := &config.Config{
+		ClusterName: "test-cluster",
+		Location:    "fsn1",
+		Workers:     []config.WorkerNodePool{{Count: 1}},
+		Addons: config.AddonsConfig{
+			Traefik: config.TraefikConfig{
+				Enabled:               true,
+				HostNetwork:           func() *bool { b := true; return &b }(),
+				Kind:                  "DaemonSet",
+				ExternalTrafficPolicy: "Local",
+				IngressClass:          "traefik",
+			},
+		},
+	}
+
+	values := buildTraefikValues(cfg)
+
+	// Verify top-level hostNetwork is set
+	require.Equal(t, true, values["hostNetwork"], "hostNetwork must be top-level true")
+
+	// Render the actual chart
+	spec := helm.GetChartSpec("traefik", config.HelmChartConfig{})
+	manifests, err := helm.RenderFromSpec(t.Context(), spec, "traefik", values)
+	require.NoError(t, err, "chart rendering should succeed")
+
+	output := string(manifests)
+	t.Logf("Rendered manifests length: %d bytes", len(output))
+
+	// Check the rendered output contains hostNetwork: true
+	require.Contains(t, output, "hostNetwork: true", "rendered manifest must have hostNetwork: true")
+	require.Contains(t, output, "kind: DaemonSet", "rendered manifest must have kind: DaemonSet")
+	require.Contains(t, output, "dnsPolicy: ClusterFirstWithHostNet", "rendered manifest must set dnsPolicy")
+	require.Contains(t, output, "hostPort: 80", "rendered manifest must have hostPort 80")
+	require.Contains(t, output, "hostPort: 443", "rendered manifest must have hostPort 443")
+}

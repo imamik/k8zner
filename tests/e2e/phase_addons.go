@@ -207,6 +207,53 @@ func verifyIngressClassExists(t *testing.T, kubeconfigPath, name string) {
 	t.Logf("  IngressClass %s exists", name)
 }
 
+// verifyTraefikHostNetwork checks that the Traefik DaemonSet has hostNetwork enabled.
+// This is critical for dev mode where Traefik binds directly to host ports 80/443.
+func verifyTraefikHostNetwork(t *testing.T, kubeconfigPath string) {
+	// Get the DaemonSet JSON to inspect hostNetwork
+	cmd := exec.CommandContext(context.Background(), "kubectl",
+		"--kubeconfig", kubeconfigPath,
+		"-n", "traefik",
+		"get", "daemonset", "-l", "app.kubernetes.io/name=traefik",
+		"-o", "jsonpath={.items[0].spec.template.spec.hostNetwork}")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Failed to get Traefik DaemonSet hostNetwork: %v (output: %s)", err, string(output))
+	}
+	hostNet := strings.TrimSpace(string(output))
+	t.Logf("  Traefik DaemonSet hostNetwork=%s", hostNet)
+	if hostNet != "true" {
+		// Dump full DaemonSet spec for debugging
+		debugCmd := exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"-n", "traefik",
+			"get", "daemonset", "-l", "app.kubernetes.io/name=traefik",
+			"-o", "yaml")
+		debugOut, _ := debugCmd.CombinedOutput()
+		t.Logf("  Full DaemonSet spec:\n%s", string(debugOut))
+
+		// Also dump operator logs for traefik debug info
+		operatorCmd := exec.CommandContext(context.Background(), "kubectl",
+			"--kubeconfig", kubeconfigPath,
+			"-n", "k8zner-system",
+			"logs", "-l", "app.kubernetes.io/name=k8zner-operator",
+			"--tail=50")
+		operatorOut, _ := operatorCmd.CombinedOutput()
+		t.Logf("  Operator logs (last 50 lines):\n%s", string(operatorOut))
+
+		t.Fatalf("Traefik DaemonSet hostNetwork is %q, expected \"true\"", hostNet)
+	}
+
+	// Also verify pods have host IPs (not pod network IPs)
+	podCmd := exec.CommandContext(context.Background(), "kubectl",
+		"--kubeconfig", kubeconfigPath,
+		"-n", "traefik",
+		"get", "pods", "-l", "app.kubernetes.io/name=traefik",
+		"-o", "jsonpath={.items[*].status.podIP}")
+	podOut, _ := podCmd.CombinedOutput()
+	t.Logf("  Traefik pod IPs: %s", string(podOut))
+}
+
 // verifyClusterIssuerExists verifies a ClusterIssuer exists.
 func verifyClusterIssuerExists(t *testing.T, kubeconfigPath, name string) {
 	cmd := exec.CommandContext(context.Background(), "kubectl",

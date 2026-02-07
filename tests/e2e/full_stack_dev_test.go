@@ -214,6 +214,9 @@ func TestE2EFullStackDev(t *testing.T) {
 
 		// Traefik pods running
 		waitForPod(t, state.KubeconfigPath, "traefik", "app.kubernetes.io/name=traefik", 5*time.Minute)
+
+		// Debug: Check if hostNetwork is enabled on the DaemonSet
+		verifyTraefikHostNetwork(t, state.KubeconfigPath)
 	})
 
 	// =========================================================================
