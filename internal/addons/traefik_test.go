@@ -451,7 +451,7 @@ func TestBuildTraefikValuesHostNetwork(t *testing.T) {
 				assert.Equal(t, true, values["hostNetwork"], "top-level hostNetwork")
 				assert.Equal(t, "ClusterFirstWithHostNet", deployment["dnsPolicy"], "deployment dnsPolicy")
 
-				// NET_BIND_SERVICE capability is required for binding to ports 80/443
+				// NET_BIND_SERVICE capability + allowPrivilegeEscalation required for binding to ports 80/443
 				secCtx, ok := values["securityContext"].(helm.Values)
 				assert.True(t, ok, "securityContext must be set for hostNetwork")
 				caps, ok := secCtx["capabilities"].(helm.Values)
@@ -459,6 +459,7 @@ func TestBuildTraefikValuesHostNetwork(t *testing.T) {
 				addCaps, ok := caps["add"].([]string)
 				assert.True(t, ok, "capabilities.add must be a string slice")
 				assert.Contains(t, addCaps, "NET_BIND_SERVICE", "must add NET_BIND_SERVICE for privileged ports")
+				assert.Equal(t, true, secCtx["allowPrivilegeEscalation"], "must allow privilege escalation for NET_BIND_SERVICE to work")
 			} else {
 				_, hasHostNetwork := values["hostNetwork"]
 				assert.False(t, hasHostNetwork, "should not have hostNetwork")
@@ -522,4 +523,5 @@ func TestTraefikChartRenderHostNetwork(t *testing.T) {
 	require.Contains(t, output, "hostPort: 80", "rendered manifest must have hostPort 80")
 	require.Contains(t, output, "hostPort: 443", "rendered manifest must have hostPort 443")
 	require.Contains(t, output, "NET_BIND_SERVICE", "rendered manifest must have NET_BIND_SERVICE capability")
+	require.Contains(t, output, "allowPrivilegeEscalation: true", "rendered manifest must allow privilege escalation")
 }

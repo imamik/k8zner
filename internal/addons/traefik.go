@@ -116,16 +116,18 @@ func buildTraefikValues(cfg *config.Config) helm.Values {
 				"maxSurge":       0,
 			},
 		}
-		// Traefik chart drops ALL capabilities by default. When using hostNetwork with
-		// privileged ports (80/443), the container needs NET_BIND_SERVICE to bind to
-		// ports < 1024. Without this, Traefik starts but can't bind — causing
-		// "connection refused" on ingress traffic.
+		// Traefik chart drops ALL capabilities and sets allowPrivilegeEscalation=false
+		// by default. When using hostNetwork with privileged ports (80/443), we need:
+		// 1. NET_BIND_SERVICE capability to bind to ports < 1024
+		// 2. allowPrivilegeEscalation=true so the kernel applies the capability
+		//    (NO_NEW_PRIVS blocks capability use when allowPrivilegeEscalation=false)
 		values["securityContext"] = helm.Values{
 			"capabilities": helm.Values{
 				"add":  []string{"NET_BIND_SERVICE"},
 				"drop": []string{"ALL"},
 			},
-			"readOnlyRootFilesystem": true,
+			"allowPrivilegeEscalation": true,
+			"readOnlyRootFilesystem":   true,
 		}
 	}
 
