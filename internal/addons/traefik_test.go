@@ -123,7 +123,8 @@ func TestBuildTraefikValues(t *testing.T) {
 			// New naming: {cluster}-ingress
 			assert.Equal(t, "test-cluster-ingress", annotations["load-balancer.hetzner.cloud/name"])
 			assert.Equal(t, "true", annotations["load-balancer.hetzner.cloud/use-private-ip"])
-			assert.Equal(t, "true", annotations["load-balancer.hetzner.cloud/uses-proxyprotocol"])
+			_, hasProxyProtocol := annotations["load-balancer.hetzner.cloud/uses-proxyprotocol"]
+			assert.False(t, hasProxyProtocol, "proxy protocol should not be set")
 
 			// Check ports configuration (no longer uses nodePort)
 			ports, ok := values["ports"].(helm.Values)
@@ -418,10 +419,9 @@ func TestBuildTraefikValuesAlwaysLoadBalancer(t *testing.T) {
 	_, hasHostPort := webPort["hostPort"]
 	assert.False(t, hasHostPort, "should not have hostPort")
 
-	// Proxy protocol enabled
-	proxyProtocol, ok := webPort["proxyProtocol"].(helm.Values)
-	require.True(t, ok)
-	assert.Equal(t, true, proxyProtocol["enabled"])
+	// No proxy protocol on ports
+	_, hasProxyProtocol := webPort["proxyProtocol"]
+	assert.False(t, hasProxyProtocol, "should not have proxyProtocol on ports")
 
 	// No securityContext (no NET_BIND_SERVICE needed)
 	_, hasSecCtx := values["securityContext"]

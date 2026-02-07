@@ -43,7 +43,7 @@ func applyTraefik(ctx context.Context, client k8sclient.Client, cfg *config.Conf
 
 // buildTraefikValues creates helm values for Traefik configuration.
 // Always uses Deployment with LoadBalancer service. CCM creates a Hetzner LB
-// via annotations, and proxy protocol preserves client IPs.
+// via annotations on the Service object.
 func buildTraefikValues(cfg *config.Config) helm.Values {
 	traefikCfg := cfg.Addons.Traefik
 	workerCount := getWorkerCount(cfg)
@@ -97,11 +97,6 @@ func buildTraefikValues(cfg *config.Config) helm.Values {
 				"key":      "node.cloudprovider.kubernetes.io/uninitialized",
 				"operator": "Exists",
 			},
-		},
-		// Proxy protocol for client IP preservation with Hetzner LBs
-		"additionalArguments": []string{
-			"--entryPoints.web.proxyProtocol.trustedIPs=127.0.0.1/32,10.0.0.0/8",
-			"--entryPoints.websecure.proxyProtocol.trustedIPs=127.0.0.1/32,10.0.0.0/8",
 		},
 		// Topology spread constraints for HA
 		"topologySpreadConstraints": buildTraefikTopologySpread(workerCount),
@@ -162,23 +157,21 @@ func buildTraefikProviders() helm.Values {
 }
 
 // buildTraefikPorts creates the ports configuration.
-// Uses standard container ports with proxy protocol for client IP preservation.
+// Uses standard container ports (8000/8443) mapped to service ports (80/443).
 // Note: Traefik chart v39+ uses new schema where 'expose' is an object with 'default' key.
 func buildTraefikPorts() helm.Values {
 	return helm.Values{
 		"web": helm.Values{
-			"port":          8000,
-			"expose":        helm.Values{"default": true},
-			"exposedPort":   80,
-			"protocol":      "TCP",
-			"proxyProtocol": helm.Values{"enabled": true},
+			"port":        8000,
+			"expose":      helm.Values{"default": true},
+			"exposedPort": 80,
+			"protocol":    "TCP",
 		},
 		"websecure": helm.Values{
-			"port":          8443,
-			"expose":        helm.Values{"default": true},
-			"exposedPort":   443,
-			"protocol":      "TCP",
-			"proxyProtocol": helm.Values{"enabled": true},
+			"port":        8443,
+			"expose":      helm.Values{"default": true},
+			"exposedPort": 443,
+			"protocol":    "TCP",
 		},
 		"traefik": helm.Values{
 			"port":   9000,
@@ -199,12 +192,11 @@ func buildTraefikService(clusterName, externalTrafficPolicy, location string) he
 		"spec": helm.Values{
 			"externalTrafficPolicy": externalTrafficPolicy,
 		},
-		// Hetzner LB annotations for proxy protocol support
+		// Hetzner LB annotations - CCM creates the LB automatically
 		"annotations": helm.Values{
-			"load-balancer.hetzner.cloud/name":               lbName,
-			"load-balancer.hetzner.cloud/use-private-ip":     "true",
-			"load-balancer.hetzner.cloud/uses-proxyprotocol": "true",
-			"load-balancer.hetzner.cloud/location":           location,
+			"load-balancer.hetzner.cloud/name":           lbName,
+			"load-balancer.hetzner.cloud/use-private-ip": "true",
+			"load-balancer.hetzner.cloud/location":       location,
 		},
 	}
 }
