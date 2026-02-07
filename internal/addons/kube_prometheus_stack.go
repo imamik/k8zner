@@ -30,10 +30,11 @@ func applyKubePrometheusStack(ctx context.Context, client k8sclient.Client, cfg 
 		return fmt.Errorf("failed to create monitoring namespace: %w", err)
 	}
 
-	// Get worker node external IPs for DNS targeting in hostNetwork mode
+	// Get worker node external IPs for DNS targeting in hostNetwork mode.
+	// Wait for CCM to set ExternalIPs on worker nodes (race condition during bootstrap).
 	var workerIPs []string
 	if cfg.Addons.Traefik.HostNetwork != nil && *cfg.Addons.Traefik.HostNetwork {
-		ips, err := client.GetWorkerExternalIPs(ctx)
+		ips, err := waitForWorkerExternalIPs(ctx, client, DefaultWorkerExternalIPWaitTime)
 		if err != nil {
 			log.Printf("[KubePrometheusStack] Warning: failed to get worker IPs for DNS target: %v", err)
 		} else if len(ips) > 0 {

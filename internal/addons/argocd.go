@@ -47,10 +47,11 @@ func applyArgoCD(ctx context.Context, client k8sclient.Client, cfg *config.Confi
 		return fmt.Errorf("failed to create argocd namespace: %w", err)
 	}
 
-	// Get worker node external IPs for DNS targeting in hostNetwork mode
+	// Get worker node external IPs for DNS targeting in hostNetwork mode.
+	// Wait for CCM to set ExternalIPs on worker nodes (race condition during bootstrap).
 	var workerIPs []string
 	if cfg.Addons.Traefik.HostNetwork != nil && *cfg.Addons.Traefik.HostNetwork {
-		ips, err := client.GetWorkerExternalIPs(ctx)
+		ips, err := waitForWorkerExternalIPs(ctx, client, DefaultWorkerExternalIPWaitTime)
 		if err != nil {
 			log.Printf("[ArgoCD] Warning: failed to get worker IPs for DNS target: %v", err)
 		} else if len(ips) > 0 {

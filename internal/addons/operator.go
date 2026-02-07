@@ -142,6 +142,10 @@ func buildOperatorValues(cfg *config.Config) helm.Values {
 	if version == "" {
 		version = "main"
 	}
+	// Allow environment variable override for E2E testing with custom operator images
+	if envVersion := os.Getenv("K8ZNER_OPERATOR_VERSION"); envVersion != "" {
+		version = envVersion
+	}
 
 	values := helm.Values{
 		"replicaCount": 2,

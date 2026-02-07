@@ -477,6 +477,61 @@ func waitForTalosCRDWithTimeout(ctx context.Context, client k8sclient.Client, ti
 	return fmt.Errorf("timeout after %v waiting for Talos API CRD - ensure kubernetesTalosAPIAccess is enabled in machine config", elapsed)
 }
 
+// Worker ExternalIP wait time constants
+const (
+	// DefaultWorkerExternalIPWaitTime is the time to wait for CCM to set worker node ExternalIPs.
+	// CCM needs to discover nodes and update their status after being installed.
+	DefaultWorkerExternalIPWaitTime = 2 * time.Minute
+
+	// WorkerExternalIPCheckInterval is how often to check for ExternalIPs.
+	WorkerExternalIPCheckInterval = 10 * time.Second
+)
+
+// waitForWorkerExternalIPs waits for at least one worker node to have an ExternalIP set.
+// This is needed because CCM sets ExternalIPs asynchronously after installation,
+// and addons like ArgoCD and Grafana need worker IPs for DNS targeting annotations.
+func waitForWorkerExternalIPs(ctx context.Context, client k8sclient.Client, timeout time.Duration) ([]string, error) {
+	if timeout <= 0 {
+		timeout = DefaultWorkerExternalIPWaitTime
+	}
+
+	deadline := time.Now().Add(timeout)
+	attempt := 0
+	startTime := time.Now()
+
+	log.Printf("[addons] Waiting up to %v for worker node ExternalIPs (set by CCM)...", timeout)
+
+	for time.Now().Before(deadline) {
+		attempt++
+
+		ips, err := client.GetWorkerExternalIPs(ctx)
+		if err != nil {
+			log.Printf("[addons] Error getting worker ExternalIPs (attempt %d): %v", attempt, err)
+		} else if len(ips) > 0 {
+			elapsed := time.Since(startTime).Round(time.Second)
+			log.Printf("[addons] Worker ExternalIPs available (after %v): %v", elapsed, ips)
+			return ips, nil
+		}
+
+		// Log progress every 30 seconds
+		if attempt%3 == 0 {
+			elapsed := time.Since(startTime).Round(time.Second)
+			log.Printf("[addons] Still waiting for worker ExternalIPs (elapsed: %v)...", elapsed)
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(WorkerExternalIPCheckInterval):
+			// Continue waiting
+		}
+	}
+
+	elapsed := time.Since(startTime).Round(time.Second)
+	log.Printf("[addons] WARNING: No worker ExternalIPs found after %v - DNS targeting will be unavailable", elapsed)
+	return nil, nil // Return nil without error - addon installation should continue
+}
+
 // IngressClass wait time constants
 const (
 	// DefaultIngressClassWaitTime is the default time to wait for an IngressClass to be ready.

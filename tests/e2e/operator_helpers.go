@@ -712,12 +712,16 @@ func (o *OperatorTestContext) ToE2EState() *E2EState {
 			}
 		}
 
-		// Get worker IPs
-		for i := 1; i <= 10; i++ {
-			serverName := naming.WorkerWithID(o.ClusterName, fmt.Sprintf("%d", i))
-			ip, err := o.HCloudClient.GetServerIP(ctx, serverName)
-			if err == nil {
-				state.WorkerIPs = append(state.WorkerIPs, ip)
+		// Get worker IPs by listing servers with cluster label and filtering by role.
+		// Workers use random 5-char IDs (e.g., cluster-w-z7g1g), not sequential.
+		servers, err := o.HCloudClient.GetServersByLabel(ctx, map[string]string{
+			"cluster": o.ClusterName,
+		})
+		if err == nil {
+			for _, server := range servers {
+				if naming.IsWorker(server.Name) && server.PublicNet.IPv4.IP != nil {
+					state.WorkerIPs = append(state.WorkerIPs, server.PublicNet.IPv4.IP.String())
+				}
 			}
 		}
 
