@@ -83,11 +83,10 @@ func TestVersionMatrix_HelmChartVersions(t *testing.T) {
 	}
 }
 
-func TestControlPlaneServerType(t *testing.T) {
-	// Control plane server type should always be cx23
-	// Note: Hetzner renamed types in 2024 - old "cx22" is now "cx23"
-	if ControlPlaneServerType != "cx23" {
-		t.Errorf("ControlPlaneServerType = %s, want cx23", ControlPlaneServerType)
+func TestDefaultControlPlaneServerType(t *testing.T) {
+	// Default control plane server type should be cx23 (dedicated vCPU for consistent performance)
+	if DefaultControlPlaneServerType != "cx23" {
+		t.Errorf("DefaultControlPlaneServerType = %s, want cx23", DefaultControlPlaneServerType)
 	}
 }
 

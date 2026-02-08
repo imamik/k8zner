@@ -28,6 +28,10 @@ type Config struct {
 	// Workers defines the worker pool configuration.
 	Workers Worker `yaml:"workers"`
 
+	// ControlPlane defines optional control plane configuration.
+	// If not specified, defaults to cpx21 (3 shared vCPU, 4GB RAM).
+	ControlPlane *ControlPlane `yaml:"control_plane,omitempty"`
+
 	// Domain enables automatic DNS and TLS via Cloudflare.
 	// Requires CF_API_TOKEN environment variable.
 	Domain string `yaml:"domain,omitempty"`
@@ -47,6 +51,16 @@ type Config struct {
 	// Requires HETZNER_S3_ACCESS_KEY and HETZNER_S3_SECRET_KEY environment variables.
 	// Creates bucket "{cluster-name}-etcd-backups" automatically.
 	Backup bool `yaml:"backup,omitempty"`
+
+	// Monitoring enables the kube-prometheus-stack (Prometheus, Grafana, Alertmanager).
+	// When Domain is set, Grafana will be accessible at {GrafanaSubdomain}.{Domain}.
+	// Default: false
+	Monitoring bool `yaml:"monitoring,omitempty"`
+
+	// GrafanaSubdomain is the subdomain for Grafana dashboard (default: "grafana").
+	// Only used when both Monitoring and Domain are set.
+	// Example: with Domain="example.com", Grafana is at grafana.example.com
+	GrafanaSubdomain string `yaml:"grafana_subdomain,omitempty"`
 }
 
 // Region is a Hetzner datacenter location.
@@ -167,12 +181,31 @@ type Worker struct {
 	Size ServerSize `yaml:"size"`
 }
 
-// ServerSize is a Hetzner shared instance type.
+// ControlPlane defines the optional control plane configuration.
+type ControlPlane struct {
+	// Size is the Hetzner server type for control plane nodes.
+	// Defaults to cpx21 (3 shared vCPU, 4GB RAM) if not specified.
+	Size ServerSize `yaml:"size,omitempty"`
+}
+
+// ServerSize is a Hetzner server type.
+// Supports both shared vCPU (CPX) and dedicated vCPU (CX) types.
 // Note: Hetzner renamed server types in 2024 (cx22 → cx23, etc.).
 // Both old and new names are accepted for backwards compatibility.
 type ServerSize string
 
 const (
+	// CPX series - Shared vCPU instances (better availability)
+	// SizeCPX22 is 2 shared vCPU, 4GB RAM, 40GB disk (~€4.49/mo).
+	SizeCPX22 ServerSize = "cpx22"
+	// SizeCPX32 is 4 shared vCPU, 8GB RAM, 80GB disk (~€8.49/mo).
+	SizeCPX32 ServerSize = "cpx32"
+	// SizeCPX42 is 8 shared vCPU, 16GB RAM, 160GB disk (~€15.49/mo).
+	SizeCPX42 ServerSize = "cpx42"
+	// SizeCPX52 is 16 shared vCPU, 32GB RAM, 320GB disk (~€29.49/mo).
+	SizeCPX52 ServerSize = "cpx52"
+
+	// CX series - Dedicated vCPU instances (consistent performance)
 	// SizeCX22 is kept for backwards compatibility, maps to cx23.
 	//
 	// Deprecated: Use SizeCX23 instead.
@@ -199,15 +232,24 @@ const (
 	SizeCX53 ServerSize = "cx53"
 )
 
-// ValidServerSizes returns all valid server sizes (new names only).
+// ValidServerSizes returns all valid server sizes (current names only).
 func ValidServerSizes() []ServerSize {
-	return []ServerSize{SizeCX23, SizeCX33, SizeCX43, SizeCX53}
+	return []ServerSize{
+		// CPX series (shared vCPU)
+		SizeCPX22, SizeCPX32, SizeCPX42, SizeCPX52,
+		// CX series (dedicated vCPU)
+		SizeCX23, SizeCX33, SizeCX43, SizeCX53,
+	}
 }
 
 // IsValid returns true if the server size is valid.
-// Accepts both old (cx22) and new (cx23) server type names.
+// Accepts CPX series, CX series, and legacy CX names (cx22, cx32, etc.).
 func (s ServerSize) IsValid() bool {
 	switch s {
+	// CPX series (shared vCPU)
+	case SizeCPX22, SizeCPX32, SizeCPX42, SizeCPX52:
+		return true
+	// CX series (dedicated vCPU) - includes legacy names
 	case SizeCX22, SizeCX23, SizeCX32, SizeCX33, SizeCX42, SizeCX43, SizeCX52, SizeCX53:
 		return true
 	default:
@@ -244,6 +286,16 @@ func (s ServerSize) Specs() ServerSpecs {
 	// Normalize first to handle old server type names
 	normalized := s.Normalize()
 	switch normalized {
+	// CPX series (shared vCPU) - same specs as CX series
+	case SizeCPX22:
+		return ServerSpecs{VCPU: 2, RAMGB: 4, DiskGB: 40}
+	case SizeCPX32:
+		return ServerSpecs{VCPU: 4, RAMGB: 8, DiskGB: 80}
+	case SizeCPX42:
+		return ServerSpecs{VCPU: 8, RAMGB: 16, DiskGB: 160}
+	case SizeCPX52:
+		return ServerSpecs{VCPU: 16, RAMGB: 32, DiskGB: 320}
+	// CX series (dedicated vCPU)
 	case SizeCX23:
 		return ServerSpecs{VCPU: 2, RAMGB: 4, DiskGB: 40}
 	case SizeCX33:
@@ -352,6 +404,28 @@ func (c *Config) ArgoHost() string {
 	return c.GetArgoSubdomain() + "." + c.Domain
 }
 
+// GetGrafanaSubdomain returns the subdomain for Grafana (default: "grafana").
+func (c *Config) GetGrafanaSubdomain() string {
+	if c.GrafanaSubdomain == "" {
+		return "grafana"
+	}
+	return c.GrafanaSubdomain
+}
+
+// GrafanaHost returns the full Grafana hostname (e.g., "grafana.example.com").
+// Returns empty string if no domain is configured.
+func (c *Config) GrafanaHost() string {
+	if c.Domain == "" {
+		return ""
+	}
+	return c.GetGrafanaSubdomain() + "." + c.Domain
+}
+
+// HasMonitoring returns true if monitoring is enabled.
+func (c *Config) HasMonitoring() bool {
+	return c.Monitoring
+}
+
 // GetCertEmail returns the email address for Let's Encrypt certificates.
 // If not set, defaults to "admin@{domain}".
 func (c *Config) GetCertEmail() string {
@@ -385,9 +459,12 @@ func (c *Config) TotalWorkerRAMGB() int {
 }
 
 // ControlPlaneSize returns the server size for control planes.
-// This is hardcoded to CX23 as it's sufficient for etcd + API server.
+// Returns the configured size or defaults to CX23 (2 dedicated vCPU, 4GB RAM).
 func (c *Config) ControlPlaneSize() ServerSize {
-	return SizeCX23
+	if c.ControlPlane != nil && c.ControlPlane.Size != "" {
+		return c.ControlPlane.Size.Normalize()
+	}
+	return SizeCX23 // Default: 2 dedicated vCPU, 4GB RAM - good for etcd + API server
 }
 
 // isValidDNSName checks if a string is a valid DNS name.

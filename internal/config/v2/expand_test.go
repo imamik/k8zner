@@ -57,8 +57,8 @@ func TestExpand_ControlPlane_DevMode(t *testing.T) {
 	if cp.Count != 1 {
 		t.Errorf("ControlPlane count = %d, want 1", cp.Count)
 	}
-	if cp.ServerType != ControlPlaneServerType {
-		t.Errorf("ControlPlane type = %q, want %q", cp.ServerType, ControlPlaneServerType)
+	if cp.ServerType != DefaultControlPlaneServerType {
+		t.Errorf("ControlPlane type = %q, want %q", cp.ServerType, DefaultControlPlaneServerType)
 	}
 	if cp.Location != "nbg1" {
 		t.Errorf("ControlPlane location = %q, want %q", cp.Location, "nbg1")
@@ -431,10 +431,9 @@ func TestExpand_Ingress_DevMode(t *testing.T) {
 		t.Fatalf("Expand() error = %v", err)
 	}
 
-	// Dev mode: No separate ingress LB (Traefik uses hostNetwork)
-	// This keeps costs low with only 1 API LB
+	// No separate ingress LB - Traefik's LoadBalancer Service creates the LB via CCM
 	if expanded.Ingress.Enabled {
-		t.Error("Ingress should be disabled in dev mode (no separate LB)")
+		t.Error("Ingress should be disabled (Traefik Service creates LB via CCM)")
 	}
 }
 
@@ -454,13 +453,12 @@ func TestExpand_Traefik_DevMode(t *testing.T) {
 		t.Fatalf("Expand() error = %v", err)
 	}
 
-	// Traefik always uses hostNetwork with DaemonSet (both modes)
-	// In dev mode, traffic goes directly to worker nodes or through shared API LB
-	if expanded.Addons.Traefik.HostNetwork == nil || !*expanded.Addons.Traefik.HostNetwork {
-		t.Error("Traefik.HostNetwork should be true")
+	// Traefik always uses Deployment with LoadBalancer service (no hostNetwork)
+	if expanded.Addons.Traefik.HostNetwork != nil {
+		t.Error("Traefik.HostNetwork should be nil (not set)")
 	}
-	if expanded.Addons.Traefik.Kind != "DaemonSet" {
-		t.Errorf("Traefik.Kind = %q, want %q", expanded.Addons.Traefik.Kind, "DaemonSet")
+	if expanded.Addons.Traefik.Kind != "Deployment" {
+		t.Errorf("Traefik.Kind = %q, want %q", expanded.Addons.Traefik.Kind, "Deployment")
 	}
 }
 
@@ -480,13 +478,12 @@ func TestExpand_Traefik_HAMode(t *testing.T) {
 		t.Fatalf("Expand() error = %v", err)
 	}
 
-	// Traefik always uses hostNetwork with DaemonSet (both modes)
-	// In HA mode, dedicated ingress LB routes to Traefik on workers
-	if expanded.Addons.Traefik.HostNetwork == nil || !*expanded.Addons.Traefik.HostNetwork {
-		t.Error("Traefik.HostNetwork should be true")
+	// Traefik always uses Deployment with LoadBalancer service (no hostNetwork)
+	if expanded.Addons.Traefik.HostNetwork != nil {
+		t.Error("Traefik.HostNetwork should be nil (not set)")
 	}
-	if expanded.Addons.Traefik.Kind != "DaemonSet" {
-		t.Errorf("Traefik.Kind = %q, want %q", expanded.Addons.Traefik.Kind, "DaemonSet")
+	if expanded.Addons.Traefik.Kind != "Deployment" {
+		t.Errorf("Traefik.Kind = %q, want %q", expanded.Addons.Traefik.Kind, "Deployment")
 	}
 }
 
@@ -506,12 +503,9 @@ func TestExpand_Ingress_HAMode(t *testing.T) {
 		t.Fatalf("Expand() error = %v", err)
 	}
 
-	// HA mode: Dedicated ingress LB for high availability
-	if !expanded.Ingress.Enabled {
-		t.Error("Ingress should be enabled in HA mode (dedicated LB)")
-	}
-	if expanded.Ingress.LoadBalancerType != LoadBalancerType {
-		t.Errorf("Ingress.LoadBalancerType = %q, want %q", expanded.Ingress.LoadBalancerType, LoadBalancerType)
+	// No separate ingress LB - Traefik's LoadBalancer Service creates the LB via CCM
+	if expanded.Ingress.Enabled {
+		t.Error("Ingress should be disabled (Traefik Service creates LB via CCM)")
 	}
 }
 
@@ -741,5 +735,134 @@ func TestExpand_BackupEncryptionDisabled(t *testing.T) {
 	// v2 config defaults to EncryptionDisabled=true (private bucket provides security)
 	if !expanded.Addons.TalosBackup.EncryptionDisabled {
 		t.Error("TalosBackup.EncryptionDisabled should be true for v2 config")
+	}
+}
+
+func TestExpand_MonitoringDisabledByDefault(t *testing.T) {
+	cfg := &Config{
+		Name:   "monitoring-test",
+		Region: RegionNuremberg,
+		Mode:   ModeDev,
+		Workers: Worker{
+			Count: 2,
+			Size:  SizeCX22,
+		},
+	}
+
+	expanded, err := Expand(cfg)
+	if err != nil {
+		t.Fatalf("Expand() error = %v", err)
+	}
+
+	// Monitoring should be disabled by default
+	if expanded.Addons.KubePrometheusStack.Enabled {
+		t.Error("KubePrometheusStack should be disabled by default")
+	}
+}
+
+func TestExpand_MonitoringEnabledWithoutDomain(t *testing.T) {
+	cfg := &Config{
+		Name:   "monitoring-test",
+		Region: RegionNuremberg,
+		Mode:   ModeDev,
+		Workers: Worker{
+			Count: 2,
+			Size:  SizeCX22,
+		},
+		Monitoring: true,
+	}
+
+	expanded, err := Expand(cfg)
+	if err != nil {
+		t.Fatalf("Expand() error = %v", err)
+	}
+
+	// Monitoring should be enabled
+	if !expanded.Addons.KubePrometheusStack.Enabled {
+		t.Error("KubePrometheusStack should be enabled when Monitoring is true")
+	}
+
+	// Grafana ingress should NOT be enabled without domain
+	if expanded.Addons.KubePrometheusStack.Grafana.IngressEnabled {
+		t.Error("Grafana ingress should not be enabled without domain")
+	}
+
+	// Prometheus persistence should be enabled by default
+	if !expanded.Addons.KubePrometheusStack.Prometheus.Persistence.Enabled {
+		t.Error("Prometheus persistence should be enabled by default")
+	}
+	if expanded.Addons.KubePrometheusStack.Prometheus.Persistence.Size != "50Gi" {
+		t.Errorf("Prometheus persistence size = %s, want 50Gi", expanded.Addons.KubePrometheusStack.Prometheus.Persistence.Size)
+	}
+}
+
+func TestExpand_MonitoringEnabledWithDomain(t *testing.T) {
+	os.Setenv("CF_API_TOKEN", "test-cf-token")
+	defer os.Unsetenv("CF_API_TOKEN")
+
+	cfg := &Config{
+		Name:   "monitoring-test",
+		Region: RegionNuremberg,
+		Mode:   ModeHA,
+		Workers: Worker{
+			Count: 3,
+			Size:  SizeCX32,
+		},
+		Domain:     "example.com",
+		Monitoring: true,
+	}
+
+	expanded, err := Expand(cfg)
+	if err != nil {
+		t.Fatalf("Expand() error = %v", err)
+	}
+
+	// Monitoring should be enabled
+	if !expanded.Addons.KubePrometheusStack.Enabled {
+		t.Error("KubePrometheusStack should be enabled")
+	}
+
+	// Grafana ingress should be enabled with domain
+	grafana := expanded.Addons.KubePrometheusStack.Grafana
+	if !grafana.IngressEnabled {
+		t.Error("Grafana ingress should be enabled with domain")
+	}
+	if grafana.IngressHost != "grafana.example.com" {
+		t.Errorf("Grafana ingress host = %s, want grafana.example.com", grafana.IngressHost)
+	}
+	if grafana.IngressClassName != "traefik" {
+		t.Errorf("Grafana ingress class = %s, want traefik", grafana.IngressClassName)
+	}
+	if !grafana.IngressTLS {
+		t.Error("Grafana ingress TLS should be enabled")
+	}
+}
+
+func TestExpand_MonitoringCustomGrafanaSubdomain(t *testing.T) {
+	os.Setenv("CF_API_TOKEN", "test-cf-token")
+	defer os.Unsetenv("CF_API_TOKEN")
+
+	cfg := &Config{
+		Name:   "monitoring-test",
+		Region: RegionNuremberg,
+		Mode:   ModeDev,
+		Workers: Worker{
+			Count: 2,
+			Size:  SizeCX22,
+		},
+		Domain:           "example.com",
+		GrafanaSubdomain: "metrics",
+		Monitoring:       true,
+	}
+
+	expanded, err := Expand(cfg)
+	if err != nil {
+		t.Fatalf("Expand() error = %v", err)
+	}
+
+	// Custom subdomain should be used
+	if expanded.Addons.KubePrometheusStack.Grafana.IngressHost != "metrics.example.com" {
+		t.Errorf("Grafana ingress host = %s, want metrics.example.com",
+			expanded.Addons.KubePrometheusStack.Grafana.IngressHost)
 	}
 }

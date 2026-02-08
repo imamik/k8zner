@@ -25,11 +25,6 @@ type Config struct {
 	// Default: true
 	HealthcheckEnabled *bool `mapstructure:"healthcheck_enabled" yaml:"healthcheck_enabled"`
 
-	// PrerequisitesCheckEnabled enables preflight check for required client tools.
-	// See: terraform/variables.tf client_prerequisites_check_enabled
-	// Default: true
-	PrerequisitesCheckEnabled *bool `mapstructure:"prerequisites_check_enabled" yaml:"prerequisites_check_enabled"`
-
 	// DeleteProtection prevents accidental cluster deletion.
 	// See: terraform/variables.tf cluster_delete_protection
 	// Default: false
@@ -127,10 +122,7 @@ type FirewallRule struct {
 
 // ControlPlaneConfig defines the control plane configuration.
 type ControlPlaneConfig struct {
-	NodePools             []ControlPlaneNodePool `mapstructure:"nodepools" yaml:"nodepools"`
-	PublicVIPIPv4Enabled  bool                   `mapstructure:"public_vip_ipv4_enabled" yaml:"public_vip_ipv4_enabled"`
-	PublicVIPIPv4ID       int                    `mapstructure:"public_vip_ipv4_id" yaml:"public_vip_ipv4_id"`
-	PrivateVIPIPv4Enabled bool                   `mapstructure:"private_vip_ipv4_enabled" yaml:"private_vip_ipv4_enabled"`
+	NodePools []ControlPlaneNodePool `mapstructure:"nodepools" yaml:"nodepools"`
 }
 
 // ControlPlaneNodePool defines a node pool for the control plane.
@@ -509,9 +501,11 @@ type AddonsConfig struct {
 	TalosBackup            TalosBackupConfig            `mapstructure:"talos_backup" yaml:"talos_backup"`
 	GatewayAPICRDs         GatewayAPICRDsConfig         `mapstructure:"gateway_api_crds" yaml:"gateway_api_crds"`
 	PrometheusOperatorCRDs PrometheusOperatorCRDsConfig `mapstructure:"prometheus_operator_crds" yaml:"prometheus_operator_crds"`
+	KubePrometheusStack    KubePrometheusStackConfig    `mapstructure:"kube_prometheus_stack" yaml:"kube_prometheus_stack"`
 	TalosCCM               TalosCCMConfig               `mapstructure:"talos_ccm" yaml:"talos_ccm"`
 	Cloudflare             CloudflareConfig             `mapstructure:"cloudflare" yaml:"cloudflare"`
 	ExternalDNS            ExternalDNSConfig            `mapstructure:"external_dns" yaml:"external_dns"`
+	Operator               OperatorConfig               `mapstructure:"operator" yaml:"operator"`
 }
 
 // CCMConfig defines the Hetzner Cloud Controller Manager configuration.
@@ -694,7 +688,7 @@ type TraefikConfig struct {
 	Helm HelmChartConfig `mapstructure:"helm" yaml:"helm"`
 
 	// Kind specifies the Kubernetes controller type: "Deployment" or "DaemonSet".
-	// Default: "Deployment" (or "DaemonSet" when HostNetwork is true)
+	// Default: "Deployment"
 	Kind string `mapstructure:"kind" yaml:"kind"`
 
 	// Replicas specifies the number of controller replicas.
@@ -710,7 +704,7 @@ type TraefikConfig struct {
 
 	// ExternalTrafficPolicy controls how external traffic is routed.
 	// Valid values: "Cluster" (cluster-wide) or "Local" (node-local).
-	// Default: "Local"
+	// Default: "Cluster"
 	ExternalTrafficPolicy string `mapstructure:"external_traffic_policy" yaml:"external_traffic_policy"`
 
 	// IngressClass specifies the IngressClass name for Traefik.
@@ -991,6 +985,146 @@ type PrometheusOperatorCRDsConfig struct {
 	Version string `mapstructure:"version" yaml:"version"`
 }
 
+// KubePrometheusStackConfig defines the kube-prometheus-stack configuration.
+// This deploys a full monitoring stack including Prometheus, Grafana, and Alertmanager.
+// See: https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack
+type KubePrometheusStackConfig struct {
+	// Enabled enables the kube-prometheus-stack deployment.
+	// Default: false
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Helm allows customizing the Helm chart repository, version, and values.
+	Helm HelmChartConfig `mapstructure:"helm" yaml:"helm"`
+
+	// Grafana configuration
+	Grafana KubePrometheusGrafanaConfig `mapstructure:"grafana" yaml:"grafana"`
+
+	// Prometheus configuration
+	Prometheus KubePrometheusPrometheusConfig `mapstructure:"prometheus" yaml:"prometheus"`
+
+	// Alertmanager configuration
+	Alertmanager KubePrometheusAlertmanagerConfig `mapstructure:"alertmanager" yaml:"alertmanager"`
+
+	// DefaultRules enables the default PrometheusRule resources.
+	// Default: true
+	DefaultRules *bool `mapstructure:"default_rules" yaml:"default_rules"`
+
+	// NodeExporter enables the node-exporter DaemonSet.
+	// Default: true
+	NodeExporter *bool `mapstructure:"node_exporter" yaml:"node_exporter"`
+
+	// KubeStateMetrics enables the kube-state-metrics deployment.
+	// Default: true
+	KubeStateMetrics *bool `mapstructure:"kube_state_metrics" yaml:"kube_state_metrics"`
+}
+
+// KubePrometheusGrafanaConfig defines Grafana configuration.
+type KubePrometheusGrafanaConfig struct {
+	// Enabled enables Grafana deployment.
+	// Default: true
+	Enabled *bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// AdminPassword sets the initial Grafana admin password.
+	// If empty, a random password is generated.
+	AdminPassword string `mapstructure:"admin_password" yaml:"admin_password"`
+
+	// IngressEnabled enables Ingress for Grafana.
+	IngressEnabled bool `mapstructure:"ingress_enabled" yaml:"ingress_enabled"`
+
+	// IngressHost is the hostname for the Grafana Ingress.
+	// Required when IngressEnabled is true.
+	IngressHost string `mapstructure:"ingress_host" yaml:"ingress_host"`
+
+	// IngressClassName specifies the IngressClass to use.
+	// Default: "traefik"
+	IngressClassName string `mapstructure:"ingress_class_name" yaml:"ingress_class_name"`
+
+	// IngressTLS enables TLS for the Ingress with cert-manager.
+	// Requires cert-manager to be installed.
+	IngressTLS bool `mapstructure:"ingress_tls" yaml:"ingress_tls"`
+
+	// Persistence enables persistent storage for Grafana.
+	Persistence KubePrometheusPersistenceConfig `mapstructure:"persistence" yaml:"persistence"`
+}
+
+// KubePrometheusPrometheusConfig defines Prometheus server configuration.
+type KubePrometheusPrometheusConfig struct {
+	// Enabled enables Prometheus deployment.
+	// Default: true
+	Enabled *bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// RetentionDays specifies how many days to retain Prometheus data.
+	// Default: 15
+	RetentionDays *int `mapstructure:"retention_days" yaml:"retention_days"`
+
+	// IngressEnabled enables Ingress for Prometheus.
+	IngressEnabled bool `mapstructure:"ingress_enabled" yaml:"ingress_enabled"`
+
+	// IngressHost is the hostname for the Prometheus Ingress.
+	IngressHost string `mapstructure:"ingress_host" yaml:"ingress_host"`
+
+	// IngressClassName specifies the IngressClass to use.
+	IngressClassName string `mapstructure:"ingress_class_name" yaml:"ingress_class_name"`
+
+	// IngressTLS enables TLS for the Ingress.
+	IngressTLS bool `mapstructure:"ingress_tls" yaml:"ingress_tls"`
+
+	// Persistence enables persistent storage for Prometheus.
+	Persistence KubePrometheusPersistenceConfig `mapstructure:"persistence" yaml:"persistence"`
+
+	// Resources defines resource requests and limits.
+	Resources KubePrometheusResourcesConfig `mapstructure:"resources" yaml:"resources"`
+}
+
+// KubePrometheusAlertmanagerConfig defines Alertmanager configuration.
+type KubePrometheusAlertmanagerConfig struct {
+	// Enabled enables Alertmanager deployment.
+	// Default: true
+	Enabled *bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// IngressEnabled enables Ingress for Alertmanager.
+	IngressEnabled bool `mapstructure:"ingress_enabled" yaml:"ingress_enabled"`
+
+	// IngressHost is the hostname for the Alertmanager Ingress.
+	IngressHost string `mapstructure:"ingress_host" yaml:"ingress_host"`
+
+	// IngressClassName specifies the IngressClass to use.
+	IngressClassName string `mapstructure:"ingress_class_name" yaml:"ingress_class_name"`
+
+	// IngressTLS enables TLS for the Ingress.
+	IngressTLS bool `mapstructure:"ingress_tls" yaml:"ingress_tls"`
+}
+
+// KubePrometheusPersistenceConfig defines storage persistence settings.
+type KubePrometheusPersistenceConfig struct {
+	// Enabled enables persistent storage.
+	// Default: false
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Size specifies the volume size (e.g., "10Gi", "50Gi").
+	// Default: "10Gi"
+	Size string `mapstructure:"size" yaml:"size"`
+
+	// StorageClass specifies the StorageClass to use.
+	// If empty, uses the default StorageClass.
+	StorageClass string `mapstructure:"storage_class" yaml:"storage_class"`
+}
+
+// KubePrometheusResourcesConfig defines resource requests and limits.
+type KubePrometheusResourcesConfig struct {
+	// Requests defines resource requests.
+	Requests KubePrometheusResourceSpec `mapstructure:"requests" yaml:"requests"`
+
+	// Limits defines resource limits.
+	Limits KubePrometheusResourceSpec `mapstructure:"limits" yaml:"limits"`
+}
+
+// KubePrometheusResourceSpec defines CPU and memory specifications.
+type KubePrometheusResourceSpec struct {
+	CPU    string `mapstructure:"cpu" yaml:"cpu"`
+	Memory string `mapstructure:"memory" yaml:"memory"`
+}
+
 // TalosCCMConfig defines the Talos Cloud Controller Manager configuration.
 // See: terraform/variables.tf talos_ccm_* variables
 // This is separate from the Hetzner CCM - it's the Siderolabs Talos CCM.
@@ -1049,4 +1183,57 @@ type ExternalDNSConfig struct {
 	// Default: ["ingress"]
 	// Options: ingress, service, gateway-httproute, etc.
 	Sources []string `mapstructure:"sources" yaml:"sources"`
+}
+
+// OperatorConfig defines the k8zner-operator addon configuration.
+// The operator provides self-healing functionality for the cluster.
+type OperatorConfig struct {
+	// Enabled enables the k8zner-operator for self-healing.
+	// When enabled, the operator monitors node health and automatically
+	// replaces failed nodes.
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
+
+	// Version specifies the operator image version.
+	// Default: "main" (latest from main branch)
+	Version string `mapstructure:"version" yaml:"version"`
+
+	// HostNetwork enables hostNetwork mode for the operator pod.
+	// This is required when deploying the operator before CNI (Cilium) is installed.
+	// When true, the operator uses the host's network namespace directly.
+	// Default: false
+	HostNetwork bool `mapstructure:"host_network" yaml:"host_network"`
+}
+
+// IsPrivateFirst returns true if the cluster should use private-first architecture.
+// In private-first mode:
+// - Servers have no public IPv4 (only IPv6 + private IPv4)
+// - The Load Balancer is the only IPv4 entry point
+// - All internal communication uses private IPs
+// - CLI communicates with Talos API via LB:50000
+func (c *Config) IsPrivateFirst() bool {
+	return c.ClusterAccess == "private"
+}
+
+// ShouldEnablePublicIPv4 returns whether servers should have public IPv4 enabled.
+// Returns false for private-first mode, true otherwise.
+// This respects the explicit Talos.Machine.PublicIPv4Enabled setting if set.
+func (c *Config) ShouldEnablePublicIPv4() bool {
+	// If explicitly configured in Talos machine config, use that
+	if c.Talos.Machine.PublicIPv4Enabled != nil {
+		return *c.Talos.Machine.PublicIPv4Enabled
+	}
+	// Otherwise, disable in private-first mode
+	return !c.IsPrivateFirst()
+}
+
+// ShouldEnablePublicIPv6 returns whether servers should have public IPv6 enabled.
+// Returns true by default (for debugging/fallback access).
+// This respects the explicit Talos.Machine.PublicIPv6Enabled setting if set.
+func (c *Config) ShouldEnablePublicIPv6() bool {
+	// If explicitly configured in Talos machine config, use that
+	if c.Talos.Machine.PublicIPv6Enabled != nil {
+		return *c.Talos.Machine.PublicIPv6Enabled
+	}
+	// Default to enabled (IPv6 is free and useful for debugging)
+	return true
 }

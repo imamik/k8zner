@@ -4,65 +4,52 @@ This document describes the internal architecture of k8zner.
 
 ## Overview
 
-k8zner is a single binary that orchestrates the creation and management of Kubernetes clusters on Hetzner Cloud using Talos Linux.
+k8zner uses an **operator-first architecture**. The CLI bootstraps infrastructure and deploys a Kubernetes operator that continuously reconciles the cluster to match the desired state defined in a `K8znerCluster` CRD.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         k8zner CLI                              │
+│              (init, apply, destroy, doctor)                     │
 ├─────────────────────────────────────────────────────────────────┤
-│                      Orchestration Layer                        │
-│              (Reconciler, Pipeline, Phases)                     │
+│                      Bootstrap Layer                            │
+│         (Image, Infrastructure, 1st CP, Operator)               │
 ├─────────────┬─────────────┬─────────────┬──────────────────────┤
-│ Provisioning│   Addons    │   Config    │      Platform        │
-│ ├─ infra    │ ├─ cilium   │ ├─ types    │ ├─ hcloud (client)   │
-│ ├─ compute  │ ├─ ccm/csi  │ ├─ load     │ ├─ talos (config)    │
-│ ├─ image    │ ├─ ingress  │ ├─ wizard   │ └─ ssh (exec)        │
-│ └─ cluster  │ └─ helm     │ └─ validate │                      │
+│ Provisioning│   Config    │   Platform  │     Operator         │
+│ ├─ infra    │ ├─ types    │ ├─ hcloud   │ ├─ controller        │
+│ ├─ compute  │ ├─ v2       │ ├─ talos    │ ├─ adapter           │
+│ ├─ image    │ ├─ wizard   │ └─ ssh      │ ├─ addons            │
+│ └─ cluster  │ └─ validate │             │ └─ CRD (K8znerCluster)│
 └─────────────┴─────────────┴─────────────┴──────────────────────┘
 ```
 
-## Pipeline Phases
+## Operator-First Flow
 
-The reconciliation pipeline executes phases in order:
+### New Cluster (`k8zner apply`)
 
-### 1. Validation Phase
+1. **Image** — Build/reuse Talos OS snapshot
+2. **Infrastructure** — Create network, firewall, placement groups, load balancer (HA)
+3. **First Control Plane** — Create 1 CP server, bootstrap etcd + Kubernetes
+4. **Operator** — Deploy k8zner-operator into the cluster
+5. **CRD** — Create `K8znerCluster` resource with full desired state
+6. **Reconcile** — Operator takes over: installs CNI, addons, scales up remaining CPs/workers
 
-Pre-flight checks ensure:
-- Configuration is valid
-- Required API tokens are present
-- Server types and locations exist
-- No conflicting resources
+### Existing Cluster (`k8zner apply`)
 
-### 2. Infrastructure Phase
+1. Update `K8znerCluster` CRD spec
+2. Operator detects change and reconciles (scale workers, update addons, etc.)
 
-Creates Hetzner Cloud resources:
-- Private network and subnets
-- Firewall rules
-- Load balancers (if HA enabled)
-- Placement groups
+### Operator Reconciliation Phases
 
-### 3. Image Phase
+The operator reconciles through ordered phases:
 
-Handles Talos OS images:
-- Checks for existing snapshots
-- Builds new images if needed
-- Supports custom extensions
-
-### 4. Compute Phase
-
-Provisions servers:
-- Creates control plane nodes
-- Creates worker nodes
-- Attaches to private network
-- Applies Talos configuration
-
-### 5. Cluster Phase
-
-Bootstraps Kubernetes:
-- Initializes etcd cluster
-- Waits for control plane ready
-- Installs configured addons
-- Generates kubeconfig
+| Phase | Description |
+|-------|-------------|
+| Infrastructure | Ensure network, firewall, LB exist |
+| Compute | Scale control planes and workers to desired count |
+| WaitForK8s | Wait for all nodes to join Kubernetes |
+| CNI | Install Cilium (must be first addon) |
+| Addons | Install remaining addons (CCM, CSI, Traefik, cert-manager, etc.) |
+| Running | Cluster is healthy, continuous monitoring |
 
 ## Project Structure
 
@@ -71,26 +58,26 @@ cmd/
 ├── k8zner/
 │   ├── commands/         # CLI command definitions (Cobra)
 │   │   ├── root.go       # Root command and global flags
-│   │   ├── init.go       # Interactive wizard command
-│   │   ├── apply.go      # Apply cluster configuration
-│   │   ├── destroy.go    # Destroy cluster
-│   │   └── upgrade.go    # Upgrade Talos/K8s
+│   │   ├── init.go       # Interactive wizard
+│   │   ├── apply.go      # Create or update cluster
+│   │   ├── destroy.go    # Tear down cluster
+│   │   └── doctor.go     # Cluster diagnostics
 │   └── handlers/         # Business logic for commands
 │
 internal/
 ├── config/               # Configuration handling
-│   ├── types.go          # Config struct definitions
+│   ├── types.go          # Internal config struct
+│   ├── v2/              # Simplified config (k8zner.yaml)
+│   │   ├── config.go     # V2 config types
+│   │   ├── expand.go     # V2 → internal config expansion
+│   │   └── defaults.go   # Version matrix, constants
 │   ├── wizard/           # Interactive configuration wizard
-│   │   ├── wizard.go     # Wizard orchestration
-│   │   ├── questions.go  # Interactive prompts
-│   │   ├── options.go    # Server types, locations, etc.
-│   │   ├── builder.go    # Config struct builder
-│   │   └── writer.go     # YAML output
 │   └── validate.go       # Configuration validation
 │
-├── orchestration/        # High-level workflow
-│   ├── reconciler.go     # Main reconciliation loop
-│   └── pipeline.go       # Phase execution
+├── operator/             # Kubernetes operator
+│   ├── controller/       # Reconciler logic
+│   ├── adapter.go        # Bridges operator ↔ provisioning
+│   └── installer.go      # Operator deployment into cluster
 │
 ├── provisioning/         # Infrastructure provisioning
 │   ├── infrastructure/   # Network, firewall, LB
@@ -146,42 +133,44 @@ Talos images are built once and reused:
 ## Data Flow
 
 ```
-User Config (YAML)
+k8zner.yaml (v2 config)
        │
        ▼
 ┌─────────────────┐
-│ Config Loader   │
+│  Config Loader  │  v2 → internal config expansion
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐     ┌─────────────┐
+│  CLI Bootstrap  │────▶│ Hetzner     │
+│  (first time)   │     │ Cloud API   │
+└────────┬────────┘     └─────────────┘
+         │
+         │  Image → Infra → 1 CP → Bootstrap
+         │
+         ▼
+┌─────────────────┐
+│ Install Operator│  Deploy k8zner-operator
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│   Validator     │
+│  Create CRD     │  K8znerCluster with full spec
 └────────┬────────┘
          │
          ▼
-┌─────────────────┐
-│   Reconciler    │◄──────────────┐
-└────────┬────────┘               │
-         │                        │
-    ┌────┴────┐              ┌────┴────┐
-    ▼         ▼              │ Hetzner │
-┌───────┐ ┌───────┐          │  Cloud  │
-│ Infra │ │Compute│          │   API   │
-└───┬───┘ └───┬───┘          └─────────┘
-    │         │
-    ▼         ▼
-┌─────────────────┐
-│    Cluster      │
-│   Bootstrap     │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│     Addons      │
-└────────┬────────┘
-         │
-         ▼
-    kubeconfig
+┌─────────────────────────────────────────┐
+│         Operator Reconciler             │
+│                                         │
+│  CRD Spec ──▶ Desired State            │
+│       │                                 │
+│  ┌────┴────┐  ┌────────┐  ┌────────┐  │
+│  │ Compute │  │ Addons │  │ Health │  │
+│  │ (scale) │  │(install)│  │(monitor)│  │
+│  └─────────┘  └────────┘  └────────┘  │
+│                                         │
+│  Continuous reconciliation (30s loop)   │
+└─────────────────────────────────────────┘
 ```
 
 ## Error Handling

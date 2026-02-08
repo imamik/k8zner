@@ -68,17 +68,22 @@ func TestBuildCSIValues(t *testing.T) {
 			assert.Equal(t, "kubernetes.io/hostname", tsc[0]["topologyKey"])
 			assert.Equal(t, "DoNotSchedule", tsc[0]["whenUnsatisfiable"])
 
+			// Note: dnsPolicy is injected via post-render patching (patchDeploymentDNSPolicy),
+			// not as a helm value, because the CSI chart doesn't support it natively.
+
 			// Check node selector
 			nodeSelector, ok := controller["nodeSelector"].(helm.Values)
 			require.True(t, ok)
 			assert.Contains(t, nodeSelector, "node-role.kubernetes.io/control-plane")
 
-			// Check tolerations (should have control-plane and CCM uninitialized)
+			// Check tolerations (control-plane, uninitialized, and not-ready)
+			// All three are required for CSI to schedule during bootstrap
 			tolerations, ok := controller["tolerations"].([]helm.Values)
 			require.True(t, ok)
-			assert.Len(t, tolerations, 2)
+			assert.Len(t, tolerations, 3)
 			assert.Equal(t, "node-role.kubernetes.io/control-plane", tolerations[0]["key"])
 			assert.Equal(t, "node.cloudprovider.kubernetes.io/uninitialized", tolerations[1]["key"])
+			assert.Equal(t, "node.kubernetes.io/not-ready", tolerations[2]["key"])
 
 			// Check storage classes - we now have two: encrypted (default) and non-encrypted
 			storageClasses, ok := values["storageClasses"].([]helm.Values)
@@ -101,6 +106,72 @@ func TestBuildCSIValues(t *testing.T) {
 			assert.Equal(t, false, nonEncryptedSC["defaultStorageClass"], "non-encrypted should not be default")
 		})
 	}
+}
+
+func TestBuildCSIValues_DefaultStorageClass(t *testing.T) {
+	tests := []struct {
+		name                string
+		defaultStorageClass bool
+	}{
+		{"default enabled", true},
+		{"default disabled", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &config.Config{
+				ControlPlane: config.ControlPlaneConfig{
+					NodePools: []config.ControlPlaneNodePool{
+						{Count: 1},
+					},
+				},
+				Addons: config.AddonsConfig{
+					CSI: config.CSIConfig{
+						DefaultStorageClass: tt.defaultStorageClass,
+					},
+				},
+			}
+			values := buildCSIValues(cfg)
+
+			storageClasses, ok := values["storageClasses"].([]helm.Values)
+			require.True(t, ok)
+
+			// Encrypted class should respect defaultStorageClass setting
+			assert.Equal(t, tt.defaultStorageClass, storageClasses[0]["defaultStorageClass"])
+			// Non-encrypted is always false
+			assert.Equal(t, false, storageClasses[1]["defaultStorageClass"])
+		})
+	}
+}
+
+func TestBuildCSIValues_Tolerations(t *testing.T) {
+	cfg := &config.Config{
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{
+				{Count: 1},
+			},
+		},
+	}
+	values := buildCSIValues(cfg)
+
+	controller, ok := values["controller"].(helm.Values)
+	require.True(t, ok)
+
+	tolerations, ok := controller["tolerations"].([]helm.Values)
+	require.True(t, ok)
+	require.Len(t, tolerations, 3, "CSI needs 3 tolerations for bootstrap")
+
+	// Verify the three required bootstrap tolerations
+	assert.Equal(t, "node-role.kubernetes.io/control-plane", tolerations[0]["key"])
+	assert.Equal(t, "NoSchedule", tolerations[0]["effect"])
+	assert.Equal(t, "Exists", tolerations[0]["operator"])
+
+	assert.Equal(t, "node.cloudprovider.kubernetes.io/uninitialized", tolerations[1]["key"])
+	assert.Equal(t, "true", tolerations[1]["value"])
+	assert.Equal(t, "NoSchedule", tolerations[1]["effect"])
+
+	assert.Equal(t, "node.kubernetes.io/not-ready", tolerations[2]["key"])
+	assert.Equal(t, "Exists", tolerations[2]["operator"])
 }
 
 func TestGenerateEncryptionKey(t *testing.T) {

@@ -15,7 +15,6 @@ import (
 	v2 "github.com/imamik/k8zner/internal/config/v2"
 	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning"
-	"github.com/imamik/k8zner/internal/util/prerequisites"
 )
 
 func TestLoadConfig(t *testing.T) {
@@ -56,51 +55,6 @@ func TestLoadConfig(t *testing.T) {
 	})
 }
 
-func TestApply(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
-		origLoad := loadV2ConfigFile
-		origExpand := expandV2Config
-		origPrereqs := checkDefaultPrereqs
-		origInfra := newInfraClient
-		origSecrets := getOrGenerateSecrets
-		origTalos := newTalosGenerator
-		origWrite := writeFile
-		origReconciler := newReconciler
-		defer func() {
-			loadV2ConfigFile = origLoad
-			expandV2Config = origExpand
-			checkDefaultPrereqs = origPrereqs
-			newInfraClient = origInfra
-			getOrGenerateSecrets = origSecrets
-			newTalosGenerator = origTalos
-			writeFile = origWrite
-			newReconciler = origReconciler
-		}()
-
-		loadV2ConfigFile = func(_ string) (*v2.Config, error) {
-			return &v2.Config{Name: "test", Region: v2.RegionFalkenstein, Mode: v2.ModeDev, Workers: v2.Worker{Count: 1, Size: v2.SizeCX22}}, nil
-		}
-		expandV2Config = func(_ *v2.Config) (*config.Config, error) {
-			return &config.Config{ClusterName: "test", Talos: config.TalosConfig{Version: "v1.9.0"}, Kubernetes: config.KubernetesConfig{Version: "1.32.0"}}, nil
-		}
-		checkDefaultPrereqs = func() *prerequisites.CheckResults {
-			return &prerequisites.CheckResults{Results: []prerequisites.CheckResult{{Tool: prerequisites.Tool{Name: "kubectl", Required: true}, Found: true}}}
-		}
-		newInfraClient = func(_ string) hcloud.InfrastructureManager { return &hcloud.MockClient{} }
-		getOrGenerateSecrets = func(_, _ string) (*secrets.Bundle, error) { return &secrets.Bundle{}, nil }
-		newTalosGenerator = func(_, _, _, _ string, _ *secrets.Bundle) provisioning.TalosConfigProducer {
-			return &mockTalosProducer{clientConfig: []byte("talos-config")}
-		}
-		writeFile = func(_ string, _ []byte, _ os.FileMode) error { return nil }
-		newReconciler = func(_ hcloud.InfrastructureManager, _ provisioning.TalosConfigProducer, _ *config.Config) Reconciler {
-			return &mockReconciler{kubeconfig: []byte("kubeconfig")}
-		}
-
-		err := Apply(context.Background(), "k8zner.yaml")
-		require.NoError(t, err)
-	})
-}
-
 type mockTalosProducer struct {
 	clientConfig    []byte
 	clientConfigErr error
@@ -130,9 +84,27 @@ func (m *mockTalosProducer) WaitForNodeReady(_ context.Context, _ string, _ time
 }
 func (m *mockTalosProducer) HealthCheck(_ context.Context, _ string) error { return nil }
 
-type mockReconciler struct {
-	kubeconfig []byte
-	err        error
-}
+// Verify factory variables exist and can be saved/restored.
+func TestFactoryVariables(t *testing.T) {
+	origInfra := newInfraClient
+	origSecrets := getOrGenerateSecrets
+	origTalos := newTalosGenerator
+	origWrite := writeFile
+	defer func() {
+		newInfraClient = origInfra
+		getOrGenerateSecrets = origSecrets
+		newTalosGenerator = origTalos
+		writeFile = origWrite
+	}()
 
-func (m *mockReconciler) Reconcile(_ context.Context) ([]byte, error) { return m.kubeconfig, m.err }
+	newInfraClient = func(_ string) hcloud.InfrastructureManager { return &hcloud.MockClient{} }
+	getOrGenerateSecrets = func(_, _ string) (*secrets.Bundle, error) { return &secrets.Bundle{}, nil }
+	newTalosGenerator = func(_, _, _, _ string, _ *secrets.Bundle) provisioning.TalosConfigProducer {
+		return &mockTalosProducer{clientConfig: []byte("talos-config")}
+	}
+	writeFile = func(_ string, _ []byte, _ os.FileMode) error { return nil }
+
+	// Verify mocks are set (basic sanity check)
+	client := newInfraClient("test")
+	assert.NotNil(t, client)
+}

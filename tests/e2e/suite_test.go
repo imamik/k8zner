@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,6 +15,28 @@ import (
 	hcloud_client "github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning/image"
 )
+
+// Test result tracking for skip logic between tests
+var (
+	testResultsLock sync.Mutex
+	fullStackPassed bool
+)
+
+// SetFullStackPassed marks the full stack test as passed.
+// This is called by TestE2EFullStackDev after ALL subtests pass.
+func SetFullStackPassed() {
+	testResultsLock.Lock()
+	defer testResultsLock.Unlock()
+	fullStackPassed = true
+}
+
+// IsFullStackPassed returns whether TestE2EFullStackDev passed.
+// There is NO override - HA test will NEVER run if FullStack failed.
+func IsFullStackPassed() bool {
+	testResultsLock.Lock()
+	defer testResultsLock.Unlock()
+	return fullStackPassed
+}
 
 // TestMain orchestrates E2E tests to run sequentially and manage shared resources.
 func TestMain(m *testing.M) {

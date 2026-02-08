@@ -111,12 +111,24 @@ func TestServerSize_IsValid(t *testing.T) {
 		size ServerSize
 		want bool
 	}{
+		// CPX series (shared vCPU)
+		{"valid cpx22", SizeCPX22, true},
+		{"valid cpx32", SizeCPX32, true},
+		{"valid cpx42", SizeCPX42, true},
+		{"valid cpx52", SizeCPX52, true},
+		// CX series (legacy names)
 		{"valid cx22", SizeCX22, true},
 		{"valid cx32", SizeCX32, true},
 		{"valid cx42", SizeCX42, true},
 		{"valid cx52", SizeCX52, true},
+		// CX series (new names)
+		{"valid cx23", SizeCX23, true},
+		{"valid cx33", SizeCX33, true},
+		{"valid cx43", SizeCX43, true},
+		{"valid cx53", SizeCX53, true},
+		// Invalid
 		{"invalid empty", ServerSize(""), false},
-		{"invalid cpx21", ServerSize("cpx21"), false},
+		{"invalid cax11", ServerSize("cax11"), false}, // ARM not supported
 		{"invalid random", ServerSize("large"), false},
 	}
 
@@ -136,6 +148,12 @@ func TestServerSize_Specs(t *testing.T) {
 		wantRAM  int
 		wantDisk int
 	}{
+		// CPX series (shared vCPU) - same specs as CX
+		{SizeCPX22, 2, 4, 40},
+		{SizeCPX32, 4, 8, 80},
+		{SizeCPX42, 8, 16, 160},
+		{SizeCPX52, 16, 32, 320},
+		// CX series (legacy names map to new specs)
 		{SizeCX22, 2, 4, 40},
 		{SizeCX32, 4, 8, 80},
 		{SizeCX42, 8, 16, 160},
@@ -670,6 +688,69 @@ func TestConfig_ArgoHost(t *testing.T) {
 			c := Config{Domain: tt.domain, ArgoSubdomain: tt.argoSubdomain}
 			if got := c.ArgoHost(); got != tt.want {
 				t.Errorf("Config.ArgoHost() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConfig_HasMonitoring(t *testing.T) {
+	tests := []struct {
+		name       string
+		monitoring bool
+		want       bool
+	}{
+		{"monitoring enabled", true, true},
+		{"monitoring disabled", false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := Config{Monitoring: tt.monitoring}
+			if got := c.HasMonitoring(); got != tt.want {
+				t.Errorf("Config.HasMonitoring() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConfig_GetGrafanaSubdomain(t *testing.T) {
+	tests := []struct {
+		name             string
+		grafanaSubdomain string
+		want             string
+	}{
+		{"default", "", "grafana"},
+		{"custom", "metrics", "metrics"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := Config{GrafanaSubdomain: tt.grafanaSubdomain}
+			if got := c.GetGrafanaSubdomain(); got != tt.want {
+				t.Errorf("Config.GetGrafanaSubdomain() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConfig_GrafanaHost(t *testing.T) {
+	tests := []struct {
+		name             string
+		domain           string
+		grafanaSubdomain string
+		want             string
+	}{
+		{"default subdomain", "example.com", "", "grafana.example.com"},
+		{"custom subdomain", "example.com", "metrics", "metrics.example.com"},
+		{"no domain", "", "", ""},
+		{"no domain with subdomain", "", "metrics", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := Config{Domain: tt.domain, GrafanaSubdomain: tt.grafanaSubdomain}
+			if got := c.GrafanaHost(); got != tt.want {
+				t.Errorf("Config.GrafanaHost() = %v, want %v", got, tt.want)
 			}
 		})
 	}

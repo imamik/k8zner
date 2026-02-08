@@ -155,6 +155,54 @@ func TestBuildCertManagerValues(t *testing.T) {
 	}
 }
 
+func TestBuildCertManagerValues_Tolerations(t *testing.T) {
+	cfg := &config.Config{
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{
+				{Count: 1},
+			},
+		},
+	}
+	values := buildCertManagerValues(cfg)
+
+	// Controller tolerations
+	tolerations, ok := values["tolerations"].([]helm.Values)
+	require.True(t, ok)
+	assert.Len(t, tolerations, 2, "cert-manager needs control-plane + CCM uninitialized tolerations")
+	assert.Equal(t, "node-role.kubernetes.io/control-plane", tolerations[0]["key"])
+	assert.Equal(t, "node.cloudprovider.kubernetes.io/uninitialized", tolerations[1]["key"])
+
+	// Webhook gets same tolerations
+	webhook, ok := values["webhook"].(helm.Values)
+	require.True(t, ok)
+	webhookTolerations, ok := webhook["tolerations"].([]helm.Values)
+	require.True(t, ok)
+	assert.Len(t, webhookTolerations, 2)
+
+	// Cainjector gets same tolerations
+	cainjector, ok := values["cainjector"].(helm.Values)
+	require.True(t, ok)
+	cainjectorTolerations, ok := cainjector["tolerations"].([]helm.Values)
+	require.True(t, ok)
+	assert.Len(t, cainjectorTolerations, 2)
+}
+
+func TestBuildCertManagerValues_GatewayAPI(t *testing.T) {
+	cfg := &config.Config{
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{
+				{Count: 1},
+			},
+		},
+	}
+	values := buildCertManagerValues(cfg)
+
+	configSection, ok := values["config"].(helm.Values)
+	require.True(t, ok)
+	assert.Equal(t, false, configSection["enableGatewayAPI"],
+		"Gateway API should be disabled by default (requires separate CRD install)")
+}
+
 func TestCreateCertManagerNamespace(t *testing.T) {
 	ns := createCertManagerNamespace()
 

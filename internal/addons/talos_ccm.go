@@ -27,8 +27,20 @@ func applyTalosCCM(ctx context.Context, client k8sclient.Client, cfg *config.Con
 
 	log.Printf("Installing Talos CCM %s...", version)
 
-	if err := applyFromURL(ctx, client, "talos-ccm", manifestURL); err != nil {
-		return fmt.Errorf("failed to apply Talos CCM from %s: %w", manifestURL, err)
+	manifestBytes, err := fetchManifestURL(ctx, manifestURL)
+	if err != nil {
+		return fmt.Errorf("failed to fetch Talos CCM from %s: %w", manifestURL, err)
+	}
+
+	// Talos CCM runs with hostNetwork on control plane nodes.
+	// When kube-proxy is disabled, inject env vars to reach the API server directly.
+	manifestBytes, err = patchHostNetworkAPIAccess(manifestBytes, "talos-cloud-controller-manager")
+	if err != nil {
+		return fmt.Errorf("failed to patch Talos CCM API access: %w", err)
+	}
+
+	if err := applyManifests(ctx, client, "talos-ccm", manifestBytes); err != nil {
+		return fmt.Errorf("failed to apply Talos CCM: %w", err)
 	}
 
 	log.Printf("Talos CCM %s installed successfully", version)

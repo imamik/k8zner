@@ -1,7 +1,7 @@
 // Package provisioning provides shared types and interfaces for cluster provisioning.
 //
 // The provisioning domain is organized into focused subpackages:
-//   - infrastructure/ — Network, Firewall, Load Balancers, Floating IPs
+//   - infrastructure/ — Network, Firewall, Load Balancers
 //   - compute/ — Servers, Control Plane, Workers, Node Pools
 //   - image/ — Talos image building and snapshot management
 //   - cluster/ — Bootstrap and Talos configuration application

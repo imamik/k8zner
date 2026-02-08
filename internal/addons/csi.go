@@ -40,6 +40,14 @@ func applyCSI(ctx context.Context, client k8sclient.Client, cfg *config.Config) 
 		return fmt.Errorf("failed to render CSI chart: %w", err)
 	}
 
+	// Post-render: inject dnsPolicy since the CSI chart doesn't support it natively.
+	// Using host DNS avoids the CoreDNS dependency during bootstrap — without this,
+	// the CSI controller can't resolve api.hetzner.cloud and enters CrashLoopBackOff.
+	manifestBytes, err = patchDeploymentDNSPolicy(manifestBytes, "hcloud-csi-controller", "Default")
+	if err != nil {
+		return fmt.Errorf("failed to patch CSI controller dnsPolicy: %w", err)
+	}
+
 	// Apply manifests to cluster
 	if err := applyManifests(ctx, client, "hcloud-csi", manifestBytes); err != nil {
 		return fmt.Errorf("failed to apply CSI manifests: %w", err)
@@ -110,6 +118,10 @@ func buildCSIValues(cfg *config.Config) helm.Values {
 			"nodeSelector": helm.Values{
 				"node-role.kubernetes.io/control-plane": "",
 			},
+			// Critical: CSI must tolerate control-plane, uninitialized, and not-ready taints.
+			// Without these tolerations, CSI cannot schedule on control plane nodes during
+			// bootstrap, creating a chicken-egg problem similar to the CCM issue.
+			// See: https://kubernetes.io/blog/2025/02/14/cloud-controller-manager-chicken-egg-problem/
 			"tolerations": []helm.Values{
 				{
 					"key":      "node-role.kubernetes.io/control-plane",
@@ -117,7 +129,13 @@ func buildCSIValues(cfg *config.Config) helm.Values {
 					"operator": "Exists",
 				},
 				{
-					"key":      "node.cloudprovider.kubernetes.io/uninitialized",
+					"key":    "node.cloudprovider.kubernetes.io/uninitialized",
+					"value":  "true",
+					"effect": "NoSchedule",
+				},
+				{
+					// Tolerate not-ready nodes to ensure CSI can start during bootstrap
+					"key":      "node.kubernetes.io/not-ready",
 					"operator": "Exists",
 				},
 			},

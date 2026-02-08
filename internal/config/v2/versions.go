@@ -71,10 +71,13 @@ func DefaultVersionMatrix() VersionMatrix {
 
 // Hardcoded infrastructure constants
 const (
-	// ControlPlaneServerType is the Hetzner server type for control planes.
-	// CX23 (2 vCPU, 4GB RAM) is the standard shared vCPU type for control planes.
-	// Note: Hetzner renamed types in 2024 - old "cx22" is now "cx23".
-	ControlPlaneServerType = "cx23"
+	// DefaultControlPlaneServerType is the default Hetzner server type for control planes.
+	// CX23 (2 dedicated vCPU, 4GB RAM) provides consistent performance for etcd + API server.
+	DefaultControlPlaneServerType = "cx23"
+
+	// DefaultWorkerServerType is the default Hetzner server type for workers.
+	// CPX22 (2 shared AMD cores, 4GB RAM) offers better availability than dedicated types.
+	DefaultWorkerServerType = "cpx22"
 
 	// LoadBalancerType is the Hetzner load balancer type.
 	// LB11 is sufficient for most workloads.

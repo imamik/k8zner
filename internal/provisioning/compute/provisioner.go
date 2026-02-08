@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/imamik/k8zner/internal/config"
 	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning"
 	"github.com/imamik/k8zner/internal/util/async"
+	"github.com/imamik/k8zner/internal/util/keygen"
 	"github.com/imamik/k8zner/internal/util/labels"
 	"github.com/imamik/k8zner/internal/util/naming"
 	"github.com/imamik/k8zner/internal/util/rdns"
@@ -30,7 +32,42 @@ func (p *Provisioner) Name() string {
 // Provision implements the provisioning.Phase interface.
 // This method creates ALL servers (control plane + workers) in parallel
 // for maximum provisioning speed.
+// Uses ephemeral SSH keys to avoid Hetzner password emails.
 func (p *Provisioner) Provision(ctx *provisioning.Context) error {
+	// 0. Create ephemeral SSH key to avoid Hetzner password emails
+	sshKeyName := fmt.Sprintf("ephemeral-%s-compute-%d", ctx.Config.ClusterName, time.Now().Unix())
+	ctx.Logger.Printf("[%s] Creating ephemeral SSH key: %s", phase, sshKeyName)
+
+	keyPair, err := keygen.GenerateRSAKeyPair(2048)
+	if err != nil {
+		return fmt.Errorf("failed to generate ephemeral SSH key: %w", err)
+	}
+
+	sshKeyLabels := labels.NewLabelBuilder(ctx.Config.ClusterName).
+		WithTestIDIfSet(ctx.Config.TestID).
+		Build()
+	sshKeyLabels["type"] = "ephemeral-compute"
+
+	_, err = ctx.Infra.CreateSSHKey(ctx, sshKeyName, string(keyPair.PublicKey), sshKeyLabels)
+	if err != nil {
+		return fmt.Errorf("failed to create ephemeral SSH key: %w", err)
+	}
+
+	// Schedule cleanup of the ephemeral SSH key (always runs)
+	defer func() {
+		ctx.Logger.Printf("[%s] Cleaning up ephemeral SSH key: %s", phase, sshKeyName)
+		if err := ctx.Infra.DeleteSSHKey(ctx, sshKeyName); err != nil {
+			ctx.Logger.Printf("[%s] Warning: failed to delete ephemeral SSH key %s: %v", phase, sshKeyName, err)
+		}
+	}()
+
+	// Replace user SSH keys with ephemeral key for this provisioning session
+	originalSSHKeys := ctx.Config.SSHKeys
+	ctx.Config.SSHKeys = []string{sshKeyName}
+	defer func() {
+		ctx.Config.SSHKeys = originalSSHKeys
+	}()
+
 	// 1. Pre-compute: Setup LB endpoint and collect SANs
 	if err := p.prepareControlPlaneEndpoint(ctx); err != nil {
 		return err

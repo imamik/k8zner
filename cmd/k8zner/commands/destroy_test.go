@@ -23,7 +23,7 @@ func TestDestroy_ConfigFlag(t *testing.T) {
 	require.NotNil(t, flag, "config flag should exist")
 	assert.Equal(t, "c", flag.Shorthand)
 	assert.Equal(t, "", flag.DefValue)
-	assert.Equal(t, "Path to cluster configuration file (required)", flag.Usage)
+	assert.Equal(t, "Path to cluster configuration file (default: k8zner.yaml)", flag.Usage)
 }
 
 func TestDestroy_ConfigFlagRequired(t *testing.T) {

@@ -28,7 +28,7 @@ This command asks just 5 questions:
   2. Region           (fsn1, nbg1, or hel1)
   3. Mode             (dev or ha)
   4. Worker count     (1-5 workers)
-  5. Worker size      (cx22, cx32, cx42, cx52)
+  5. Worker size      (cpx11-51 shared, cx23-53 dedicated)
   6. Domain           (optional, for DNS + TLS)
 
 Everything else is automatically configured with best practices:

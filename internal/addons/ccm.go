@@ -49,6 +49,28 @@ func buildCCMValues(cfg *config.Config, _ int64) helm.Values {
 		"nodeSelector": helm.Values{
 			"node-role.kubernetes.io/control-plane": "",
 		},
+		// Critical: CCM must tolerate control-plane and uninitialized taints.
+		// Without these tolerations, CCM cannot schedule on control plane nodes,
+		// creating a chicken-egg problem where CCM can't run to remove the
+		// uninitialized taint because it doesn't tolerate that taint.
+		// See: https://kubernetes.io/blog/2025/02/14/cloud-controller-manager-chicken-egg-problem/
+		"tolerations": []helm.Values{
+			{
+				"key":      "node-role.kubernetes.io/control-plane",
+				"effect":   "NoSchedule",
+				"operator": "Exists",
+			},
+			{
+				"key":    "node.cloudprovider.kubernetes.io/uninitialized",
+				"value":  "true",
+				"effect": "NoSchedule",
+			},
+			{
+				// Tolerate not-ready nodes to ensure CCM can start during bootstrap
+				"key":      "node.kubernetes.io/not-ready",
+				"operator": "Exists",
+			},
+		},
 		"networking": helm.Values{
 			"enabled":     true,
 			"clusterCIDR": getClusterCIDR(cfg),
@@ -66,6 +88,13 @@ func buildCCMValues(cfg *config.Config, _ int64) helm.Values {
 	// Build environment variables for load balancer configuration
 	// See: terraform/hcloud.tf lines 39-54
 	env := buildCCMEnvVars(cfg, lb)
+
+	// CCM runs on control plane nodes with hostNetwork:true.
+	// When kube-proxy is disabled (Cilium replaces it), the Kubernetes service IP
+	// is not routable. Override to use localhost since kube-apiserver runs on the same node.
+	env["KUBERNETES_SERVICE_HOST"] = helm.Values{"value": "localhost"}
+	env["KUBERNETES_SERVICE_PORT"] = helm.Values{"value": "6443"}
+
 	if len(env) > 0 {
 		values["env"] = env
 	}
@@ -78,6 +107,17 @@ func buildCCMValues(cfg *config.Config, _ int64) helm.Values {
 func buildCCMEnvVars(cfg *config.Config, lb *config.CCMLoadBalancerConfig) helm.Values {
 	ccm := &cfg.Addons.CCM
 	env := helm.Values{}
+
+	// HCLOUD_TOKEN - Critical: CCM needs this to authenticate with Hetzner Cloud API
+	// Without this, CCM cannot provision load balancers or manage routes
+	env["HCLOUD_TOKEN"] = helm.Values{
+		"valueFrom": helm.Values{
+			"secretKeyRef": helm.Values{
+				"name": "hcloud",
+				"key":  "token",
+			},
+		},
+	}
 
 	// HCLOUD_LOAD_BALANCERS_ENABLED
 	if lb.Enabled != nil {

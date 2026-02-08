@@ -9,6 +9,45 @@ import (
 	"github.com/imamik/k8zner/internal/config"
 )
 
+func TestBuildMetricsServerValues_Tolerations(t *testing.T) {
+	// When scheduling on control plane, should have 2 tolerations
+	cfg := &config.Config{
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{
+				{Count: 1},
+			},
+		},
+		Workers: []config.WorkerNodePool{}, // No workers → schedules on CP
+	}
+	values := buildMetricsServerValues(cfg)
+
+	tolerations, ok := values["tolerations"].([]helm.Values)
+	assert.True(t, ok)
+	assert.Len(t, tolerations, 2)
+	assert.Equal(t, "node-role.kubernetes.io/control-plane", tolerations[0]["key"])
+	assert.Equal(t, "node.cloudprovider.kubernetes.io/uninitialized", tolerations[1]["key"])
+}
+
+func TestBuildMetricsServerValues_Args(t *testing.T) {
+	cfg := &config.Config{
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{
+				{Count: 1},
+			},
+		},
+		Workers: []config.WorkerNodePool{
+			{Count: 1},
+		},
+	}
+	values := buildMetricsServerValues(cfg)
+
+	args, ok := values["args"].([]string)
+	assert.True(t, ok)
+	assert.Contains(t, args, "--kubelet-insecure-tls",
+		"Talos uses self-signed kubelet certs requiring insecure TLS")
+	assert.Contains(t, args, "--kubelet-preferred-address-types=InternalIP")
+}
+
 func TestBuildMetricsServerValues(t *testing.T) {
 	// Helper for creating bool pointers
 	boolPtr := func(b bool) *bool { return &b }

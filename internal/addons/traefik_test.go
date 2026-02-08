@@ -115,14 +115,16 @@ func TestBuildTraefikValues(t *testing.T) {
 
 			spec, ok := service["spec"].(helm.Values)
 			require.True(t, ok)
-			assert.Equal(t, "Local", spec["externalTrafficPolicy"])
+			assert.Equal(t, "Cluster", spec["externalTrafficPolicy"])
 
 			// Check Hetzner LB annotations
 			annotations, ok := service["annotations"].(helm.Values)
 			require.True(t, ok)
+			// New naming: {cluster}-ingress
 			assert.Equal(t, "test-cluster-ingress", annotations["load-balancer.hetzner.cloud/name"])
 			assert.Equal(t, "true", annotations["load-balancer.hetzner.cloud/use-private-ip"])
-			assert.Equal(t, "true", annotations["load-balancer.hetzner.cloud/uses-proxyprotocol"])
+			_, hasProxyProtocol := annotations["load-balancer.hetzner.cloud/uses-proxyprotocol"]
+			assert.False(t, hasProxyProtocol, "proxy protocol should not be set")
 
 			// Check ports configuration (no longer uses nodePort)
 			ports, ok := values["ports"].(helm.Values)
@@ -287,9 +289,9 @@ func TestBuildTraefikValuesExternalTrafficPolicy(t *testing.T) {
 		expectedPolicy string
 	}{
 		{
-			name:           "default is Local",
+			name:           "default is Cluster",
 			policy:         "",
-			expectedPolicy: "Local",
+			expectedPolicy: "Cluster",
 		},
 		{
 			name:           "explicit Local",
@@ -297,7 +299,7 @@ func TestBuildTraefikValuesExternalTrafficPolicy(t *testing.T) {
 			expectedPolicy: "Local",
 		},
 		{
-			name:           "Cluster policy",
+			name:           "explicit Cluster",
 			policy:         "Cluster",
 			expectedPolicy: "Cluster",
 		},
@@ -363,7 +365,7 @@ func TestBuildTraefikValuesIngressClass(t *testing.T) {
 }
 
 func TestBuildTraefikValuesIngressRoute(t *testing.T) {
-	// IngressRoute is always disabled since we don't install Traefik CRDs
+	// IngressRoute is always disabled - we use standard Kubernetes Ingress
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
 		Workers:     []config.WorkerNodePool{{Count: 2}},
@@ -380,97 +382,85 @@ func TestBuildTraefikValuesIngressRoute(t *testing.T) {
 	assert.Equal(t, false, dashboard["enabled"])
 }
 
-func TestBuildTraefikValuesHostNetwork(t *testing.T) {
-	boolPtr := func(b bool) *bool { return &b }
-
-	tests := []struct {
-		name                  string
-		hostNetwork           *bool
-		expectedHostNetwork   bool
-		expectedServiceType   string
-		expectedKind          string
-		expectedHasAnnotation bool
-		expectedHasHostPort   bool
-	}{
-		{
-			name:                  "hostNetwork disabled (default LoadBalancer mode)",
-			hostNetwork:           nil,
-			expectedHostNetwork:   false,
-			expectedServiceType:   "LoadBalancer",
-			expectedKind:          "Deployment",
-			expectedHasAnnotation: true,
-			expectedHasHostPort:   false,
-		},
-		{
-			name:                  "hostNetwork explicitly disabled",
-			hostNetwork:           boolPtr(false),
-			expectedHostNetwork:   false,
-			expectedServiceType:   "LoadBalancer",
-			expectedKind:          "Deployment",
-			expectedHasAnnotation: true,
-			expectedHasHostPort:   false,
-		},
-		{
-			name:                  "hostNetwork enabled (dev mode)",
-			hostNetwork:           boolPtr(true),
-			expectedHostNetwork:   true,
-			expectedServiceType:   "ClusterIP",
-			expectedKind:          "DaemonSet",
-			expectedHasAnnotation: false,
-			expectedHasHostPort:   true,
+func TestBuildTraefikValuesAlwaysLoadBalancer(t *testing.T) {
+	// Traefik always uses LoadBalancer service with Deployment, regardless of config
+	cfg := &config.Config{
+		ClusterName: "test-cluster",
+		Location:    "fsn1",
+		Workers:     []config.WorkerNodePool{{Count: 2}},
+		Addons: config.AddonsConfig{
+			Traefik: config.TraefikConfig{
+				Enabled: true,
+			},
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := &config.Config{
-				ClusterName: "test-cluster",
-				Location:    "fsn1",
-				Workers:     []config.WorkerNodePool{{Count: 2}},
-				Addons: config.AddonsConfig{
-					Traefik: config.TraefikConfig{
-						Enabled:     true,
-						HostNetwork: tt.hostNetwork,
-					},
-				},
-			}
+	values := buildTraefikValues(cfg)
 
-			values := buildTraefikValues(cfg)
+	// No hostNetwork should be set
+	_, hasHostNetwork := values["hostNetwork"]
+	assert.False(t, hasHostNetwork, "should not have hostNetwork")
 
-			// Check service type
-			service := values["service"].(helm.Values)
-			assert.Equal(t, tt.expectedServiceType, service["type"], "service type")
+	// Service should be LoadBalancer
+	service := values["service"].(helm.Values)
+	assert.Equal(t, "LoadBalancer", service["type"])
 
-			// Check deployment kind and hostNetwork
-			deployment := values["deployment"].(helm.Values)
-			assert.Equal(t, tt.expectedKind, deployment["kind"], "deployment kind")
+	// Should have LB annotations
+	_, hasAnnotations := service["annotations"]
+	assert.True(t, hasAnnotations, "should have LB annotations")
 
-			if tt.expectedHostNetwork {
-				assert.Equal(t, true, deployment["hostNetwork"], "deployment hostNetwork")
-				assert.Equal(t, "ClusterFirstWithHostNet", deployment["dnsPolicy"], "deployment dnsPolicy")
-			} else {
-				_, hasHostNetwork := deployment["hostNetwork"]
-				assert.False(t, hasHostNetwork, "should not have hostNetwork")
-			}
+	// Deployment, not DaemonSet
+	deployment := values["deployment"].(helm.Values)
+	assert.Equal(t, "Deployment", deployment["kind"])
 
-			// Check annotations
-			_, hasAnnotations := service["annotations"]
-			assert.Equal(t, tt.expectedHasAnnotation, hasAnnotations, "has LB annotations")
+	// No hostPort on ports
+	ports := values["ports"].(helm.Values)
+	webPort := ports["web"].(helm.Values)
+	_, hasHostPort := webPort["hostPort"]
+	assert.False(t, hasHostPort, "should not have hostPort")
 
-			// Check ports for hostPort
-			ports := values["ports"].(helm.Values)
-			webPort := ports["web"].(helm.Values)
-			websecurePort := ports["websecure"].(helm.Values)
+	// No proxy protocol on ports
+	_, hasProxyProtocol := webPort["proxyProtocol"]
+	assert.False(t, hasProxyProtocol, "should not have proxyProtocol on ports")
 
-			_, hasHostPort := webPort["hostPort"]
-			assert.Equal(t, tt.expectedHasHostPort, hasHostPort, "web has hostPort")
-			_, hasWebsecureHostPort := websecurePort["hostPort"]
-			assert.Equal(t, tt.expectedHasHostPort, hasWebsecureHostPort, "websecure has hostPort")
+	// TLS enabled on websecure (at ports.websecure.http.tls)
+	websecurePort := ports["websecure"].(helm.Values)
+	wsHTTP, ok := websecurePort["http"].(helm.Values)
+	require.True(t, ok, "websecure should have http config")
+	wsTLS, ok := wsHTTP["tls"].(helm.Values)
+	require.True(t, ok, "websecure.http should have tls config")
+	assert.Equal(t, true, wsTLS["enabled"], "websecure tls should be enabled")
 
-			if tt.expectedHasHostPort {
-				assert.Equal(t, 80, webPort["hostPort"], "web hostPort value")
-				assert.Equal(t, 443, websecurePort["hostPort"], "websecure hostPort value")
-			}
-		})
+	// No securityContext (no NET_BIND_SERVICE needed)
+	_, hasSecCtx := values["securityContext"]
+	assert.False(t, hasSecCtx, "should not have securityContext")
+}
+
+func TestTraefikChartRenderLoadBalancer(t *testing.T) {
+	cfg := &config.Config{
+		ClusterName: "test-cluster",
+		Location:    "fsn1",
+		Workers:     []config.WorkerNodePool{{Count: 2}},
+		Addons: config.AddonsConfig{
+			Traefik: config.TraefikConfig{
+				Enabled: true,
+			},
+		},
 	}
+
+	values := buildTraefikValues(cfg)
+
+	// Render the actual chart
+	spec := helm.GetChartSpec("traefik", config.HelmChartConfig{})
+	manifests, err := helm.RenderFromSpec(t.Context(), spec, "traefik", values)
+	require.NoError(t, err, "chart rendering should succeed")
+
+	output := string(manifests)
+	t.Logf("Rendered manifests length: %d bytes", len(output))
+
+	// Verify LoadBalancer mode
+	require.Contains(t, output, "kind: Deployment", "rendered manifest must have kind: Deployment")
+	require.Contains(t, output, "type: LoadBalancer", "rendered manifest must have LoadBalancer service")
+	require.NotContains(t, output, "hostNetwork: true", "rendered manifest must NOT have hostNetwork")
+	require.NotContains(t, output, "hostPort:", "rendered manifest must NOT have hostPort")
 }

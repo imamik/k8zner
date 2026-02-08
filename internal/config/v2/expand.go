@@ -25,13 +25,13 @@ func Expand(cfg *Config) (*config.Config, error) {
 		// Basic cluster info
 		ClusterName: cfg.Name,
 		Location:    string(cfg.Region),
+		HCloudToken: os.Getenv("HCLOUD_TOKEN"),
 
 		// Access configuration
-		ClusterAccess:             "public", // LB is public, nodes are IPv6-only
-		GracefulDestroy:           true,
-		HealthcheckEnabled:        boolPtr(true),
-		PrerequisitesCheckEnabled: boolPtr(true),
-		DeleteProtection:          false,
+		ClusterAccess:      "public", // LB is public, nodes are IPv6-only
+		GracefulDestroy:    true,
+		HealthcheckEnabled: boolPtr(true),
+		DeleteProtection:   false,
 
 		// Config output paths
 		KubeconfigPath:  "./secrets/kubeconfig",
@@ -71,42 +71,23 @@ func Expand(cfg *Config) (*config.Config, error) {
 
 func expandNetwork(cfg *Config) config.NetworkConfig {
 	return config.NetworkConfig{
-		IPv4CIDR:        NetworkCIDR,
-		NodeIPv4CIDR:    NodeCIDR,
-		ServiceIPv4CIDR: ServiceCIDR,
-		PodIPv4CIDR:     PodCIDR,
-		Zone:            NetworkZone(cfg.Region),
+		IPv4CIDR:           NetworkCIDR,
+		NodeIPv4CIDR:       NodeCIDR,
+		ServiceIPv4CIDR:    ServiceCIDR,
+		PodIPv4CIDR:        PodCIDR,
+		Zone:               NetworkZone(cfg.Region),
+		NodeIPv4SubnetMask: 25, // /25 subnets for each role (126 IPs per subnet)
 	}
 }
 
 func expandFirewall(cfg *Config) config.FirewallConfig {
-	fwConfig := config.FirewallConfig{
+	return config.FirewallConfig{
 		// Auto-detect current IP for API access
 		UseCurrentIPv4: boolPtr(true),
 		UseCurrentIPv6: boolPtr(true),
+		// No ExtraRules needed: Traefik uses LoadBalancer service,
+		// so the Hetzner LB handles ingress traffic (not node ports 80/443).
 	}
-
-	// Add HTTP/HTTPS rules for hostNetwork mode
-	// In hostNetwork mode, Traefik binds directly to ports 80/443 on worker nodes,
-	// so the firewall must allow incoming traffic on these ports from anywhere.
-	fwConfig.ExtraRules = []config.FirewallRule{
-		{
-			Description: "Allow HTTP traffic for ingress (hostNetwork mode)",
-			Direction:   "in",
-			Protocol:    "tcp",
-			Port:        "80",
-			SourceIPs:   []string{"0.0.0.0/0", "::/0"},
-		},
-		{
-			Description: "Allow HTTPS traffic for ingress (hostNetwork mode)",
-			Direction:   "in",
-			Protocol:    "tcp",
-			Port:        "443",
-			SourceIPs:   []string{"0.0.0.0/0", "::/0"},
-		},
-	}
-
-	return fwConfig
 }
 
 func expandControlPlane(cfg *Config) config.ControlPlaneConfig {
@@ -117,15 +98,13 @@ func expandControlPlane(cfg *Config) config.ControlPlaneConfig {
 			{
 				Name:       "control-plane",
 				Location:   string(cfg.Region),
-				ServerType: ControlPlaneServerType,
+				ServerType: string(cfg.ControlPlaneSize()), // Use configured or default size
 				Count:      cpCount,
 				Labels: map[string]string{
 					"node.kubernetes.io/role": "control-plane",
 				},
 			},
 		},
-		// Enable public VIP for HA clusters
-		PublicVIPIPv4Enabled: cfg.Mode == ModeHA,
 	}
 }
 
@@ -145,13 +124,10 @@ func expandWorkers(cfg *Config) []config.WorkerNodePool {
 }
 
 func expandIngress(cfg *Config) config.IngressConfig {
-	// Dev mode: No separate ingress LB - Traefik uses hostNetwork on workers
-	// HA mode: Dedicated ingress LB for high availability
+	// Ingress LB is not pre-provisioned; Traefik's LoadBalancer Service
+	// creates a Hetzner LB automatically via CCM annotations.
 	return config.IngressConfig{
-		Enabled:          cfg.Mode == ModeHA,
-		LoadBalancerType: LoadBalancerType,
-		PublicNetwork:    true,
-		Algorithm:        "round_robin",
+		Enabled: false,
 	}
 }
 
@@ -211,23 +187,25 @@ func expandAddons(cfg *Config, vm VersionMatrix) config.AddonsConfig {
 		},
 
 		// Cilium CNI - always enabled with kube-proxy replacement
+		// Tunnel mode avoids direct routing device detection issues on Hetzner Cloud
+		// where multiple interfaces (eth0=public, eth1=private) confuse Cilium's
+		// native routing. kube-proxy replacement still works in tunnel mode.
 		Cilium: config.CiliumConfig{
 			Enabled:                     true,
 			KubeProxyReplacementEnabled: true,
-			RoutingMode:                 "native",
+			RoutingMode:                 "tunnel",
 			HubbleEnabled:               true,
 			HubbleRelayEnabled:          true,
 			HubbleUIEnabled:             true,
 		},
 
 		// Traefik ingress - always enabled (replaces ingress-nginx)
-		// Uses DaemonSet with hostNetwork to bind directly to host ports 80/443.
-		// Infrastructure LBs route traffic to Traefik via the private network.
+		// Uses Deployment with LoadBalancer service; CCM creates a Hetzner LB
+		// automatically via annotations. No hostNetwork needed.
 		Traefik: config.TraefikConfig{
 			Enabled:               true,
-			Kind:                  "DaemonSet",
-			HostNetwork:           boolPtr(true),
-			ExternalTrafficPolicy: "Local",
+			Kind:                  "Deployment",
+			ExternalTrafficPolicy: "Cluster",
 			IngressClass:          "traefik",
 		},
 
@@ -263,6 +241,9 @@ func expandAddons(cfg *Config, vm VersionMatrix) config.AddonsConfig {
 		PrometheusOperatorCRDs: config.PrometheusOperatorCRDsConfig{
 			Enabled: true,
 		},
+
+		// Kube Prometheus Stack - enabled only when monitoring is set
+		KubePrometheusStack: expandKubePrometheusStack(cfg),
 
 		// Talos CCM - always enabled
 		TalosCCM: config.TalosCCMConfig{
@@ -325,4 +306,32 @@ func expandArgoCD(cfg *Config) config.ArgoCDConfig {
 	}
 
 	return argoCfg
+}
+
+func expandKubePrometheusStack(cfg *Config) config.KubePrometheusStackConfig {
+	if !cfg.HasMonitoring() {
+		return config.KubePrometheusStackConfig{Enabled: false}
+	}
+
+	promCfg := config.KubePrometheusStackConfig{
+		Enabled: true,
+		Grafana: config.KubePrometheusGrafanaConfig{},
+		Prometheus: config.KubePrometheusPrometheusConfig{
+			Persistence: config.KubePrometheusPersistenceConfig{
+				Enabled: true,
+				Size:    "50Gi",
+			},
+		},
+		Alertmanager: config.KubePrometheusAlertmanagerConfig{},
+	}
+
+	// Enable Grafana ingress with TLS when domain is configured
+	if cfg.HasDomain() {
+		promCfg.Grafana.IngressEnabled = true
+		promCfg.Grafana.IngressHost = cfg.GrafanaHost()
+		promCfg.Grafana.IngressClassName = "traefik"
+		promCfg.Grafana.IngressTLS = true
+	}
+
+	return promCfg
 }

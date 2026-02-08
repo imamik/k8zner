@@ -130,6 +130,25 @@ func TestBuildCiliumValues(t *testing.T) {
 				assert.True(t, bpf["hostLegacyRouting"].(bool))
 			}
 
+			// Check devices - must include all PCI ethernet interfaces for LB health checks
+			// Talos uses predictable PCI names (enp1s0, enp7s0), not eth0/eth1
+			assert.Equal(t, "enp+", values["devices"])
+
+			// Check autoDirectNodeRoutes - must be true for native routing
+			if tt.expectedRoutingMode == "native" {
+				assert.True(t, values["autoDirectNodeRoutes"].(bool))
+			} else {
+				assert.False(t, values["autoDirectNodeRoutes"].(bool))
+			}
+
+			// Verify nodePort.directRoutingDevice is always set to enp1s0
+			// kube-proxy replacement requires this even in tunnel mode
+			// Talos on Hetzner uses enp1s0 as the first PCI device (default route)
+			np, ok := values["nodePort"]
+			assert.True(t, ok, "nodePort values should be set")
+			npValues := np.(helm.Values)
+			assert.Equal(t, "enp1s0", npValues["directRoutingDevice"], "directRoutingDevice should be enp1s0 (default route device on Talos)")
+
 			// Check K8s service settings
 			assert.Equal(t, "127.0.0.1", values["k8sServiceHost"])
 			assert.Equal(t, 7445, values["k8sServicePort"])

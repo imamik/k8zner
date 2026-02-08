@@ -82,6 +82,60 @@ func TestTalosCCMConfig(t *testing.T) {
 	})
 }
 
+func TestTalosCCMHostNetworkPatching(t *testing.T) {
+	// Talos CCM runs with hostNetwork on control plane nodes.
+	// When kube-proxy is disabled, API access requires direct env vars.
+	// This tests the patchHostNetworkAPIAccess function.
+	daemonSetManifest := `apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: talos-cloud-controller-manager
+  namespace: kube-system
+spec:
+  template:
+    spec:
+      hostNetwork: true
+      containers:
+      - name: talos-cloud-controller-manager
+        image: ghcr.io/siderolabs/talos-cloud-controller-manager:v1.11.0
+`
+
+	patched, err := patchHostNetworkAPIAccess([]byte(daemonSetManifest), "talos-cloud-controller-manager")
+	assert.NoError(t, err)
+
+	// Verify env vars were injected
+	patchedStr := string(patched)
+	assert.Contains(t, patchedStr, "KUBERNETES_SERVICE_HOST")
+	assert.Contains(t, patchedStr, "KUBERNETES_SERVICE_PORT")
+}
+
+func TestTalosCCMVersionFormats(t *testing.T) {
+	// Verify URL format for different version string patterns
+	tests := []struct {
+		version string
+	}{
+		{"v1.11.0"},
+		{"v1.10.0"},
+		{"v2.0.0-alpha.1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.version, func(t *testing.T) {
+			cfg := &config.Config{
+				Addons: config.AddonsConfig{
+					TalosCCM: config.TalosCCMConfig{
+						Enabled: true,
+						Version: tt.version,
+					},
+				},
+			}
+			url := buildTalosCCMURL(cfg)
+			assert.Contains(t, url, tt.version)
+			assert.Contains(t, url, "siderolabs/talos-cloud-controller-manager")
+		})
+	}
+}
+
 // buildTalosCCMURL builds the manifest URL for testing purposes.
 // This mirrors the logic in applyTalosCCM.
 func buildTalosCCMURL(cfg *config.Config) string {
