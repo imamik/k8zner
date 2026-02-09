@@ -17,8 +17,6 @@ import (
 const defaultStagingEmail = "staging@k8zner.local"
 
 // applyCertManagerCloudflare creates ClusterIssuers for Let's Encrypt with Cloudflare DNS01 solver.
-// This is applied after cert-manager is installed and Cloudflare secrets are created.
-// If no email is provided, only staging ClusterIssuer is created with a placeholder email.
 func applyCertManagerCloudflare(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	cfCfg := cfg.Addons.CertManager.Cloudflare
 
@@ -62,8 +60,7 @@ func applyCertManagerCloudflare(ctx context.Context, client k8sclient.Client, cf
 	return nil
 }
 
-// applyClusterIssuerWithRetry applies a ClusterIssuer manifest with retry logic.
-// This handles transient webhook failures that can occur right after cert-manager is installed.
+// applyClusterIssuerWithRetry applies a ClusterIssuer manifest with retry for transient webhook failures.
 func applyClusterIssuerWithRetry(ctx context.Context, client k8sclient.Client, name string, manifest []byte) error {
 	maxRetries := 6
 	retryInterval := 10 * time.Second
@@ -100,12 +97,8 @@ func applyClusterIssuerWithRetry(ctx context.Context, client k8sclient.Client, n
 	return fmt.Errorf("failed after %d attempts: %w", maxRetries, lastErr)
 }
 
-// waitForCertManagerCRDs waits for cert-manager CRDs to be available, the webhook to be ready,
-// and refreshes the client's REST mapper.
-// This is necessary because:
-// 1. Helm chart applies CRDs asynchronously - they may not be immediately available
-// 2. The cert-manager webhook validates ClusterIssuer resources and must be running
-// 3. Even after the webhook endpoint exists, it may need a few seconds to be ready
+// waitForCertManagerCRDs waits for cert-manager CRDs and webhook to be ready.
+// Helm applies CRDs asynchronously and the webhook needs time to initialize.
 func waitForCertManagerCRDs(ctx context.Context, client k8sclient.Client) error {
 	timeout := 3 * time.Minute
 	interval := 5 * time.Second

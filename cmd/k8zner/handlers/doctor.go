@@ -56,7 +56,7 @@ type AddonHealth struct {
 func Doctor(ctx context.Context, configPath string, watch, jsonOutput bool) error {
 	cfg, err := loadConfig(configPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load config: %w", err)
 	}
 
 	// Pre-cluster mode: no kubeconfig

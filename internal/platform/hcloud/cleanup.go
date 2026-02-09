@@ -15,6 +15,7 @@ type CleanupError struct {
 	Errors []error
 }
 
+// Error returns a summary of all cleanup errors.
 func (e *CleanupError) Error() string {
 	if len(e.Errors) == 1 {
 		return e.Errors[0].Error()
@@ -22,6 +23,7 @@ func (e *CleanupError) Error() string {
 	return fmt.Sprintf("cleanup encountered %d errors: %v", len(e.Errors), e.Errors)
 }
 
+// Unwrap returns the underlying errors for errors.Is/As support.
 func (e *CleanupError) Unwrap() error {
 	if len(e.Errors) == 1 {
 		return e.Errors[0]
@@ -29,12 +31,14 @@ func (e *CleanupError) Unwrap() error {
 	return errors.Join(e.Errors...)
 }
 
+// Add appends a non-nil error to the collection.
 func (e *CleanupError) Add(err error) {
 	if err != nil {
 		e.Errors = append(e.Errors, err)
 	}
 }
 
+// HasErrors reports whether any errors were collected.
 func (e *CleanupError) HasErrors() bool {
 	return len(e.Errors) > 0
 }

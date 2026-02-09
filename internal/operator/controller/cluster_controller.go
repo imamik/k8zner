@@ -737,18 +737,22 @@ func (r *ClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // nodeEventHandler handles node events and triggers reconciliation.
 type nodeEventHandler struct{}
 
+// Create enqueues the cluster for reconciliation on node creation.
 func (h *nodeEventHandler) Create(ctx context.Context, e event.CreateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	h.enqueueCluster(ctx, q)
 }
 
+// Update enqueues the cluster for reconciliation on node update.
 func (h *nodeEventHandler) Update(ctx context.Context, e event.UpdateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	h.enqueueCluster(ctx, q)
 }
 
+// Delete enqueues the cluster for reconciliation on node deletion.
 func (h *nodeEventHandler) Delete(ctx context.Context, e event.DeleteEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	h.enqueueCluster(ctx, q)
 }
 
+// Generic enqueues the cluster for reconciliation on generic events.
 func (h *nodeEventHandler) Generic(ctx context.Context, e event.GenericEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	h.enqueueCluster(ctx, q)
 }

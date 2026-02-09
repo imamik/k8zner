@@ -10,13 +10,7 @@ import (
 	sigsyaml "sigs.k8s.io/yaml"
 )
 
-// patchDeploymentDNSPolicy modifies rendered Helm YAML to set dnsPolicy on
-// a specific Deployment. This is a post-render patch for charts that don't
-// expose dnsPolicy as a configurable value.
-//
-// It splits multi-doc YAML into individual documents, finds the Deployment
-// matching deploymentName, sets spec.template.spec.dnsPolicy, and
-// re-serializes all docs back to multi-doc YAML.
+// patchDeploymentDNSPolicy sets dnsPolicy on a named Deployment in rendered Helm YAML.
 func patchDeploymentDNSPolicy(manifests []byte, deploymentName, dnsPolicy string) ([]byte, error) {
 	decoder := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(manifests), 4096)
 
@@ -68,11 +62,7 @@ func patchDeploymentDNSPolicy(manifests []byte, deploymentName, dnsPolicy string
 	return buf.Bytes(), nil
 }
 
-// patchHostNetworkAPIAccess injects KUBERNETES_SERVICE_HOST=localhost and
-// KUBERNETES_SERVICE_PORT=6443 env vars into all containers of a named
-// DaemonSet or Deployment. This is required for pods that run with
-// hostNetwork:true when kube-proxy is disabled (Cilium replaces it),
-// because the Kubernetes service IP is not routable without kube-proxy/Cilium.
+// patchHostNetworkAPIAccess injects Kubernetes API env vars into containers for hostNetwork pods.
 func patchHostNetworkAPIAccess(manifests []byte, resourceName string) ([]byte, error) {
 	decoder := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(manifests), 4096)
 

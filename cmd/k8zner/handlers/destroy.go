@@ -30,7 +30,7 @@ const (
 func Destroy(ctx context.Context, configPath string) error {
 	cfg, err := loadConfig(configPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load config: %w", err)
 	}
 
 	log.Printf("Destroying cluster: %s", cfg.ClusterName)
