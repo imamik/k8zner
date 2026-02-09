@@ -10,7 +10,7 @@ require (
 	github.com/aws/smithy-go v1.24.0
 	github.com/charmbracelet/huh v0.8.0
 	github.com/hetznercloud/hcloud-go/v2 v2.36.0
-	github.com/siderolabs/talos/pkg/machinery v1.12.2
+	github.com/siderolabs/talos/pkg/machinery v1.12.3
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.47.0
