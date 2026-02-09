@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/imamik/k8zner/internal/addons/helm"
 	"github.com/imamik/k8zner/internal/addons/k8sclient"
@@ -146,6 +147,8 @@ func buildOperatorValues(cfg *config.Config) helm.Values {
 	if envVersion := os.Getenv("K8ZNER_OPERATOR_VERSION"); envVersion != "" {
 		version = envVersion
 	}
+	// Docker image tags don't support slashes; sanitize branch names like "refactor/foo"
+	version = strings.ReplaceAll(version, "/", "-")
 
 	// With hostNetwork, each replica needs exclusive host ports (8080/8081),
 	// so we can't run more replicas than available control plane nodes.

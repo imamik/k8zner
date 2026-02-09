@@ -129,6 +129,30 @@ func TestBuildOperatorValues(t *testing.T) {
 		assert.Equal(t, "test-branch", image["tag"])
 	})
 
+	t.Run("env var with slashes is sanitized", func(t *testing.T) {
+		t.Setenv("K8ZNER_OPERATOR_VERSION", "refactor/k8s-operator-v3")
+
+		cfg := &config.Config{
+			HCloudToken: "test-token",
+			ControlPlane: config.ControlPlaneConfig{
+				NodePools: []config.ControlPlaneNodePool{
+					{Count: 1},
+				},
+			},
+			Addons: config.AddonsConfig{
+				Operator: config.OperatorConfig{
+					Enabled: true,
+					Version: "v1.0.0",
+				},
+			},
+		}
+
+		values := buildOperatorValues(cfg)
+		image, ok := values["image"].(helm.Values)
+		require.True(t, ok)
+		assert.Equal(t, "refactor-k8s-operator-v3", image["tag"])
+	})
+
 	t.Run("hostNetwork mode", func(t *testing.T) {
 		cfg := &config.Config{
 			HCloudToken: "test-token",
