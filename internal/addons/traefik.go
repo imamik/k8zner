@@ -92,16 +92,14 @@ func buildTraefikValues(cfg *config.Config) helm.Values {
 		"providers":    buildTraefikProviders(),
 		"ports":        buildTraefikPorts(),
 		"service":      buildTraefikService(cfg.ClusterName, externalTrafficPolicy, location),
-		// Add tolerations for CCM uninitialized taint
-		// This allows Traefik to schedule before CCM has fully initialized nodes
-		"tolerations": []helm.Values{
-			{
-				"key":      "node.cloudprovider.kubernetes.io/uninitialized",
-				"operator": "Exists",
-			},
-		},
-		// Topology spread constraints for HA
-		"topologySpreadConstraints": buildTraefikTopologySpread(workerCount),
+		"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
+		"topologySpreadConstraints": func() []helm.Values {
+			hostnamePolicy := "ScheduleAnyway"
+			if workerCount > 1 {
+				hostnamePolicy = "DoNotSchedule"
+			}
+			return helm.TopologySpread("traefik", "traefik", hostnamePolicy)
+		}(),
 	}
 
 	// Merge custom Helm values from config
@@ -212,49 +210,11 @@ func buildTraefikService(clusterName, externalTrafficPolicy, location string) he
 	}
 }
 
-// buildTraefikTopologySpread creates topology spread constraints for Traefik.
-// Two constraints: hostname (strict if multiple workers) and zone (soft).
-func buildTraefikTopologySpread(workerCount int) []helm.Values {
-	// Determine whenUnsatisfiable for hostname constraint
-	hostnameUnsatisfiable := "ScheduleAnyway"
-	if workerCount > 1 {
-		hostnameUnsatisfiable = "DoNotSchedule"
-	}
-
-	labelSelector := helm.Values{
-		"matchLabels": helm.Values{
-			"app.kubernetes.io/instance": "traefik",
-			"app.kubernetes.io/name":     "traefik",
-		},
-	}
-
-	return []helm.Values{
-		{
-			"topologyKey":       "kubernetes.io/hostname",
-			"maxSkew":           1,
-			"whenUnsatisfiable": hostnameUnsatisfiable,
-			"labelSelector":     labelSelector,
-			"matchLabelKeys":    []string{"pod-template-hash"},
-		},
-		{
-			"topologyKey":       "topology.kubernetes.io/zone",
-			"maxSkew":           1,
-			"whenUnsatisfiable": "ScheduleAnyway",
-			"labelSelector":     labelSelector,
-			"matchLabelKeys":    []string{"pod-template-hash"},
-		},
-	}
-}
-
 // createTraefikNamespace returns the traefik namespace manifest.
 func createTraefikNamespace() string {
-	return `apiVersion: v1
-kind: Namespace
-metadata:
-  name: traefik
-  labels:
-    pod-security.kubernetes.io/enforce: baseline
-    pod-security.kubernetes.io/audit: baseline
-    pod-security.kubernetes.io/warn: baseline
-`
+	return helm.NamespaceManifest("traefik", map[string]string{
+		"pod-security.kubernetes.io/enforce": "baseline",
+		"pod-security.kubernetes.io/audit":   "baseline",
+		"pod-security.kubernetes.io/warn":    "baseline",
+	})
 }

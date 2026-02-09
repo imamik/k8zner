@@ -79,15 +79,8 @@ func buildPrometheusValues(cfg *config.Config) helm.Values {
 		"prometheusSpec": helm.Values{
 			// Retention period
 			"retention": fmt.Sprintf("%dd", getIntWithDefault(promCfg.RetentionDays, 15)),
-			// Add tolerations for CCM uninitialized taint
-			"tolerations": []helm.Values{
-				{
-					"key":      "node.cloudprovider.kubernetes.io/uninitialized",
-					"operator": "Exists",
-				},
-			},
-			// Resource defaults
-			"resources": buildResourceValues(promCfg.Resources, "500m", "512Mi", "2", "2Gi"),
+			"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
+			"resources":   buildResourceValues(promCfg.Resources, "500m", "512Mi", "2", "2Gi"),
 			// Service monitor selector - scrape all ServiceMonitors
 			"serviceMonitorSelectorNilUsesHelmValues": false,
 			"podMonitorSelectorNilUsesHelmValues":     false,
@@ -173,14 +166,7 @@ func buildGrafanaValues(cfg *config.Config) helm.Values {
 		"testFramework": helm.Values{
 			"enabled": false,
 		},
-		// Add tolerations for CCM uninitialized taint
-		"tolerations": []helm.Values{
-			{
-				"key":      "node.cloudprovider.kubernetes.io/uninitialized",
-				"operator": "Exists",
-			},
-		},
-		// Resource defaults
+		"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
 		"resources": helm.Values{
 			"requests": helm.Values{
 				"cpu":    "100m",
@@ -266,13 +252,7 @@ func buildAlertmanagerValues(cfg *config.Config) helm.Values {
 	values := helm.Values{
 		"enabled": getBoolWithDefault(alertCfg.Enabled, true),
 		"alertmanagerSpec": helm.Values{
-			// Add tolerations for CCM uninitialized taint
-			"tolerations": []helm.Values{
-				{
-					"key":      "node.cloudprovider.kubernetes.io/uninitialized",
-					"operator": "Exists",
-				},
-			},
+			"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
 			// Resource defaults
 			"resources": helm.Values{
 				"requests": helm.Values{
@@ -333,14 +313,7 @@ func buildAlertmanagerIngress(cfg *config.Config) helm.Values {
 // buildPrometheusOperatorValues creates the Prometheus Operator configuration.
 func buildPrometheusOperatorValues() helm.Values {
 	return helm.Values{
-		// Add tolerations for CCM uninitialized taint
-		"tolerations": []helm.Values{
-			{
-				"key":      "node.cloudprovider.kubernetes.io/uninitialized",
-				"operator": "Exists",
-			},
-		},
-		// Resource defaults
+		"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
 		"resources": helm.Values{
 			"requests": helm.Values{
 				"cpu":    "100m",
@@ -411,13 +384,7 @@ func buildResourceValues(resources config.KubePrometheusResourcesConfig, default
 
 // createMonitoringNamespace returns the monitoring namespace manifest.
 func createMonitoringNamespace() string {
-	return `apiVersion: v1
-kind: Namespace
-metadata:
-  name: monitoring
-  labels:
-    name: monitoring
-`
+	return helm.NamespaceManifest("monitoring", map[string]string{"name": "monitoring"})
 }
 
 // Helper functions

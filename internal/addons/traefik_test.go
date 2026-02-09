@@ -155,27 +155,27 @@ func TestBuildTraefikValues(t *testing.T) {
 	}
 }
 
-func TestBuildTraefikTopologySpread(t *testing.T) {
+func TestTopologySpread(t *testing.T) {
 	tests := []struct {
 		name                          string
-		workerCount                   int
+		hostnamePolicy                string
 		expectedHostnameUnsatisfiable string
 	}{
 		{
-			name:                          "single worker - soft constraint",
-			workerCount:                   1,
+			name:                          "soft constraint",
+			hostnamePolicy:                "ScheduleAnyway",
 			expectedHostnameUnsatisfiable: "ScheduleAnyway",
 		},
 		{
-			name:                          "multiple workers - hard constraint",
-			workerCount:                   3,
+			name:                          "hard constraint",
+			hostnamePolicy:                "DoNotSchedule",
 			expectedHostnameUnsatisfiable: "DoNotSchedule",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			constraints := buildTraefikTopologySpread(tt.workerCount)
+			constraints := helm.TopologySpread("traefik", "traefik", tt.hostnamePolicy)
 
 			assert.Len(t, constraints, 2)
 			assert.Equal(t, tt.expectedHostnameUnsatisfiable, constraints[0]["whenUnsatisfiable"])

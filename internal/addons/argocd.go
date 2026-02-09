@@ -136,15 +136,8 @@ func buildArgoCDController(cfg config.ArgoCDConfig) helm.Values {
 	}
 
 	return helm.Values{
-		"replicas": replicas,
-		// Add tolerations for CCM uninitialized taint
-		"tolerations": []helm.Values{
-			{
-				"key":      "node.cloudprovider.kubernetes.io/uninitialized",
-				"operator": "Exists",
-			},
-		},
-		// Resource defaults for production
+		"replicas":    replicas,
+		"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
 		"resources": helm.Values{
 			"requests": helm.Values{
 				"cpu":    "100m",
@@ -169,15 +162,8 @@ func buildArgoCDServer(cfg *config.Config) helm.Values {
 	}
 
 	server := helm.Values{
-		"replicas": replicas,
-		// Add tolerations for CCM uninitialized taint
-		"tolerations": []helm.Values{
-			{
-				"key":      "node.cloudprovider.kubernetes.io/uninitialized",
-				"operator": "Exists",
-			},
-		},
-		// Resource defaults for production
+		"replicas":    replicas,
+		"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
 		"resources": helm.Values{
 			"requests": helm.Values{
 				"cpu":    "50m",
@@ -208,15 +194,8 @@ func buildArgoCDRepoServer(cfg config.ArgoCDConfig) helm.Values {
 	}
 
 	return helm.Values{
-		"replicas": replicas,
-		// Add tolerations for CCM uninitialized taint
-		"tolerations": []helm.Values{
-			{
-				"key":      "node.cloudprovider.kubernetes.io/uninitialized",
-				"operator": "Exists",
-			},
-		},
-		// Resource defaults for production
+		"replicas":    replicas,
+		"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
 		"resources": helm.Values{
 			"requests": helm.Values{
 				"cpu":    "50m",
@@ -239,15 +218,8 @@ func buildArgoCDRedis(cfg config.ArgoCDConfig) helm.Values {
 	}
 
 	return helm.Values{
-		"enabled": true,
-		// Add tolerations for CCM uninitialized taint
-		"tolerations": []helm.Values{
-			{
-				"key":      "node.cloudprovider.kubernetes.io/uninitialized",
-				"operator": "Exists",
-			},
-		},
-		// Resource defaults
+		"enabled":     true,
+		"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
 		"resources": helm.Values{
 			"requests": helm.Values{
 				"cpu":    "50m",
@@ -279,29 +251,7 @@ func buildArgoCDIngress(cfg *config.Config) helm.Values {
 	// from the hostname automatically (argocd-server-tls)
 	if argoCDCfg.IngressTLS {
 		ingress["tls"] = true
-
-		// Build annotations for TLS and DNS
-		annotations := helm.Values{}
-
-		// Determine which ClusterIssuer to use based on cert-manager Cloudflare config
-		clusterIssuer := "letsencrypt-prod" // Default fallback
-		if cfg.Addons.CertManager.Cloudflare.Enabled {
-			if cfg.Addons.CertManager.Cloudflare.Production {
-				clusterIssuer = "letsencrypt-cloudflare-production"
-			} else {
-				clusterIssuer = "letsencrypt-cloudflare-staging"
-			}
-		}
-		annotations["cert-manager.io/cluster-issuer"] = clusterIssuer
-
-		// Add external-dns hostname annotation if Cloudflare/external-dns is enabled.
-		// external-dns auto-discovers the target IP from the Ingress status
-		// (set by Traefik's LoadBalancer service).
-		if cfg.Addons.Cloudflare.Enabled && cfg.Addons.ExternalDNS.Enabled {
-			annotations["external-dns.alpha.kubernetes.io/hostname"] = argoCDCfg.IngressHost
-		}
-
-		ingress["annotations"] = annotations
+		ingress["annotations"] = buildIngressAnnotations(cfg, argoCDCfg.IngressHost)
 	}
 
 	return ingress
@@ -309,11 +259,5 @@ func buildArgoCDIngress(cfg *config.Config) helm.Values {
 
 // createArgoCDNamespace returns the argocd namespace manifest.
 func createArgoCDNamespace() string {
-	return `apiVersion: v1
-kind: Namespace
-metadata:
-  name: argocd
-  labels:
-    name: argocd
-`
+	return helm.NamespaceManifest("argocd", map[string]string{"name": "argocd"})
 }

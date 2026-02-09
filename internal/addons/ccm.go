@@ -46,31 +46,8 @@ func buildCCMValues(cfg *config.Config, _ int64) helm.Values {
 	// Base configuration
 	values := helm.Values{
 		"kind": "DaemonSet",
-		"nodeSelector": helm.Values{
-			"node-role.kubernetes.io/control-plane": "",
-		},
-		// Critical: CCM must tolerate control-plane and uninitialized taints.
-		// Without these tolerations, CCM cannot schedule on control plane nodes,
-		// creating a chicken-egg problem where CCM can't run to remove the
-		// uninitialized taint because it doesn't tolerate that taint.
-		// See: https://kubernetes.io/blog/2025/02/14/cloud-controller-manager-chicken-egg-problem/
-		"tolerations": []helm.Values{
-			{
-				"key":      "node-role.kubernetes.io/control-plane",
-				"effect":   "NoSchedule",
-				"operator": "Exists",
-			},
-			{
-				"key":    "node.cloudprovider.kubernetes.io/uninitialized",
-				"value":  "true",
-				"effect": "NoSchedule",
-			},
-			{
-				// Tolerate not-ready nodes to ensure CCM can start during bootstrap
-				"key":      "node.kubernetes.io/not-ready",
-				"operator": "Exists",
-			},
-		},
+		"nodeSelector": helm.ControlPlaneNodeSelector(),
+		"tolerations":  helm.BootstrapTolerations(),
 		"networking": helm.Values{
 			"enabled":     true,
 			"clusterCIDR": getClusterCIDR(cfg),

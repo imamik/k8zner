@@ -115,30 +115,8 @@ func buildCSIValues(cfg *config.Config) helm.Values {
 					"matchLabelKeys": []string{"pod-template-hash"},
 				},
 			},
-			"nodeSelector": helm.Values{
-				"node-role.kubernetes.io/control-plane": "",
-			},
-			// Critical: CSI must tolerate control-plane, uninitialized, and not-ready taints.
-			// Without these tolerations, CSI cannot schedule on control plane nodes during
-			// bootstrap, creating a chicken-egg problem similar to the CCM issue.
-			// See: https://kubernetes.io/blog/2025/02/14/cloud-controller-manager-chicken-egg-problem/
-			"tolerations": []helm.Values{
-				{
-					"key":      "node-role.kubernetes.io/control-plane",
-					"effect":   "NoSchedule",
-					"operator": "Exists",
-				},
-				{
-					"key":    "node.cloudprovider.kubernetes.io/uninitialized",
-					"value":  "true",
-					"effect": "NoSchedule",
-				},
-				{
-					// Tolerate not-ready nodes to ensure CSI can start during bootstrap
-					"key":      "node.kubernetes.io/not-ready",
-					"operator": "Exists",
-				},
-			},
+			"nodeSelector": helm.ControlPlaneNodeSelector(),
+			"tolerations":  helm.BootstrapTolerations(),
 		},
 		"storageClasses": storageClasses,
 	}

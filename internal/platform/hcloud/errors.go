@@ -49,13 +49,3 @@ func isHCloudErrorCode(err error, codes ...hcloud.ErrorCode) bool {
 func IsNotFound(err error) bool {
 	return isHCloudErrorCode(err, hcloud.ErrorCodeNotFound)
 }
-
-// IsConflict checks if an error indicates a conflict occurred.
-func IsConflict(err error) bool {
-	return isHCloudErrorCode(err, hcloud.ErrorCodeConflict)
-}
-
-// IsRateLimited checks if an error indicates rate limiting.
-func IsRateLimited(err error) bool {
-	return isHCloudErrorCode(err, hcloud.ErrorCodeRateLimitExceeded)
-}
