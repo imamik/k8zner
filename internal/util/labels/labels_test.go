@@ -397,11 +397,3 @@ func TestSelectorForClusterRole(t *testing.T) {
 		t.Errorf("SelectorForClusterRole() = %q, want %q", selector, expected)
 	}
 }
-
-func TestLegacySelectorForCluster(t *testing.T) {
-	selector := LegacySelectorForCluster("my-cluster")
-	expected := "cluster=my-cluster"
-	if selector != expected {
-		t.Errorf("LegacySelectorForCluster() = %q, want %q", selector, expected)
-	}
-}

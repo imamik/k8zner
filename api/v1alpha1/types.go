@@ -612,8 +612,6 @@ const (
 	ConditionControlPlaneReady = "ControlPlaneReady"
 	// ConditionWorkersReady indicates all workers are healthy
 	ConditionWorkersReady = "WorkersReady"
-	// ConditionEtcdHealthy indicates etcd cluster is healthy
-	ConditionEtcdHealthy = "EtcdHealthy"
 	// ConditionAddonsHealthy indicates all addons are healthy
 	ConditionAddonsHealthy = "AddonsHealthy"
 	// ConditionInfrastructureReady indicates infrastructure is provisioned

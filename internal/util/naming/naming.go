@@ -127,13 +127,6 @@ func WorkerWithID(cluster, id string) string {
 	return fmt.Sprintf("%s-%s-%s", cluster, RoleWorker, id)
 }
 
-// Server returns the name for a server (deprecated, use ControlPlane or Worker).
-// Kept for backward compatibility during migration.
-// Format: {cluster}-{poolName}-{index}
-func Server(cluster, poolName string, index int) string {
-	return fmt.Sprintf("%s-%s-%d", cluster, poolName, index)
-}
-
 // StateMarker returns the name for the cluster state marker.
 // Format: {cluster}-state
 func StateMarker(cluster string) string {

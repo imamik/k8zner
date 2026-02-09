@@ -152,8 +152,3 @@ func SelectorForCluster(clusterName string) string {
 func SelectorForClusterRole(clusterName, role string) string {
 	return KeyCluster + "=" + clusterName + "," + KeyRole + "=" + role
 }
-
-// LegacySelectorForCluster returns a legacy label selector (for migration).
-func LegacySelectorForCluster(clusterName string) string {
-	return LegacyKeyCluster + "=" + clusterName
-}

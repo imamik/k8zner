@@ -74,15 +74,6 @@ type EtcdMember struct {
 	IsLeader bool
 }
 
-// NodeReplacer handles the logic for replacing nodes.
-type NodeReplacer interface {
-	// ReplaceControlPlane replaces an unhealthy control plane node.
-	ReplaceControlPlane(ctx context.Context, cluster *ClusterState, node *NodeInfo) error
-
-	// ReplaceWorker replaces an unhealthy worker node.
-	ReplaceWorker(ctx context.Context, cluster *ClusterState, node *NodeInfo) error
-}
-
 // ClusterState holds the current state of a cluster for node operations.
 type ClusterState struct {
 	Name           string
@@ -92,41 +83,4 @@ type ClusterState struct {
 	SANs           []string
 	SSHKeyIDs      []string
 	Labels         map[string]string
-}
-
-// NodeInfo holds information about a node to be replaced.
-type NodeInfo struct {
-	Name       string
-	ServerID   int64
-	PrivateIP  string
-	Role       string // "control-plane" or "worker"
-	Pool       string
-	ServerType string
-}
-
-// HealthChecker checks the health of cluster components.
-type HealthChecker interface {
-	// CheckNodeHealth returns the health status of a Kubernetes node.
-	CheckNodeHealth(ctx context.Context, nodeName string) (*NodeHealth, error)
-
-	// CheckEtcdHealth returns the health status of the etcd cluster.
-	CheckEtcdHealth(ctx context.Context, controlPlaneIP string) (*EtcdHealth, error)
-}
-
-// NodeHealth represents the health status of a node.
-type NodeHealth struct {
-	Ready            bool
-	MemoryPressure   bool
-	DiskPressure     bool
-	PIDPressure      bool
-	NetworkAvailable bool
-	Reason           string
-}
-
-// EtcdHealth represents the health status of the etcd cluster.
-type EtcdHealth struct {
-	Healthy     bool
-	MemberCount int
-	LeaderID    string
-	Members     []EtcdMember
 }
