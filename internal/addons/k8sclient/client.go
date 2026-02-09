@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/discovery"
@@ -38,9 +39,9 @@ type Client interface {
 	// This is useful for waiting for a service's backing pods to be ready.
 	HasReadyEndpoints(ctx context.Context, namespace, serviceName string) (bool, error)
 
-	// GetWorkerExternalIPs returns the external IPs of worker nodes.
-	// This is useful for DNS configuration when using hostNetwork mode.
-	GetWorkerExternalIPs(ctx context.Context) ([]string, error)
+	// HasIngressClass checks if an IngressClass with the given name exists.
+	// This is useful for checking Traefik/nginx readiness before creating Ingress resources.
+	HasIngressClass(ctx context.Context, name string) (bool, error)
 }
 
 // client implements the Client interface using k8s.io/client-go.
@@ -133,8 +134,9 @@ func (c *client) RefreshDiscovery(ctx context.Context) error {
 	return nil
 }
 
-// HasCRD checks if a specific API resource exists (e.g., "cert-manager.io/v1/ClusterIssuer").
-// The crdName parameter is in the format "group/version/kind" (e.g., "cert-manager.io/v1/ClusterIssuer").
+// HasCRD checks if a specific API resource exists.
+// The crdName parameter is in the format "group/version/kind" (e.g., "cert-manager.io/v1/ClusterIssuer")
+// or just "group/version" to check if the API group exists (e.g., "talos.dev/v1alpha1").
 func (c *client) HasCRD(ctx context.Context, crdName string) (bool, error) {
 	if len(c.kubeconfig) == 0 {
 		return true, nil // For test clients, assume CRDs exist
@@ -159,12 +161,29 @@ func (c *client) HasCRD(ctx context.Context, crdName string) (bool, error) {
 		}
 	}
 
+	// Parse the crdName to extract group/version and optionally kind
+	// Format: "group/version" or "group/version/kind"
+	parts := splitCRDName(crdName)
+	if len(parts) < 2 {
+		return false, fmt.Errorf("invalid CRD name format: %s (expected group/version or group/version/kind)", crdName)
+	}
+
+	groupVersion := parts[0] + "/" + parts[1]
+	var kind string
+	if len(parts) >= 3 {
+		kind = parts[2]
+	}
+
 	// Look for the specified API resource
-	// For cert-manager, we check for the cert-manager.io API group
 	for _, list := range apiResourceLists {
-		if list.GroupVersion == "cert-manager.io/v1" {
+		if list.GroupVersion == groupVersion {
+			// If no kind specified, just check if the API group exists
+			if kind == "" {
+				return true, nil
+			}
+			// Check for specific kind
 			for _, resource := range list.APIResources {
-				if resource.Kind == "ClusterIssuer" {
+				if resource.Kind == kind {
 					return true, nil
 				}
 			}
@@ -172,6 +191,27 @@ func (c *client) HasCRD(ctx context.Context, crdName string) (bool, error) {
 	}
 
 	return false, nil
+}
+
+// splitCRDName splits a CRD name like "talos.dev/v1alpha1/ServiceAccount" into parts.
+func splitCRDName(crdName string) []string {
+	var parts []string
+	start := 0
+	slashCount := 0
+
+	for i, c := range crdName {
+		if c == '/' {
+			parts = append(parts, crdName[start:i])
+			start = i + 1
+			slashCount++
+		}
+	}
+	// Add the last part
+	if start < len(crdName) {
+		parts = append(parts, crdName[start:])
+	}
+
+	return parts
 }
 
 // HasReadyEndpoints checks if a service has at least one ready endpoint.
@@ -191,29 +231,19 @@ func (c *client) HasReadyEndpoints(ctx context.Context, namespace, serviceName s
 	return false, nil
 }
 
-// GetWorkerExternalIPs returns the external IPs of worker nodes.
-// Worker nodes are identified by NOT having the control-plane role label.
-func (c *client) GetWorkerExternalIPs(ctx context.Context) ([]string, error) {
-	nodes, err := c.clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+// HasIngressClass checks if an IngressClass with the given name exists.
+func (c *client) HasIngressClass(ctx context.Context, name string) (bool, error) {
+	if len(c.kubeconfig) == 0 {
+		return true, nil // For test clients, assume IngressClass exists
+	}
+
+	_, err := c.clientset.NetworkingV1().IngressClasses().Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to list nodes: %w", err)
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to check IngressClass %s: %w", name, err)
 	}
 
-	var externalIPs []string
-	for _, node := range nodes.Items {
-		// Skip control plane nodes
-		if _, isControlPlane := node.Labels["node-role.kubernetes.io/control-plane"]; isControlPlane {
-			continue
-		}
-
-		// Get external IP from node addresses
-		for _, addr := range node.Status.Addresses {
-			if addr.Type == corev1.NodeExternalIP && addr.Address != "" {
-				externalIPs = append(externalIPs, addr.Address)
-				break // Only need one external IP per node
-			}
-		}
-	}
-
-	return externalIPs, nil
+	return true, nil
 }

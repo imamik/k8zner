@@ -54,7 +54,13 @@ func (m *mockK8sClient) GetWorkerExternalIPs(ctx context.Context) ([]string, err
 	return args.Get(0).([]string), args.Error(1)
 }
 
+func (m *mockK8sClient) HasIngressClass(ctx context.Context, name string) (bool, error) {
+	args := m.Called(ctx, name)
+	return args.Bool(0), args.Error(1)
+}
+
 func TestApplyManifests(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		addonName   string
@@ -89,6 +95,7 @@ func TestApplyManifests(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			client := new(mockK8sClient)
 			client.On("ApplyManifests", mock.Anything, tt.manifests, tt.addonName).Return(tt.mockErr)
 
@@ -105,6 +112,7 @@ func TestApplyManifests(t *testing.T) {
 }
 
 func TestApplyFromURL_Success(t *testing.T) {
+	t.Parallel()
 	manifestContent := `apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -128,6 +136,7 @@ data:
 }
 
 func TestApplyFromURL_HTTPError(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
@@ -141,6 +150,7 @@ func TestApplyFromURL_HTTPError(t *testing.T) {
 }
 
 func TestApplyFromURL_ServerError(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -154,6 +164,7 @@ func TestApplyFromURL_ServerError(t *testing.T) {
 }
 
 func TestApplyFromURL_InvalidURL(t *testing.T) {
+	t.Parallel()
 	client := new(mockK8sClient)
 
 	err := applyFromURL(context.Background(), client, "test-addon", "http://[::1]:namedport")
@@ -166,6 +177,7 @@ func TestApplyFromURL_InvalidURL(t *testing.T) {
 }
 
 func TestApplyFromURL_ApplyError(t *testing.T) {
+	t.Parallel()
 	manifestContent := `apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -186,6 +198,7 @@ metadata:
 }
 
 func TestApplyFromURL_ContextCanceled(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Slow response that will be canceled
 		select {

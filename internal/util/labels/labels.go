@@ -3,7 +3,48 @@
 // This package enforces uniform labeling patterns across all infrastructure resources,
 // enabling easy identification, grouping, and management of resources belonging to
 // the same cluster.
+//
+// Standard label keys use the k8zner.io domain prefix for namespacing.
 package labels
+
+// Standard label keys for Hetzner Cloud resources.
+// Using k8zner.io prefix for clear namespacing.
+const (
+	// KeyCluster identifies which cluster a resource belongs to
+	KeyCluster = "k8zner.io/cluster"
+
+	// KeyRole identifies the role of a server (control-plane, worker)
+	KeyRole = "k8zner.io/role"
+
+	// KeyPool identifies the node pool name
+	KeyPool = "k8zner.io/pool"
+
+	// KeyManagedBy identifies the management system
+	KeyManagedBy = "k8zner.io/managed-by"
+
+	// KeyServerID is a unique identifier for the server within the cluster
+	KeyServerID = "k8zner.io/server-id"
+
+	// Legacy keys (for backward compatibility during migration)
+	LegacyKeyCluster  = "cluster"
+	LegacyKeyRole     = "role"
+	LegacyKeyPool     = "pool"
+	LegacyKeyNodePool = "nodepool"
+	LegacyKeyState    = "state"
+	LegacyKeyTestID   = "test-id"
+)
+
+// Role values
+const (
+	RoleControlPlane = "control-plane"
+	RoleWorker       = "worker"
+)
+
+// ManagedBy values
+const (
+	ManagedByK8zner   = "k8zner"
+	ManagedByOperator = "k8zner-operator"
+)
 
 // LabelBuilder provides a fluent interface for building Hetzner Cloud resource labels.
 // Labels are used to identify and group resources belonging to the same cluster.
@@ -12,41 +53,54 @@ type LabelBuilder struct {
 }
 
 // NewLabelBuilder creates a new label builder with the cluster name pre-set.
+// Sets both new and legacy cluster labels for compatibility.
 func NewLabelBuilder(clusterName string) *LabelBuilder {
 	return &LabelBuilder{
 		labels: map[string]string{
-			"cluster": clusterName,
+			KeyCluster:       clusterName,
+			LegacyKeyCluster: clusterName, // Keep legacy for backward compat
+			KeyManagedBy:     ManagedByK8zner,
 		},
 	}
 }
 
 // WithRole adds a role label (e.g., "control-plane", "worker").
+// Sets both new and legacy role labels for compatibility.
 func (lb *LabelBuilder) WithRole(role string) *LabelBuilder {
-	lb.labels["role"] = role
+	lb.labels[KeyRole] = role
+	lb.labels[LegacyKeyRole] = role // Keep legacy for backward compat
 	return lb
 }
 
 // WithPool adds a pool name label.
+// Sets both new and legacy pool labels for compatibility.
 func (lb *LabelBuilder) WithPool(pool string) *LabelBuilder {
-	lb.labels["pool"] = pool
+	lb.labels[KeyPool] = pool
+	lb.labels[LegacyKeyPool] = pool // Keep legacy for backward compat
+	return lb
+}
+
+// WithServerID adds a server ID label (the unique 5-char identifier).
+func (lb *LabelBuilder) WithServerID(id string) *LabelBuilder {
+	lb.labels[KeyServerID] = id
 	return lb
 }
 
 // WithNodePool adds a nodepool label (used for worker placement groups).
 func (lb *LabelBuilder) WithNodePool(pool string) *LabelBuilder {
-	lb.labels["nodepool"] = pool
+	lb.labels[LegacyKeyNodePool] = pool
 	return lb
 }
 
 // WithState adds a state label (used for cluster state tracking).
 func (lb *LabelBuilder) WithState(state string) *LabelBuilder {
-	lb.labels["state"] = state
+	lb.labels[LegacyKeyState] = state
 	return lb
 }
 
 // WithTestID adds a test-id label (used for E2E test resource tracking).
 func (lb *LabelBuilder) WithTestID(testID string) *LabelBuilder {
-	lb.labels["test-id"] = testID
+	lb.labels[LegacyKeyTestID] = testID
 	return lb
 }
 
@@ -54,8 +108,14 @@ func (lb *LabelBuilder) WithTestID(testID string) *LabelBuilder {
 // This simplifies conditional test ID patterns throughout the codebase.
 func (lb *LabelBuilder) WithTestIDIfSet(testID string) *LabelBuilder {
 	if testID != "" {
-		lb.labels["test-id"] = testID
+		lb.labels[LegacyKeyTestID] = testID
 	}
+	return lb
+}
+
+// WithManagedBy sets who manages this resource.
+func (lb *LabelBuilder) WithManagedBy(manager string) *LabelBuilder {
+	lb.labels[KeyManagedBy] = manager
 	return lb
 }
 
@@ -81,4 +141,14 @@ func (lb *LabelBuilder) Build() map[string]string {
 		result[k] = v
 	}
 	return result
+}
+
+// SelectorForCluster returns a label selector string for all resources in a cluster.
+func SelectorForCluster(clusterName string) string {
+	return KeyCluster + "=" + clusterName
+}
+
+// SelectorForClusterRole returns a label selector for resources with a specific role.
+func SelectorForClusterRole(clusterName, role string) string {
+	return KeyCluster + "=" + clusterName + "," + KeyRole + "=" + role
 }

@@ -11,7 +11,9 @@ import (
 )
 
 func TestCleanupError(t *testing.T) {
+	t.Parallel()
 	t.Run("single error", func(t *testing.T) {
+		t.Parallel()
 		ce := &CleanupError{}
 		ce.Add(errors.New("test error"))
 
@@ -25,6 +27,7 @@ func TestCleanupError(t *testing.T) {
 	})
 
 	t.Run("multiple errors", func(t *testing.T) {
+		t.Parallel()
 		ce := &CleanupError{}
 		ce.Add(errors.New("error 1"))
 		ce.Add(errors.New("error 2"))
@@ -40,6 +43,7 @@ func TestCleanupError(t *testing.T) {
 	})
 
 	t.Run("no errors", func(t *testing.T) {
+		t.Parallel()
 		ce := &CleanupError{}
 
 		if ce.HasErrors() {
@@ -48,6 +52,7 @@ func TestCleanupError(t *testing.T) {
 	})
 
 	t.Run("add nil error", func(t *testing.T) {
+		t.Parallel()
 		ce := &CleanupError{}
 		ce.Add(nil)
 
@@ -57,6 +62,7 @@ func TestCleanupError(t *testing.T) {
 	})
 
 	t.Run("unwrap single error", func(t *testing.T) {
+		t.Parallel()
 		original := errors.New("original error")
 		ce := &CleanupError{}
 		ce.Add(original)
@@ -70,6 +76,7 @@ func TestCleanupError(t *testing.T) {
 // TestBuildLabelSelector is already tested in real_client_test.go
 
 func TestGetResourceInfo(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		resource   interface{}
@@ -87,12 +94,6 @@ func TestGetResourceInfo(t *testing.T) {
 			resource:   &hcloud.LoadBalancer{ID: 2, Name: "lb-1"},
 			expectName: "lb-1",
 			expectID:   2,
-		},
-		{
-			name:       "floating IP",
-			resource:   &hcloud.FloatingIP{ID: 3, Name: "fip-1"},
-			expectName: "fip-1",
-			expectID:   3,
 		},
 		{
 			name:       "firewall",
@@ -128,13 +129,12 @@ func TestGetResourceInfo(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			var info resourceInfo
 			switch v := tt.resource.(type) {
 			case *hcloud.Server:
 				info = getResourceInfo(v)
 			case *hcloud.LoadBalancer:
-				info = getResourceInfo(v)
-			case *hcloud.FloatingIP:
 				info = getResourceInfo(v)
 			case *hcloud.Firewall:
 				info = getResourceInfo(v)
@@ -159,6 +159,7 @@ func TestGetResourceInfo(t *testing.T) {
 }
 
 func TestRealClient_CleanupByLabel_WithHTTPMock(t *testing.T) {
+	t.Parallel()
 	ts := newTestServer()
 	defer ts.close()
 
@@ -173,10 +174,6 @@ func TestRealClient_CleanupByLabel_WithHTTPMock(t *testing.T) {
 
 	ts.handleFunc("/load_balancers", func(w http.ResponseWriter, _ *http.Request) {
 		jsonResponse(w, http.StatusOK, schema.LoadBalancerListResponse{LoadBalancers: []schema.LoadBalancer{}})
-	})
-
-	ts.handleFunc("/floating_ips", func(w http.ResponseWriter, _ *http.Request) {
-		jsonResponse(w, http.StatusOK, schema.FloatingIPListResponse{FloatingIPs: []schema.FloatingIP{}})
 	})
 
 	ts.handleFunc("/firewalls", func(w http.ResponseWriter, _ *http.Request) {
@@ -209,7 +206,9 @@ func TestRealClient_CleanupByLabel_WithHTTPMock(t *testing.T) {
 }
 
 func TestRealClient_DeleteServersByLabel_WithHTTPMock(t *testing.T) {
+	t.Parallel()
 	t.Run("deletes servers successfully", func(t *testing.T) {
+		t.Parallel()
 		ts := newTestServer()
 		defer ts.close()
 
@@ -258,6 +257,7 @@ func TestRealClient_DeleteServersByLabel_WithHTTPMock(t *testing.T) {
 	})
 
 	t.Run("handles empty label selector", func(t *testing.T) {
+		t.Parallel()
 		ts := newTestServer()
 		defer ts.close()
 
@@ -276,6 +276,7 @@ func TestRealClient_DeleteServersByLabel_WithHTTPMock(t *testing.T) {
 }
 
 func TestRealClient_DeleteLoadBalancersByLabel_WithHTTPMock(t *testing.T) {
+	t.Parallel()
 	ts := newTestServer()
 	defer ts.close()
 
@@ -303,35 +304,8 @@ func TestRealClient_DeleteLoadBalancersByLabel_WithHTTPMock(t *testing.T) {
 	}
 }
 
-func TestRealClient_DeleteFloatingIPsByLabel_WithHTTPMock(t *testing.T) {
-	ts := newTestServer()
-	defer ts.close()
-
-	ts.handleFunc("/floating_ips", func(w http.ResponseWriter, r *http.Request) {
-		jsonResponse(w, http.StatusOK, schema.FloatingIPListResponse{
-			FloatingIPs: []schema.FloatingIP{
-				{ID: 1, Name: "fip-1", Labels: map[string]string{"cluster": "test"}},
-			},
-		})
-	})
-
-	ts.handleFunc("/floating_ips/1", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodDelete {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-	})
-
-	client := ts.realClient()
-	ctx := context.Background()
-
-	err := client.deleteFloatingIPsByLabel(ctx, "cluster=test")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
 func TestRealClient_DeleteFirewallsByLabel_WithHTTPMock(t *testing.T) {
+	t.Parallel()
 	ts := newTestServer()
 	defer ts.close()
 
@@ -360,6 +334,7 @@ func TestRealClient_DeleteFirewallsByLabel_WithHTTPMock(t *testing.T) {
 }
 
 func TestRealClient_DeleteNetworksByLabel_WithHTTPMock(t *testing.T) {
+	t.Parallel()
 	ts := newTestServer()
 	defer ts.close()
 
@@ -388,6 +363,7 @@ func TestRealClient_DeleteNetworksByLabel_WithHTTPMock(t *testing.T) {
 }
 
 func TestRealClient_DeletePlacementGroupsByLabel_WithHTTPMock(t *testing.T) {
+	t.Parallel()
 	ts := newTestServer()
 	defer ts.close()
 
@@ -416,6 +392,7 @@ func TestRealClient_DeletePlacementGroupsByLabel_WithHTTPMock(t *testing.T) {
 }
 
 func TestRealClient_DeleteSSHKeysByLabel_WithHTTPMock(t *testing.T) {
+	t.Parallel()
 	ts := newTestServer()
 	defer ts.close()
 
@@ -444,6 +421,7 @@ func TestRealClient_DeleteSSHKeysByLabel_WithHTTPMock(t *testing.T) {
 }
 
 func TestRealClient_DeleteCertificatesByLabel_WithHTTPMock(t *testing.T) {
+	t.Parallel()
 	ts := newTestServer()
 	defer ts.close()
 
@@ -472,6 +450,7 @@ func TestRealClient_DeleteCertificatesByLabel_WithHTTPMock(t *testing.T) {
 }
 
 func TestRealClient_DeleteVolumesByLabel_WithHTTPMock(t *testing.T) {
+	t.Parallel()
 	ts := newTestServer()
 	defer ts.close()
 
@@ -500,6 +479,7 @@ func TestRealClient_DeleteVolumesByLabel_WithHTTPMock(t *testing.T) {
 }
 
 func TestRealClient_CountResourcesByLabel_WithHTTPMock(t *testing.T) {
+	t.Parallel()
 	ts := newTestServer()
 	defer ts.close()
 
@@ -518,10 +498,6 @@ func TestRealClient_CountResourcesByLabel_WithHTTPMock(t *testing.T) {
 
 	ts.handleFunc("/load_balancers", func(w http.ResponseWriter, _ *http.Request) {
 		jsonResponse(w, http.StatusOK, schema.LoadBalancerListResponse{LoadBalancers: []schema.LoadBalancer{}})
-	})
-
-	ts.handleFunc("/floating_ips", func(w http.ResponseWriter, _ *http.Request) {
-		jsonResponse(w, http.StatusOK, schema.FloatingIPListResponse{FloatingIPs: []schema.FloatingIP{}})
 	})
 
 	ts.handleFunc("/firewalls", func(w http.ResponseWriter, _ *http.Request) {
@@ -569,6 +545,7 @@ func TestRealClient_CountResourcesByLabel_WithHTTPMock(t *testing.T) {
 }
 
 func TestRemainingResources_String(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		r        RemainingResources
@@ -593,6 +570,7 @@ func TestRemainingResources_String(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := tt.r.String(); got != tt.expected {
 				t.Errorf("String() = %q, want %q", got, tt.expected)
 			}
@@ -601,8 +579,11 @@ func TestRemainingResources_String(t *testing.T) {
 }
 
 func TestDeleteResourcesByLabel(t *testing.T) {
+	t.Parallel()
 	// Test the generic deleteResourcesByLabel function
+
 	t.Run("handles list error", func(t *testing.T) {
+		t.Parallel()
 		ctx := context.Background()
 		err := deleteResourcesByLabel(ctx, "test",
 			func(ctx context.Context) ([]*hcloud.Server, error) {
@@ -618,6 +599,7 @@ func TestDeleteResourcesByLabel(t *testing.T) {
 	})
 
 	t.Run("returns delete errors", func(t *testing.T) {
+		t.Parallel()
 		ctx := context.Background()
 		// deleteResourcesByLabel now returns errors for failed deletions
 		err := deleteResourcesByLabel(ctx, "test",
@@ -635,6 +617,7 @@ func TestDeleteResourcesByLabel(t *testing.T) {
 	})
 
 	t.Run("handles empty list", func(t *testing.T) {
+		t.Parallel()
 		ctx := context.Background()
 		err := deleteResourcesByLabel(ctx, "test",
 			func(ctx context.Context) ([]*hcloud.Server, error) {

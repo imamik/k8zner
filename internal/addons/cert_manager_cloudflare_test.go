@@ -9,6 +9,7 @@ import (
 )
 
 func TestBuildClusterIssuerManifest_Staging(t *testing.T) {
+	t.Parallel()
 	email := "test@example.com"
 
 	manifest, err := buildClusterIssuerManifest(email, false)
@@ -51,6 +52,7 @@ func TestBuildClusterIssuerManifest_Staging(t *testing.T) {
 }
 
 func TestBuildClusterIssuerManifest_Production(t *testing.T) {
+	t.Parallel()
 	email := "admin@example.org"
 
 	manifest, err := buildClusterIssuerManifest(email, true)
@@ -78,6 +80,7 @@ func TestBuildClusterIssuerManifest_Production(t *testing.T) {
 }
 
 func TestBuildClusterIssuerManifest_DifferentEmails(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		email string
@@ -89,6 +92,7 @@ func TestBuildClusterIssuerManifest_DifferentEmails(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			manifest, err := buildClusterIssuerManifest(tt.email, false)
 			require.NoError(t, err)
 
@@ -104,6 +108,7 @@ func TestBuildClusterIssuerManifest_DifferentEmails(t *testing.T) {
 }
 
 func TestBuildClusterIssuerManifest_ValidYAML(t *testing.T) {
+	t.Parallel()
 	manifest, err := buildClusterIssuerManifest("test@example.com", false)
 	require.NoError(t, err)
 
@@ -114,6 +119,7 @@ func TestBuildClusterIssuerManifest_ValidYAML(t *testing.T) {
 }
 
 func TestBuildClusterIssuerManifest_BothEnvironments(t *testing.T) {
+	t.Parallel()
 	email := "test@example.com"
 
 	stagingManifest, err := buildClusterIssuerManifest(email, false)
@@ -136,7 +142,9 @@ func TestBuildClusterIssuerManifest_BothEnvironments(t *testing.T) {
 }
 
 func TestClusterIssuerData_Fields(t *testing.T) {
+	t.Parallel()
 	// Test the structure directly
+
 	data := clusterIssuerData{
 		Name:           "test-issuer",
 		Email:          "test@example.com",

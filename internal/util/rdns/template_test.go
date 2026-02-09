@@ -9,6 +9,7 @@ import (
 )
 
 func TestRenderTemplate(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		template  string
@@ -97,6 +98,7 @@ func TestRenderTemplate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := RenderTemplate(tt.template, tt.vars)
 
 			if tt.wantError {
@@ -111,6 +113,7 @@ func TestRenderTemplate(t *testing.T) {
 }
 
 func TestGenerateIPLabels(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		ipAddr    string
@@ -166,6 +169,7 @@ func TestGenerateIPLabels(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := generateIPLabels(tt.ipAddr)
 
 			if tt.wantError {
@@ -180,6 +184,7 @@ func TestGenerateIPLabels(t *testing.T) {
 }
 
 func TestReverseIPv4(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		ipv4 string
 		want string
@@ -192,6 +197,7 @@ func TestReverseIPv4(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.ipv4, func(t *testing.T) {
+			t.Parallel()
 			got := reverseIPv4(tt.ipv4)
 			assert.Equal(t, tt.want, got)
 		})
@@ -199,6 +205,7 @@ func TestReverseIPv4(t *testing.T) {
 }
 
 func TestExpandIPv6(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		ip   string
@@ -228,6 +235,7 @@ func TestExpandIPv6(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ip := parseIP(t, tt.ip)
 			got := expandIPv6(ip)
 			assert.Equal(t, tt.want, got)
@@ -236,6 +244,7 @@ func TestExpandIPv6(t *testing.T) {
 }
 
 func TestHasUnresolvedTemplates(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		s    string
@@ -251,6 +260,7 @@ func TestHasUnresolvedTemplates(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := hasUnresolvedTemplates(tt.s)
 			assert.Equal(t, tt.want, got)
 		})
@@ -258,8 +268,10 @@ func TestHasUnresolvedTemplates(t *testing.T) {
 }
 
 func TestRenderTemplateEdgeCases(t *testing.T) {
+	t.Parallel()
 	// Generate a 253-character DNS name (maximum allowed by RFC 1035)
 	// Build a long string first, then truncate to exact length
+
 	longDNS := "server123456789." + // 16 chars
 		"very-long-subdomain-name-with-many-characters-to-reach-limit." + // 62 chars
 		"another-long-subdomain-with-additional-characters-for-length." + // 62 chars
@@ -418,6 +430,7 @@ func TestRenderTemplateEdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := RenderTemplate(tt.template, tt.vars)
 
 			if tt.wantErr {
@@ -443,6 +456,7 @@ func parseIP(t *testing.T, s string) net.IP {
 }
 
 func TestResolveTemplate(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		templates []string
@@ -487,6 +501,7 @@ func TestResolveTemplate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := ResolveTemplate(tt.templates...)
 			assert.Equal(t, tt.want, got)
 		})

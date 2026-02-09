@@ -11,7 +11,9 @@ import (
 )
 
 func TestBuildCCMValues(t *testing.T) {
+	t.Parallel()
 	// Helper to create bool pointer
+
 	boolPtr := func(b bool) *bool { return &b }
 
 	tests := []struct {
@@ -129,6 +131,7 @@ func TestBuildCCMValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			networkID := int64(12345)
 			values := buildCCMValues(tt.cfg, networkID)
 
@@ -169,6 +172,7 @@ func TestBuildCCMValues(t *testing.T) {
 }
 
 func TestBuildCCMEnvVars(t *testing.T) {
+	t.Parallel()
 	boolPtr := func(b bool) *bool { return &b }
 
 	cfg := &config.Config{
@@ -218,6 +222,7 @@ func TestBuildCCMEnvVars(t *testing.T) {
 
 	for key, expectedValue := range expectedVars {
 		t.Run(key, func(t *testing.T) {
+			t.Parallel()
 			envVar, ok := env[key].(helm.Values)
 			require.True(t, ok, "env var %s should be present", key)
 			assert.Equal(t, expectedValue, envVar["value"], "env var %s should have correct value", key)
@@ -226,6 +231,7 @@ func TestBuildCCMEnvVars(t *testing.T) {
 }
 
 func TestBuildCCMEnvVarsLocationFallback(t *testing.T) {
+	t.Parallel()
 	boolPtr := func(b bool) *bool { return &b }
 
 	// Test that location falls back to cluster location when not set
@@ -249,7 +255,49 @@ func TestBuildCCMEnvVarsLocationFallback(t *testing.T) {
 	assert.Equal(t, "hel1", location["value"], "should fall back to cluster location")
 }
 
+func TestBuildCCMValues_Tolerations(t *testing.T) {
+	t.Parallel()
+	// Tolerations are critical for CCM to function properly.
+	// Without them, CCM cannot schedule on control plane nodes due to taints,
+	// creating a chicken-egg problem where CCM can't initialize nodes.
+	// See: https://kubernetes.io/blog/2025/02/14/cloud-controller-manager-chicken-egg-problem/
+
+	cfg := &config.Config{
+		Location: "fsn1",
+		Network: config.NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+		},
+		Addons: config.AddonsConfig{
+			CCM: config.CCMConfig{
+				Enabled: true,
+			},
+		},
+	}
+
+	values := buildCCMValues(cfg, 12345)
+
+	// Check tolerations are present
+	tolerations, ok := values["tolerations"].([]helm.Values)
+	require.True(t, ok, "tolerations must be present in CCM values")
+	require.Len(t, tolerations, 3, "CCM should have exactly 3 tolerations")
+
+	// Verify control-plane toleration
+	assert.Equal(t, "node-role.kubernetes.io/control-plane", tolerations[0]["key"])
+	assert.Equal(t, "NoSchedule", tolerations[0]["effect"])
+	assert.Equal(t, "Exists", tolerations[0]["operator"])
+
+	// Verify uninitialized toleration (critical for bootstrap)
+	assert.Equal(t, "node.cloudprovider.kubernetes.io/uninitialized", tolerations[1]["key"])
+	assert.Equal(t, "true", tolerations[1]["value"])
+	assert.Equal(t, "NoSchedule", tolerations[1]["effect"])
+
+	// Verify not-ready toleration (helps during bootstrap)
+	assert.Equal(t, "node.kubernetes.io/not-ready", tolerations[2]["key"])
+	assert.Equal(t, "Exists", tolerations[2]["operator"])
+}
+
 func TestGetClusterCIDR(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		cfg      *config.Config
@@ -306,6 +354,7 @@ func TestGetClusterCIDR(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := getClusterCIDR(tt.cfg)
 			assert.Equal(t, tt.expected, result)
 		})

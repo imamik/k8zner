@@ -11,7 +11,9 @@ import (
 )
 
 func TestCreateServer_IPv6Only(t *testing.T) {
+	t.Parallel()
 	t.Run("creates server with IPv6-only when enablePublicIPv4 is false", func(t *testing.T) {
+		t.Parallel()
 		ts := newTestServer()
 		defer ts.close()
 
@@ -97,6 +99,7 @@ func TestCreateServer_IPv6Only(t *testing.T) {
 	})
 
 	t.Run("creates server with both IPv4 and IPv6 by default", func(t *testing.T) {
+		t.Parallel()
 		ts := newTestServer()
 		defer ts.close()
 
@@ -179,7 +182,9 @@ func TestCreateServer_IPv6Only(t *testing.T) {
 }
 
 func TestGetServerIP_IPv6Only(t *testing.T) {
+	t.Parallel()
 	t.Run("returns IPv6 when server has no IPv4", func(t *testing.T) {
+		t.Parallel()
 		ts := newTestServer()
 		defer ts.close()
 
@@ -229,6 +234,7 @@ func TestGetServerIP_IPv6Only(t *testing.T) {
 	})
 
 	t.Run("returns IPv4 when server has both", func(t *testing.T) {
+		t.Parallel()
 		ts := newTestServer()
 		defer ts.close()
 
@@ -272,6 +278,7 @@ func TestGetServerIP_IPv6Only(t *testing.T) {
 	})
 
 	t.Run("returns error when server has no public IP", func(t *testing.T) {
+		t.Parallel()
 		ts := newTestServer()
 		defer ts.close()
 
@@ -312,6 +319,7 @@ func TestGetServerIP_IPv6Only(t *testing.T) {
 
 // TestMockClient_IPv6Parameters verifies the mock client supports IPv6 parameters
 func TestMockClient_IPv6Parameters(t *testing.T) {
+	t.Parallel()
 	m := &MockClient{}
 
 	var capturedIPv4, capturedIPv6 bool

@@ -49,6 +49,29 @@ func RenderFromSpec(ctx context.Context, spec ChartSpec, namespace string, value
 	return manifests, nil
 }
 
+// RenderFromPath renders a chart from a local filesystem path with the provided values.
+// This is useful for charts embedded in the application or during development.
+func RenderFromPath(chartPath, releaseName, namespace string, values Values) ([]byte, error) {
+	// Load the chart from the local path
+	loadedChart, err := LoadChartFromPath(chartPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load chart: %w", err)
+	}
+
+	// Create renderer and render the chart
+	renderer := &Renderer{
+		chartName: releaseName,
+		namespace: namespace,
+	}
+
+	manifests, err := renderer.renderChart(loadedChart, values)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render chart: %w", err)
+	}
+
+	return manifests, nil
+}
+
 // renderChart uses helm engine to render the chart with values.
 func (r *Renderer) renderChart(ch *chart.Chart, values Values) ([]byte, error) {
 	// Load chart's default values from values.yaml
@@ -100,7 +123,7 @@ func (r *Renderer) renderChart(ch *chart.Chart, values Values) ([]byte, error) {
 		return nil, fmt.Errorf("failed to render templates: %w", err)
 	}
 
-	// Combine all rendered manifests
+	// Combine all rendered template manifests
 	var combined bytes.Buffer
 	for name, content := range rendered {
 		// Skip NOTES.txt

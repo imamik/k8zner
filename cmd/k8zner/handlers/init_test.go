@@ -57,9 +57,6 @@ func TestPrintInitSuccess(t *testing.T) {
 		assert.Contains(t, output, "fsn1")
 		assert.Contains(t, output, "dev")
 		assert.Contains(t, output, "2 x cx32")
-		assert.Contains(t, output, "Cost Estimate")
-		assert.Contains(t, output, "VAT")
-		assert.Contains(t, output, "IPv6 Savings")
 		assert.Contains(t, output, "Next Steps")
 		assert.Contains(t, output, "HCLOUD_TOKEN")
 		assert.Contains(t, output, "k8zner apply")
@@ -86,7 +83,7 @@ func TestPrintInitSuccess(t *testing.T) {
 		assert.Contains(t, output, "ha")
 		assert.Contains(t, output, "3 x cx42")
 		assert.Contains(t, output, "example.com")
-		// HA mode has 3 control planes (cx23 is the standard type)
+		// HA mode has 3 control planes (cx23 is the default type)
 		assert.Contains(t, output, "3 x cx23")
 	})
 

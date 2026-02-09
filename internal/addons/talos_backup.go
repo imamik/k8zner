@@ -12,6 +12,7 @@ import (
 	"github.com/imamik/k8zner/internal/addons/k8sclient"
 	"github.com/imamik/k8zner/internal/config"
 	v2 "github.com/imamik/k8zner/internal/config/v2"
+	"github.com/imamik/k8zner/internal/platform/s3"
 )
 
 // talosBackupVersion returns the pinned talos-backup version from the version matrix.
@@ -33,6 +34,11 @@ func applyTalosBackup(ctx context.Context, client k8sclient.Client, cfg *config.
 	// Warn if encryption is disabled
 	if backup.EncryptionDisabled {
 		log.Printf("WARNING: Talos backup encryption is disabled. etcd backups will be stored unencrypted in S3 bucket %q", backup.S3Bucket)
+	}
+
+	// Ensure S3 bucket exists before installing the CronJob
+	if err := ensureS3Bucket(ctx, backup); err != nil {
+		return fmt.Errorf("failed to ensure S3 bucket: %w", err)
 	}
 
 	manifests := generateTalosBackupManifests(cfg)
@@ -121,8 +127,12 @@ func generateTalosBackupCronJob(cfg *config.Config) string {
 			{"emptyDir": map[string]any{}, "name": "tmp"},
 			{"name": "talos-secrets", "secret": map[string]any{"secretName": "talos-backup-secrets"}},
 		},
+		// Tolerations for control plane and uninitialized nodes.
+		// The uninitialized toleration is required because CCM may not have
+		// finished initializing nodes when this CronJob is first scheduled.
 		"tolerations": []map[string]any{
 			{"key": "node-role.kubernetes.io/control-plane", "operator": "Exists", "effect": "NoSchedule"},
+			{"key": "node.cloudprovider.kubernetes.io/uninitialized", "operator": "Exists", "effect": "NoSchedule"},
 		},
 	}
 
@@ -180,4 +190,29 @@ func buildTalosBackupEnv(cfg *config.Config) []map[string]any {
 		{"name": "ENABLE_COMPRESSION", "value": "true"},
 		{"name": "DISABLE_ENCRYPTION", "value": disableEncryption},
 	}
+}
+
+// ensureS3Bucket creates the S3 bucket if it doesn't already exist.
+func ensureS3Bucket(_ context.Context, backup config.TalosBackupConfig) error {
+	client, err := s3.NewClient(backup.S3Endpoint, backup.S3Region, backup.S3AccessKey, backup.S3SecretKey)
+	if err != nil {
+		return fmt.Errorf("failed to create S3 client: %w", err)
+	}
+
+	exists, err := client.BucketExists(context.Background(), backup.S3Bucket)
+	if err != nil {
+		return fmt.Errorf("failed to check bucket existence: %w", err)
+	}
+
+	if exists {
+		log.Printf("[talos-backup] S3 bucket already exists: %s", backup.S3Bucket)
+		return nil
+	}
+
+	if err := client.CreateBucket(context.Background(), backup.S3Bucket); err != nil {
+		return fmt.Errorf("failed to create bucket %s: %w", backup.S3Bucket, err)
+	}
+
+	log.Printf("[talos-backup] S3 bucket created: %s", backup.S3Bucket)
+	return nil
 }

@@ -10,6 +10,7 @@ import (
 )
 
 func TestGetImageBuilderConfig(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name               string
 		arch               string
@@ -168,6 +169,7 @@ func TestGetImageBuilderConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			p := &Provisioner{}
 			ctx := &provisioning.Context{
 				Config: tt.cfg,
@@ -182,10 +184,14 @@ func TestGetImageBuilderConfig(t *testing.T) {
 }
 
 func TestImageBuilderConfigDefaults(t *testing.T) {
+	t.Parallel()
 	// Test that config defaults are correctly set by the config loader
 	// This tests the values set in load.go
+
 	t.Run("default values from load.go", func(t *testing.T) {
+		t.Parallel()
 		// These are the defaults set in internal/config/load.go
+
 		expectedAMD64ServerType := "cpx11"
 		expectedAMD64Location := "ash"
 		expectedARM64ServerType := "cax11"

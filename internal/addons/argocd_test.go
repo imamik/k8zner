@@ -11,6 +11,7 @@ import (
 )
 
 func TestBuildArgoCDValues(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		argoCDCfg      config.ArgoCDConfig
@@ -63,13 +64,14 @@ func TestBuildArgoCDValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cfg := &config.Config{
 				Addons: config.AddonsConfig{
 					ArgoCD: tt.argoCDCfg,
 				},
 			}
 
-			values := buildArgoCDValues(cfg, nil)
+			values := buildArgoCDValues(cfg)
 
 			// Check CRDs are enabled
 			crds, ok := values["crds"].(helm.Values)
@@ -97,12 +99,12 @@ func TestBuildArgoCDValues(t *testing.T) {
 				assert.Equal(t, false, redisHA["enabled"], "redis-ha should be disabled in non-HA mode")
 			}
 
-			// Check redisSecretInit is disabled (prevents argocd-redis secret issues)
+			// Check redisSecretInit is enabled (creates the argocd-redis secret)
 			// This is a TOP-LEVEL key, not nested under redis
 			// See: https://github.com/argoproj/argo-helm/issues/3057
 			redisSecretInit, ok := values["redisSecretInit"].(helm.Values)
 			require.True(t, ok, "redisSecretInit should be set")
-			assert.Equal(t, false, redisSecretInit["enabled"], "redisSecretInit.enabled should be false")
+			assert.Equal(t, true, redisSecretInit["enabled"], "redisSecretInit.enabled should be true")
 
 			// Check ingress
 			if tt.expectIngress {
@@ -114,6 +116,7 @@ func TestBuildArgoCDValues(t *testing.T) {
 }
 
 func TestBuildArgoCDController(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name             string
 		cfg              config.ArgoCDConfig
@@ -143,6 +146,7 @@ func TestBuildArgoCDController(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			controller := buildArgoCDController(tt.cfg)
 
 			assert.Equal(t, tt.expectedReplicas, controller["replicas"])
@@ -157,6 +161,7 @@ func TestBuildArgoCDController(t *testing.T) {
 }
 
 func TestBuildArgoCDServer(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name             string
 		cfg              *config.Config
@@ -202,7 +207,8 @@ func TestBuildArgoCDServer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := buildArgoCDServer(tt.cfg, nil)
+			t.Parallel()
+			server := buildArgoCDServer(tt.cfg)
 
 			assert.Equal(t, tt.expectedReplicas, server["replicas"])
 
@@ -215,6 +221,7 @@ func TestBuildArgoCDServer(t *testing.T) {
 }
 
 func TestBuildArgoCDIngress(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name              string
 		cfg               *config.Config
@@ -313,26 +320,23 @@ func TestBuildArgoCDIngress(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ingress := buildArgoCDIngress(tt.cfg, nil)
+			t.Parallel()
+			ingress := buildArgoCDIngress(tt.cfg)
 
 			assert.Equal(t, true, ingress["enabled"])
 
-			hosts, ok := ingress["hosts"].([]string)
+			hostname, ok := ingress["hostname"].(string)
 			require.True(t, ok)
-			require.Len(t, hosts, 1)
-			assert.Equal(t, tt.expectedHost, hosts[0])
+			assert.Equal(t, tt.expectedHost, hostname)
 
 			if tt.expectedClassName != "" {
 				assert.Equal(t, tt.expectedClassName, ingress["ingressClassName"])
 			}
 
 			if tt.expectTLS {
-				tls, ok := ingress["tls"].([]helm.Values)
+				tls, ok := ingress["tls"].(bool)
 				require.True(t, ok)
-				require.Len(t, tls, 1)
-				tlsHosts, ok := tls[0]["hosts"].([]string)
-				require.True(t, ok)
-				assert.Contains(t, tlsHosts, tt.expectedHost)
+				assert.True(t, tls)
 
 				// Check cluster issuer annotation
 				annotations, ok := ingress["annotations"].(helm.Values)
@@ -344,6 +348,7 @@ func TestBuildArgoCDIngress(t *testing.T) {
 }
 
 func TestBuildArgoCDRedis(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		cfg           config.ArgoCDConfig
@@ -365,6 +370,7 @@ func TestBuildArgoCDRedis(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			redis := buildArgoCDRedis(tt.cfg)
 
 			assert.Equal(t, tt.expectEnabled, redis["enabled"])
@@ -379,6 +385,7 @@ func TestBuildArgoCDRedis(t *testing.T) {
 }
 
 func TestCreateArgoCDNamespace(t *testing.T) {
+	t.Parallel()
 	ns := createArgoCDNamespace()
 
 	assert.Contains(t, ns, "apiVersion: v1")
@@ -387,6 +394,7 @@ func TestCreateArgoCDNamespace(t *testing.T) {
 }
 
 func TestBuildArgoCDValuesCustomHelmValues(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		Addons: config.AddonsConfig{
 			ArgoCD: config.ArgoCDConfig{
@@ -400,7 +408,7 @@ func TestBuildArgoCDValuesCustomHelmValues(t *testing.T) {
 		},
 	}
 
-	values := buildArgoCDValues(cfg, nil)
+	values := buildArgoCDValues(cfg)
 
 	// Custom values should be merged
 	assert.Equal(t, "customValue", values["customKey"])

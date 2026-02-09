@@ -8,6 +8,7 @@ import (
 )
 
 func TestWithExponentialBackoff_Success(t *testing.T) {
+	t.Parallel()
 	attempts := 0
 	operation := func() error {
 		attempts++
@@ -26,6 +27,7 @@ func TestWithExponentialBackoff_Success(t *testing.T) {
 }
 
 func TestWithExponentialBackoff_SuccessAfterRetries(t *testing.T) {
+	t.Parallel()
 	attempts := 0
 	operation := func() error {
 		attempts++
@@ -47,6 +49,7 @@ func TestWithExponentialBackoff_SuccessAfterRetries(t *testing.T) {
 }
 
 func TestWithExponentialBackoff_MaxRetries(t *testing.T) {
+	t.Parallel()
 	attempts := 0
 	operation := func() error {
 		attempts++
@@ -71,6 +74,7 @@ func TestWithExponentialBackoff_MaxRetries(t *testing.T) {
 }
 
 func TestWithExponentialBackoff_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	attempts := 0
 	operation := func() error {
 		attempts++
@@ -94,6 +98,7 @@ func TestWithExponentialBackoff_ContextCancellation(t *testing.T) {
 }
 
 func TestWithExponentialBackoff_ContextTimeout(t *testing.T) {
+	t.Parallel()
 	attempts := 0
 	operation := func() error {
 		attempts++
@@ -117,6 +122,7 @@ func TestWithExponentialBackoff_ContextTimeout(t *testing.T) {
 }
 
 func TestWithExponentialBackoff_FatalError(t *testing.T) {
+	t.Parallel()
 	attempts := 0
 	operation := func() error {
 		attempts++
@@ -138,6 +144,7 @@ func TestWithExponentialBackoff_FatalError(t *testing.T) {
 }
 
 func TestWithExponentialBackoff_BackoffTiming(t *testing.T) {
+	t.Parallel()
 	attempts := 0
 	var delays []time.Duration
 	lastTime := time.Now()
@@ -190,7 +197,9 @@ func TestWithExponentialBackoff_BackoffTiming(t *testing.T) {
 }
 
 func TestFatal(t *testing.T) {
+	t.Parallel()
 	t.Run("Nil error", func(t *testing.T) {
+		t.Parallel()
 		err := Fatal(nil)
 		if err != nil {
 			t.Errorf("Expected nil, got: %v", err)
@@ -198,6 +207,7 @@ func TestFatal(t *testing.T) {
 	})
 
 	t.Run("Non-nil error", func(t *testing.T) {
+		t.Parallel()
 		originalErr := errors.New("test error")
 		err := Fatal(originalErr)
 
@@ -214,7 +224,9 @@ func TestFatal(t *testing.T) {
 }
 
 func TestIsFatal(t *testing.T) {
+	t.Parallel()
 	t.Run("Non-fatal error", func(t *testing.T) {
+		t.Parallel()
 		err := errors.New("regular error")
 		if IsFatal(err) {
 			t.Error("Expected non-fatal error")
@@ -222,6 +234,7 @@ func TestIsFatal(t *testing.T) {
 	})
 
 	t.Run("Fatal error", func(t *testing.T) {
+		t.Parallel()
 		err := Fatal(errors.New("fatal error"))
 		if !IsFatal(err) {
 			t.Error("Expected fatal error")
@@ -229,6 +242,7 @@ func TestIsFatal(t *testing.T) {
 	})
 
 	t.Run("Wrapped fatal error", func(t *testing.T) {
+		t.Parallel()
 		err := Fatal(errors.New("base error"))
 		wrapped := errors.Join(err, errors.New("additional context"))
 		if !IsFatal(wrapped) {
@@ -238,7 +252,9 @@ func TestIsFatal(t *testing.T) {
 }
 
 func TestWithOptions(t *testing.T) {
+	t.Parallel()
 	t.Run("WithMaxRetries", func(t *testing.T) {
+		t.Parallel()
 		attempts := 0
 		operation := func() error {
 			attempts++
@@ -256,6 +272,7 @@ func TestWithOptions(t *testing.T) {
 	})
 
 	t.Run("WithInitialDelay", func(t *testing.T) {
+		t.Parallel()
 		start := time.Now()
 		attempts := 0
 		operation := func() error {
@@ -279,6 +296,7 @@ func TestWithOptions(t *testing.T) {
 	})
 
 	t.Run("WithMaxDelay", func(t *testing.T) {
+		t.Parallel()
 		attempts := 0
 		var delays []time.Duration
 		lastTime := time.Now()
@@ -313,6 +331,7 @@ func TestWithOptions(t *testing.T) {
 	})
 
 	t.Run("WithMultiplier", func(t *testing.T) {
+		t.Parallel()
 		attempts := 0
 		var delays []time.Duration
 		lastTime := time.Now()

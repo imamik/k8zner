@@ -1,0 +1,22 @@
+# Production HA cluster - 3 control planes, 3 workers.
+# Cost: ~64 EUR/month (3 CP + 3 workers + 2 LBs)
+#
+# Features:
+#   - 3 control planes for etcd quorum and API server HA
+#   - Dedicated API and ingress load balancers
+#   - Automatic TLS via Cloudflare DNS-01 challenge
+#   - ArgoCD dashboard at argo.example.com
+#
+# Usage:
+#   export HCLOUD_TOKEN="your-token"
+#   export CF_API_TOKEN="your-cloudflare-token"
+#   k8zner apply -c examples/ha-production.yaml
+
+name: production
+region: fsn1
+mode: ha
+workers:
+  count: 3
+  size: cx33
+domain: example.com
+cert_email: ops@example.com

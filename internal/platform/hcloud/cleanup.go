@@ -15,6 +15,7 @@ type CleanupError struct {
 	Errors []error
 }
 
+// Error returns a summary of all cleanup errors.
 func (e *CleanupError) Error() string {
 	if len(e.Errors) == 1 {
 		return e.Errors[0].Error()
@@ -22,6 +23,7 @@ func (e *CleanupError) Error() string {
 	return fmt.Sprintf("cleanup encountered %d errors: %v", len(e.Errors), e.Errors)
 }
 
+// Unwrap returns the underlying errors for errors.Is/As support.
 func (e *CleanupError) Unwrap() error {
 	if len(e.Errors) == 1 {
 		return e.Errors[0]
@@ -29,19 +31,21 @@ func (e *CleanupError) Unwrap() error {
 	return errors.Join(e.Errors...)
 }
 
+// Add appends a non-nil error to the collection.
 func (e *CleanupError) Add(err error) {
 	if err != nil {
 		e.Errors = append(e.Errors, err)
 	}
 }
 
+// HasErrors reports whether any errors were collected.
 func (e *CleanupError) HasErrors() bool {
 	return len(e.Errors) > 0
 }
 
 // resource is a constraint for Hetzner Cloud resources that have Name and ID fields.
 type resource interface {
-	*hcloud.Server | *hcloud.LoadBalancer | *hcloud.FloatingIP | *hcloud.Firewall |
+	*hcloud.Server | *hcloud.LoadBalancer | *hcloud.Firewall |
 		*hcloud.Network | *hcloud.PlacementGroup | *hcloud.SSHKey | *hcloud.Certificate | *hcloud.Volume
 }
 
@@ -57,8 +61,6 @@ func getResourceInfo[T resource](r T) resourceInfo {
 	case *hcloud.Server:
 		return resourceInfo{Name: v.Name, ID: v.ID}
 	case *hcloud.LoadBalancer:
-		return resourceInfo{Name: v.Name, ID: v.ID}
-	case *hcloud.FloatingIP:
 		return resourceInfo{Name: v.Name, ID: v.ID}
 	case *hcloud.Firewall:
 		return resourceInfo{Name: v.Name, ID: v.ID}
@@ -121,12 +123,11 @@ func (c *RealClient) CleanupByLabel(ctx context.Context, labelSelector map[strin
 	// 1. Servers (must be deleted before networks, load balancers)
 	// 2. Volumes (must be deleted after servers detach them)
 	// 3. Load Balancers
-	// 4. Floating IPs
-	// 5. Firewalls
-	// 6. Networks
-	// 7. Placement Groups
-	// 8. SSH Keys
-	// 9. Certificates
+	// 4. Firewalls
+	// 5. Networks
+	// 6. Placement Groups
+	// 7. SSH Keys
+	// 8. Certificates
 
 	if err := c.deleteServersByLabel(ctx, labelString); err != nil {
 		log.Printf("[Cleanup] Warning: Failed to delete servers: %v", err)
@@ -143,9 +144,11 @@ func (c *RealClient) CleanupByLabel(ctx context.Context, labelSelector map[strin
 		cleanupErrs.Add(fmt.Errorf("load balancers: %w", err))
 	}
 
-	if err := c.deleteFloatingIPsByLabel(ctx, labelString); err != nil {
-		log.Printf("[Cleanup] Warning: Failed to delete floating IPs: %v", err)
-		cleanupErrs.Add(fmt.Errorf("floating IPs: %w", err))
+	// Also delete CCM-created LoadBalancers (they don't have k8zner labels)
+	// CCM creates LBs with "hcloud-ccm/service-uid" label for K8s LoadBalancer Services
+	if err := c.DeleteCCMLoadBalancers(ctx); err != nil {
+		log.Printf("[Cleanup] Warning: Failed to delete CCM load balancers: %v", err)
+		cleanupErrs.Add(fmt.Errorf("CCM load balancers: %w", err))
 	}
 
 	if err := c.deleteFirewallsByLabel(ctx, labelString); err != nil {
@@ -260,23 +263,52 @@ func (c *RealClient) deleteLoadBalancersByLabel(ctx context.Context, labelSelect
 	)
 }
 
-// deleteFloatingIPsByLabel deletes all floating IPs matching the label selector.
-func (c *RealClient) deleteFloatingIPsByLabel(ctx context.Context, labelSelector string) error {
-	return deleteResourcesByLabel(ctx, "floating IP",
-		func(ctx context.Context) ([]*hcloud.FloatingIP, error) {
-			return c.client.FloatingIP.AllWithOpts(ctx, hcloud.FloatingIPListOpts{
-				ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
-			})
-		},
-		func(ctx context.Context, fip *hcloud.FloatingIP) error {
-			_, err := c.client.FloatingIP.Delete(ctx, fip)
-			return err
-		},
-	)
+// DeleteCCMLoadBalancers deletes load balancers created by the Hetzner CCM.
+// CCM-created LBs have the label "hcloud-ccm/service-uid" and don't have k8zner labels.
+// This should be called before cluster destruction to clean up LBs that CCM created
+// for Kubernetes LoadBalancer Services.
+func (c *RealClient) DeleteCCMLoadBalancers(ctx context.Context) error {
+	log.Printf("[Cleanup] Looking for CCM-created load balancers...")
+
+	// List all load balancers (no label filter - CCM LBs don't have k8zner labels)
+	allLBs, err := c.client.LoadBalancer.All(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list all load balancers: %w", err)
+	}
+
+	var ccmLBs []*hcloud.LoadBalancer
+	for _, lb := range allLBs {
+		// CCM-created LBs have "hcloud-ccm/service-uid" label
+		if _, hasCCMLabel := lb.Labels["hcloud-ccm/service-uid"]; hasCCMLabel {
+			ccmLBs = append(ccmLBs, lb)
+		}
+	}
+
+	if len(ccmLBs) == 0 {
+		log.Printf("[Cleanup] No CCM-created load balancers found")
+		return nil
+	}
+
+	log.Printf("[Cleanup] Found %d CCM-created load balancers to delete", len(ccmLBs))
+
+	var deleteErrs []error
+	for _, lb := range ccmLBs {
+		log.Printf("[Cleanup] Deleting CCM load balancer: %s (ID: %d)", lb.Name, lb.ID)
+		if _, err := c.client.LoadBalancer.Delete(ctx, lb); err != nil {
+			log.Printf("[Cleanup] Warning: Failed to delete CCM load balancer %s: %v", lb.Name, err)
+			deleteErrs = append(deleteErrs, fmt.Errorf("CCM LB %q: %w", lb.Name, err))
+		}
+	}
+
+	if len(deleteErrs) > 0 {
+		return errors.Join(deleteErrs...)
+	}
+	return nil
 }
 
 // deleteFirewallsByLabel deletes all firewalls matching the label selector.
-// It retries if the firewall is still in use (e.g., servers being deleted).
+// It first removes all resource associations (label selectors, servers) to avoid
+// "resource_in_use" errors, then deletes the firewall.
 func (c *RealClient) deleteFirewallsByLabel(ctx context.Context, labelSelector string) error {
 	firewalls, err := c.client.Firewall.AllWithOpts(ctx, hcloud.FirewallListOpts{
 		ListOpts: hcloud.ListOpts{LabelSelector: labelSelector},
@@ -288,7 +320,39 @@ func (c *RealClient) deleteFirewallsByLabel(ctx context.Context, labelSelector s
 	for _, fw := range firewalls {
 		log.Printf("[Cleanup] Deleting firewall: %s (ID: %d)", fw.Name, fw.ID)
 
-		// Retry up to 30 times (2.5 minutes) in case firewall is still in use
+		// First, remove all resource associations (label selectors and servers)
+		// This prevents "resource_in_use" errors when deleting
+		if len(fw.AppliedTo) > 0 {
+			log.Printf("[Cleanup] Removing %d resource associations from firewall %s", len(fw.AppliedTo), fw.Name)
+			resourcesToRemove := make([]hcloud.FirewallResource, len(fw.AppliedTo))
+			for i, applied := range fw.AppliedTo {
+				resourcesToRemove[i] = hcloud.FirewallResource{
+					Type: applied.Type,
+				}
+				if applied.Server != nil {
+					resourcesToRemove[i].Server = &hcloud.FirewallResourceServer{ID: applied.Server.ID}
+				}
+				if applied.LabelSelector != nil {
+					resourcesToRemove[i].LabelSelector = &hcloud.FirewallResourceLabelSelector{
+						Selector: applied.LabelSelector.Selector,
+					}
+				}
+			}
+
+			actions, _, err := c.client.Firewall.RemoveResources(ctx, fw, resourcesToRemove)
+			if err != nil {
+				log.Printf("[Cleanup] Warning: Failed to remove resources from firewall %s: %v", fw.Name, err)
+			} else if len(actions) > 0 {
+				// Wait for the removal actions to complete
+				if err := c.client.Action.WaitFor(ctx, actions...); err != nil {
+					log.Printf("[Cleanup] Warning: Failed to wait for resource removal from firewall %s: %v", fw.Name, err)
+				}
+			}
+			// Small delay to let HCloud process the removal
+			time.Sleep(2 * time.Second)
+		}
+
+		// Now delete the firewall with retry logic
 		for i := 0; i < 30; i++ {
 			select {
 			case <-ctx.Done():
@@ -298,6 +362,7 @@ func (c *RealClient) deleteFirewallsByLabel(ctx context.Context, labelSelector s
 
 			_, err := c.client.Firewall.Delete(ctx, fw)
 			if err == nil {
+				log.Printf("[Cleanup] Successfully deleted firewall %s", fw.Name)
 				break
 			}
 
@@ -427,7 +492,6 @@ type RemainingResources struct {
 	Servers         int
 	Volumes         int
 	LoadBalancers   int
-	FloatingIPs     int
 	Firewalls       int
 	Networks        int
 	PlacementGroups int
@@ -437,7 +501,7 @@ type RemainingResources struct {
 
 // Total returns the total count of remaining resources.
 func (r RemainingResources) Total() int {
-	return r.Servers + r.Volumes + r.LoadBalancers + r.FloatingIPs +
+	return r.Servers + r.Volumes + r.LoadBalancers +
 		r.Firewalls + r.Networks + r.PlacementGroups + r.SSHKeys + r.Certificates
 }
 
@@ -452,9 +516,6 @@ func (r RemainingResources) String() string {
 	}
 	if r.LoadBalancers > 0 {
 		parts = append(parts, fmt.Sprintf("%d load balancers", r.LoadBalancers))
-	}
-	if r.FloatingIPs > 0 {
-		parts = append(parts, fmt.Sprintf("%d floating IPs", r.FloatingIPs))
 	}
 	if r.Firewalls > 0 {
 		parts = append(parts, fmt.Sprintf("%d firewalls", r.Firewalls))
@@ -509,15 +570,6 @@ func (c *RealClient) CountResourcesByLabel(ctx context.Context, labelSelector ma
 		return result, fmt.Errorf("failed to list load balancers: %w", err)
 	}
 	result.LoadBalancers = len(loadBalancers)
-
-	// Count floating IPs
-	floatingIPs, err := c.client.FloatingIP.AllWithOpts(ctx, hcloud.FloatingIPListOpts{
-		ListOpts: hcloud.ListOpts{LabelSelector: labelString},
-	})
-	if err != nil {
-		return result, fmt.Errorf("failed to list floating IPs: %w", err)
-	}
-	result.FloatingIPs = len(floatingIPs)
 
 	// Count firewalls
 	firewalls, err := c.client.Firewall.AllWithOpts(ctx, hcloud.FirewallListOpts{

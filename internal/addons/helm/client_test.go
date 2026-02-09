@@ -12,6 +12,7 @@ import (
 // This test requires network access and downloads real charts.
 // Skip in CI environments without network or for fast unit tests.
 func TestDownloadChartIntegration(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
@@ -78,6 +79,7 @@ func TestDownloadChartIntegration(t *testing.T) {
 
 // TestDownloadChartInvalidRepo tests error handling for invalid repos.
 func TestDownloadChartInvalidRepo(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
@@ -99,7 +101,9 @@ func TestDownloadChartInvalidRepo(t *testing.T) {
 
 // TestClearCache tests cache clearing functionality.
 func TestClearCache(t *testing.T) {
+	t.Parallel()
 	// Create a test file in cache directory
+
 	cachePath := GetCachePath()
 	if err := os.MkdirAll(cachePath, 0755); err != nil {
 		t.Fatalf("Failed to create cache directory: %v", err)
@@ -123,6 +127,7 @@ func TestClearCache(t *testing.T) {
 
 // TestChartSpecString tests ChartSpec string representation.
 func TestChartSpec(t *testing.T) {
+	t.Parallel()
 	spec := ChartSpec{
 		Repository: "https://example.com/charts",
 		Name:       "my-chart",

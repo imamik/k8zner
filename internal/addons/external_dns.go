@@ -120,12 +120,7 @@ func buildExternalDNSValues(cfg *config.Config) helm.Values {
 				},
 			},
 		},
-		"tolerations": []helm.Values{
-			{
-				"key":      "node.cloudprovider.kubernetes.io/uninitialized",
-				"operator": "Exists",
-			},
-		},
+		"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
 		// Service account configuration
 		"serviceAccount": helm.Values{
 			"create": true,

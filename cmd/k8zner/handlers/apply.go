@@ -11,33 +11,60 @@ import (
 	"log"
 	"os"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/clientcmd"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
 
+	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	"github.com/imamik/k8zner/internal/config"
 	v2config "github.com/imamik/k8zner/internal/config/v2"
-	"github.com/imamik/k8zner/internal/orchestration"
-	"github.com/imamik/k8zner/internal/platform/hcloud"
+	hcloudInternal "github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/platform/talos"
 	"github.com/imamik/k8zner/internal/provisioning"
-	"github.com/imamik/k8zner/internal/util/prerequisites"
+	clusterProv "github.com/imamik/k8zner/internal/provisioning/cluster"
+	"github.com/imamik/k8zner/internal/provisioning/compute"
+	"github.com/imamik/k8zner/internal/provisioning/destroy"
+	"github.com/imamik/k8zner/internal/provisioning/image"
+	"github.com/imamik/k8zner/internal/provisioning/infrastructure"
 )
 
 const (
 	secretsFile     = "secrets.yaml"
 	talosConfigPath = "talosconfig"
 	kubeconfigPath  = "kubeconfig"
+
+	// k8znerNamespace is the Kubernetes namespace for k8zner resources.
+	k8znerNamespace = "k8zner-system"
+
+	// credentialsSecretName is the name of the secret containing Hetzner and Talos credentials.
+	credentialsSecretName = "k8zner-credentials" //nolint:gosec // This is a secret name, not a credential value
 )
 
-// Reconciler interface for testing - matches orchestration.Reconciler.
-type Reconciler interface {
-	Reconcile(ctx context.Context) ([]byte, error)
+// InfrastructureInfo contains information about created infrastructure.
+type InfrastructureInfo struct {
+	NetworkID             int64
+	NetworkName           string
+	FirewallID            int64
+	FirewallName          string
+	LoadBalancerID        int64
+	LoadBalancerName      string
+	LoadBalancerIP        string
+	LoadBalancerPrivateIP string
+	SSHKeyID              int64
+}
+
+// Provisioner interface for testing - matches provisioning.Phase.
+type Provisioner interface {
+	Provision(ctx *provisioning.Context) error
 }
 
 // Factory function variables - can be replaced in tests for dependency injection.
 var (
 	// newInfraClient creates a new infrastructure client.
-	newInfraClient = func(token string) hcloud.InfrastructureManager {
-		return hcloud.NewRealClient(token)
+	newInfraClient = func(token string) hcloudInternal.InfrastructureManager {
+		return hcloudInternal.NewRealClient(token)
 	}
 
 	// getOrGenerateSecrets loads or generates Talos secrets.
@@ -47,14 +74,6 @@ var (
 	newTalosGenerator = func(clusterName, kubernetesVersion, talosVersion, endpoint string, sb *secrets.Bundle) provisioning.TalosConfigProducer {
 		return talos.NewGenerator(clusterName, kubernetesVersion, talosVersion, endpoint, sb)
 	}
-
-	// newReconciler creates a new infrastructure reconciler.
-	newReconciler = func(infra hcloud.InfrastructureManager, talosGen provisioning.TalosConfigProducer, cfg *config.Config) Reconciler {
-		return orchestration.NewReconciler(infra, talosGen, cfg)
-	}
-
-	// checkDefaultPrereqs runs prerequisite checks.
-	checkDefaultPrereqs = prerequisites.CheckDefault
 
 	// writeFile writes data to a file (for testing injection).
 	writeFile = os.WriteFile
@@ -67,66 +86,239 @@ var (
 
 	// findV2ConfigFile finds the v2 config file (for testing injection).
 	findV2ConfigFile = v2config.FindConfigFile
+
+	// Factory functions for provisioners - can be replaced in tests.
+	newInfraProvisioner    = infrastructure.NewProvisioner
+	newImageProvisioner    = image.NewProvisioner
+	newComputeProvisioner  = compute.NewProvisioner
+	newClusterProvisioner  = clusterProv.NewProvisioner
+	newDestroyProvisioner  = func() Provisioner { return destroy.NewProvisioner() }
+	newProvisioningContext = provisioning.NewContext
 )
 
-// Apply provisions a Kubernetes cluster on Hetzner Cloud using Talos Linux.
-//
-// This function orchestrates the complete cluster provisioning workflow:
-//  1. Loads and validates cluster configuration (auto-detects v2 or legacy format)
-//  2. Initializes Hetzner Cloud client using HCLOUD_TOKEN environment variable
-//  3. Generates Talos machine configurations and persists secrets immediately
-//  4. Reconciles cluster infrastructure (networks, servers, load balancers, bootstrap)
-//  5. Writes kubeconfig if cluster bootstrap completed successfully
-//  6. Installs configured cluster addons (CCM, CSI, etc.) if bootstrap succeeded
-//
-// Secrets and Talos config are written before reconciliation to ensure they're
-// preserved even if reconciliation fails, enabling retry without data loss.
-//
-// Addon installation is performed separately after infrastructure provisioning
-// to maintain clean separation between infrastructure and cluster components.
-//
-// The function expects HCLOUD_TOKEN to be set in the environment and will
-// delegate validation to the Hetzner Cloud client.
-func Apply(ctx context.Context, configPath string) error {
+// Apply creates or updates a Kubernetes cluster on Hetzner Cloud using Talos Linux.
+// Checks for existing operator-managed clusters to update, otherwise bootstraps from scratch.
+func Apply(ctx context.Context, configPath string, wait bool) error {
 	cfg, err := loadConfig(configPath)
 	if err != nil {
-		return err
-	}
-
-	// Run prerequisites check if enabled (default: true)
-	if err := checkPrerequisites(cfg); err != nil {
-		return err
+		return fmt.Errorf("failed to load config: %w", err)
 	}
 
 	log.Printf("Applying configuration for cluster: %s", cfg.ClusterName)
 
-	client := initializeClient()
-	talosGen, err := initializeTalosGenerator(cfg)
+	// Check if cluster already exists with operator management
+	if isOperatorManaged, err := checkOperatorManaged(ctx, cfg.ClusterName); err == nil && isOperatorManaged {
+		log.Printf("Cluster %s is operator-managed, updating CRD spec", cfg.ClusterName)
+		return updateExistingCluster(ctx, cfg)
+	}
+
+	// No existing cluster — bootstrap from scratch
+	return bootstrapNewCluster(ctx, cfg, wait)
+}
+
+// updateExistingCluster updates an existing operator-managed cluster's CRD spec.
+func updateExistingCluster(ctx context.Context, cfg *config.Config) error {
+	kubecfg, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load kubeconfig: %w", err)
 	}
 
-	if err := writeTalosFiles(talosGen); err != nil {
-		return err
-	}
-
-	kubeconfig, err := reconcileInfrastructure(ctx, client, talosGen, cfg)
+	scheme := k8znerv1alpha1.Scheme
+	k8sClient, err := client.New(kubecfg, client.Options{Scheme: scheme})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
-	if err := writeKubeconfig(kubeconfig); err != nil {
-		return err
+	k8zCluster := &k8znerv1alpha1.K8znerCluster{}
+	key := client.ObjectKey{
+		Namespace: k8znerNamespace,
+		Name:      cfg.ClusterName,
 	}
 
-	printApplySuccess(kubeconfig, cfg)
+	if err := k8sClient.Get(ctx, key, k8zCluster); err != nil {
+		return fmt.Errorf("failed to get K8znerCluster: %w", err)
+	}
+
+	updateClusterSpecFromConfig(k8zCluster, cfg)
+
+	if err := k8sClient.Update(ctx, k8zCluster); err != nil {
+		return fmt.Errorf("failed to update K8znerCluster: %w", err)
+	}
+
+	log.Printf("Updated K8znerCluster %s spec", cfg.ClusterName)
+	log.Printf("\nThe operator will now reconcile the changes.")
+	log.Printf("Monitor progress with:")
+	log.Printf("  k8zner doctor --watch")
+
 	return nil
 }
 
+// bootstrapNewCluster creates a new cluster from scratch.
+// Flow: Image -> Infrastructure -> 1 CP -> Bootstrap -> Install operator -> Create CRD
+func bootstrapNewCluster(ctx context.Context, cfg *config.Config, wait bool) error {
+	token := os.Getenv("HCLOUD_TOKEN")
+	if token == "" {
+		return fmt.Errorf("HCLOUD_TOKEN environment variable is required")
+	}
+	infraClient := newInfraClient(token)
+
+	talosGen, err := initializeTalosGenerator(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to initialize Talos generator: %w", err)
+	}
+
+	talosGen.SetMachineConfigOptions(talos.NewMachineConfigOptions(cfg))
+
+	if err := writeTalosFiles(talosGen); err != nil {
+		return fmt.Errorf("failed to write Talos config files: %w", err)
+	}
+
+	pCtx := newProvisioningContext(ctx, cfg, infraClient, talosGen)
+
+	// Track whether cleanup is needed on failure
+	var cleanupNeeded bool
+	var applyErr error
+	defer func() {
+		if applyErr != nil && cleanupNeeded {
+			log.Println("Apply failed, cleaning up created resources...")
+			cleanupCtx := context.Background()
+			if cleanupErr := cleanupOnFailure(cleanupCtx, cfg, infraClient); cleanupErr != nil {
+				log.Printf("Warning: cleanup failed: %v", cleanupErr)
+			}
+		}
+	}()
+
+	if applyErr = provisionImage(pCtx); applyErr != nil {
+		return applyErr
+	}
+
+	if applyErr = provisionInfrastructure(pCtx); applyErr != nil {
+		return applyErr
+	}
+	cleanupNeeded = true
+
+	if applyErr = provisionFirstControlPlane(cfg, pCtx); applyErr != nil {
+		return applyErr
+	}
+
+	if applyErr = bootstrapCluster(pCtx); applyErr != nil {
+		return applyErr
+	}
+
+	kubeconfig := pCtx.State.Kubeconfig
+	if len(kubeconfig) == 0 {
+		applyErr = fmt.Errorf("kubeconfig not available after cluster bootstrap")
+		return applyErr
+	}
+	if applyErr = writeKubeconfig(kubeconfig); applyErr != nil {
+		return applyErr
+	}
+
+	if applyErr = installOperator(ctx, cfg, kubeconfig, pCtx.State.Network.ID); applyErr != nil {
+		return applyErr
+	}
+
+	// Gather infrastructure info for CRD
+	infraInfo := buildInfraInfo(ctx, pCtx, infraClient, cfg)
+
+	// Phase 6: Create CRD
+	log.Println("Phase 6/6: Creating K8znerCluster CRD...")
+	if err := createClusterCRD(ctx, cfg, pCtx, infraInfo, kubeconfig, token); err != nil {
+		return fmt.Errorf("CRD creation failed: %w", err)
+	}
+
+	printApplySuccess(cfg, wait)
+
+	if wait {
+		return waitForOperatorComplete(ctx, cfg.ClusterName, kubeconfig)
+	}
+
+	return nil
+}
+
+// checkOperatorManaged checks if a cluster is managed by the operator.
+func checkOperatorManaged(ctx context.Context, clusterName string) (bool, error) {
+	if _, err := os.Stat(kubeconfigPath); os.IsNotExist(err) {
+		return false, nil
+	}
+
+	kubecfg, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+	if err != nil {
+		return false, err
+	}
+
+	scheme := k8znerv1alpha1.Scheme
+	k8sClient, err := client.New(kubecfg, client.Options{Scheme: scheme})
+	if err != nil {
+		return false, err
+	}
+
+	k8zCluster := &k8znerv1alpha1.K8znerCluster{}
+	key := client.ObjectKey{
+		Namespace: k8znerNamespace,
+		Name:      clusterName,
+	}
+
+	if err := k8sClient.Get(ctx, key, k8zCluster); err != nil {
+		return false, nil
+	}
+
+	return k8zCluster.Spec.CredentialsRef.Name != "", nil
+}
+
+// updateClusterSpecFromConfig updates the K8znerCluster spec from config.Config.
+func updateClusterSpecFromConfig(k8zCluster *k8znerv1alpha1.K8znerCluster, cfg *config.Config) {
+	if len(cfg.ControlPlane.NodePools) > 0 {
+		pool := cfg.ControlPlane.NodePools[0]
+		k8zCluster.Spec.ControlPlanes.Count = pool.Count
+		k8zCluster.Spec.ControlPlanes.Size = pool.ServerType
+	}
+
+	if len(cfg.Workers) > 0 {
+		pool := cfg.Workers[0]
+		k8zCluster.Spec.Workers.Count = pool.Count
+		k8zCluster.Spec.Workers.Size = pool.ServerType
+	}
+
+	k8zCluster.Spec.Talos.Version = cfg.Talos.Version
+	k8zCluster.Spec.Talos.SchematicID = cfg.Talos.SchematicID
+	k8zCluster.Spec.Talos.Extensions = cfg.Talos.Extensions
+	k8zCluster.Spec.Kubernetes.Version = cfg.Kubernetes.Version
+
+	k8zCluster.Spec.Network.IPv4CIDR = cfg.Network.IPv4CIDR
+	k8zCluster.Spec.Network.PodCIDR = cfg.Network.PodIPv4CIDR
+	k8zCluster.Spec.Network.ServiceCIDR = cfg.Network.ServiceIPv4CIDR
+
+	if k8zCluster.Spec.Addons == nil {
+		k8zCluster.Spec.Addons = &k8znerv1alpha1.AddonSpec{}
+	}
+	k8zCluster.Spec.Addons.MetricsServer = cfg.Addons.MetricsServer.Enabled
+	k8zCluster.Spec.Addons.CertManager = cfg.Addons.CertManager.Enabled
+	k8zCluster.Spec.Addons.Traefik = cfg.Addons.Traefik.Enabled
+	k8zCluster.Spec.Addons.ArgoCD = cfg.Addons.ArgoCD.Enabled
+	k8zCluster.Spec.Addons.Monitoring = cfg.Addons.KubePrometheusStack.Enabled
+
+	if cfg.Addons.TalosBackup.Enabled && cfg.Addons.TalosBackup.S3AccessKey != "" {
+		if k8zCluster.Spec.Backup == nil {
+			k8zCluster.Spec.Backup = &k8znerv1alpha1.BackupSpec{}
+		}
+		k8zCluster.Spec.Backup.Enabled = true
+		k8zCluster.Spec.Backup.Schedule = cfg.Addons.TalosBackup.Schedule
+		if k8zCluster.Spec.Backup.S3SecretRef == nil {
+			k8zCluster.Spec.Backup.S3SecretRef = &k8znerv1alpha1.SecretReference{
+				Name: k8zCluster.Name + "-backup-s3",
+			}
+		}
+	}
+
+	if k8zCluster.Annotations == nil {
+		k8zCluster.Annotations = make(map[string]string)
+	}
+	k8zCluster.Annotations["k8zner.io/last-applied"] = metav1.Now().Format(metav1.RFC3339Micro)
+}
+
 // loadConfig loads and validates cluster configuration.
-// If configPath is empty, it looks for k8zner.yaml in the current directory.
 func loadConfig(configPath string) (*config.Config, error) {
-	// If no path provided, try to find default config
 	if configPath == "" {
 		path, err := findV2ConfigFile()
 		if err != nil {
@@ -135,7 +327,6 @@ func loadConfig(configPath string) (*config.Config, error) {
 		configPath = path
 	}
 
-	// Load config and expand to internal format
 	v2Cfg, err := loadV2ConfigFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config %s: %w", configPath, err)
@@ -143,155 +334,4 @@ func loadConfig(configPath string) (*config.Config, error) {
 
 	log.Printf("Using config: %s", configPath)
 	return expandV2Config(v2Cfg)
-}
-
-// initializeClient creates a Hetzner Cloud client using HCLOUD_TOKEN from environment.
-// Token validation is delegated to the client.
-func initializeClient() hcloud.InfrastructureManager {
-	token := os.Getenv("HCLOUD_TOKEN")
-	return newInfraClient(token)
-}
-
-// initializeTalosGenerator creates a Talos configuration generator for the orchestration.
-// Generates machine configs, certificates, and client secrets for cluster access.
-func initializeTalosGenerator(cfg *config.Config) (provisioning.TalosConfigProducer, error) {
-	endpoint := fmt.Sprintf("https://%s-kube-api:%d", cfg.ClusterName, config.KubeAPIPort)
-
-	sb, err := getOrGenerateSecrets(secretsFile, cfg.Talos.Version)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize secrets: %w", err)
-	}
-
-	return newTalosGenerator(
-		cfg.ClusterName,
-		cfg.Kubernetes.Version,
-		cfg.Talos.Version,
-		endpoint,
-		sb,
-	), nil
-}
-
-// reconcileInfrastructure provisions infrastructure and bootstraps the Kubernetes orchestration.
-// Returns kubeconfig bytes if bootstrap completed.
-// Kubeconfig will be empty if cluster was already bootstrapped.
-func reconcileInfrastructure(ctx context.Context, client hcloud.InfrastructureManager, talosGen provisioning.TalosConfigProducer, cfg *config.Config) ([]byte, error) {
-	log.Println("Starting infrastructure reconciliation...")
-
-	reconciler := newReconciler(client, talosGen, cfg)
-	kubeconfig, err := reconciler.Reconcile(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("reconciliation failed: %w", err)
-	}
-
-	log.Println("Infrastructure reconciliation completed")
-	return kubeconfig, nil
-}
-
-// writeTalosFiles persists Talos secrets and client config to disk.
-// Must be called before reconciliation to ensure secrets survive failures.
-func writeTalosFiles(talosGen provisioning.TalosConfigProducer) error {
-	clientCfgBytes, err := talosGen.GetClientConfig()
-	if err != nil {
-		return fmt.Errorf("failed to generate talosconfig: %w", err)
-	}
-
-	if err := writeFile(talosConfigPath, clientCfgBytes, 0600); err != nil {
-		return fmt.Errorf("failed to write talosconfig: %w", err)
-	}
-
-	return nil
-}
-
-// writeKubeconfig persists the Kubernetes client config to disk.
-// Only writes if kubeconfig is non-empty (i.e., cluster bootstrap succeeded).
-func writeKubeconfig(kubeconfig []byte) error {
-	if len(kubeconfig) == 0 {
-		return nil
-	}
-
-	if err := writeFile(kubeconfigPath, kubeconfig, 0600); err != nil {
-		return fmt.Errorf("failed to write kubeconfig: %w", err)
-	}
-
-	return nil
-}
-
-// printApplySuccess outputs completion message and next steps for the user.
-// Message varies depending on whether this was initial bootstrap or re-apply.
-func printApplySuccess(kubeconfig []byte, cfg *config.Config) {
-	fmt.Printf("\nReconciliation complete!\n")
-	fmt.Printf("Secrets saved to: %s\n", secretsFile)
-	fmt.Printf("Talos config saved to: %s\n", talosConfigPath)
-
-	if len(kubeconfig) > 0 {
-		fmt.Printf("Kubeconfig saved to: %s\n", kubeconfigPath)
-		fmt.Printf("\nYou can now access your cluster with:\n")
-		fmt.Printf("  export KUBECONFIG=%s\n", kubeconfigPath)
-		fmt.Printf("  kubectl get nodes\n")
-	} else {
-		fmt.Printf("\nNote: Cluster was already bootstrapped. To retrieve kubeconfig, use talosctl:\n")
-		fmt.Printf("  talosctl --talosconfig %s kubeconfig\n", talosConfigPath)
-	}
-
-	// Print Cilium encryption info if Cilium is enabled
-	printCiliumEncryptionInfo(cfg)
-}
-
-// printCiliumEncryptionInfo outputs Cilium encryption settings.
-// Matches terraform/outputs.tf cilium_encryption_info output.
-func printCiliumEncryptionInfo(cfg *config.Config) {
-	if !cfg.Addons.Cilium.Enabled {
-		return
-	}
-
-	cilium := cfg.Addons.Cilium
-	if !cilium.EncryptionEnabled {
-		fmt.Printf("\nCilium encryption: disabled\n")
-		return
-	}
-
-	fmt.Printf("\nCilium encryption info:\n")
-	fmt.Printf("  Enabled: %t\n", cilium.EncryptionEnabled)
-	fmt.Printf("  Type: %s\n", cilium.EncryptionType)
-
-	if cilium.EncryptionType == "ipsec" {
-		fmt.Printf("  IPsec settings:\n")
-		fmt.Printf("    Algorithm: %s\n", cilium.IPSecAlgorithm)
-		fmt.Printf("    Key size (bits): %d\n", cilium.IPSecKeySize)
-		fmt.Printf("    Key ID: %d\n", cilium.IPSecKeyID)
-		fmt.Printf("    Secret name: cilium-ipsec-keys\n")
-		fmt.Printf("    Namespace: kube-system\n")
-	}
-}
-
-// checkPrerequisites verifies required client tools are available.
-// Enabled by default, can be disabled via prerequisites_check_enabled: false.
-func checkPrerequisites(cfg *config.Config) error {
-	// Default to enabled if not explicitly set
-	enabled := cfg.PrerequisitesCheckEnabled == nil || *cfg.PrerequisitesCheckEnabled
-
-	if !enabled {
-		return nil
-	}
-
-	log.Println("Checking prerequisites...")
-	results := checkDefaultPrereqs()
-
-	// Log found tools
-	for _, r := range results.Results {
-		if r.Found {
-			version := r.Version
-			if version == "" {
-				version = "unknown version"
-			}
-			log.Printf("  Found %s (%s)", r.Tool.Name, version)
-		}
-	}
-
-	// Return error if required tools are missing
-	if err := results.Error(); err != nil {
-		return fmt.Errorf("prerequisites check failed: %w", err)
-	}
-
-	return nil
 }

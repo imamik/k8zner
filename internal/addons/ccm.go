@@ -46,9 +46,8 @@ func buildCCMValues(cfg *config.Config, _ int64) helm.Values {
 	// Base configuration
 	values := helm.Values{
 		"kind": "DaemonSet",
-		"nodeSelector": helm.Values{
-			"node-role.kubernetes.io/control-plane": "",
-		},
+		"nodeSelector": helm.ControlPlaneNodeSelector(),
+		"tolerations":  helm.BootstrapTolerations(),
 		"networking": helm.Values{
 			"enabled":     true,
 			"clusterCIDR": getClusterCIDR(cfg),
@@ -66,6 +65,13 @@ func buildCCMValues(cfg *config.Config, _ int64) helm.Values {
 	// Build environment variables for load balancer configuration
 	// See: terraform/hcloud.tf lines 39-54
 	env := buildCCMEnvVars(cfg, lb)
+
+	// CCM runs on control plane nodes with hostNetwork:true.
+	// When kube-proxy is disabled (Cilium replaces it), the Kubernetes service IP
+	// is not routable. Override to use localhost since kube-apiserver runs on the same node.
+	env["KUBERNETES_SERVICE_HOST"] = helm.Values{"value": "localhost"}
+	env["KUBERNETES_SERVICE_PORT"] = helm.Values{"value": "6443"}
+
 	if len(env) > 0 {
 		values["env"] = env
 	}
@@ -78,6 +84,17 @@ func buildCCMValues(cfg *config.Config, _ int64) helm.Values {
 func buildCCMEnvVars(cfg *config.Config, lb *config.CCMLoadBalancerConfig) helm.Values {
 	ccm := &cfg.Addons.CCM
 	env := helm.Values{}
+
+	// HCLOUD_TOKEN - Critical: CCM needs this to authenticate with Hetzner Cloud API
+	// Without this, CCM cannot provision load balancers or manage routes
+	env["HCLOUD_TOKEN"] = helm.Values{
+		"valueFrom": helm.Values{
+			"secretKeyRef": helm.Values{
+				"name": "hcloud",
+				"key":  "token",
+			},
+		},
+	}
 
 	// HCLOUD_LOAD_BALANCERS_ENABLED
 	if lb.Enabled != nil {

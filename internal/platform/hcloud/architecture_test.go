@@ -3,6 +3,7 @@ package hcloud
 import "testing"
 
 func TestDetectArchitecture(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		serverType string
 		expected   Architecture
@@ -37,6 +38,7 @@ func TestDetectArchitecture(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.serverType, func(t *testing.T) {
+			t.Parallel()
 			result := DetectArchitecture(tt.serverType)
 			if result != tt.expected {
 				t.Errorf("DetectArchitecture(%q) = %q, want %q", tt.serverType, result, tt.expected)
@@ -46,17 +48,19 @@ func TestDetectArchitecture(t *testing.T) {
 }
 
 func TestGetDefaultServerType(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		arch     Architecture
 		expected string
 	}{
-		{ArchAMD64, "cx23"},
+		{ArchAMD64, "cpx22"},
 		{ArchARM64, "cax11"},
-		{"unknown", "cx23"}, // Unknown defaults to AMD64 server type
+		{"unknown", "cpx22"}, // Unknown defaults to AMD64 server type
 	}
 
 	for _, tt := range tests {
 		t.Run(string(tt.arch), func(t *testing.T) {
+			t.Parallel()
 			result := GetDefaultServerType(tt.arch)
 			if result != tt.expected {
 				t.Errorf("GetDefaultServerType(%q) = %q, want %q", tt.arch, result, tt.expected)
@@ -66,6 +70,7 @@ func TestGetDefaultServerType(t *testing.T) {
 }
 
 func TestArchitecture_String(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		arch     Architecture
 		expected string
@@ -76,6 +81,7 @@ func TestArchitecture_String(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
+			t.Parallel()
 			result := tt.arch.String()
 			if result != tt.expected {
 				t.Errorf("Architecture.String() = %q, want %q", result, tt.expected)
@@ -85,12 +91,15 @@ func TestArchitecture_String(t *testing.T) {
 }
 
 func TestDetectArchitecture_RoundTrip(t *testing.T) {
+	t.Parallel()
 	// Test that GetDefaultServerType returns a server type
 	// that DetectArchitecture correctly identifies
+
 	archs := []Architecture{ArchAMD64, ArchARM64}
 
 	for _, arch := range archs {
 		t.Run(string(arch), func(t *testing.T) {
+			t.Parallel()
 			serverType := GetDefaultServerType(arch)
 			detectedArch := DetectArchitecture(serverType)
 			if detectedArch != arch {

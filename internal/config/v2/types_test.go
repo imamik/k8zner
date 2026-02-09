@@ -6,6 +6,7 @@ import (
 )
 
 func TestRegion_IsValid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		region Region
@@ -21,6 +22,7 @@ func TestRegion_IsValid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := tt.region.IsValid(); got != tt.want {
 				t.Errorf("Region.IsValid() = %v, want %v", got, tt.want)
 			}
@@ -29,6 +31,7 @@ func TestRegion_IsValid(t *testing.T) {
 }
 
 func TestRegion_String(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		region Region
 		want   string
@@ -41,6 +44,7 @@ func TestRegion_String(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.region), func(t *testing.T) {
+			t.Parallel()
 			if got := tt.region.String(); got != tt.want {
 				t.Errorf("Region.String() = %v, want %v", got, tt.want)
 			}
@@ -49,6 +53,7 @@ func TestRegion_String(t *testing.T) {
 }
 
 func TestMode_IsValid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		mode Mode
@@ -62,6 +67,7 @@ func TestMode_IsValid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := tt.mode.IsValid(); got != tt.want {
 				t.Errorf("Mode.IsValid() = %v, want %v", got, tt.want)
 			}
@@ -70,6 +76,7 @@ func TestMode_IsValid(t *testing.T) {
 }
 
 func TestMode_ControlPlaneCount(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		mode Mode
 		want int
@@ -80,6 +87,7 @@ func TestMode_ControlPlaneCount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.mode), func(t *testing.T) {
+			t.Parallel()
 			if got := tt.mode.ControlPlaneCount(); got != tt.want {
 				t.Errorf("Mode.ControlPlaneCount() = %v, want %v", got, tt.want)
 			}
@@ -88,6 +96,7 @@ func TestMode_ControlPlaneCount(t *testing.T) {
 }
 
 func TestMode_LoadBalancerCount(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		mode Mode
 		want int
@@ -98,6 +107,7 @@ func TestMode_LoadBalancerCount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.mode), func(t *testing.T) {
+			t.Parallel()
 			if got := tt.mode.LoadBalancerCount(); got != tt.want {
 				t.Errorf("Mode.LoadBalancerCount() = %v, want %v", got, tt.want)
 			}
@@ -106,22 +116,36 @@ func TestMode_LoadBalancerCount(t *testing.T) {
 }
 
 func TestServerSize_IsValid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		size ServerSize
 		want bool
 	}{
+		// CPX series (shared vCPU)
+		{"valid cpx22", SizeCPX22, true},
+		{"valid cpx32", SizeCPX32, true},
+		{"valid cpx42", SizeCPX42, true},
+		{"valid cpx52", SizeCPX52, true},
+		// CX series (legacy names)
 		{"valid cx22", SizeCX22, true},
 		{"valid cx32", SizeCX32, true},
 		{"valid cx42", SizeCX42, true},
 		{"valid cx52", SizeCX52, true},
+		// CX series (new names)
+		{"valid cx23", SizeCX23, true},
+		{"valid cx33", SizeCX33, true},
+		{"valid cx43", SizeCX43, true},
+		{"valid cx53", SizeCX53, true},
+		// Invalid
 		{"invalid empty", ServerSize(""), false},
-		{"invalid cpx21", ServerSize("cpx21"), false},
+		{"invalid cax11", ServerSize("cax11"), false}, // ARM not supported
 		{"invalid random", ServerSize("large"), false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := tt.size.IsValid(); got != tt.want {
 				t.Errorf("ServerSize.IsValid() = %v, want %v", got, tt.want)
 			}
@@ -130,12 +154,19 @@ func TestServerSize_IsValid(t *testing.T) {
 }
 
 func TestServerSize_Specs(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		size     ServerSize
 		wantVCPU int
 		wantRAM  int
 		wantDisk int
 	}{
+		// CPX series (shared vCPU) - same specs as CX
+		{SizeCPX22, 2, 4, 40},
+		{SizeCPX32, 4, 8, 80},
+		{SizeCPX42, 8, 16, 160},
+		{SizeCPX52, 16, 32, 320},
+		// CX series (legacy names map to new specs)
 		{SizeCX22, 2, 4, 40},
 		{SizeCX32, 4, 8, 80},
 		{SizeCX42, 8, 16, 160},
@@ -144,6 +175,7 @@ func TestServerSize_Specs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.size), func(t *testing.T) {
+			t.Parallel()
 			specs := tt.size.Specs()
 			if specs.VCPU != tt.wantVCPU {
 				t.Errorf("Specs().VCPU = %v, want %v", specs.VCPU, tt.wantVCPU)
@@ -380,6 +412,7 @@ func TestConfig_Validate(t *testing.T) {
 }
 
 func TestConfig_ControlPlaneCount(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		mode Mode
 		want int
@@ -390,6 +423,7 @@ func TestConfig_ControlPlaneCount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.mode), func(t *testing.T) {
+			t.Parallel()
 			c := Config{Mode: tt.mode}
 			if got := c.ControlPlaneCount(); got != tt.want {
 				t.Errorf("Config.ControlPlaneCount() = %v, want %v", got, tt.want)
@@ -399,6 +433,7 @@ func TestConfig_ControlPlaneCount(t *testing.T) {
 }
 
 func TestConfig_LoadBalancerCount(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		mode Mode
 		want int
@@ -409,6 +444,7 @@ func TestConfig_LoadBalancerCount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.mode), func(t *testing.T) {
+			t.Parallel()
 			c := Config{Mode: tt.mode}
 			if got := c.LoadBalancerCount(); got != tt.want {
 				t.Errorf("Config.LoadBalancerCount() = %v, want %v", got, tt.want)
@@ -418,6 +454,7 @@ func TestConfig_LoadBalancerCount(t *testing.T) {
 }
 
 func TestConfig_HasDomain(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		domain string
@@ -429,6 +466,7 @@ func TestConfig_HasDomain(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			c := Config{Domain: tt.domain}
 			if got := c.HasDomain(); got != tt.want {
 				t.Errorf("Config.HasDomain() = %v, want %v", got, tt.want)
@@ -438,6 +476,7 @@ func TestConfig_HasDomain(t *testing.T) {
 }
 
 func TestConfig_TotalWorkerVCPU(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		workers Worker
@@ -450,6 +489,7 @@ func TestConfig_TotalWorkerVCPU(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			c := Config{Workers: tt.workers}
 			if got := c.TotalWorkerVCPU(); got != tt.want {
 				t.Errorf("Config.TotalWorkerVCPU() = %v, want %v", got, tt.want)
@@ -459,6 +499,7 @@ func TestConfig_TotalWorkerVCPU(t *testing.T) {
 }
 
 func TestConfig_TotalWorkerRAMGB(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		workers Worker
@@ -471,6 +512,7 @@ func TestConfig_TotalWorkerRAMGB(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			c := Config{Workers: tt.workers}
 			if got := c.TotalWorkerRAMGB(); got != tt.want {
 				t.Errorf("Config.TotalWorkerRAMGB() = %v, want %v", got, tt.want)
@@ -480,6 +522,7 @@ func TestConfig_TotalWorkerRAMGB(t *testing.T) {
 }
 
 func TestConfig_HasBackup(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		backup bool
@@ -491,6 +534,7 @@ func TestConfig_HasBackup(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			c := Config{Backup: tt.backup}
 			if got := c.HasBackup(); got != tt.want {
 				t.Errorf("Config.HasBackup() = %v, want %v", got, tt.want)
@@ -500,6 +544,7 @@ func TestConfig_HasBackup(t *testing.T) {
 }
 
 func TestConfig_BackupBucketName(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		clusterName string
@@ -511,6 +556,7 @@ func TestConfig_BackupBucketName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			c := Config{Name: tt.clusterName}
 			if got := c.BackupBucketName(); got != tt.want {
 				t.Errorf("Config.BackupBucketName() = %v, want %v", got, tt.want)
@@ -520,6 +566,7 @@ func TestConfig_BackupBucketName(t *testing.T) {
 }
 
 func TestConfig_S3Endpoint(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		region Region
@@ -532,6 +579,7 @@ func TestConfig_S3Endpoint(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			c := Config{Region: tt.region}
 			if got := c.S3Endpoint(); got != tt.want {
 				t.Errorf("Config.S3Endpoint() = %v, want %v", got, tt.want)
@@ -630,6 +678,7 @@ func TestConfig_Validate_Backup(t *testing.T) {
 }
 
 func TestConfig_GetCertEmail(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		certEmail string
@@ -644,6 +693,7 @@ func TestConfig_GetCertEmail(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			c := Config{CertEmail: tt.certEmail, Domain: tt.domain}
 			if got := c.GetCertEmail(); got != tt.want {
 				t.Errorf("Config.GetCertEmail() = %v, want %v", got, tt.want)
@@ -653,6 +703,7 @@ func TestConfig_GetCertEmail(t *testing.T) {
 }
 
 func TestConfig_ArgoHost(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		domain        string
@@ -667,9 +718,79 @@ func TestConfig_ArgoHost(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			c := Config{Domain: tt.domain, ArgoSubdomain: tt.argoSubdomain}
 			if got := c.ArgoHost(); got != tt.want {
 				t.Errorf("Config.ArgoHost() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConfig_HasMonitoring(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		monitoring bool
+		want       bool
+	}{
+		{"monitoring enabled", true, true},
+		{"monitoring disabled", false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c := Config{Monitoring: tt.monitoring}
+			if got := c.HasMonitoring(); got != tt.want {
+				t.Errorf("Config.HasMonitoring() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConfig_GetGrafanaSubdomain(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name             string
+		grafanaSubdomain string
+		want             string
+	}{
+		{"default", "", "grafana"},
+		{"custom", "metrics", "metrics"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c := Config{GrafanaSubdomain: tt.grafanaSubdomain}
+			if got := c.GetGrafanaSubdomain(); got != tt.want {
+				t.Errorf("Config.GetGrafanaSubdomain() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConfig_GrafanaHost(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name             string
+		domain           string
+		grafanaSubdomain string
+		want             string
+	}{
+		{"default subdomain", "example.com", "", "grafana.example.com"},
+		{"custom subdomain", "example.com", "metrics", "metrics.example.com"},
+		{"no domain", "", "", ""},
+		{"no domain with subdomain", "", "metrics", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c := Config{Domain: tt.domain, GrafanaSubdomain: tt.grafanaSubdomain}
+			if got := c.GrafanaHost(); got != tt.want {
+				t.Errorf("Config.GrafanaHost() = %v, want %v", got, tt.want)
 			}
 		})
 	}

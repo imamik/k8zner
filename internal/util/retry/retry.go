@@ -105,10 +105,12 @@ type FatalError struct {
 	Err error
 }
 
+// Error returns the underlying error message.
 func (e *FatalError) Error() string {
 	return e.Err.Error()
 }
 
+// Unwrap returns the underlying error for errors.Is/As support.
 func (e *FatalError) Unwrap() error {
 	return e.Err
 }

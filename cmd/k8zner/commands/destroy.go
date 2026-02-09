@@ -22,17 +22,17 @@ func Destroy() *cobra.Command {
 This command deletes all resources associated with the cluster including:
   - Servers (control plane and worker nodes)
   - Load balancers
-  - Floating IPs
   - Firewalls
   - Networks and subnets
   - Placement groups
   - SSH keys
-  - Certificates (Talos state markers)
+  - S3 backup buckets (if configured)
 
 Resources are deleted in dependency order to ensure clean teardown.
 
-Example:
-  k8zner destroy -c k8zner.yaml
+Examples:
+  k8zner destroy
+  k8zner destroy -c production.yaml
 
 WARNING: This operation is irreversible. All cluster data will be lost.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -40,8 +40,7 @@ WARNING: This operation is irreversible. All cluster data will be lost.`,
 		},
 	}
 
-	cmd.Flags().StringVarP(&configPath, "config", "c", "", "Path to cluster configuration file (required)")
-	_ = cmd.MarkFlagRequired("config")
+	cmd.Flags().StringVarP(&configPath, "config", "c", "", "Path to cluster configuration file (default: k8zner.yaml)")
 
 	return cmd
 }

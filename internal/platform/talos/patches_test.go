@@ -10,6 +10,7 @@ import (
 )
 
 func TestNewMachineConfigOptions(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		cfg      *config.Config
@@ -82,6 +83,7 @@ func TestNewMachineConfigOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			opts := NewMachineConfigOptions(tt.cfg)
 			tt.validate(t, opts)
 		})
@@ -89,6 +91,7 @@ func TestNewMachineConfigOptions(t *testing.T) {
 }
 
 func TestBuildDiskEncryptionPatch(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name               string
 		stateEncryption    bool
@@ -128,6 +131,7 @@ func TestBuildDiskEncryptionPatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			opts := &MachineConfigOptions{
 				StateEncryption:     tt.stateEncryption,
 				EphemeralEncryption: tt.ephemeralEncrypt,
@@ -150,6 +154,7 @@ func TestBuildDiskEncryptionPatch(t *testing.T) {
 }
 
 func TestBuildSysctlsPatch(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		ipv6Enabled   bool
@@ -179,6 +184,7 @@ func TestBuildSysctlsPatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			opts := &MachineConfigOptions{
 				IPv6Enabled: tt.ipv6Enabled,
 				Sysctls:     tt.customSysctls,
@@ -206,6 +212,7 @@ func TestBuildSysctlsPatch(t *testing.T) {
 }
 
 func TestBuildKubeletPatch(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		isControlPlane bool
@@ -278,6 +285,7 @@ func TestBuildKubeletPatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := buildKubeletPatch(tt.opts, tt.isControlPlane, tt.serverID)
 			tt.validateFunc(t, result)
 		})
@@ -285,6 +293,7 @@ func TestBuildKubeletPatch(t *testing.T) {
 }
 
 func TestBuildNetworkPatch(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		hostname     string
@@ -367,6 +376,7 @@ func TestBuildNetworkPatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := buildNetworkPatch(tt.hostname, tt.opts, false)
 			tt.validateFunc(t, result)
 		})
@@ -374,6 +384,7 @@ func TestBuildNetworkPatch(t *testing.T) {
 }
 
 func TestBuildClusterPatch(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		isControlPlane bool
@@ -486,6 +497,7 @@ func TestBuildClusterPatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := buildClusterPatch(tt.opts, tt.isControlPlane)
 			tt.validateFunc(t, result)
 		})
@@ -493,6 +505,7 @@ func TestBuildClusterPatch(t *testing.T) {
 }
 
 func TestBuildDiscoveryPatch(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		kubeEnabled    bool
@@ -527,6 +540,7 @@ func TestBuildDiscoveryPatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			opts := &MachineConfigOptions{
 				DiscoveryKubernetesEnabled: tt.kubeEnabled,
 				DiscoveryServiceEnabled:    tt.serviceEnabled,
@@ -546,7 +560,9 @@ func TestBuildDiscoveryPatch(t *testing.T) {
 }
 
 func TestBuildFeaturesPatch(t *testing.T) {
+	t.Parallel()
 	t.Run("control plane has Talos API access", func(t *testing.T) {
+		t.Parallel()
 		result := buildFeaturesPatch(true)
 
 		hostDNS := result["hostDNS"].(map[string]any)
@@ -560,6 +576,7 @@ func TestBuildFeaturesPatch(t *testing.T) {
 	})
 
 	t.Run("worker does not have Talos API access", func(t *testing.T) {
+		t.Parallel()
 		result := buildFeaturesPatch(false)
 
 		hostDNS := result["hostDNS"].(map[string]any)
@@ -572,6 +589,7 @@ func TestBuildFeaturesPatch(t *testing.T) {
 }
 
 func TestBuildControlPlanePatch(t *testing.T) {
+	t.Parallel()
 	opts := &MachineConfigOptions{
 		StateEncryption:            true,
 		EphemeralEncryption:        true,
@@ -612,6 +630,7 @@ func TestBuildControlPlanePatch(t *testing.T) {
 }
 
 func TestBuildWorkerPatch(t *testing.T) {
+	t.Parallel()
 	opts := &MachineConfigOptions{
 		StateEncryption:         true,
 		EphemeralEncryption:     true,

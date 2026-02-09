@@ -72,24 +72,39 @@ Worker node configuration:
 | Field | Description | Valid Values |
 |-------|-------------|--------------|
 | `count` | Number of worker nodes | 1-5 |
-| `size` | Worker server size | cx22, cx32, cx42, cx52 |
+| `size` | Worker server size | cx23-53, cpx22-52 |
 
 ```yaml
 workers:
   count: 3
-  size: cx32
+  size: cx33
 ```
 
 **Why 1-5 workers?** The simplified config uses an opinionated limit to keep clusters predictable and cost-effective for initial deployment. For larger clusters, update the config and run `k8zner apply` again to scale workers.
 
 #### Available Sizes
 
+##### CX Series - Dedicated vCPU (Default)
+Consistent performance, recommended for production:
+
 | Size | vCPU | RAM | Best For |
 |------|------|-----|----------|
-| `cx22` | 2 | 4GB | Small workloads |
-| `cx32` | 4 | 8GB | Medium workloads |
-| `cx42` | 8 | 16GB | Larger workloads |
-| `cx52` | 16 | 32GB | Heavy workloads |
+| `cx23` | 2 | 4GB | Small workloads |
+| `cx33` | 4 | 8GB | Medium workloads |
+| `cx43` | 8 | 16GB | Larger workloads |
+| `cx53` | 16 | 32GB | Heavy workloads |
+
+##### CPX Series - Shared vCPU
+Better availability, suitable for dev/test:
+
+| Size | vCPU | RAM | Best For |
+|------|------|-----|----------|
+| `cpx22` | 2 | 4GB | Dev/test |
+| `cpx32` | 4 | 8GB | Medium workloads |
+| `cpx42` | 8 | 16GB | Larger workloads |
+| `cpx52` | 16 | 32GB | Heavy workloads |
+
+Note: Hetzner renamed server types in 2024 (cx22→cx23, etc.). Both old and new names are accepted for backwards compatibility.
 
 ### domain (optional)
 
@@ -168,24 +183,29 @@ aws s3 rb s3://{cluster-name}-etcd-backups --force \
 
 The simplified config automatically includes production-ready settings:
 
+### Architecture & Regions
+- **x86-64 only**: All nodes run on amd64 architecture (CX/CPX server types)
+- **EU regions only**: Nuremberg, Falkenstein, Helsinki (where CX/CPX instances are available)
+- **No ARM support**: CAX (Ampere) servers are not supported
+
 ### Infrastructure
 - **IPv6-only nodes**: No public IPv4 (saves costs, better security)
-- **Control planes**: cx22 servers (cost-effective for control plane workloads)
+- **Control planes**: cx23 servers by default (2 dedicated vCPU, 4GB RAM - sufficient for etcd + API server)
 - **Disk encryption**: LUKS2 encryption for state and ephemeral partitions
 
 ### Networking
 - **Cilium CNI**: eBPF-based networking with kube-proxy replacement
-- **Native routing**: Direct pod-to-pod communication without tunneling
+- **Tunnel mode (VXLAN)**: Reliable pod-to-pod communication on Hetzner Cloud
 - **Hubble**: Network observability and monitoring
 
 ### Ingress
-- **Traefik**: Modern ingress controller with Gateway API support
-- **hostNetwork mode**: Direct port binding for efficiency
-- **cert-manager**: Automatic TLS certificate provisioning
+- **Traefik**: Modern ingress controller (Deployment + LoadBalancer service)
+- **Hetzner Load Balancer**: CCM auto-creates LB via service annotations
+- **cert-manager**: Automatic TLS certificates via Cloudflare DNS-01 challenge
 
 ### Load Balancers
-- **API LB**: Always provisioned for Kubernetes API access
-- **Ingress LB**: Additional LB in HA mode for HTTP/HTTPS traffic
+- **API LB**: Provisioned in HA mode for Kubernetes API access
+- **Ingress LB**: Auto-created by CCM when Traefik LoadBalancer service is deployed
 
 ### Addons (always enabled)
 - Hetzner Cloud Controller Manager (CCM)
@@ -223,19 +243,6 @@ export HETZNER_S3_SECRET_KEY="your-s3-secret-key"
 
 Get S3 credentials from [Hetzner Cloud Console](https://console.hetzner.cloud/) → Object Storage → Security Credentials.
 
-## Cost Estimation
-
-Before applying, estimate your monthly costs:
-
-```bash
-k8zner cost
-```
-
-Output shows:
-- Line-item breakdown (control planes, workers, load balancers)
-- Subtotal, VAT (19% for Germany), and total
-- IPv6 savings (what you save by not using IPv4)
-
 ## Example Configurations
 
 ### Development Cluster
@@ -248,7 +255,7 @@ region: fsn1
 mode: dev
 workers:
   count: 1
-  size: cx22
+  size: cx23
 ```
 
 **Cost**: ~€18/month (1 CP + 1 worker + 1 LB)
@@ -263,7 +270,7 @@ region: fsn1
 mode: ha
 workers:
   count: 3
-  size: cx32
+  size: cx33
 domain: example.com
 ```
 
@@ -279,8 +286,10 @@ region: fsn1
 mode: ha
 workers:
   count: 5
-  size: cx52
+  size: cx53
 domain: example.com
+monitoring: true
+backup: true
 ```
 
 **Cost**: ~€180/month (3 CP + 5 workers + 2 LBs)

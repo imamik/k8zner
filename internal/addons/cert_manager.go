@@ -95,19 +95,14 @@ func buildCertManagerBaseConfig(replicas int) helm.Values {
 			"minAvailable":   nil,
 			"maxUnavailable": 1,
 		},
-		"nodeSelector": helm.Values{
-			"node-role.kubernetes.io/control-plane": "",
-		},
+		"nodeSelector": helm.ControlPlaneNodeSelector(),
 		"tolerations": []helm.Values{
 			{
 				"key":      "node-role.kubernetes.io/control-plane",
 				"effect":   "NoSchedule",
 				"operator": "Exists",
 			},
-			{
-				"key":      "node.cloudprovider.kubernetes.io/uninitialized",
-				"operator": "Exists",
-			},
+			helm.CCMUninitializedToleration(),
 		},
 	}
 }
@@ -142,9 +137,5 @@ func buildCertManagerConfig(cfg *config.Config) helm.Values {
 
 // createCertManagerNamespace returns the cert-manager namespace manifest.
 func createCertManagerNamespace() string {
-	return `apiVersion: v1
-kind: Namespace
-metadata:
-  name: cert-manager
-`
+	return helm.NamespaceManifest("cert-manager", nil)
 }

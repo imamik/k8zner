@@ -13,6 +13,7 @@ import (
 )
 
 func TestCreateSecret(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
 	fakeClientset := fake.NewSimpleClientset()
@@ -55,6 +56,7 @@ func TestCreateSecret(t *testing.T) {
 }
 
 func TestCreateSecret_ValidationErrors(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
 	fakeClientset := fake.NewSimpleClientset()
@@ -83,6 +85,7 @@ func TestCreateSecret_ValidationErrors(t *testing.T) {
 }
 
 func TestDeleteSecret(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	// Create a fake clientset with an existing secret
@@ -113,6 +116,7 @@ func TestDeleteSecret(t *testing.T) {
 }
 
 func TestDeleteSecret_ValidationErrors(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
 	fakeClientset := fake.NewSimpleClientset()
@@ -133,7 +137,9 @@ func TestDeleteSecret_ValidationErrors(t *testing.T) {
 }
 
 func TestNewFromClients(t *testing.T) {
+	t.Parallel()
 	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
+
 	fakeClientset := fake.NewSimpleClientset()
 
 	// Test that NewFromClients returns a valid client

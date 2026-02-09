@@ -16,6 +16,7 @@ import (
 )
 
 func TestNewBuilder(t *testing.T) {
+	t.Parallel()
 	mockClient := &hcloud.MockClient{}
 	builder := NewBuilder(mockClient)
 	require.NotNil(t, builder)
@@ -23,12 +24,14 @@ func TestNewBuilder(t *testing.T) {
 }
 
 func TestNewBuilder_NilClient(t *testing.T) {
+	t.Parallel()
 	builder := NewBuilder(nil)
 	require.NotNil(t, builder)
 	assert.Nil(t, builder.infra)
 }
 
 func TestBuild_NilInfraClient(t *testing.T) {
+	t.Parallel()
 	builder := NewBuilder(nil)
 	_, err := builder.Build(context.Background(), "v1.8.0", "v1.30.0", "amd64", "", "nbg1", nil)
 	require.Error(t, err)
@@ -36,6 +39,7 @@ func TestBuild_NilInfraClient(t *testing.T) {
 }
 
 func TestBuild_CreateSSHKeyError(t *testing.T) {
+	t.Parallel()
 	expectedErr := errors.New("ssh key creation failed")
 	mockClient := &hcloud.MockClient{
 		CreateSSHKeyFunc: func(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
@@ -50,6 +54,7 @@ func TestBuild_CreateSSHKeyError(t *testing.T) {
 }
 
 func TestBuild_CreateServerError(t *testing.T) {
+	t.Parallel()
 	expectedErr := errors.New("server creation failed")
 	mockClient := &hcloud.MockClient{
 		CreateSSHKeyFunc: func(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
@@ -67,6 +72,7 @@ func TestBuild_CreateServerError(t *testing.T) {
 }
 
 func TestBuild_GetServerIPError(t *testing.T) {
+	t.Parallel()
 	expectedErr := errors.New("get IP failed")
 	mockClient := &hcloud.MockClient{
 		CreateSSHKeyFunc: func(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
@@ -87,6 +93,7 @@ func TestBuild_GetServerIPError(t *testing.T) {
 }
 
 func TestBuild_EnableRescueError(t *testing.T) {
+	t.Parallel()
 	expectedErr := errors.New("enable rescue failed")
 	mockClient := &hcloud.MockClient{
 		CreateSSHKeyFunc: func(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
@@ -110,6 +117,7 @@ func TestBuild_EnableRescueError(t *testing.T) {
 }
 
 func TestBuild_ResetServerError(t *testing.T) {
+	t.Parallel()
 	expectedErr := errors.New("reset server failed")
 	mockClient := &hcloud.MockClient{
 		CreateSSHKeyFunc: func(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
@@ -136,7 +144,9 @@ func TestBuild_ResetServerError(t *testing.T) {
 }
 
 func TestBuild_DefaultLocation(t *testing.T) {
+	t.Parallel()
 	// Test that empty location defaults to nbg1
+
 	var capturedLocation string
 	mockClient := &hcloud.MockClient{
 		CreateSSHKeyFunc: func(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
@@ -155,17 +165,19 @@ func TestBuild_DefaultLocation(t *testing.T) {
 }
 
 func TestBuild_DefaultServerType(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name               string
 		arch               string
 		expectedServerType string
 	}{
-		{"amd64 default", "amd64", "cx23"},
+		{"amd64 default", "amd64", "cpx22"},
 		{"arm64 default", "arm64", "cax11"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			var capturedServerType string
 			mockClient := &hcloud.MockClient{
 				CreateSSHKeyFunc: func(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
@@ -186,6 +198,7 @@ func TestBuild_DefaultServerType(t *testing.T) {
 }
 
 func TestBuild_CustomLabels(t *testing.T) {
+	t.Parallel()
 	var capturedLabels map[string]string
 	mockClient := &hcloud.MockClient{
 		CreateSSHKeyFunc: func(_ context.Context, _ string, _ string, labels map[string]string) (string, error) {
@@ -210,18 +223,22 @@ func TestBuild_CustomLabels(t *testing.T) {
 }
 
 func TestGetKeys(t *testing.T) {
+	t.Parallel()
 	t.Run("empty map", func(t *testing.T) {
+		t.Parallel()
 		result := getKeys(map[string]bool{})
 		assert.Empty(t, result)
 	})
 
 	t.Run("single key", func(t *testing.T) {
+		t.Parallel()
 		result := getKeys(map[string]bool{"amd64": true})
 		assert.Len(t, result, 1)
 		assert.Contains(t, result, "amd64")
 	})
 
 	t.Run("multiple keys", func(t *testing.T) {
+		t.Parallel()
 		result := getKeys(map[string]bool{"amd64": true, "arm64": true})
 		assert.Len(t, result, 2)
 		assert.Contains(t, result, "amd64")
@@ -230,9 +247,11 @@ func TestGetKeys(t *testing.T) {
 }
 
 func TestEnsureImageForArch(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner()
 
 	t.Run("skips build when snapshot exists", func(t *testing.T) {
+		t.Parallel()
 		mockClient := &hcloud.MockClient{
 			GetSnapshotByLabelsFunc: func(_ context.Context, _ map[string]string) (*hcloudgo.Image, error) {
 				return &hcloudgo.Image{ID: 123, Description: "existing-snapshot"}, nil
@@ -245,6 +264,7 @@ func TestEnsureImageForArch(t *testing.T) {
 	})
 
 	t.Run("returns error when snapshot check fails", func(t *testing.T) {
+		t.Parallel()
 		mockClient := &hcloud.MockClient{
 			GetSnapshotByLabelsFunc: func(_ context.Context, _ map[string]string) (*hcloudgo.Image, error) {
 				return nil, errors.New("API error")
@@ -276,6 +296,7 @@ func createTestContext(t *testing.T, mockInfra *hcloud.MockClient, cfg *config.C
 // SSH functionality is tested separately in internal/platform/ssh/ssh_test.go.
 // For full end-to-end testing, use the e2e tests with real infrastructure.
 func TestBuild(t *testing.T) {
+	t.Parallel()
 	t.Skip("This test requires mocking SSH which conflicts with the new SSH client design. Use e2e tests for full validation.")
 
 	mockClient := &hcloud.MockClient{

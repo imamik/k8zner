@@ -8,6 +8,7 @@ import (
 )
 
 func TestApply(t *testing.T) {
+	t.Parallel()
 	cmd := Apply()
 
 	require.NotNil(t, cmd)
@@ -18,6 +19,7 @@ func TestApply(t *testing.T) {
 }
 
 func TestApply_ConfigFlag(t *testing.T) {
+	t.Parallel()
 	cmd := Apply()
 
 	flag := cmd.Flags().Lookup("config")
@@ -28,6 +30,7 @@ func TestApply_ConfigFlag(t *testing.T) {
 }
 
 func TestApply_ConfigFlagOptional(t *testing.T) {
+	t.Parallel()
 	cmd := Apply()
 
 	// The flag should NOT be marked as required (uses default k8zner.yaml)
@@ -41,6 +44,7 @@ func TestApply_ConfigFlagOptional(t *testing.T) {
 }
 
 func TestApply_RunE(t *testing.T) {
+	t.Parallel()
 	cmd := Apply()
 	assert.NotNil(t, cmd.RunE, "Apply command should have RunE function")
 }

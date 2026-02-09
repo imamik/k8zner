@@ -13,6 +13,7 @@ import (
 )
 
 func TestDestroy(t *testing.T) {
+	t.Parallel()
 	origLoad := loadV2ConfigFile
 	origExpand := expandV2Config
 	origInfra := newInfraClient

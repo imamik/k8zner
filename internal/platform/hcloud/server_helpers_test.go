@@ -8,6 +8,7 @@ import (
 )
 
 func TestServerIPv4(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		server   *hcloud.Server
@@ -42,6 +43,7 @@ func TestServerIPv4(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := ServerIPv4(tt.server)
 			if result != tt.expected {
 				t.Errorf("expected %q, got %q", tt.expected, result)
@@ -51,6 +53,7 @@ func TestServerIPv4(t *testing.T) {
 }
 
 func TestServerIPv6(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		server   *hcloud.Server
@@ -85,6 +88,7 @@ func TestServerIPv6(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := ServerIPv6(tt.server)
 			if result != tt.expected {
 				t.Errorf("expected %q, got %q", tt.expected, result)
@@ -94,6 +98,7 @@ func TestServerIPv6(t *testing.T) {
 }
 
 func TestLoadBalancerIPv4(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		lb       *hcloud.LoadBalancer
@@ -128,6 +133,7 @@ func TestLoadBalancerIPv4(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := LoadBalancerIPv4(tt.lb)
 			if result != tt.expected {
 				t.Errorf("expected %q, got %q", tt.expected, result)
@@ -137,6 +143,7 @@ func TestLoadBalancerIPv4(t *testing.T) {
 }
 
 func TestLoadBalancerIPv6(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		lb       *hcloud.LoadBalancer
@@ -171,6 +178,7 @@ func TestLoadBalancerIPv6(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := LoadBalancerIPv6(tt.lb)
 			if result != tt.expected {
 				t.Errorf("expected %q, got %q", tt.expected, result)

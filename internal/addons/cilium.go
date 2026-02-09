@@ -96,7 +96,11 @@ func buildCiliumValues(cfg *config.Config) helm.Values {
 		"ipam": helm.Values{
 			"mode": "kubernetes",
 		},
+		// Match all PCI ethernet interfaces (enp1s0=public, enp7s0=private on Hetzner+Talos).
+		// Without this, LB health checks on private network bypass kube-proxy replacement.
+		"devices":               "enp+",
 		"routingMode":           ciliumCfg.RoutingMode,
+		"autoDirectNodeRoutes":  ciliumCfg.RoutingMode == "native",
 		"ipv4NativeRoutingCIDR": nativeRoutingCIDR,
 		"policyCIDRMatchMode":   policyCIDRMatchMode,
 		"bpf": helm.Values{
@@ -135,7 +139,12 @@ func buildCiliumValues(cfg *config.Config) helm.Values {
 			"enabled": ciliumCfg.EgressGatewayEnabled,
 		},
 		"loadBalancer": helm.Values{
-			"acceleration": "native",
+			"acceleration": "disabled",
+		},
+		// Required for kube-proxy replacement with multiple interfaces, even in tunnel mode.
+		// Without this, Cilium fails: "unable to determine direct routing device".
+		"nodePort": helm.Values{
+			"directRoutingDevice": "enp1s0",
 		},
 	}
 
@@ -298,6 +307,11 @@ func buildCiliumHubbleConfig(cfg *config.Config) helm.Values {
 				},
 				{
 					"key":      "node.cloudprovider.kubernetes.io/uninitialized",
+					"operator": "Exists",
+				},
+				{
+					// Tolerate not-ready nodes to ensure Hubble relay can start during bootstrap
+					"key":      "node.kubernetes.io/not-ready",
 					"operator": "Exists",
 				},
 			},

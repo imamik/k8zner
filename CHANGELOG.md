@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Operator-first architecture** — `apply` is now the single entry point for cluster lifecycle
+  - New clusters: bootstraps infrastructure, deploys operator, creates CRD
+  - Existing clusters: updates CRD spec, operator reconciles changes
+  - `--wait` flag to wait for operator to complete provisioning
+- **`doctor` command** — Diagnose cluster configuration and live status
+  - Pre-cluster mode: validates config, shows what would be created
+  - Cluster mode: ASCII table with emoji indicators for infrastructure, nodes, and addons
+  - `--watch` flag for continuous updates, `--json` for machine-readable output
+
+### Removed
+
+- **7 CLI commands** removed in favor of operator-first approach:
+  - `create` — absorbed into `apply`
+  - `bootstrap` — replaced by operator
+  - `upgrade` — handled by operator via CRD update
+  - `health` — replaced by `doctor`
+  - `image` — image management is automatic
+  - `cost` — cost estimation removed
+  - `migrate` — migration path no longer needed
+- **`internal/orchestration`** — CLI-only reconciler replaced by operator
+- **`internal/pricing`** — CLI-only cost estimation
+- **`internal/util/prerequisites`** — not needed with operator approach
+- **`PrerequisitesCheckEnabled`** config field
+
+### Changed
+
+- Traefik uses Deployment + LoadBalancer service (was "DaemonSet with hostNetwork")
+- `destroy` command config flag is now optional (auto-detects k8zner.yaml)
+
 ## [0.6.0] - 2026-01-31
 
 ### Added

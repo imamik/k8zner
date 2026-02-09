@@ -1,0 +1,411 @@
+package addons
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/imamik/k8zner/internal/addons/helm"
+	"github.com/imamik/k8zner/internal/addons/k8sclient"
+	"github.com/imamik/k8zner/internal/config"
+)
+
+// applyKubePrometheusStack installs the kube-prometheus-stack (Prometheus, Grafana, Alertmanager).
+func applyKubePrometheusStack(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
+	// Create namespace first
+	namespaceYAML := createMonitoringNamespace()
+	if err := applyManifests(ctx, client, "monitoring-namespace", []byte(namespaceYAML)); err != nil {
+		return fmt.Errorf("failed to create monitoring namespace: %w", err)
+	}
+
+	// Build values based on configuration
+	values := buildKubePrometheusStackValues(cfg)
+
+	// Get chart spec with any config overrides
+	spec := helm.GetChartSpec("kube-prometheus-stack", cfg.Addons.KubePrometheusStack.Helm)
+
+	// Render helm chart
+	manifestBytes, err := helm.RenderFromSpec(ctx, spec, "monitoring", values)
+	if err != nil {
+		return fmt.Errorf("failed to render kube-prometheus-stack chart: %w", err)
+	}
+
+	// Apply all manifests
+	if err := applyManifests(ctx, client, "kube-prometheus-stack", manifestBytes); err != nil {
+		return fmt.Errorf("failed to apply kube-prometheus-stack manifests: %w", err)
+	}
+
+	log.Printf("[KubePrometheusStack] Monitoring stack installed successfully")
+	return nil
+}
+
+// buildKubePrometheusStackValues creates helm values for kube-prometheus-stack configuration.
+func buildKubePrometheusStackValues(cfg *config.Config) helm.Values {
+	promCfg := cfg.Addons.KubePrometheusStack
+
+	values := helm.Values{
+		// Default alerting rules
+		"defaultRules": helm.Values{
+			"create": getBoolWithDefault(promCfg.DefaultRules, true),
+		},
+		// Prometheus configuration
+		"prometheus": buildPrometheusValues(cfg),
+		// Grafana configuration
+		"grafana": buildGrafanaValues(cfg),
+		// Alertmanager configuration
+		"alertmanager": buildAlertmanagerValues(cfg),
+		// Node Exporter
+		"nodeExporter": helm.Values{
+			"enabled": getBoolWithDefault(promCfg.NodeExporter, true),
+		},
+		// Kube State Metrics
+		"kubeStateMetrics": helm.Values{
+			"enabled": getBoolWithDefault(promCfg.KubeStateMetrics, true),
+		},
+		// Prometheus Operator configuration
+		"prometheusOperator": buildPrometheusOperatorValues(),
+	}
+
+	// Merge custom Helm values from config
+	return helm.MergeCustomValues(values, promCfg.Helm.Values)
+}
+
+// buildPrometheusValues creates the Prometheus server configuration.
+func buildPrometheusValues(cfg *config.Config) helm.Values {
+	promCfg := cfg.Addons.KubePrometheusStack.Prometheus
+
+	values := helm.Values{
+		"enabled": getBoolWithDefault(promCfg.Enabled, true),
+		"prometheusSpec": helm.Values{
+			// Retention period
+			"retention": fmt.Sprintf("%dd", getIntWithDefault(promCfg.RetentionDays, 15)),
+			"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
+			"resources":   buildResourceValues(promCfg.Resources, "500m", "512Mi", "2", "2Gi"),
+			// Service monitor selector - scrape all ServiceMonitors
+			"serviceMonitorSelectorNilUsesHelmValues": false,
+			"podMonitorSelectorNilUsesHelmValues":     false,
+			"ruleSelectorNilUsesHelmValues":           false,
+		},
+	}
+
+	// Storage configuration
+	if promCfg.Persistence.Enabled {
+		values["prometheusSpec"].(helm.Values)["storageSpec"] = helm.Values{
+			"volumeClaimTemplate": helm.Values{
+				"spec": helm.Values{
+					"accessModes": []string{"ReadWriteOnce"},
+					"resources": helm.Values{
+						"requests": helm.Values{
+							"storage": getStringWithDefault(promCfg.Persistence.Size, "50Gi"),
+						},
+					},
+					"storageClassName": promCfg.Persistence.StorageClass,
+				},
+			},
+		}
+	}
+
+	// Ingress configuration
+	if promCfg.IngressEnabled && promCfg.IngressHost != "" {
+		values["ingress"] = buildPrometheusIngress(cfg)
+	}
+
+	return values
+}
+
+// buildPrometheusIngress creates the ingress configuration for Prometheus.
+func buildPrometheusIngress(cfg *config.Config) helm.Values {
+	promCfg := cfg.Addons.KubePrometheusStack.Prometheus
+
+	ingress := helm.Values{
+		"enabled": true,
+		"hosts": []string{
+			promCfg.IngressHost,
+		},
+		"paths": []string{"/"},
+	}
+
+	// Set ingress class
+	ingressClass := promCfg.IngressClassName
+	if ingressClass == "" {
+		ingressClass = "traefik"
+	}
+	ingress["ingressClassName"] = ingressClass
+
+	// Configure TLS if enabled
+	if promCfg.IngressTLS {
+		ingress["tls"] = []helm.Values{
+			{
+				"hosts":      []string{promCfg.IngressHost},
+				"secretName": "prometheus-tls",
+			},
+		}
+
+		// Build annotations for TLS and DNS
+		annotations := buildIngressAnnotations(cfg, promCfg.IngressHost)
+		ingress["annotations"] = annotations
+	}
+
+	return ingress
+}
+
+// buildGrafanaValues creates the Grafana configuration.
+func buildGrafanaValues(cfg *config.Config) helm.Values {
+	grafanaCfg := cfg.Addons.KubePrometheusStack.Grafana
+
+	values := helm.Values{
+		"enabled": getBoolWithDefault(grafanaCfg.Enabled, true),
+		// Run Grafana in insecure mode - Traefik handles TLS termination
+		"grafana.ini": helm.Values{
+			"server": helm.Values{
+				"root_url":            fmt.Sprintf("https://%s", grafanaCfg.IngressHost),
+				"serve_from_sub_path": false,
+			},
+		},
+		// Disable test framework to avoid service account race conditions
+		"testFramework": helm.Values{
+			"enabled": false,
+		},
+		"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
+		"resources": helm.Values{
+			"requests": helm.Values{
+				"cpu":    "100m",
+				"memory": "128Mi",
+			},
+			"limits": helm.Values{
+				"memory": "256Mi",
+			},
+		},
+		// Default data sources
+		"sidecar": helm.Values{
+			"dashboards": helm.Values{
+				"enabled": true,
+			},
+			"datasources": helm.Values{
+				"enabled": true,
+			},
+		},
+	}
+
+	// Admin password
+	if grafanaCfg.AdminPassword != "" {
+		values["adminPassword"] = grafanaCfg.AdminPassword
+	}
+
+	// Persistence configuration
+	if grafanaCfg.Persistence.Enabled {
+		values["persistence"] = helm.Values{
+			"enabled":          true,
+			"size":             getStringWithDefault(grafanaCfg.Persistence.Size, "10Gi"),
+			"storageClassName": grafanaCfg.Persistence.StorageClass,
+		}
+	}
+
+	// Ingress configuration
+	if grafanaCfg.IngressEnabled && grafanaCfg.IngressHost != "" {
+		values["ingress"] = buildGrafanaIngress(cfg)
+	}
+
+	return values
+}
+
+// buildGrafanaIngress creates the ingress configuration for Grafana.
+func buildGrafanaIngress(cfg *config.Config) helm.Values {
+	grafanaCfg := cfg.Addons.KubePrometheusStack.Grafana
+
+	ingress := helm.Values{
+		"enabled": true,
+		"hosts": []string{
+			grafanaCfg.IngressHost,
+		},
+		"path": "/",
+	}
+
+	// Set ingress class
+	ingressClass := grafanaCfg.IngressClassName
+	if ingressClass == "" {
+		ingressClass = "traefik"
+	}
+	ingress["ingressClassName"] = ingressClass
+
+	// Configure TLS if enabled
+	if grafanaCfg.IngressTLS {
+		ingress["tls"] = []helm.Values{
+			{
+				"hosts":      []string{grafanaCfg.IngressHost},
+				"secretName": "grafana-tls",
+			},
+		}
+
+		// Build annotations for TLS and DNS
+		annotations := buildIngressAnnotations(cfg, grafanaCfg.IngressHost)
+		ingress["annotations"] = annotations
+	}
+
+	return ingress
+}
+
+// buildAlertmanagerValues creates the Alertmanager configuration.
+func buildAlertmanagerValues(cfg *config.Config) helm.Values {
+	alertCfg := cfg.Addons.KubePrometheusStack.Alertmanager
+
+	values := helm.Values{
+		"enabled": getBoolWithDefault(alertCfg.Enabled, true),
+		"alertmanagerSpec": helm.Values{
+			"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
+			// Resource defaults
+			"resources": helm.Values{
+				"requests": helm.Values{
+					"cpu":    "50m",
+					"memory": "64Mi",
+				},
+				"limits": helm.Values{
+					"memory": "128Mi",
+				},
+			},
+		},
+	}
+
+	// Ingress configuration
+	if alertCfg.IngressEnabled && alertCfg.IngressHost != "" {
+		values["ingress"] = buildAlertmanagerIngress(cfg)
+	}
+
+	return values
+}
+
+// buildAlertmanagerIngress creates the ingress configuration for Alertmanager.
+func buildAlertmanagerIngress(cfg *config.Config) helm.Values {
+	alertCfg := cfg.Addons.KubePrometheusStack.Alertmanager
+
+	ingress := helm.Values{
+		"enabled": true,
+		"hosts": []string{
+			alertCfg.IngressHost,
+		},
+		"paths": []string{"/"},
+	}
+
+	// Set ingress class
+	ingressClass := alertCfg.IngressClassName
+	if ingressClass == "" {
+		ingressClass = "traefik"
+	}
+	ingress["ingressClassName"] = ingressClass
+
+	// Configure TLS if enabled
+	if alertCfg.IngressTLS {
+		ingress["tls"] = []helm.Values{
+			{
+				"hosts":      []string{alertCfg.IngressHost},
+				"secretName": "alertmanager-tls",
+			},
+		}
+
+		// Build annotations for TLS and DNS
+		annotations := buildIngressAnnotations(cfg, alertCfg.IngressHost)
+		ingress["annotations"] = annotations
+	}
+
+	return ingress
+}
+
+// buildPrometheusOperatorValues creates the Prometheus Operator configuration.
+func buildPrometheusOperatorValues() helm.Values {
+	return helm.Values{
+		"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
+		"resources": helm.Values{
+			"requests": helm.Values{
+				"cpu":    "100m",
+				"memory": "128Mi",
+			},
+			"limits": helm.Values{
+				"memory": "256Mi",
+			},
+		},
+	}
+}
+
+// buildIngressAnnotations builds common ingress annotations for TLS and DNS.
+// external-dns auto-discovers the target IP from the Ingress status
+// (set by Traefik's LoadBalancer service).
+func buildIngressAnnotations(cfg *config.Config, host string) helm.Values {
+	annotations := helm.Values{}
+
+	// Determine which ClusterIssuer to use based on cert-manager Cloudflare config
+	clusterIssuer := "letsencrypt-prod" // Default fallback
+	if cfg.Addons.CertManager.Cloudflare.Enabled {
+		if cfg.Addons.CertManager.Cloudflare.Production {
+			clusterIssuer = "letsencrypt-cloudflare-production"
+		} else {
+			clusterIssuer = "letsencrypt-cloudflare-staging"
+		}
+	}
+	annotations["cert-manager.io/cluster-issuer"] = clusterIssuer
+
+	// Add external-dns hostname annotation if Cloudflare/external-dns is enabled
+	if cfg.Addons.Cloudflare.Enabled && cfg.Addons.ExternalDNS.Enabled {
+		annotations["external-dns.alpha.kubernetes.io/hostname"] = host
+	}
+
+	return annotations
+}
+
+// buildResourceValues creates resource specifications with defaults.
+func buildResourceValues(resources config.KubePrometheusResourcesConfig, defaultReqCPU, defaultReqMem, defaultLimitCPU, defaultLimitMem string) helm.Values {
+	reqCPU := resources.Requests.CPU
+	if reqCPU == "" {
+		reqCPU = defaultReqCPU
+	}
+	reqMem := resources.Requests.Memory
+	if reqMem == "" {
+		reqMem = defaultReqMem
+	}
+	limitCPU := resources.Limits.CPU
+	if limitCPU == "" {
+		limitCPU = defaultLimitCPU
+	}
+	limitMem := resources.Limits.Memory
+	if limitMem == "" {
+		limitMem = defaultLimitMem
+	}
+
+	return helm.Values{
+		"requests": helm.Values{
+			"cpu":    reqCPU,
+			"memory": reqMem,
+		},
+		"limits": helm.Values{
+			"cpu":    limitCPU,
+			"memory": limitMem,
+		},
+	}
+}
+
+// createMonitoringNamespace returns the monitoring namespace manifest.
+func createMonitoringNamespace() string {
+	return helm.NamespaceManifest("monitoring", map[string]string{"name": "monitoring"})
+}
+
+// Helper functions
+
+func getBoolWithDefault(ptr *bool, defaultVal bool) bool {
+	if ptr == nil {
+		return defaultVal
+	}
+	return *ptr
+}
+
+func getIntWithDefault(ptr *int, defaultVal int) int {
+	if ptr == nil {
+		return defaultVal
+	}
+	return *ptr
+}
+
+func getStringWithDefault(s string, defaultVal string) string {
+	if s == "" {
+		return defaultVal
+	}
+	return s
+}
