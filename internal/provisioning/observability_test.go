@@ -125,9 +125,8 @@ func TestMockObserver_Events(t *testing.T) {
 }
 
 func TestEventTypes(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Verify all event types are defined
-	)
 
 	eventTypes := []EventType{
 		EventPhaseStarted,

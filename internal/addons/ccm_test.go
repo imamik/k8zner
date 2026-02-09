@@ -11,9 +11,8 @@ import (
 )
 
 func TestBuildCCMValues(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Helper to create bool pointer
-	)
 
 	boolPtr := func(b bool) *bool { return &b }
 
@@ -257,12 +256,11 @@ func TestBuildCCMEnvVarsLocationFallback(t *testing.T) {
 }
 
 func TestBuildCCMValues_Tolerations(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Tolerations are critical for CCM to function properly.
 	// Without them, CCM cannot schedule on control plane nodes due to taints,
 	// creating a chicken-egg problem where CCM can't initialize nodes.
 	// See: https://kubernetes.io/blog/2025/02/14/cloud-controller-manager-chicken-egg-problem/
-	)
 
 	cfg := &config.Config{
 		Location: "fsn1",

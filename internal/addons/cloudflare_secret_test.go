@@ -88,9 +88,8 @@ func TestCreateExternalDNSNamespace(t *testing.T) {
 }
 
 func TestCreateCloudflareSecret_SecretNameConstant(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Verify the constant is set correctly
-	)
 
 	assert.Equal(t, "cloudflare-api-token", cloudflareSecretName)
 }
@@ -116,9 +115,8 @@ func TestCreateCloudflareSecret_SecretKeyName(t *testing.T) {
 }
 
 func TestCloudflareSecretName_UsedInCertManagerCloudflare(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Verify the constant is used in ClusterIssuer manifest
-	)
 
 	manifest, err := buildClusterIssuerManifest("test@example.com", false)
 	require.NoError(t, err)
@@ -127,10 +125,9 @@ func TestCloudflareSecretName_UsedInCertManagerCloudflare(t *testing.T) {
 }
 
 func TestCloudflareSecretName_UsedInExternalDNSValues(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Verify the constant is used in external-dns values
 	// This is implicitly tested via the env var reference
-	)
 
 	cfg := &struct {
 		Name string

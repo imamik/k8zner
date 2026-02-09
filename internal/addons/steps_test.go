@@ -144,9 +144,8 @@ func TestInstallStep_UnknownStep(t *testing.T) {
 }
 
 func TestStepConstants(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Verify step constants match expected addon names
-	)
 
 	assert.Equal(t, "hcloud-ccm", StepCCM)
 	assert.Equal(t, "hcloud-csi", StepCSI)

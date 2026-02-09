@@ -86,9 +86,8 @@ func TestGetFirstControlPlaneIP(t *testing.T) {
 }
 
 func TestWaitForPort_Success(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Start a test server
-	)
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
@@ -105,9 +104,8 @@ func TestWaitForPort_Success(t *testing.T) {
 }
 
 func TestWaitForPort_Timeout(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Use a port that's definitely not listening
-	)
 
 	ctx := context.Background()
 	timeouts := config.TestTimeouts()
@@ -230,9 +228,8 @@ func TestBootstrap_StateMarkerPresent(t *testing.T) {
 }
 
 func TestProvision(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Test that Provision() delegates to BootstrapCluster()
-	)
 
 	p := NewProvisioner()
 	mockInfra := &hcloud_internal.MockClient{

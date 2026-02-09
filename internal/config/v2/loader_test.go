@@ -7,9 +7,8 @@ import (
 )
 
 func TestLoad_ValidConfig(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Create a temporary config file
-	)
 
 	content := `
 name: my-cluster

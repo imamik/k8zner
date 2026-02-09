@@ -176,9 +176,8 @@ func TestGetCachePath_WithXDGEnv(t *testing.T) {
 
 // TestClearMemoryCache verifies memory cache can be cleared.
 func TestClearMemoryCache(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// This should not panic
-	)
 
 	ClearMemoryCache()
 }

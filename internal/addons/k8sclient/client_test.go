@@ -137,9 +137,8 @@ func TestDeleteSecret_ValidationErrors(t *testing.T) {
 }
 
 func TestNewFromClients(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
-	)
 
 	fakeClientset := fake.NewSimpleClientset()
 

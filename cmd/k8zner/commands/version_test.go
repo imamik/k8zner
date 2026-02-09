@@ -23,9 +23,8 @@ func TestVersion_Run(t *testing.T) {
 }
 
 func TestSetVersionInfo(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Save original values
-	)
 
 	origVersion := version
 	origCommit := commit
@@ -47,9 +46,8 @@ func TestSetVersionInfo(t *testing.T) {
 }
 
 func TestVersion_Output(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Save original values
-	)
 
 	origVersion := version
 	origCommit := commit
@@ -78,9 +76,8 @@ func TestVersion_Output(t *testing.T) {
 }
 
 func TestVersion_DefaultValues(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Test that default values are set
-	)
 
 	cmd := Version()
 

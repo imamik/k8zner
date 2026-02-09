@@ -44,10 +44,9 @@ func TestGenerateRSAKeyPair_ValidBits(t *testing.T) {
 }
 
 func TestGenerateRSAKeyPair_InvalidBits(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// RSA key generation fails for very small bit sizes
 	// The minimum practical size varies by implementation
-	)
 
 	tests := []struct {
 		name string

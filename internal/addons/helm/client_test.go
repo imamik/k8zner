@@ -101,9 +101,8 @@ func TestDownloadChartInvalidRepo(t *testing.T) {
 
 // TestClearCache tests cache clearing functionality.
 func TestClearCache(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Create a test file in cache directory
-	)
 
 	cachePath := GetCachePath()
 	if err := os.MkdirAll(cachePath, 0755); err != nil {

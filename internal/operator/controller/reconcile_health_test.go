@@ -220,9 +220,8 @@ func TestHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("parseThreshold", func(t *testing.T) {
-		t.Parallel(
+		t.Parallel()
 		// Nil health check uses defaults
-		)
 
 		assert.Equal(t, defaultNodeNotReadyThreshold, parseThreshold(nil, "node"))
 		assert.Equal(t, defaultEtcdUnhealthyThreshold, parseThreshold(nil, "etcd"))

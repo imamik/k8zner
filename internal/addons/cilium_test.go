@@ -427,9 +427,8 @@ func TestGenerateIPSecKey(t *testing.T) {
 }
 
 func TestGenerateIPSecKeyRandomness(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Generate multiple keys and ensure they're all different
-	)
 
 	keys := make(map[string]bool)
 	for i := 0; i < 10; i++ {

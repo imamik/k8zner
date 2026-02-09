@@ -268,10 +268,9 @@ func TestHasUnresolvedTemplates(t *testing.T) {
 }
 
 func TestRenderTemplateEdgeCases(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Generate a 253-character DNS name (maximum allowed by RFC 1035)
 	// Build a long string first, then truncate to exact length
-	)
 
 	longDNS := "server123456789." + // 16 chars
 		"very-long-subdomain-name-with-many-characters-to-reach-limit." + // 62 chars

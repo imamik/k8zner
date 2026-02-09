@@ -213,9 +213,8 @@ func TestCIDRHost_IPv6Error(t *testing.T) {
 }
 
 func TestCIDRSubnet_InvalidNewbits(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Test when newbits would exceed 32 bits total
-	)
 
 	_, err := CIDRSubnet("10.0.0.0/24", 16, 0)
 	if err == nil {

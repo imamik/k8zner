@@ -91,10 +91,9 @@ func TestArchitecture_String(t *testing.T) {
 }
 
 func TestDetectArchitecture_RoundTrip(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Test that GetDefaultServerType returns a server type
 	// that DetectArchitecture correctly identifies
-	)
 
 	archs := []Architecture{ArchAMD64, ArchARM64}
 

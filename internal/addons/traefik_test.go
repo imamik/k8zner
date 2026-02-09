@@ -378,9 +378,8 @@ func TestBuildTraefikValuesIngressClass(t *testing.T) {
 }
 
 func TestBuildTraefikValuesIngressRoute(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// IngressRoute is always disabled - we use standard Kubernetes Ingress
-	)
 
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
@@ -399,9 +398,8 @@ func TestBuildTraefikValuesIngressRoute(t *testing.T) {
 }
 
 func TestBuildTraefikValuesAlwaysLoadBalancer(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Traefik always uses LoadBalancer service with Deployment, regardless of config
-	)
 
 	cfg := &config.Config{
 		ClusterName: "test-cluster",

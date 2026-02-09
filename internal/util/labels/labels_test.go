@@ -393,9 +393,8 @@ func TestWithTestIDIfSet(t *testing.T) {
 }
 
 func TestWithTestIDIfSetChaining(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Test that it works in a fluent chain
-	)
 
 	labels := NewLabelBuilder("test-cluster").
 		WithRole(RoleWorker).

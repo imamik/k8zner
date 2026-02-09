@@ -10,9 +10,8 @@ import (
 )
 
 func TestValidationPhase_RequiredFields(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Missing cluster name
-	)
 
 	cfg := &config.Config{
 		Location: "nbg1",

@@ -579,9 +579,8 @@ func TestRemainingResources_String(t *testing.T) {
 }
 
 func TestDeleteResourcesByLabel(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Test the generic deleteResourcesByLabel function
-	)
 
 	t.Run("handles list error", func(t *testing.T) {
 		t.Parallel()

@@ -90,11 +90,10 @@ func TestTalosCCMConfig(t *testing.T) {
 }
 
 func TestTalosCCMHostNetworkPatching(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Talos CCM runs with hostNetwork on control plane nodes.
 	// When kube-proxy is disabled, API access requires direct env vars.
 	// This tests the patchHostNetworkAPIAccess function.
-	)
 
 	daemonSetManifest := `apiVersion: apps/v1
 kind: DaemonSet
@@ -120,9 +119,8 @@ spec:
 }
 
 func TestTalosCCMVersionFormats(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Verify URL format for different version string patterns
-	)
 
 	tests := []struct {
 		version string

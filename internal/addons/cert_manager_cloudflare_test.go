@@ -142,9 +142,8 @@ func TestBuildClusterIssuerManifest_BothEnvironments(t *testing.T) {
 }
 
 func TestClusterIssuerData_Fields(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Test the structure directly
-	)
 
 	data := clusterIssuerData{
 		Name:           "test-issuer",

@@ -204,10 +204,9 @@ func TestDeepMerge(t *testing.T) {
 }
 
 func TestDeepMerge_RealWorldCSICase(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// This simulates the actual CSI addon scenario where chart defaults
 	// contain podSecurityContext but our custom values don't
-	)
 
 	chartDefaults := Values{
 		"controller": map[string]any{
@@ -380,9 +379,8 @@ func TestToValuesMap(t *testing.T) {
 func TestFromYAML_Errors(t *testing.T) {
 	t.Parallel()
 	t.Run("invalid yaml - tabs in content", func(t *testing.T) {
-		t.Parallel(
+		t.Parallel()
 		// YAML doesn't allow tabs for indentation - this should fail
-		)
 
 		invalidYAML := []byte("key:\n\t- invalid")
 		_, err := FromYAML(invalidYAML)
@@ -530,9 +528,8 @@ func TestMergeCustomValues(t *testing.T) {
 	})
 
 	t.Run("real-world helm override scenario", func(t *testing.T) {
-		t.Parallel(
+		t.Parallel()
 		// Simulates user overriding Cilium helm values
-		)
 
 		base := Values{
 			"ipam": Values{"mode": "kubernetes"},

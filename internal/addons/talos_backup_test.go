@@ -258,10 +258,9 @@ func TestTalosBackupVersion(t *testing.T) {
 }
 
 func TestGenerateTalosBackupCronJob_Tolerations(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Tolerations are critical for the backup CronJob to schedule on control plane nodes.
 	// Without the uninitialized toleration, the job may fail to schedule during bootstrap.
-	)
 
 	cfg := &config.Config{
 		ClusterName: "test-cluster",

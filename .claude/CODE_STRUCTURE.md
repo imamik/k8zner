@@ -179,11 +179,18 @@ The operator controller (`internal/operator/controller/`) uses a single struct (
 |------|---------------|
 | `cluster_controller.go` | Struct, constants, options, `Reconcile()` entry point, `SetupWithManager` |
 | `reconcile_phases.go` | Phase state machine (Infrastructure → Image → Compute → Bootstrap → CNI → Addons → Running) |
-| `reconcile_scaling.go` | Control plane and worker scaling (up/down) |
+| `reconcile_addons.go` | CNI and addon phase reconciliation (Cilium readiness, addon installation order) |
+| `reconcile_scaling_cp.go` | Control plane scaling (up/down), etcd membership safety |
+| `reconcile_scaling_workers.go` | Worker scaling (up/down), node pool management |
 | `reconcile_healing.go` | Self-healing node replacement |
 | `reconcile_health.go` | Health checks, node readiness, cluster phase updates |
 | `server_provisioning.go` | Shared provisioning helpers (create server, SSH keys, snapshot lookup) |
 | `node_status.go` | Node phase tracking in CRD status |
+| `cluster_state.go` | Cluster state aggregation and node status tracking |
+| `talos_client.go` | Talos node communication, config generation, health checks |
+| `interfaces.go` | Interface definitions for HCloud, Talos, and Kubernetes clients |
+| `metrics.go` | Prometheus metrics registration and recording |
+| `node_state_verifier.go` | Node state verification against expected cluster topology |
 
 **When to split a controller file**: when a single file exceeds ~800 lines and methods group by theme. Keep the struct definition and entry point in the main file; move method groups to thematic files.
 

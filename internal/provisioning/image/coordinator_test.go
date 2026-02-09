@@ -184,15 +184,13 @@ func TestGetImageBuilderConfig(t *testing.T) {
 }
 
 func TestImageBuilderConfigDefaults(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Test that config defaults are correctly set by the config loader
 	// This tests the values set in load.go
-	)
 
 	t.Run("default values from load.go", func(t *testing.T) {
-		t.Parallel(
+		t.Parallel()
 		// These are the defaults set in internal/config/load.go
-		)
 
 		expectedAMD64ServerType := "cpx11"
 		expectedAMD64Location := "ash"

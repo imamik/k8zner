@@ -144,9 +144,8 @@ func TestBuild_ResetServerError(t *testing.T) {
 }
 
 func TestBuild_DefaultLocation(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Test that empty location defaults to nbg1
-	)
 
 	var capturedLocation string
 	mockClient := &hcloud.MockClient{

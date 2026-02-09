@@ -42,9 +42,8 @@ func TestApplyManifests_InvalidYAML(t *testing.T) {
 }
 
 func TestApplyManifests_NoKindInDocument(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// YAML without kind field - decoder will fail
-	)
 
 	manifests := []byte(`apiVersion: v1
 metadata:
@@ -60,9 +59,8 @@ metadata:
 }
 
 func TestApplyManifests_EmptyDocuments(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Multiple empty documents should be skipped
-	)
 
 	manifests := []byte(`---
 ---
@@ -91,9 +89,8 @@ func TestNewFromKubeconfig_EmptyKubeconfig(t *testing.T) {
 }
 
 func TestNewFromKubeconfig_ValidYAMLButNoCluster(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Valid YAML kubeconfig structure but with no clusters defined
-	)
 
 	kubeconfig := []byte(`apiVersion: v1
 kind: Config
@@ -108,9 +105,8 @@ users: []
 }
 
 func TestNewFromKubeconfig_MalformedURL(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Kubeconfig with malformed server URL
-	)
 
 	kubeconfig := []byte(`apiVersion: v1
 kind: Config
@@ -182,17 +178,15 @@ func createApplyTestMapper() meta.RESTMapper {
 }
 
 func TestClient_Interface(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Verify that client implements the Client interface
-	)
 
 	var _ Client = &client{}
 }
 
 func TestApplyObject_NoKind(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
-	)
 
 	clientset := fake.NewSimpleClientset()
 	scheme := runtime.NewScheme()
@@ -221,9 +215,8 @@ func TestApplyObject_NoKind(t *testing.T) {
 }
 
 func TestApplyObject_UnknownGVK(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
-	)
 
 	clientset := fake.NewSimpleClientset()
 	scheme := runtime.NewScheme()
@@ -289,9 +282,8 @@ func TestGVKMapping(t *testing.T) {
 }
 
 func TestUnstructured_MarshalJSON(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Test that unstructured objects can be marshaled to JSON for SSA
-	)
 
 	obj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -350,9 +342,8 @@ func TestUnstructured_GetMetadata(t *testing.T) {
 }
 
 func TestApplyManifests_MultiDocument(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Multi-document YAML with mix of empty and valid documents
-	)
 
 	manifests := []byte(`---
 apiVersion: v1
@@ -385,9 +376,8 @@ data:
 }
 
 func TestApplyManifests_WhitespaceOnlyDocument(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Document with only whitespace/comments should be skipped
-	)
 
 	manifests := []byte(`
 
@@ -403,9 +393,8 @@ func TestApplyManifests_WhitespaceOnlyDocument(t *testing.T) {
 }
 
 func TestApplyObject_NamespacedResourceWithEmptyNamespace(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
-	)
 
 	clientset := fake.NewSimpleClientset()
 	scheme := runtime.NewScheme()
@@ -442,9 +431,8 @@ func TestApplyObject_NamespacedResourceWithEmptyNamespace(t *testing.T) {
 }
 
 func TestApplyObject_ClusterScopedResource(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
-	)
 
 	clientset := fake.NewSimpleClientset()
 	scheme := runtime.NewScheme()
@@ -478,9 +466,8 @@ func TestApplyObject_ClusterScopedResource(t *testing.T) {
 }
 
 func TestApplyManifests_FieldManagerPropagation(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Verify field manager is passed through correctly
-	)
 
 	manifests := []byte(`apiVersion: v1
 kind: ConfigMap

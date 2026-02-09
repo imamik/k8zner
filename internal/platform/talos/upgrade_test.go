@@ -10,11 +10,10 @@ import (
 )
 
 func TestUpgradeNode_BuildsCorrectImageURL(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// This test verifies the image URL format used in upgradeNode
 	// The actual UpgradeNode method requires a real Talos client, so we test
 	// the image URL construction logic separately
-	)
 
 	tests := []struct {
 		name        string
@@ -57,10 +56,9 @@ func buildImageURL(schematicID, version string) string {
 }
 
 func TestWaitForNodeReady_Timeout(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Test that WaitForNodeReady respects timeout
 	// This is a unit test that verifies timeout logic without real Talos client
-	)
 
 	timeout := 100 * time.Millisecond
 	startTime := time.Now()
@@ -86,10 +84,9 @@ func TestWaitForNodeReady_Timeout(t *testing.T) {
 }
 
 func TestUpgradeKubernetes_StripsVPrefix(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Test that Kubernetes version has 'v' prefix stripped
 	// The Talos API expects version without 'v' prefix
-	)
 
 	tests := []struct {
 		name     string
@@ -123,10 +120,9 @@ func TestUpgradeKubernetes_StripsVPrefix(t *testing.T) {
 }
 
 func TestGetNodeVersion_ReturnsVersion(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// This is a documentation test showing the expected behavior
 	// GetNodeVersion should return the Talos version tag from the node
-	)
 
 	// Expected behavior:
 	// - Connects to node via Talos API
@@ -141,10 +137,9 @@ func TestGetNodeVersion_ReturnsVersion(t *testing.T) {
 }
 
 func TestGetSchematicID_ReturnsSchematic(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// This is a documentation test showing the expected behavior
 	// GetSchematicID should return the schematic ID from the node's version info
-	)
 
 	// Expected behavior:
 	// - Connects to node via Talos API
@@ -159,10 +154,9 @@ func TestGetSchematicID_ReturnsSchematic(t *testing.T) {
 }
 
 func TestHealthCheck_ConnectsToNode(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// This is a documentation test showing the expected behavior
 	// HealthCheck should verify node is responsive
-	)
 
 	// Expected behavior:
 	// - Connects to node via Talos API
@@ -175,10 +169,9 @@ func TestHealthCheck_ConnectsToNode(t *testing.T) {
 }
 
 func TestCreateClient_RequiresAuthentication(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// This is a documentation test showing the expected behavior
 	// createClient should create authenticated Talos client
-	)
 
 	// Expected behavior:
 	// - Uses talosconfig from Generator
@@ -192,10 +185,9 @@ func TestCreateClient_RequiresAuthentication(t *testing.T) {
 }
 
 func TestWaitForNodeReady_InitialDelay(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Test that WaitForNodeReady includes initial delay
 	// This allows the node to start rebooting before we check
-	)
 
 	initialDelay := 30 * time.Second
 
@@ -209,9 +201,8 @@ func TestWaitForNodeReady_InitialDelay(t *testing.T) {
 }
 
 func TestWaitForNodeReady_PollingInterval(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// Test that WaitForNodeReady polls at regular intervals
-	)
 
 	pollingInterval := 10 * time.Second
 
@@ -225,10 +216,9 @@ func TestWaitForNodeReady_PollingInterval(t *testing.T) {
 }
 
 func TestUpgradeNode_CausesReboot(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// This is a documentation test showing the expected behavior
 	// UpgradeNode initiates an upgrade that causes the node to reboot
-	)
 
 	// Expected behavior:
 	// - Calls talosClient.Upgrade() with image URL
@@ -241,10 +231,9 @@ func TestUpgradeNode_CausesReboot(t *testing.T) {
 }
 
 func TestUpgradeKubernetes_UpgradesControlPlane(t *testing.T) {
-	t.Parallel(
+	t.Parallel()
 	// This is a documentation test showing the expected behavior
 	// UpgradeKubernetes upgrades the Kubernetes control plane components
-	)
 
 	// Expected behavior:
 	// - Connects to control plane node
