@@ -189,7 +189,7 @@ func BenchmarkToMap_SmallValues(b *testing.B) {
 		"key1": "value1",
 		"key2": 42,
 		"nested": Values{
-			"a": "alpha",
+			"a":    "alpha",
 			"list": []string{"one", "two", "three"},
 		},
 	}

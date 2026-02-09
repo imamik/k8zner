@@ -159,9 +159,9 @@ func TestBuildAddonsConfig_TraefikDefaults(t *testing.T) {
 func TestBuildAddonsConfig_ConditionalAddons(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name    string
-		addons  *k8znerv1alpha1.AddonSpec
-		check   func(t *testing.T, a config.AddonsConfig)
+		name   string
+		addons *k8znerv1alpha1.AddonSpec
+		check  func(t *testing.T, a config.AddonsConfig)
 	}{
 		{
 			name:   "nil addons disables optional addons",
@@ -354,11 +354,11 @@ func TestExpandFirewallFromSpec(t *testing.T) {
 func TestExpandArgoCDFromSpec(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name           string
-		spec           *k8znerv1alpha1.K8znerClusterSpec
-		expectEnabled  bool
-		expectIngress  bool
-		expectHost     string
+		name          string
+		spec          *k8znerv1alpha1.K8znerClusterSpec
+		expectEnabled bool
+		expectIngress bool
+		expectHost    string
 	}{
 		{
 			name:          "disabled when addon nil",
@@ -696,11 +696,11 @@ func TestSpecToConfig_FullRoundTrip(t *testing.T) {
 				Count: 5, Size: "cpx31",
 			},
 			Addons: &k8znerv1alpha1.AddonSpec{
-				Traefik:      true,
-				CertManager:  true,
-				ExternalDNS:  true,
-				ArgoCD:       true,
-				Monitoring:   true,
+				Traefik:       true,
+				CertManager:   true,
+				ExternalDNS:   true,
+				ArgoCD:        true,
+				Monitoring:    true,
 				MetricsServer: true,
 			},
 			Backup: &k8znerv1alpha1.BackupSpec{

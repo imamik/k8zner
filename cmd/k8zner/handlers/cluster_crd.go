@@ -290,7 +290,7 @@ func createBackupS3Secret(cfg *config.Config, clusterName string) *corev1.Secret
 			Name:      backupS3SecretName(clusterName),
 			Namespace: k8znerNamespace,
 			Labels: map[string]string{
-				"cluster":  clusterName,
+				"cluster": clusterName,
 				"purpose": "backup",
 			},
 		},

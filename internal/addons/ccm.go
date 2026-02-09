@@ -45,7 +45,7 @@ func buildCCMValues(cfg *config.Config, _ int64) helm.Values {
 
 	// Base configuration
 	values := helm.Values{
-		"kind": "DaemonSet",
+		"kind":         "DaemonSet",
 		"nodeSelector": helm.ControlPlaneNodeSelector(),
 		"tolerations":  helm.BootstrapTolerations(),
 		"networking": helm.Values{

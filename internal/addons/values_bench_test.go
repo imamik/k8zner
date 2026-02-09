@@ -306,12 +306,12 @@ func BenchmarkBuildArgoCDValues_WithIngress(b *testing.B) {
 	cfg := &config.Config{
 		Addons: config.AddonsConfig{
 			ArgoCD: config.ArgoCDConfig{
-				Enabled:        true,
-				HA:             true,
-				IngressEnabled: true,
-				IngressHost:    "argocd.example.com",
+				Enabled:          true,
+				HA:               true,
+				IngressEnabled:   true,
+				IngressHost:      "argocd.example.com",
 				IngressClassName: "traefik",
-				IngressTLS:     true,
+				IngressTLS:       true,
 			},
 			CertManager: config.CertManagerConfig{
 				Cloudflare: config.CertManagerCloudflareConfig{
@@ -333,12 +333,12 @@ func BenchmarkBuildArgoCDValues_WithCustomValues(b *testing.B) {
 	cfg := &config.Config{
 		Addons: config.AddonsConfig{
 			ArgoCD: config.ArgoCDConfig{
-				Enabled:        true,
-				HA:             true,
-				IngressEnabled: true,
-				IngressHost:    "argocd.example.com",
+				Enabled:          true,
+				HA:               true,
+				IngressEnabled:   true,
+				IngressHost:      "argocd.example.com",
 				IngressClassName: "traefik",
-				IngressTLS:     true,
+				IngressTLS:       true,
 				Helm: config.HelmChartConfig{
 					Values: map[string]any{
 						"server": map[string]any{
@@ -379,12 +379,12 @@ func BenchmarkBuildArgoCDValues_Parallel(b *testing.B) {
 	cfg := &config.Config{
 		Addons: config.AddonsConfig{
 			ArgoCD: config.ArgoCDConfig{
-				Enabled:        true,
-				HA:             true,
-				IngressEnabled: true,
-				IngressHost:    "argocd.example.com",
+				Enabled:          true,
+				HA:               true,
+				IngressEnabled:   true,
+				IngressHost:      "argocd.example.com",
 				IngressClassName: "traefik",
-				IngressTLS:     true,
+				IngressTLS:       true,
 			},
 			CertManager: config.CertManagerConfig{
 				Cloudflare: config.CertManagerCloudflareConfig{

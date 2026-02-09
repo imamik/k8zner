@@ -92,7 +92,7 @@ func buildTraefikValues(cfg *config.Config) helm.Values {
 		"providers":    buildTraefikProviders(),
 		"ports":        buildTraefikPorts(),
 		"service":      buildTraefikService(cfg.ClusterName, externalTrafficPolicy, location),
-		"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
+		"tolerations":  []helm.Values{helm.CCMUninitializedToleration()},
 		"topologySpreadConstraints": func() []helm.Values {
 			hostnamePolicy := "ScheduleAnyway"
 			if workerCount > 1 {

@@ -531,9 +531,9 @@ func TestPhaseTransitionLogic(t *testing.T) {
 		scheme := setupTestScheme(t)
 
 		tests := []struct {
-			name   string
-			infra  k8znerv1alpha1.InfrastructureStatus
-			skips  bool
+			name  string
+			infra k8znerv1alpha1.InfrastructureStatus
+			skips bool
 		}{
 			{
 				name: "missing network ID",

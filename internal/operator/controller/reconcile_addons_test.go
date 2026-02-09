@@ -266,7 +266,7 @@ func TestFindTalosEndpoint(t *testing.T) {
 			want: "",
 		},
 		{
-			name: "returns empty when no endpoints available",
+			name:    "returns empty when no endpoints available",
 			cluster: &k8znerv1alpha1.K8znerCluster{},
 			want:    "",
 		},
@@ -964,7 +964,7 @@ func TestInstallNextAddon_AddonTracking(t *testing.T) {
 					"traefik":         {Installed: true},
 					"external-dns":    {Installed: true},
 					"argocd":          {Installed: true},
-					"kube-prometheus":  {Installed: true},
+					"kube-prometheus": {Installed: true},
 					"talos-backup":    {Installed: true},
 				},
 			},

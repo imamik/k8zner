@@ -454,7 +454,9 @@ func TestBuildTraefikValuesAlwaysLoadBalancer(t *testing.T) {
 }
 
 func TestTraefikChartRenderLoadBalancer(t *testing.T) {
-	t.Parallel()
+	// Not parallel: t.Setenv is incompatible with t.Parallel
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
 		Location:    "fsn1",

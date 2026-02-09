@@ -20,9 +20,9 @@ func TestBuildK8znerCluster(t *testing.T) {
 		ClusterName: "prod",
 		Location:    "nbg1",
 		Network: config.NetworkConfig{
-			IPv4CIDR:       "10.0.0.0/16",
-			NodeIPv4CIDR:   "10.0.0.0/20",
-			PodIPv4CIDR:    "10.244.0.0/16",
+			IPv4CIDR:        "10.0.0.0/16",
+			NodeIPv4CIDR:    "10.0.0.0/20",
+			PodIPv4CIDR:     "10.244.0.0/16",
 			ServiceIPv4CIDR: "10.96.0.0/16",
 		},
 		ControlPlane: config.ControlPlaneConfig{
@@ -101,9 +101,9 @@ func TestBuildClusterSpec(t *testing.T) {
 				},
 			},
 			Network: config.NetworkConfig{
-				IPv4CIDR:       "10.0.0.0/16",
-				NodeIPv4CIDR:   "10.0.0.0/20",
-				PodIPv4CIDR:    "10.244.0.0/16",
+				IPv4CIDR:        "10.0.0.0/16",
+				NodeIPv4CIDR:    "10.0.0.0/20",
+				PodIPv4CIDR:     "10.244.0.0/16",
 				ServiceIPv4CIDR: "10.96.0.0/16",
 			},
 			Kubernetes: config.KubernetesConfig{Version: "1.30.0"},
@@ -135,11 +135,11 @@ func TestBuildAddonSpec(t *testing.T) {
 		t.Parallel()
 		cfg := &config.Config{
 			Addons: config.AddonsConfig{
-				Traefik:     config.TraefikConfig{Enabled: true},
-				CertManager: config.CertManagerConfig{Enabled: true},
-				ExternalDNS: config.ExternalDNSConfig{Enabled: true},
-				ArgoCD:      config.ArgoCDConfig{Enabled: true},
-				MetricsServer: config.MetricsServerConfig{Enabled: true},
+				Traefik:             config.TraefikConfig{Enabled: true},
+				CertManager:         config.CertManagerConfig{Enabled: true},
+				ExternalDNS:         config.ExternalDNSConfig{Enabled: true},
+				ArgoCD:              config.ArgoCDConfig{Enabled: true},
+				MetricsServer:       config.MetricsServerConfig{Enabled: true},
 				KubePrometheusStack: config.KubePrometheusStackConfig{Enabled: true},
 			},
 		}
@@ -250,8 +250,8 @@ func TestBuildBackupSpec(t *testing.T) {
 		cfg := &config.Config{
 			Addons: config.AddonsConfig{
 				TalosBackup: config.TalosBackupConfig{
-					Enabled:    true,
-					Schedule:   "0 */6 * * *",
+					Enabled:     true,
+					Schedule:    "0 */6 * * *",
 					S3AccessKey: "AKIA...",
 					S3SecretKey: "secret",
 				},
@@ -293,7 +293,7 @@ func TestCreateBackupS3Secret(t *testing.T) {
 		cfg := &config.Config{
 			Addons: config.AddonsConfig{
 				TalosBackup: config.TalosBackupConfig{
-					Enabled:    true,
+					Enabled:     true,
 					S3AccessKey: "AKIA-KEY",
 					S3SecretKey: "secret-key",
 					S3Endpoint:  "s3.eu-central.wasabisys.com",

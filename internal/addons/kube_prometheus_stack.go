@@ -78,7 +78,7 @@ func buildPrometheusValues(cfg *config.Config) helm.Values {
 		"enabled": getBoolWithDefault(promCfg.Enabled, true),
 		"prometheusSpec": helm.Values{
 			// Retention period
-			"retention": fmt.Sprintf("%dd", getIntWithDefault(promCfg.RetentionDays, 15)),
+			"retention":   fmt.Sprintf("%dd", getIntWithDefault(promCfg.RetentionDays, 15)),
 			"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
 			"resources":   buildResourceValues(promCfg.Resources, "500m", "512Mi", "2", "2Gi"),
 			// Service monitor selector - scrape all ServiceMonitors
