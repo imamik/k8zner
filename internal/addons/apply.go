@@ -165,34 +165,24 @@ func applyAddons(ctx context.Context, cfg *config.Config, kubeconfig []byte, net
 	}
 
 	if cfg.Addons.ArgoCD.Enabled {
-		log.Printf("[addons] Installing ArgoCD...")
 		if err := applyArgoCD(ctx, client, cfg); err != nil {
 			return fmt.Errorf("failed to install ArgoCD: %w", err)
 		}
-		log.Printf("[addons] ArgoCD installed successfully")
 	}
 
-	// Install kube-prometheus-stack (full monitoring: Prometheus, Grafana, Alertmanager)
 	if cfg.Addons.KubePrometheusStack.Enabled {
-		log.Printf("[addons] Installing kube-prometheus-stack (Prometheus, Grafana, Alertmanager)...")
 		if err := applyKubePrometheusStack(ctx, client, cfg); err != nil {
 			return fmt.Errorf("failed to install kube-prometheus-stack: %w", err)
 		}
-		log.Printf("[addons] kube-prometheus-stack installed successfully")
 	}
 
-	// Install Talos Backup (etcd backup to S3)
 	if cfg.Addons.TalosBackup.Enabled {
 		if err := waitForTalosCRD(ctx, client); err != nil {
 			log.Printf("[addons] WARNING: Talos Backup SKIPPED - %v", err)
-			log.Printf("[addons] To enable backup later, ensure kubernetesTalosAPIAccess is enabled and re-run addon installation")
 		} else {
-			log.Printf("[addons] Installing Talos Backup (schedule=%s, bucket=%s)...",
-				cfg.Addons.TalosBackup.Schedule, cfg.Addons.TalosBackup.S3Bucket)
 			if err := applyTalosBackup(ctx, client, cfg); err != nil {
 				return fmt.Errorf("failed to install Talos Backup: %w", err)
 			}
-			log.Printf("[addons] Talos Backup installed successfully")
 		}
 	}
 
