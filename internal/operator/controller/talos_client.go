@@ -197,10 +197,7 @@ func (c *RealTalosClient) WaitForNodeReady(ctx context.Context, nodeIP string, t
 }
 
 // waitForTalosAPI waits for the Talos API port to become available.
-// It accepts both successful Version() responses AND "maintenance mode" errors
-// as indicators that the API is ready, since Talos in maintenance mode returns
-// "API is not implemented in maintenance mode" for Version() calls but can still
-// accept ApplyConfiguration() calls.
+// Accepts both success and "maintenance mode" errors as readiness indicators.
 func waitForTalosAPI(ctx context.Context, nodeIP string, timeout time.Duration) error {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()

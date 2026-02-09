@@ -1,0 +1,371 @@
+package provisioning
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
+	"gopkg.in/yaml.v3"
+
+	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	"github.com/imamik/k8zner/internal/config"
+	"github.com/imamik/k8zner/internal/platform/talos"
+	"github.com/imamik/k8zner/internal/provisioning"
+)
+
+// SpecToConfig converts a K8znerCluster spec to the internal config.Config format.
+func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) (*config.Config, error) {
+	spec := &k8sCluster.Spec
+
+	cfg := &config.Config{
+		ClusterName: k8sCluster.Name,
+		HCloudToken: creds.HCloudToken,
+		Location:    spec.Region,
+
+		// Firewall configuration
+		// UseCurrentIPv4/IPv6 auto-detects operator's IP for API access rules.
+		Firewall: expandFirewallFromSpec(spec),
+
+		// Network configuration
+		// NodeIPv4CIDR is critical for CCM subnet configuration - it determines
+		// where load balancers are attached in the private network.
+		Network: config.NetworkConfig{
+			IPv4CIDR:           defaultString(spec.Network.IPv4CIDR, "10.0.0.0/16"),
+			NodeIPv4CIDR:       defaultString(spec.Network.NodeIPv4CIDR, "10.0.0.0/17"),
+			NodeIPv4SubnetMask: 25, // /25 subnets for each role (126 IPs per subnet)
+			PodIPv4CIDR:        defaultString(spec.Network.PodCIDR, "10.0.128.0/17"),
+			ServiceIPv4CIDR:    defaultString(spec.Network.ServiceCIDR, "10.96.0.0/12"),
+		},
+
+		// Talos configuration
+		Talos: config.TalosConfig{
+			Version:     spec.Talos.Version,
+			SchematicID: spec.Talos.SchematicID,
+			Extensions:  spec.Talos.Extensions,
+		},
+
+		// Kubernetes configuration
+		Kubernetes: config.KubernetesConfig{
+			Version:                spec.Kubernetes.Version,
+			APILoadBalancerEnabled: true, // Always enable LB for operator-managed clusters
+		},
+
+		// Control plane configuration
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{
+				{
+					Name:       "control-plane",
+					Location:   spec.Region,
+					ServerType: normalizeServerSize(spec.ControlPlanes.Size),
+					Count:      spec.ControlPlanes.Count,
+				},
+			},
+		},
+
+		// Worker configuration
+		// IMPORTANT: Workers are created by the reconciliation loop (scaleUpWorkers),
+		// NOT by the compute provisioner. Set Count=0 here to avoid duplicate workers.
+		Workers: []config.WorkerNodePool{
+			{
+				Name:       "workers",
+				Location:   spec.Region,
+				ServerType: normalizeServerSize(spec.Workers.Size),
+				Count:      0, // Workers created by reconcileWorkers, not compute provisioner
+			},
+		},
+
+		// Enable essential addons
+		Addons: buildAddonsConfig(spec),
+	}
+
+	configureBackup(cfg, spec, creds)
+	configureCloudflare(cfg, spec, creds, k8sCluster.Name)
+
+	// Calculate derived network configuration (NodeIPv4CIDR, etc.)
+	if err := cfg.CalculateSubnets(); err != nil {
+		return nil, fmt.Errorf("failed to calculate network subnets: %w", err)
+	}
+
+	return cfg, nil
+}
+
+// buildAddonsConfig creates the addons configuration from the CRD spec.
+func buildAddonsConfig(spec *k8znerv1alpha1.K8znerClusterSpec) config.AddonsConfig {
+	return config.AddonsConfig{
+		// CRDs - always enabled as dependencies for other addons
+		GatewayAPICRDs: config.GatewayAPICRDsConfig{
+			Enabled: true,
+		},
+		PrometheusOperatorCRDs: config.PrometheusOperatorCRDsConfig{
+			Enabled: true, // Required for kube-prometheus-stack
+		},
+		// Core addons
+		TalosCCM: config.TalosCCMConfig{
+			Enabled: true,      // Node lifecycle management
+			Version: "v1.11.0", // Pinned Talos CCM version
+		},
+		Cilium: config.CiliumConfig{
+			Enabled:                     true,
+			KubeProxyReplacementEnabled: true,
+			RoutingMode:                 "tunnel",
+			HubbleEnabled:               true,
+			HubbleRelayEnabled:          true,
+			HubbleUIEnabled:             true,
+		},
+		CCM: config.CCMConfig{
+			Enabled: true,
+		},
+		CSI: config.CSIConfig{
+			Enabled: true,
+		},
+		MetricsServer: config.MetricsServerConfig{
+			Enabled: spec.Addons != nil && spec.Addons.MetricsServer,
+		},
+		CertManager: config.CertManagerConfig{
+			Enabled: spec.Addons != nil && spec.Addons.CertManager,
+		},
+		Traefik: config.TraefikConfig{
+			Enabled:               spec.Addons != nil && spec.Addons.Traefik,
+			Kind:                  "Deployment",
+			ExternalTrafficPolicy: "Cluster",
+			IngressClass:          "traefik",
+		},
+		ExternalDNS:         expandExternalDNSFromSpec(spec),
+		ArgoCD:              expandArgoCDFromSpec(spec),
+		KubePrometheusStack: expandMonitoringFromSpec(spec),
+	}
+}
+
+// configureBackup maps backup configuration from spec.Backup to cfg.Addons.TalosBackup.
+func configureBackup(cfg *config.Config, spec *k8znerv1alpha1.K8znerClusterSpec, creds *Credentials) {
+	if spec.Backup == nil || !spec.Backup.Enabled {
+		return
+	}
+	if creds.BackupS3AccessKey == "" || creds.BackupS3SecretKey == "" {
+		return
+	}
+
+	cfg.Addons.TalosBackup = config.TalosBackupConfig{
+		Enabled:            true,
+		Schedule:           spec.Backup.Schedule,
+		S3AccessKey:        creds.BackupS3AccessKey,
+		S3SecretKey:        creds.BackupS3SecretKey,
+		S3Endpoint:         creds.BackupS3Endpoint,
+		S3Bucket:           creds.BackupS3Bucket,
+		S3Region:           creds.BackupS3Region,
+		EncryptionDisabled: true, // No age public key available via operator path
+	}
+}
+
+// configureCloudflare enables Cloudflare integration when ExternalDNS is active.
+func configureCloudflare(cfg *config.Config, spec *k8znerv1alpha1.K8znerClusterSpec, creds *Credentials, clusterName string) {
+	if !cfg.Addons.ExternalDNS.Enabled {
+		return
+	}
+
+	cfg.Addons.Cloudflare = config.CloudflareConfig{
+		Enabled:  true,
+		APIToken: creds.CloudflareAPIToken,
+		Domain:   spec.Domain,
+	}
+	cfg.Addons.ExternalDNS.TXTOwnerID = clusterName
+
+	// Enable CertManager Cloudflare integration for DNS-01 challenge
+	if cfg.Addons.CertManager.Enabled && spec.Domain != "" {
+		cfg.Addons.CertManager.Cloudflare = config.CertManagerCloudflareConfig{
+			Enabled:    true,
+			Production: true,
+			Email:      "admin@" + spec.Domain,
+		}
+	}
+}
+
+// normalizeServerSize converts legacy server type names to current Hetzner names.
+func normalizeServerSize(size string) string {
+	legacyMap := map[string]string{
+		"cx22": "cx23",
+		"cx32": "cx33",
+		"cx42": "cx43",
+		"cx52": "cx53",
+	}
+	if newSize, ok := legacyMap[strings.ToLower(size)]; ok {
+		return newSize
+	}
+	return size
+}
+
+// expandFirewallFromSpec derives firewall config from the CRD spec.
+func expandFirewallFromSpec(spec *k8znerv1alpha1.K8znerClusterSpec) config.FirewallConfig {
+	return config.FirewallConfig{
+		UseCurrentIPv4: boolPtr(true),
+		UseCurrentIPv6: boolPtr(true),
+	}
+}
+
+// expandArgoCDFromSpec derives ArgoCD config from the CRD spec.
+func expandArgoCDFromSpec(spec *k8znerv1alpha1.K8znerClusterSpec) config.ArgoCDConfig {
+	argoCfg := config.ArgoCDConfig{
+		Enabled: spec.Addons != nil && spec.Addons.ArgoCD,
+	}
+
+	if spec.Domain != "" && argoCfg.Enabled {
+		subdomain := "argo"
+		if spec.Addons != nil && spec.Addons.ArgoSubdomain != "" {
+			subdomain = spec.Addons.ArgoSubdomain
+		}
+		argoCfg.IngressEnabled = true
+		argoCfg.IngressHost = subdomain + "." + spec.Domain
+		argoCfg.IngressClassName = "traefik"
+		argoCfg.IngressTLS = true
+	}
+
+	return argoCfg
+}
+
+// expandMonitoringFromSpec derives kube-prometheus-stack config from the CRD spec.
+func expandMonitoringFromSpec(spec *k8znerv1alpha1.K8znerClusterSpec) config.KubePrometheusStackConfig {
+	promCfg := config.KubePrometheusStackConfig{
+		Enabled: spec.Addons != nil && spec.Addons.Monitoring,
+	}
+
+	if !promCfg.Enabled {
+		return promCfg
+	}
+
+	if spec.Domain != "" {
+		subdomain := "grafana"
+		if spec.Addons != nil && spec.Addons.GrafanaSubdomain != "" {
+			subdomain = spec.Addons.GrafanaSubdomain
+		}
+		promCfg.Grafana.IngressEnabled = true
+		promCfg.Grafana.IngressHost = subdomain + "." + spec.Domain
+		promCfg.Grafana.IngressClassName = "traefik"
+		promCfg.Grafana.IngressTLS = true
+	}
+
+	return promCfg
+}
+
+// expandExternalDNSFromSpec derives ExternalDNS config from the CRD spec.
+func expandExternalDNSFromSpec(spec *k8znerv1alpha1.K8znerClusterSpec) config.ExternalDNSConfig {
+	dnsCfg := config.ExternalDNSConfig{
+		Enabled: spec.Addons != nil && spec.Addons.ExternalDNS,
+	}
+
+	if dnsCfg.Enabled {
+		dnsCfg.Policy = "sync"
+		dnsCfg.Sources = []string{"ingress"}
+	}
+
+	return dnsCfg
+}
+
+func boolPtr(b bool) *bool { return &b }
+
+func defaultString(value, defaultValue string) string {
+	if value == "" {
+		return defaultValue
+	}
+	return value
+}
+
+// ParseSecretsFromBytes parses a Talos secrets bundle from YAML bytes.
+func ParseSecretsFromBytes(data []byte) (*secrets.Bundle, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("empty secrets data")
+	}
+
+	var sb secrets.Bundle
+	if err := yaml.Unmarshal(data, &sb); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal secrets bundle: %w", err)
+	}
+
+	// Re-inject clock (required for certificate generation)
+	sb.Clock = secrets.NewFixedClock(time.Now())
+
+	return &sb, nil
+}
+
+// CreateTalosGenerator creates a TalosConfigProducer from the cluster spec and credentials.
+func (a *PhaseAdapter) CreateTalosGenerator(
+	k8sCluster *k8znerv1alpha1.K8znerCluster,
+	creds *Credentials,
+) (provisioning.TalosConfigProducer, error) {
+	sb, err := ParseSecretsFromBytes(creds.TalosSecrets)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse talos secrets: %w", err)
+	}
+
+	endpoint, err := resolveEndpoint(k8sCluster)
+	if err != nil {
+		return nil, err
+	}
+
+	generator := talos.NewGenerator(
+		k8sCluster.Name,
+		k8sCluster.Spec.Kubernetes.Version,
+		k8sCluster.Spec.Talos.Version,
+		endpoint,
+		sb,
+	)
+
+	generator.SetMachineConfigOptions(buildMachineConfigOptions(k8sCluster))
+
+	return generator, nil
+}
+
+// resolveEndpoint determines the control plane endpoint URL for Talos config generation.
+func resolveEndpoint(k8sCluster *k8znerv1alpha1.K8znerCluster) (string, error) {
+	var endpoint string
+	var endpointIP string
+
+	//nolint:gocritic // if-else chain is clearer here due to different condition types
+	if k8sCluster.Status.Infrastructure.LoadBalancerPrivateIP != "" {
+		endpointIP = k8sCluster.Status.Infrastructure.LoadBalancerPrivateIP
+	} else if k8sCluster.Status.ControlPlaneEndpoint != "" {
+		if strings.HasPrefix(k8sCluster.Status.ControlPlaneEndpoint, "https://") {
+			endpoint = k8sCluster.Status.ControlPlaneEndpoint
+		} else {
+			endpointIP = k8sCluster.Status.ControlPlaneEndpoint
+		}
+	} else if k8sCluster.Status.Infrastructure.LoadBalancerIP != "" {
+		endpointIP = k8sCluster.Status.Infrastructure.LoadBalancerIP
+	} else if len(k8sCluster.Status.ControlPlanes.Nodes) > 0 {
+		cp := k8sCluster.Status.ControlPlanes.Nodes[0]
+		if cp.PrivateIP != "" {
+			endpointIP = cp.PrivateIP
+		} else if cp.PublicIP != "" {
+			endpointIP = cp.PublicIP
+		}
+	}
+
+	if endpoint == "" && endpointIP != "" {
+		endpoint = fmt.Sprintf("https://%s:%d", endpointIP, config.KubeAPIPort)
+	}
+
+	if endpoint == "" {
+		return "", fmt.Errorf("cannot create talos generator: no valid control plane endpoint found (LoadBalancerPrivateIP, ControlPlaneEndpoint, LoadBalancerIP, or CP node IP required)")
+	}
+
+	return endpoint, nil
+}
+
+// buildMachineConfigOptions creates MachineConfigOptions from the cluster spec.
+func buildMachineConfigOptions(k8sCluster *k8znerv1alpha1.K8znerCluster) *talos.MachineConfigOptions {
+	return &talos.MachineConfigOptions{
+		SchematicID:             k8sCluster.Spec.Talos.SchematicID,
+		StateEncryption:         true,
+		EphemeralEncryption:     true,
+		IPv6Enabled:             true,
+		PublicIPv4Enabled:       true,
+		PublicIPv6Enabled:       true,
+		CoreDNSEnabled:          true,
+		DiscoveryServiceEnabled: true,
+		KubeProxyReplacement:    true, // Cilium replaces kube-proxy
+		NodeIPv4CIDR:            defaultString(k8sCluster.Spec.Network.IPv4CIDR, "10.0.0.0/16"),
+		PodIPv4CIDR:             defaultString(k8sCluster.Spec.Network.PodCIDR, "10.244.0.0/16"),
+		ServiceIPv4CIDR:         defaultString(k8sCluster.Spec.Network.ServiceCIDR, "10.96.0.0/16"),
+		EtcdSubnet:              defaultString(k8sCluster.Spec.Network.IPv4CIDR, "10.0.0.0/16"),
+	}
+}

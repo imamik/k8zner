@@ -96,12 +96,8 @@ func buildCiliumValues(cfg *config.Config) helm.Values {
 		"ipam": helm.Values{
 			"mode": "kubernetes",
 		},
-		// Explicitly include all ethernet interfaces so eBPF programs handle
-		// NodePort traffic on both public and private interfaces.
-		// Talos on Hetzner Cloud uses predictable PCI names (enp1s0=public,
-		// enp7s0=private) rather than traditional eth0/eth1 names.
-		// Without this, Hetzner LB health checks arriving on the private network
-		// may not be processed by Cilium's kube-proxy replacement.
+		// Match all PCI ethernet interfaces (enp1s0=public, enp7s0=private on Hetzner+Talos).
+		// Without this, LB health checks on private network bypass kube-proxy replacement.
 		"devices":               "enp+",
 		"routingMode":           ciliumCfg.RoutingMode,
 		"autoDirectNodeRoutes":  ciliumCfg.RoutingMode == "native",
@@ -145,11 +141,8 @@ func buildCiliumValues(cfg *config.Config) helm.Values {
 		"loadBalancer": helm.Values{
 			"acceleration": "disabled",
 		},
-		// kube-proxy replacement requires a direct routing device for NodePort/LB
-		// handling, even in tunnel mode. On Hetzner Cloud with Talos, enp1s0 is
-		// the first PCI device (public, has default route). Without explicit
-		// setting, Cilium fails: "unable to determine direct routing device"
-		// when multiple interfaces exist.
+		// Required for kube-proxy replacement with multiple interfaces, even in tunnel mode.
+		// Without this, Cilium fails: "unable to determine direct routing device".
 		"nodePort": helm.Values{
 			"directRoutingDevice": "enp1s0",
 		},

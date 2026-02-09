@@ -10,18 +10,7 @@ import (
 	"github.com/imamik/k8zner/internal/config"
 )
 
-// applyKubePrometheusStack installs the kube-prometheus-stack, providing a complete
-// monitoring solution including Prometheus, Grafana, Alertmanager, and various exporters.
-//
-// Features:
-//   - Prometheus for metrics collection and alerting
-//   - Grafana for visualization with pre-built dashboards
-//   - Alertmanager for alert routing and notification
-//   - Node Exporter for hardware/OS metrics
-//   - Kube State Metrics for Kubernetes object metrics
-//   - Pre-configured alerting rules
-//
-// See: https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack
+// applyKubePrometheusStack installs the kube-prometheus-stack (Prometheus, Grafana, Alertmanager).
 func applyKubePrometheusStack(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	// Create namespace first
 	namespaceYAML := createMonitoringNamespace()

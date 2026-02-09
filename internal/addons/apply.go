@@ -224,12 +224,8 @@ func hasEnabledAddons(cfg *config.Config) bool {
 		a.TalosBackup.Enabled || a.KubePrometheusStack.Enabled || a.Operator.Enabled
 }
 
-// validateAddonConfig performs pre-flight validation of addon configuration.
-// Returns an error if required configuration is missing for enabled addons.
-//
-// Note: Some validations (e.g., S3 credentials) are intentionally duplicated
-// from v2/types.go for defense-in-depth. The v2 layer validates at config load
-// time (fail fast), while this validates at addon install time (runtime check).
+// validateAddonConfig checks that required configuration is set for enabled addons.
+// Duplicates some v2 validations for defense-in-depth (fail at install time, not just load time).
 func validateAddonConfig(cfg *config.Config) error {
 	a := &cfg.Addons
 
@@ -280,9 +276,7 @@ const (
 )
 
 // waitForTalosCRD waits for the Talos API CRD (talos.dev/v1alpha1) to be available.
-// This CRD is registered by Talos when kubernetesTalosAPIAccess is enabled in the
-// machine config. The CRD registration happens asynchronously after cluster bootstrap,
-// so we need to wait for it before installing the Talos Backup addon.
+// The CRD is registered asynchronously after bootstrap when kubernetesTalosAPIAccess is enabled.
 func waitForTalosCRD(ctx context.Context, client k8sclient.Client) error {
 	return waitForTalosCRDWithTimeout(ctx, client, DefaultTalosCRDWaitTime)
 }

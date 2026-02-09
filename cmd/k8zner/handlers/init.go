@@ -23,14 +23,7 @@ var (
 	writeV2Config = v2config.WriteYAML
 )
 
-// Init runs the simplified v2 configuration wizard and writes the result to a file.
-//
-// This function orchestrates the v2 configuration workflow:
-//  1. Checks if the output file already exists and warns the user
-//  2. Runs the simplified wizard to collect 5 key options
-//  3. Converts the wizard result to a v2 Config
-//  4. Writes the configuration to the specified output file
-//  5. Shows summary and next steps
+// Init runs the v2 configuration wizard and writes the result to a file.
 func Init(ctx context.Context, outputPath string) error {
 	if fileExists(outputPath) {
 		fmt.Printf("Warning: %s already exists and will be overwritten.\n\n", outputPath)

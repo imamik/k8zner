@@ -8,11 +8,7 @@ package provisioning
 import (
 	"context"
 	"fmt"
-	"strings"
-	"time"
 
-	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
-	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -21,7 +17,6 @@ import (
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	"github.com/imamik/k8zner/internal/config"
 	hcloudInternal "github.com/imamik/k8zner/internal/platform/hcloud"
-	"github.com/imamik/k8zner/internal/platform/talos"
 	"github.com/imamik/k8zner/internal/provisioning"
 	"github.com/imamik/k8zner/internal/provisioning/cluster"
 	"github.com/imamik/k8zner/internal/provisioning/compute"
@@ -85,48 +80,13 @@ func (a *PhaseAdapter) LoadCredentials(ctx context.Context, k8sCluster *k8znerv1
 		return nil, fmt.Errorf("failed to get credentials secret %s: %w", key.Name, err)
 	}
 
-	creds := &Credentials{}
-
-	// HCloud token
-	if token, ok := secret.Data[k8znerv1alpha1.CredentialsKeyHCloudToken]; ok {
-		creds.HCloudToken = string(token)
-	} else {
-		return nil, fmt.Errorf("credentials secret missing key %s", k8znerv1alpha1.CredentialsKeyHCloudToken)
+	creds, err := extractCredentials(secret)
+	if err != nil {
+		return nil, err
 	}
 
-	// Talos secrets (optional for existing clusters)
-	if talosSecretData, ok := secret.Data[k8znerv1alpha1.CredentialsKeyTalosSecrets]; ok {
-		creds.TalosSecrets = talosSecretData
-	}
-
-	// Talos config (optional for existing clusters)
-	if cfg, ok := secret.Data[k8znerv1alpha1.CredentialsKeyTalosConfig]; ok {
-		creds.TalosConfig = cfg
-	}
-
-	// Cloudflare API token (optional, for DNS/TLS integration)
-	if cfToken, ok := secret.Data[k8znerv1alpha1.CredentialsKeyCloudflareAPIToken]; ok {
-		creds.CloudflareAPIToken = string(cfToken)
-	}
-
-	// Load backup S3 credentials if S3SecretRef is specified
-	if k8sCluster.Spec.Backup != nil && k8sCluster.Spec.Backup.S3SecretRef != nil && k8sCluster.Spec.Backup.S3SecretRef.Name != "" {
-		backupSecret := &corev1.Secret{}
-		backupKey := client.ObjectKey{
-			Namespace: k8sCluster.Namespace,
-			Name:      k8sCluster.Spec.Backup.S3SecretRef.Name,
-		}
-
-		if err := a.client.Get(ctx, backupKey, backupSecret); err != nil {
-			logger.Error(err, "failed to load backup S3 secret, backup will be skipped", "secret", backupKey.Name)
-		} else {
-			creds.BackupS3AccessKey = string(backupSecret.Data["access-key"])
-			creds.BackupS3SecretKey = string(backupSecret.Data["secret-key"])
-			creds.BackupS3Endpoint = string(backupSecret.Data["endpoint"])
-			creds.BackupS3Bucket = string(backupSecret.Data["bucket"])
-			creds.BackupS3Region = string(backupSecret.Data["region"])
-			logger.V(1).Info("loaded backup S3 credentials from secret", "secret", backupKey.Name)
-		}
+	if err := a.loadBackupCredentials(ctx, k8sCluster, creds, logger); err != nil {
+		logger.Error(err, "failed to load backup S3 secret, backup will be skipped")
 	}
 
 	logger.V(1).Info("loaded credentials from secret",
@@ -138,6 +98,57 @@ func (a *PhaseAdapter) LoadCredentials(ctx context.Context, k8sCluster *k8znerv1
 	)
 
 	return creds, nil
+}
+
+// extractCredentials extracts core credentials from a Kubernetes Secret.
+func extractCredentials(secret *corev1.Secret) (*Credentials, error) {
+	creds := &Credentials{}
+
+	if token, ok := secret.Data[k8znerv1alpha1.CredentialsKeyHCloudToken]; ok {
+		creds.HCloudToken = string(token)
+	} else {
+		return nil, fmt.Errorf("credentials secret missing key %s", k8znerv1alpha1.CredentialsKeyHCloudToken)
+	}
+
+	if talosSecretData, ok := secret.Data[k8znerv1alpha1.CredentialsKeyTalosSecrets]; ok {
+		creds.TalosSecrets = talosSecretData
+	}
+
+	if cfg, ok := secret.Data[k8znerv1alpha1.CredentialsKeyTalosConfig]; ok {
+		creds.TalosConfig = cfg
+	}
+
+	if cfToken, ok := secret.Data[k8znerv1alpha1.CredentialsKeyCloudflareAPIToken]; ok {
+		creds.CloudflareAPIToken = string(cfToken)
+	}
+
+	return creds, nil
+}
+
+// loadBackupCredentials loads backup S3 credentials from a referenced Secret.
+func (a *PhaseAdapter) loadBackupCredentials(ctx context.Context, k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials, logger interface{ Info(string, ...interface{}) }) error {
+	if k8sCluster.Spec.Backup == nil || k8sCluster.Spec.Backup.S3SecretRef == nil || k8sCluster.Spec.Backup.S3SecretRef.Name == "" {
+		return nil
+	}
+
+	backupSecret := &corev1.Secret{}
+	backupKey := client.ObjectKey{
+		Namespace: k8sCluster.Namespace,
+		Name:      k8sCluster.Spec.Backup.S3SecretRef.Name,
+	}
+
+	if err := a.client.Get(ctx, backupKey, backupSecret); err != nil {
+		return err
+	}
+
+	creds.BackupS3AccessKey = string(backupSecret.Data["access-key"])
+	creds.BackupS3SecretKey = string(backupSecret.Data["secret-key"])
+	creds.BackupS3Endpoint = string(backupSecret.Data["endpoint"])
+	creds.BackupS3Bucket = string(backupSecret.Data["bucket"])
+	creds.BackupS3Region = string(backupSecret.Data["region"])
+	logger.Info("loaded backup S3 credentials from secret", "secret", backupKey.Name)
+
+	return nil
 }
 
 // BuildProvisioningContext creates a provisioning context from the CRD spec and credentials.
@@ -170,17 +181,14 @@ func (a *PhaseAdapter) BuildProvisioningContext(
 }
 
 // ReconcileInfrastructure runs the infrastructure provisioning phase.
-// Creates network, firewall, and load balancer.
 func (a *PhaseAdapter) ReconcileInfrastructure(pCtx *provisioning.Context, k8sCluster *k8znerv1alpha1.K8znerCluster) error {
 	logger := log.FromContext(pCtx.Context)
 	logger.Info("reconciling infrastructure")
 
-	// Run the infrastructure provisioner
 	if err := a.infraProvisioner.Provision(pCtx); err != nil {
 		return fmt.Errorf("infrastructure provisioning failed: %w", err)
 	}
 
-	// Update CRD status with infrastructure IDs
 	if pCtx.State.Network != nil {
 		k8sCluster.Status.Infrastructure.NetworkID = pCtx.State.Network.ID
 	}
@@ -189,7 +197,6 @@ func (a *PhaseAdapter) ReconcileInfrastructure(pCtx *provisioning.Context, k8sCl
 	}
 	k8sCluster.Status.Infrastructure.SSHKeyID = pCtx.State.SSHKeyID
 
-	// Set condition
 	SetCondition(k8sCluster, k8znerv1alpha1.ConditionInfrastructureReady, metav1.ConditionTrue,
 		"InfrastructureProvisioned", "Network, firewall, and load balancer created")
 
@@ -201,12 +208,10 @@ func (a *PhaseAdapter) ReconcileImage(pCtx *provisioning.Context, k8sCluster *k8
 	logger := log.FromContext(pCtx.Context)
 	logger.Info("reconciling image")
 
-	// Run the image provisioner
 	if err := a.imageProvisioner.Provision(pCtx); err != nil {
 		return fmt.Errorf("image provisioning failed: %w", err)
 	}
 
-	// Get snapshot info and update status
 	snapshot, err := pCtx.Infra.GetSnapshotByLabels(pCtx.Context, map[string]string{
 		"talos_version": pCtx.Config.Talos.Version,
 	})
@@ -218,11 +223,9 @@ func (a *PhaseAdapter) ReconcileImage(pCtx *provisioning.Context, k8sCluster *k8
 			SchematicID: pCtx.Config.Talos.SchematicID,
 			CreatedAt:   &now,
 		}
-		// Also update in Infrastructure for backwards compatibility
 		k8sCluster.Status.Infrastructure.SnapshotID = snapshot.ID
 	}
 
-	// Set condition
 	SetCondition(k8sCluster, k8znerv1alpha1.ConditionImageReady, metav1.ConditionTrue,
 		"ImageAvailable", "Talos image snapshot is available")
 
@@ -230,51 +233,22 @@ func (a *PhaseAdapter) ReconcileImage(pCtx *provisioning.Context, k8sCluster *k8
 }
 
 // ReconcileCompute provisions the remaining control plane and worker servers.
-// Skips the bootstrap node if it already exists.
 func (a *PhaseAdapter) ReconcileCompute(pCtx *provisioning.Context, k8sCluster *k8znerv1alpha1.K8znerCluster) error {
 	logger := log.FromContext(pCtx.Context)
 	logger.Info("reconciling compute")
 
 	// If bootstrap node exists, we need to account for it
 	if k8sCluster.Spec.Bootstrap != nil && k8sCluster.Spec.Bootstrap.Completed {
-		// Add bootstrap node to state so compute provisioner doesn't recreate it
-		bootstrapName := k8sCluster.Spec.Bootstrap.BootstrapNode
-		if bootstrapName != "" {
-			pCtx.State.ControlPlaneIPs[bootstrapName] = k8sCluster.Spec.Bootstrap.PublicIP
-			pCtx.State.ControlPlaneServerIDs[bootstrapName] = k8sCluster.Spec.Bootstrap.BootstrapNodeID
-		}
-
-		// For CLI-bootstrapped clusters, limit CP count to 1 and worker count to 0.
-		// The CLI bootstraps only 1 CP and 0 workers. The Bootstrap phase is skipped
-		// (can't run from inside cluster due to TLS cert SANs), so any additional
-		// servers created here would be orphaned in maintenance mode (no Talos config).
-		// The Running-phase scaleUpControlPlanes/scaleUpWorkers handles creating +
-		// configuring additional nodes.
-		for i := range pCtx.Config.ControlPlane.NodePools {
-			if pCtx.Config.ControlPlane.NodePools[i].Count > 1 {
-				logger.Info("limiting CP count to 1 for CLI-bootstrapped cluster (Running-phase will scale up)",
-					"originalCount", pCtx.Config.ControlPlane.NodePools[i].Count)
-				pCtx.Config.ControlPlane.NodePools[i].Count = 1
-			}
-		}
-		for i := range pCtx.Config.Workers {
-			if pCtx.Config.Workers[i].Count > 0 {
-				logger.Info("limiting worker count to 0 for CLI-bootstrapped cluster (Running-phase will scale up)",
-					"originalCount", pCtx.Config.Workers[i].Count)
-				pCtx.Config.Workers[i].Count = 0
-			}
-		}
+		populateBootstrapState(pCtx, k8sCluster, logger)
 	}
 
-	// Run the compute provisioner (will create remaining nodes)
 	if err := a.computeProvisioner.Provision(pCtx); err != nil {
 		return fmt.Errorf("compute provisioning failed: %w", err)
 	}
 
-	// Update node statuses from provisioning results
 	updateNodeStatuses(k8sCluster, pCtx.State)
 
-	// Try to get placement group ID for status (optional - don't fail if not found)
+	// Try to get placement group ID for status (optional)
 	pgName := naming.PlacementGroup(k8sCluster.Name, "control-plane")
 	if pg, err := pCtx.Infra.GetPlacementGroup(pCtx.Context, pgName); err == nil && pg != nil {
 		k8sCluster.Status.Infrastructure.PlacementGroupID = pg.ID
@@ -283,15 +257,51 @@ func (a *PhaseAdapter) ReconcileCompute(pCtx *provisioning.Context, k8sCluster *
 	return nil
 }
 
+// populateBootstrapState adds bootstrap node info to state and limits counts for CLI-bootstrapped clusters.
+func populateBootstrapState(pCtx *provisioning.Context, k8sCluster *k8znerv1alpha1.K8znerCluster, logger interface{ Info(string, ...interface{}) }) {
+	bootstrapName := k8sCluster.Spec.Bootstrap.BootstrapNode
+	if bootstrapName != "" {
+		pCtx.State.ControlPlaneIPs[bootstrapName] = k8sCluster.Spec.Bootstrap.PublicIP
+		pCtx.State.ControlPlaneServerIDs[bootstrapName] = k8sCluster.Spec.Bootstrap.BootstrapNodeID
+	}
+
+	// Limit counts for CLI-bootstrapped clusters - Running-phase handles scale-up
+	for i := range pCtx.Config.ControlPlane.NodePools {
+		if pCtx.Config.ControlPlane.NodePools[i].Count > 1 {
+			logger.Info("limiting CP count to 1 for CLI-bootstrapped cluster (Running-phase will scale up)",
+				"originalCount", pCtx.Config.ControlPlane.NodePools[i].Count)
+			pCtx.Config.ControlPlane.NodePools[i].Count = 1
+		}
+	}
+	for i := range pCtx.Config.Workers {
+		if pCtx.Config.Workers[i].Count > 0 {
+			logger.Info("limiting worker count to 0 for CLI-bootstrapped cluster (Running-phase will scale up)",
+				"originalCount", pCtx.Config.Workers[i].Count)
+			pCtx.Config.Workers[i].Count = 0
+		}
+	}
+}
+
 // ReconcileBootstrap applies Talos configs and bootstraps the cluster.
 func (a *PhaseAdapter) ReconcileBootstrap(pCtx *provisioning.Context, k8sCluster *k8znerv1alpha1.K8znerCluster) error {
 	logger := log.FromContext(pCtx.Context)
 	logger.Info("reconciling bootstrap")
 
-	// CRITICAL: Populate state from CRD status (filled during Compute phase)
-	// This is required for CLI-bootstrapped clusters where we need to configure new nodes.
-	// Without this, the cluster provisioner won't know about the new servers and
-	// configureNewNodes() will have an empty IP list.
+	// Populate state from CRD status (filled during Compute phase)
+	populateStateFromCRD(pCtx, k8sCluster, logger)
+
+	if err := a.clusterProvisioner.Provision(pCtx); err != nil {
+		return fmt.Errorf("cluster bootstrap failed: %w", err)
+	}
+
+	SetCondition(k8sCluster, k8znerv1alpha1.ConditionBootstrapped, metav1.ConditionTrue,
+		"ClusterBootstrapped", "Cluster has been bootstrapped successfully")
+
+	return nil
+}
+
+// populateStateFromCRD populates provisioning state from the CRD status for bootstrap.
+func populateStateFromCRD(pCtx *provisioning.Context, k8sCluster *k8znerv1alpha1.K8znerCluster, logger interface{ Info(string, ...interface{}) }) {
 	for _, node := range k8sCluster.Status.ControlPlanes.Nodes {
 		if node.Name != "" && node.PublicIP != "" {
 			pCtx.State.ControlPlaneIPs[node.Name] = node.PublicIP
@@ -305,10 +315,7 @@ func (a *PhaseAdapter) ReconcileBootstrap(pCtx *provisioning.Context, k8sCluster
 		}
 	}
 
-	// CRITICAL: Populate SANs from infrastructure status
-	// SANs are required for generating valid Talos configs for new control plane nodes.
-	// Without proper SANs, the generated certificates won't include the LB IP and
-	// kubectl/API access will fail with certificate errors.
+	// Populate SANs from infrastructure status for valid TLS certificates
 	var sans []string
 	if k8sCluster.Status.Infrastructure.LoadBalancerIP != "" {
 		sans = append(sans, k8sCluster.Status.Infrastructure.LoadBalancerIP)
@@ -318,29 +325,17 @@ func (a *PhaseAdapter) ReconcileBootstrap(pCtx *provisioning.Context, k8sCluster
 	}
 	pCtx.State.SANs = sans
 
-	logger.V(1).Info("populated state from CRD status for bootstrap",
+	logger.Info("populated state from CRD status for bootstrap",
 		"controlPlaneCount", len(pCtx.State.ControlPlaneIPs),
 		"workerCount", len(pCtx.State.WorkerIPs),
 		"controlPlaneIPs", pCtx.State.ControlPlaneIPs,
 		"workerIPs", pCtx.State.WorkerIPs,
 		"SANs", pCtx.State.SANs,
 	)
-
-	// Run the cluster provisioner (applies configs, bootstraps etcd)
-	if err := a.clusterProvisioner.Provision(pCtx); err != nil {
-		return fmt.Errorf("cluster bootstrap failed: %w", err)
-	}
-
-	// Set condition
-	SetCondition(k8sCluster, k8znerv1alpha1.ConditionBootstrapped, metav1.ConditionTrue,
-		"ClusterBootstrapped", "Cluster has been bootstrapped successfully")
-
-	return nil
 }
 
 // AttachBootstrapNodeToInfrastructure attaches the bootstrap control plane
-// to the network, firewall, and load balancer using the provisioning context.
-// This is called after infrastructure is created to integrate the bootstrap node.
+// to the network, firewall, and load balancer.
 func (a *PhaseAdapter) AttachBootstrapNodeToInfrastructure(
 	pCtx *provisioning.Context,
 	k8sCluster *k8znerv1alpha1.K8znerCluster,
@@ -361,7 +356,6 @@ func (a *PhaseAdapter) AttachBootstrapNodeToInfrastructure(
 		"serverID", k8sCluster.Spec.Bootstrap.BootstrapNodeID,
 	)
 
-	// Get the network ID from the provisioning state or cluster status
 	networkID := pCtx.State.Network.ID
 	if networkID == 0 {
 		networkID = k8sCluster.Status.Infrastructure.NetworkID
@@ -370,7 +364,6 @@ func (a *PhaseAdapter) AttachBootstrapNodeToInfrastructure(
 		return fmt.Errorf("network ID not available - infrastructure must be provisioned first")
 	}
 
-	// Check if server is already attached to the network
 	server, err := pCtx.Infra.GetServerByName(pCtx.Context, bootstrapName)
 	if err != nil {
 		return fmt.Errorf("failed to get bootstrap server: %w", err)
@@ -391,18 +384,9 @@ func (a *PhaseAdapter) AttachBootstrapNodeToInfrastructure(
 		}
 	}
 
-	// Calculate private IP for bootstrap node (first CP in subnet)
-	// Control planes use subnet index 0, which is 10.0.0.0/24 by default
-	// First CP gets IP .2 (after network .0 and gateway .1)
-	networkCIDR := defaultString(k8sCluster.Spec.Network.IPv4CIDR, "10.0.0.0/16")
-	cpSubnet, err := config.CIDRSubnet(networkCIDR, 8, 0) // Control plane subnet
+	privateIP, err := calculateBootstrapNodeIP(k8sCluster)
 	if err != nil {
-		return fmt.Errorf("failed to calculate control plane subnet: %w", err)
-	}
-
-	privateIP, err := config.CIDRHost(cpSubnet, 2) // First CP IP (.2)
-	if err != nil {
-		return fmt.Errorf("failed to calculate bootstrap node IP: %w", err)
+		return err
 	}
 
 	logger.Info("attaching bootstrap node to network",
@@ -411,7 +395,6 @@ func (a *PhaseAdapter) AttachBootstrapNodeToInfrastructure(
 		"privateIP", privateIP,
 	)
 
-	// Attach the server to the network
 	if err := pCtx.Infra.AttachServerToNetwork(pCtx.Context, bootstrapName, networkID, privateIP); err != nil {
 		return fmt.Errorf("failed to attach bootstrap node to network: %w", err)
 	}
@@ -425,9 +408,24 @@ func (a *PhaseAdapter) AttachBootstrapNodeToInfrastructure(
 	return nil
 }
 
+// calculateBootstrapNodeIP determines the private IP for the bootstrap node.
+func calculateBootstrapNodeIP(k8sCluster *k8znerv1alpha1.K8znerCluster) (string, error) {
+	networkCIDR := defaultString(k8sCluster.Spec.Network.IPv4CIDR, "10.0.0.0/16")
+	cpSubnet, err := config.CIDRSubnet(networkCIDR, 8, 0)
+	if err != nil {
+		return "", fmt.Errorf("failed to calculate control plane subnet: %w", err)
+	}
+
+	privateIP, err := config.CIDRHost(cpSubnet, 2)
+	if err != nil {
+		return "", fmt.Errorf("failed to calculate bootstrap node IP: %w", err)
+	}
+
+	return privateIP, nil
+}
+
 // updateNodeStatuses updates the cluster status with node information from provisioning state.
 func updateNodeStatuses(k8sCluster *k8znerv1alpha1.K8znerCluster, state *provisioning.State) {
-	// Update control plane nodes
 	for name, ip := range state.ControlPlaneIPs {
 		serverID := state.ControlPlaneServerIDs[name]
 		found := false
@@ -449,7 +447,6 @@ func updateNodeStatuses(k8sCluster *k8znerv1alpha1.K8znerCluster, state *provisi
 		}
 	}
 
-	// Update worker nodes
 	for name, ip := range state.WorkerIPs {
 		serverID := state.WorkerServerIDs[name]
 		found := false
@@ -483,7 +480,6 @@ func SetCondition(k8sCluster *k8znerv1alpha1.K8znerCluster, condType string, sta
 		Message:            message,
 	}
 
-	// Find and update existing condition or append new one
 	for i, c := range k8sCluster.Status.Conditions {
 		if c.Type == condType {
 			if c.Status != status {
@@ -493,440 +489,4 @@ func SetCondition(k8sCluster *k8znerv1alpha1.K8znerCluster, condType string, sta
 		}
 	}
 	k8sCluster.Status.Conditions = append(k8sCluster.Status.Conditions, condition)
-}
-
-// SpecToConfig converts a K8znerCluster spec to the internal config.Config format.
-func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) (*config.Config, error) {
-	spec := &k8sCluster.Spec
-
-	cfg := &config.Config{
-		ClusterName: k8sCluster.Name,
-		HCloudToken: creds.HCloudToken,
-		Location:    spec.Region,
-
-		// Firewall configuration
-		// UseCurrentIPv4/IPv6 auto-detects operator's IP for API access rules.
-		Firewall: expandFirewallFromSpec(spec),
-
-		// Network configuration
-		// NodeIPv4CIDR is critical for CCM subnet configuration - it determines
-		// where load balancers are attached in the private network.
-		Network: config.NetworkConfig{
-			IPv4CIDR:           defaultString(spec.Network.IPv4CIDR, "10.0.0.0/16"),
-			NodeIPv4CIDR:       defaultString(spec.Network.NodeIPv4CIDR, "10.0.0.0/17"),
-			NodeIPv4SubnetMask: 25, // /25 subnets for each role (126 IPs per subnet)
-			PodIPv4CIDR:        defaultString(spec.Network.PodCIDR, "10.0.128.0/17"),
-			ServiceIPv4CIDR:    defaultString(spec.Network.ServiceCIDR, "10.96.0.0/12"),
-		},
-
-		// Talos configuration
-		Talos: config.TalosConfig{
-			Version:     spec.Talos.Version,
-			SchematicID: spec.Talos.SchematicID,
-			Extensions:  spec.Talos.Extensions,
-		},
-
-		// Kubernetes configuration
-		Kubernetes: config.KubernetesConfig{
-			Version:                spec.Kubernetes.Version,
-			APILoadBalancerEnabled: true, // Always enable LB for operator-managed clusters
-		},
-
-		// Control plane configuration
-		ControlPlane: config.ControlPlaneConfig{
-			NodePools: []config.ControlPlaneNodePool{
-				{
-					Name:       "control-plane",
-					Location:   spec.Region,
-					ServerType: normalizeServerSize(spec.ControlPlanes.Size),
-					Count:      spec.ControlPlanes.Count,
-				},
-			},
-		},
-
-		// Worker configuration
-		// IMPORTANT: Workers are created by the reconciliation loop (scaleUpWorkers),
-		// NOT by the compute provisioner. Set Count=0 here to avoid duplicate workers.
-		// The reconciliation loop handles worker scaling based on CRD spec.Workers.Count.
-		Workers: []config.WorkerNodePool{
-			{
-				Name:       "workers",
-				Location:   spec.Region,
-				ServerType: normalizeServerSize(spec.Workers.Size),
-				Count:      0, // Workers created by reconcileWorkers, not compute provisioner
-			},
-		},
-
-		// Enable essential addons
-		Addons: config.AddonsConfig{
-			// CRDs - always enabled as dependencies for other addons
-			GatewayAPICRDs: config.GatewayAPICRDsConfig{
-				Enabled: true,
-			},
-			PrometheusOperatorCRDs: config.PrometheusOperatorCRDsConfig{
-				Enabled: true, // Required for kube-prometheus-stack
-			},
-			// Core addons
-			TalosCCM: config.TalosCCMConfig{
-				Enabled: true,      // Node lifecycle management
-				Version: "v1.11.0", // Pinned Talos CCM version
-			},
-			Cilium: config.CiliumConfig{
-				Enabled:                     true,
-				KubeProxyReplacementEnabled: true,
-				RoutingMode:                 "tunnel",
-				HubbleEnabled:               true,
-				HubbleRelayEnabled:          true,
-				HubbleUIEnabled:             true,
-			},
-			CCM: config.CCMConfig{
-				Enabled: true,
-			},
-			CSI: config.CSIConfig{
-				Enabled: true,
-			},
-			MetricsServer: config.MetricsServerConfig{
-				Enabled: spec.Addons != nil && spec.Addons.MetricsServer,
-			},
-			CertManager: config.CertManagerConfig{
-				Enabled: spec.Addons != nil && spec.Addons.CertManager,
-			},
-			Traefik: config.TraefikConfig{
-				Enabled:               spec.Addons != nil && spec.Addons.Traefik,
-				Kind:                  "Deployment",
-				ExternalTrafficPolicy: "Cluster",
-				IngressClass:          "traefik",
-			},
-			ExternalDNS:         expandExternalDNSFromSpec(spec),
-			ArgoCD:              expandArgoCDFromSpec(spec),
-			KubePrometheusStack: expandMonitoringFromSpec(spec),
-		},
-	}
-
-	// Map backup configuration from spec.Backup to cfg.Addons.TalosBackup
-	// S3 credentials are loaded from the referenced Secret via LoadCredentials
-	if spec.Backup != nil && spec.Backup.Enabled {
-		// Only enable backup if we have the required S3 credentials
-		if creds.BackupS3AccessKey != "" && creds.BackupS3SecretKey != "" {
-			cfg.Addons.TalosBackup = config.TalosBackupConfig{
-				Enabled:            true,
-				Schedule:           spec.Backup.Schedule,
-				S3AccessKey:        creds.BackupS3AccessKey,
-				S3SecretKey:        creds.BackupS3SecretKey,
-				S3Endpoint:         creds.BackupS3Endpoint,
-				S3Bucket:           creds.BackupS3Bucket,
-				S3Region:           creds.BackupS3Region,
-				EncryptionDisabled: true, // No age public key available via operator path
-			}
-		}
-		// If credentials are missing, backup will be silently skipped
-		// The LoadCredentials function logs a warning in this case
-	}
-
-	// Enable Cloudflare when ExternalDNS is enabled
-	// ExternalDNS requires Cloudflare for DNS provider functionality
-	// The API token comes from the credentials secret (cf-api-token key)
-	if cfg.Addons.ExternalDNS.Enabled {
-		cfg.Addons.Cloudflare = config.CloudflareConfig{
-			Enabled:  true,
-			APIToken: creds.CloudflareAPIToken,
-			Domain:   spec.Domain,
-		}
-		cfg.Addons.ExternalDNS.TXTOwnerID = k8sCluster.Name
-		// Also enable CertManager Cloudflare integration if cert-manager is enabled
-		// This allows automatic DNS-01 challenge for TLS certificates
-		if cfg.Addons.CertManager.Enabled {
-			// Derive cert email from domain (matches v2 GetCertEmail behavior)
-			certEmail := ""
-			if spec.Domain != "" {
-				certEmail = "admin@" + spec.Domain
-			}
-			cfg.Addons.CertManager.Cloudflare = config.CertManagerCloudflareConfig{
-				Enabled:    true,
-				Production: true,
-				Email:      certEmail,
-			}
-		}
-	}
-
-	// Calculate derived network configuration (NodeIPv4CIDR, etc.)
-	if err := cfg.CalculateSubnets(); err != nil {
-		return nil, fmt.Errorf("failed to calculate network subnets: %w", err)
-	}
-
-	return cfg, nil
-}
-
-// normalizeServerSize converts legacy server type names to current Hetzner names.
-func normalizeServerSize(size string) string {
-	// Map legacy types to current types
-	legacyMap := map[string]string{
-		"cx22": "cx23",
-		"cx32": "cx33",
-		"cx42": "cx43",
-		"cx52": "cx53",
-	}
-	if newSize, ok := legacyMap[strings.ToLower(size)]; ok {
-		return newSize
-	}
-	return size
-}
-
-// expandFirewallFromSpec derives firewall config from the CRD spec.
-// No extra rules needed: Traefik uses LoadBalancer service, so the
-// Hetzner LB handles ingress traffic (not node ports 80/443).
-func expandFirewallFromSpec(spec *k8znerv1alpha1.K8znerClusterSpec) config.FirewallConfig {
-	return config.FirewallConfig{
-		UseCurrentIPv4: boolPtr(true),
-		UseCurrentIPv6: boolPtr(true),
-	}
-}
-
-// expandArgoCDFromSpec derives ArgoCD config from the CRD spec.
-// When a domain is configured, ingress is automatically enabled.
-func expandArgoCDFromSpec(spec *k8znerv1alpha1.K8znerClusterSpec) config.ArgoCDConfig {
-	argoCfg := config.ArgoCDConfig{
-		Enabled: spec.Addons != nil && spec.Addons.ArgoCD,
-	}
-
-	if spec.Domain != "" && argoCfg.Enabled {
-		subdomain := "argo"
-		if spec.Addons != nil && spec.Addons.ArgoSubdomain != "" {
-			subdomain = spec.Addons.ArgoSubdomain
-		}
-		argoCfg.IngressEnabled = true
-		argoCfg.IngressHost = subdomain + "." + spec.Domain
-		argoCfg.IngressClassName = "traefik"
-		argoCfg.IngressTLS = true
-	}
-
-	return argoCfg
-}
-
-// expandMonitoringFromSpec derives kube-prometheus-stack config from the CRD spec.
-// When a domain is configured, Grafana ingress is automatically enabled.
-func expandMonitoringFromSpec(spec *k8znerv1alpha1.K8znerClusterSpec) config.KubePrometheusStackConfig {
-	promCfg := config.KubePrometheusStackConfig{
-		Enabled: spec.Addons != nil && spec.Addons.Monitoring,
-	}
-
-	if !promCfg.Enabled {
-		return promCfg
-	}
-
-	if spec.Domain != "" {
-		subdomain := "grafana"
-		if spec.Addons != nil && spec.Addons.GrafanaSubdomain != "" {
-			subdomain = spec.Addons.GrafanaSubdomain
-		}
-		promCfg.Grafana.IngressEnabled = true
-		promCfg.Grafana.IngressHost = subdomain + "." + spec.Domain
-		promCfg.Grafana.IngressClassName = "traefik"
-		promCfg.Grafana.IngressTLS = true
-	}
-
-	return promCfg
-}
-
-// expandExternalDNSFromSpec derives ExternalDNS config from the CRD spec.
-// Sets standard defaults for Policy and Sources. TXTOwnerID is set separately
-// in SpecToConfig using the cluster name.
-func expandExternalDNSFromSpec(spec *k8znerv1alpha1.K8znerClusterSpec) config.ExternalDNSConfig {
-	dnsCfg := config.ExternalDNSConfig{
-		Enabled: spec.Addons != nil && spec.Addons.ExternalDNS,
-	}
-
-	if dnsCfg.Enabled {
-		dnsCfg.Policy = "sync"
-		dnsCfg.Sources = []string{"ingress"}
-	}
-
-	return dnsCfg
-}
-
-// boolPtr returns a pointer to a boolean value.
-func boolPtr(b bool) *bool { return &b }
-
-// defaultString returns the value if non-empty, otherwise the default.
-func defaultString(value, defaultValue string) string {
-	if value == "" {
-		return defaultValue
-	}
-	return value
-}
-
-// ParseSecretsFromBytes parses a Talos secrets bundle from YAML bytes.
-// This is used when loading secrets from a Kubernetes Secret instead of a file.
-func ParseSecretsFromBytes(data []byte) (*secrets.Bundle, error) {
-	if len(data) == 0 {
-		return nil, fmt.Errorf("empty secrets data")
-	}
-
-	var sb secrets.Bundle
-	if err := yaml.Unmarshal(data, &sb); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal secrets bundle: %w", err)
-	}
-
-	// Re-inject clock (required for certificate generation)
-	sb.Clock = secrets.NewFixedClock(time.Now())
-
-	return &sb, nil
-}
-
-// CreateTalosGenerator creates a TalosConfigProducer from the cluster spec and credentials.
-// This is used by the operator to generate Talos configs for new nodes.
-func (a *PhaseAdapter) CreateTalosGenerator(
-	k8sCluster *k8znerv1alpha1.K8znerCluster,
-	creds *Credentials,
-) (provisioning.TalosConfigProducer, error) {
-	// Parse secrets from the credential data
-	sb, err := ParseSecretsFromBytes(creds.TalosSecrets)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse talos secrets: %w", err)
-	}
-
-	// Determine the endpoint - prefer private IPs for internal cluster communication
-	// Priority: 1. LB Private IP (internal), 2. ControlPlaneEndpoint (if already URL), 3. LB Public IP, 4. First CP node private IP, 5. First CP node public IP
-	// Note: The endpoint must be a full URL (https://host:6443) for Talos config generation
-	var endpoint string
-	var endpointIP string
-
-	//nolint:gocritic // if-else chain is clearer here due to different condition types
-	if k8sCluster.Status.Infrastructure.LoadBalancerPrivateIP != "" {
-		// Prefer private IP for internal cluster communication (faster, more secure)
-		endpointIP = k8sCluster.Status.Infrastructure.LoadBalancerPrivateIP
-	} else if k8sCluster.Status.ControlPlaneEndpoint != "" {
-		// ControlPlaneEndpoint might already be a URL - use it directly if it looks like one
-		if strings.HasPrefix(k8sCluster.Status.ControlPlaneEndpoint, "https://") {
-			endpoint = k8sCluster.Status.ControlPlaneEndpoint
-		} else {
-			endpointIP = k8sCluster.Status.ControlPlaneEndpoint
-		}
-	} else if k8sCluster.Status.Infrastructure.LoadBalancerIP != "" {
-		endpointIP = k8sCluster.Status.Infrastructure.LoadBalancerIP
-	} else if len(k8sCluster.Status.ControlPlanes.Nodes) > 0 {
-		// Fallback to first control plane node - prefer private IP
-		cp := k8sCluster.Status.ControlPlanes.Nodes[0]
-		if cp.PrivateIP != "" {
-			endpointIP = cp.PrivateIP
-		} else if cp.PublicIP != "" {
-			endpointIP = cp.PublicIP
-		}
-	}
-
-	// Format as URL if we have an IP but not a full endpoint URL yet
-	if endpoint == "" && endpointIP != "" {
-		endpoint = fmt.Sprintf("https://%s:%d", endpointIP, config.KubeAPIPort)
-	}
-
-	if endpoint == "" {
-		return nil, fmt.Errorf("cannot create talos generator: no valid control plane endpoint found (LoadBalancerPrivateIP, ControlPlaneEndpoint, LoadBalancerIP, or CP node IP required)")
-	}
-
-	// Create the generator
-	generator := talos.NewGenerator(
-		k8sCluster.Name,
-		k8sCluster.Spec.Kubernetes.Version,
-		k8sCluster.Spec.Talos.Version,
-		endpoint,
-		sb,
-	)
-
-	// Set machine config options from spec
-	machineOpts := &talos.MachineConfigOptions{
-		SchematicID: k8sCluster.Spec.Talos.SchematicID,
-		// Set defaults for operator-managed clusters
-		StateEncryption:         true,
-		EphemeralEncryption:     true,
-		IPv6Enabled:             true,
-		PublicIPv4Enabled:       true,
-		PublicIPv6Enabled:       true,
-		CoreDNSEnabled:          true,
-		DiscoveryServiceEnabled: true,
-		KubeProxyReplacement:    true, // Cilium replaces kube-proxy
-		// Network context from spec
-		NodeIPv4CIDR:    defaultString(k8sCluster.Spec.Network.IPv4CIDR, "10.0.0.0/16"),
-		PodIPv4CIDR:     defaultString(k8sCluster.Spec.Network.PodCIDR, "10.244.0.0/16"),
-		ServiceIPv4CIDR: defaultString(k8sCluster.Spec.Network.ServiceCIDR, "10.96.0.0/16"),
-		EtcdSubnet:      defaultString(k8sCluster.Spec.Network.IPv4CIDR, "10.0.0.0/16"),
-	}
-
-	generator.SetMachineConfigOptions(machineOpts)
-
-	return generator, nil
-}
-
-// OperatorObserver implements provisioning.Observer for operator context.
-type OperatorObserver struct {
-	ctx    context.Context
-	fields map[string]string
-}
-
-// NewOperatorObserver creates a new operator observer.
-func NewOperatorObserver(ctx context.Context) *OperatorObserver {
-	return &OperatorObserver{
-		ctx:    ctx,
-		fields: make(map[string]string),
-	}
-}
-
-// Printf implements the Logger interface.
-func (o *OperatorObserver) Printf(format string, v ...interface{}) {
-	logger := log.FromContext(o.ctx)
-	logger.Info(fmt.Sprintf(format, v...))
-}
-
-// Event implements provisioning.Observer.
-func (o *OperatorObserver) Event(event provisioning.Event) {
-	logger := log.FromContext(o.ctx)
-
-	// Merge context fields with event fields
-	fields := make(map[string]string)
-	for k, v := range o.fields {
-		fields[k] = v
-	}
-	for k, v := range event.Fields {
-		fields[k] = v
-	}
-
-	// Convert to key-value pairs for structured logging
-	keysAndValues := make([]interface{}, 0, len(fields)*2+4)
-	keysAndValues = append(keysAndValues, "eventType", string(event.Type))
-	if event.Phase != "" {
-		keysAndValues = append(keysAndValues, "phase", event.Phase)
-	}
-	if event.Resource != "" {
-		keysAndValues = append(keysAndValues, "resource", event.Resource)
-	}
-	for k, v := range fields {
-		keysAndValues = append(keysAndValues, k, v)
-	}
-
-	switch event.Type {
-	case provisioning.EventPhaseFailed, provisioning.EventResourceFailed, provisioning.EventValidationError:
-		logger.Error(nil, event.Message, keysAndValues...)
-	default:
-		logger.Info(event.Message, keysAndValues...)
-	}
-}
-
-// Progress implements provisioning.Observer.
-func (o *OperatorObserver) Progress(phase string, current, total int) {
-	logger := log.FromContext(o.ctx)
-	logger.V(1).Info("progress", "phase", phase, "current", current, "total", total)
-}
-
-// WithFields implements provisioning.Observer.
-func (o *OperatorObserver) WithFields(fields map[string]string) provisioning.Observer {
-	newFields := make(map[string]string)
-	for k, v := range o.fields {
-		newFields[k] = v
-	}
-	for k, v := range fields {
-		newFields[k] = v
-	}
-	return &OperatorObserver{
-		ctx:    o.ctx,
-		fields: newFields,
-	}
 }

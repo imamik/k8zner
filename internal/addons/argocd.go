@@ -10,18 +10,7 @@ import (
 	"github.com/imamik/k8zner/internal/config"
 )
 
-// applyArgoCD installs ArgoCD, a declarative GitOps continuous delivery tool.
-// ArgoCD continuously monitors running applications and compares their live state
-// against the desired state specified in Git, automatically syncing any deviations.
-//
-// Features:
-//   - Web UI for application visualization and management
-//   - Multi-cluster deployment support
-//   - SSO integration (OIDC, OAuth2, LDAP, SAML)
-//   - Webhook triggers for automated sync
-//   - Health assessment and resource tracking
-//
-// See: https://argo-cd.readthedocs.io/
+// applyArgoCD installs ArgoCD for declarative GitOps continuous delivery.
 func applyArgoCD(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	argoCDCfg := cfg.Addons.ArgoCD
 

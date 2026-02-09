@@ -17,6 +17,7 @@ import (
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	"github.com/imamik/k8zner/internal/addons"
+	"github.com/imamik/k8zner/internal/config"
 	operatorprov "github.com/imamik/k8zner/internal/operator/provisioning"
 	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning"
@@ -292,7 +293,6 @@ func (r *ClusterReconciler) reconcileCNIPhase(ctx context.Context, cluster *k8zn
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonCNIInstalling,
 		"Installing Cilium CNI")
 
-	// Load credentials
 	logger.V(1).Info("loading credentials for CNI installation")
 	creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
 	if err != nil {
@@ -304,14 +304,12 @@ func (r *ClusterReconciler) reconcileCNIPhase(ctx context.Context, cluster *k8zn
 		"hasTalosConfig", len(creds.TalosConfig) > 0,
 	)
 
-	// Convert CRD spec to config for CNI installation
 	cfg, err := operatorprov.SpecToConfig(cluster, creds)
 	if err != nil {
 		r.logAndRecordError(ctx, cluster, err, EventReasonCNIFailed, "Failed to convert spec to config")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
-	// Get kubeconfig from Talos
 	logger.V(1).Info("getting kubeconfig from Talos")
 	kubeconfig, err := r.getKubeconfigFromTalos(ctx, cluster, creds)
 	if err != nil {
@@ -320,27 +318,42 @@ func (r *ClusterReconciler) reconcileCNIPhase(ctx context.Context, cluster *k8zn
 	}
 	logger.V(1).Info("kubeconfig retrieved successfully", "kubeconfigLength", len(kubeconfig))
 
-	// Install Cilium CNI only
+	if result, err := r.installAndWaitForCNI(ctx, cluster, cfg, kubeconfig); err != nil || result.RequeueAfter > 0 {
+		return result, err
+	}
+
+	// For CLI-bootstrapped clusters, workers don't exist yet - go through compute/bootstrap first
+	if cluster.Spec.Bootstrap != nil && cluster.Spec.Bootstrap.Completed {
+		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseCompute
+	} else {
+		// For operator-managed clusters, compute/bootstrap already ran - proceed to addons
+		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseAddons
+	}
+	return ctrl.Result{Requeue: true}, nil
+}
+
+// installAndWaitForCNI installs Cilium CNI and waits for it to become ready.
+func (r *ClusterReconciler) installAndWaitForCNI(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, cfg *config.Config, kubeconfig []byte) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
 	logger.Info("installing Cilium CNI")
 	if err := addons.ApplyCilium(ctx, cfg, kubeconfig); err != nil {
 		r.logAndRecordError(ctx, cluster, err, EventReasonCNIFailed, "Failed to install Cilium")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
-	// Update addon status
 	now := metav1.Now()
 	if cluster.Status.Addons == nil {
 		cluster.Status.Addons = make(map[string]k8znerv1alpha1.AddonStatus)
 	}
 	cluster.Status.Addons[k8znerv1alpha1.AddonNameCilium] = k8znerv1alpha1.AddonStatus{
 		Installed:          true,
-		Healthy:            false, // Will be updated when we verify readiness
+		Healthy:            false,
 		Phase:              k8znerv1alpha1.AddonPhaseInstalling,
 		LastTransitionTime: &now,
 		InstallOrder:       k8znerv1alpha1.AddonOrderCilium,
 	}
 
-	// Wait for Cilium to be ready
 	logger.Info("waiting for Cilium to be ready")
 	if err := r.waitForCiliumReady(ctx, kubeconfig); err != nil {
 		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCNIFailed,
@@ -348,7 +361,6 @@ func (r *ClusterReconciler) reconcileCNIPhase(ctx context.Context, cluster *k8zn
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
-	// Update status to installed
 	cluster.Status.Addons[k8znerv1alpha1.AddonNameCilium] = k8znerv1alpha1.AddonStatus{
 		Installed:          true,
 		Healthy:            true,
@@ -360,14 +372,7 @@ func (r *ClusterReconciler) reconcileCNIPhase(ctx context.Context, cluster *k8zn
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonCNIReady,
 		"Cilium CNI is ready")
 
-	// For CLI-bootstrapped clusters, workers don't exist yet - go through compute/bootstrap first
-	if cluster.Spec.Bootstrap != nil && cluster.Spec.Bootstrap.Completed {
-		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseCompute
-	} else {
-		// For operator-managed clusters, compute/bootstrap already ran - proceed to addons
-		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseAddons
-	}
-	return ctrl.Result{Requeue: true}, nil
+	return ctrl.Result{}, nil
 }
 
 // waitForCiliumReady waits for Cilium pods to be ready.
@@ -435,35 +440,17 @@ func (r *ClusterReconciler) reconcileAddonsPhase(ctx context.Context, cluster *k
 	logger := log.FromContext(ctx)
 	logger.Info("reconciling addons phase")
 
-	// Ensure workers are ready before installing addons.
-	// Workers are created by scaleUpWorkers (normally in running phase), but addons like
-	// ArgoCD need worker IPs for ExternalDNS target annotations.
-	desiredWorkers := cluster.Spec.Workers.Count
-	readyWorkers := cluster.Status.Workers.Ready
-	if desiredWorkers > 0 && readyWorkers < desiredWorkers {
-		// Trigger worker creation if not already done
-		currentWorkerNodes := len(cluster.Status.Workers.Nodes)
-		if currentWorkerNodes < desiredWorkers && r.hcloudClient != nil {
-			toCreate := desiredWorkers - currentWorkerNodes
-			logger.Info("creating workers before addon installation",
-				"desired", desiredWorkers, "current", currentWorkerNodes, "toCreate", toCreate)
-			if err := r.scaleUpWorkers(ctx, cluster, toCreate); err != nil {
-				logger.Error(err, "failed to create workers for addon phase")
-			}
-		}
-		logger.Info("waiting for workers to be ready before installing addons",
-			"ready", readyWorkers, "desired", desiredWorkers)
-		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+	// Ensure workers are ready before installing addons
+	if result, waiting := r.ensureWorkersReady(ctx, cluster); waiting {
+		return result, nil
 	}
 
-	// Load credentials
 	creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
 	if err != nil {
 		r.logAndRecordError(ctx, cluster, err, EventReasonCredentialsError, "Failed to load credentials")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
-	// Convert CRD spec to config for addon installation
 	cfg, err := operatorprov.SpecToConfig(cluster, creds)
 	if err != nil {
 		r.logAndRecordError(ctx, cluster, err, EventReasonAddonsFailed, "Failed to convert spec to config")
@@ -471,30 +458,16 @@ func (r *ClusterReconciler) reconcileAddonsPhase(ctx context.Context, cluster *k
 	}
 	cfg.HCloudToken = creds.HCloudToken
 
-	// Get kubeconfig from Talos
 	kubeconfig, err := r.getKubeconfigFromTalos(ctx, cluster, creds)
 	if err != nil {
 		r.logAndRecordError(ctx, cluster, err, EventReasonAddonsFailed, "Failed to get kubeconfig")
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
-	// Get network ID from status, or look it up from HCloud if not set
-	networkID := cluster.Status.Infrastructure.NetworkID
-	if networkID == 0 {
-		logger.Info("networkID not in status, looking up from HCloud", "clusterName", cluster.Name)
-		network, err := r.hcloudClient.GetNetwork(ctx, cluster.Name)
-		if err != nil {
-			r.logAndRecordError(ctx, cluster, err, EventReasonAddonsFailed, "Failed to get network from HCloud")
-			return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
-		}
-		if network == nil {
-			r.Recorder.Event(cluster, corev1.EventTypeWarning, EventReasonAddonsFailed,
-				"Network not found in HCloud - waiting for infrastructure")
-			return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
-		}
-		networkID = network.ID
-		cluster.Status.Infrastructure.NetworkID = networkID
-		logger.Info("found network ID from HCloud", "networkID", networkID)
+	networkID, err := r.resolveNetworkID(ctx, cluster)
+	if err != nil {
+		r.logAndRecordError(ctx, cluster, err, EventReasonAddonsFailed, "Failed to resolve network ID")
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
 	if cfg.HCloudToken == "" {
@@ -503,20 +476,75 @@ func (r *ClusterReconciler) reconcileAddonsPhase(ctx context.Context, cluster *k
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
-	// Initialize addon status map
+	return r.installNextAddon(ctx, cluster, cfg, kubeconfig, networkID)
+}
+
+// ensureWorkersReady checks if workers are ready, creating them if needed.
+// Returns (result, true) if workers are still being created/not ready and caller should return.
+func (r *ClusterReconciler) ensureWorkersReady(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (ctrl.Result, bool) {
+	logger := log.FromContext(ctx)
+
+	desiredWorkers := cluster.Spec.Workers.Count
+	readyWorkers := cluster.Status.Workers.Ready
+	if desiredWorkers == 0 || readyWorkers >= desiredWorkers {
+		return ctrl.Result{}, false
+	}
+
+	// Trigger worker creation if not already done
+	currentWorkerNodes := len(cluster.Status.Workers.Nodes)
+	if currentWorkerNodes < desiredWorkers && r.hcloudClient != nil {
+		toCreate := desiredWorkers - currentWorkerNodes
+		logger.Info("creating workers before addon installation",
+			"desired", desiredWorkers, "current", currentWorkerNodes, "toCreate", toCreate)
+		if err := r.scaleUpWorkers(ctx, cluster, toCreate); err != nil {
+			logger.Error(err, "failed to create workers for addon phase")
+		}
+	}
+
+	logger.Info("waiting for workers to be ready before installing addons",
+		"ready", readyWorkers, "desired", desiredWorkers)
+	return ctrl.Result{RequeueAfter: 15 * time.Second}, true
+}
+
+// resolveNetworkID returns the network ID from status, or looks it up from HCloud.
+func (r *ClusterReconciler) resolveNetworkID(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (int64, error) {
+	logger := log.FromContext(ctx)
+
+	networkID := cluster.Status.Infrastructure.NetworkID
+	if networkID != 0 {
+		return networkID, nil
+	}
+
+	logger.Info("networkID not in status, looking up from HCloud", "clusterName", cluster.Name)
+	network, err := r.hcloudClient.GetNetwork(ctx, cluster.Name)
+	if err != nil {
+		return 0, err
+	}
+	if network == nil {
+		r.Recorder.Event(cluster, corev1.EventTypeWarning, EventReasonAddonsFailed,
+			"Network not found in HCloud - waiting for infrastructure")
+		return 0, fmt.Errorf("network not found in HCloud")
+	}
+
+	cluster.Status.Infrastructure.NetworkID = network.ID
+	logger.Info("found network ID from HCloud", "networkID", network.ID)
+	return network.ID, nil
+}
+
+// installNextAddon installs the next pending addon from the enabled steps list.
+func (r *ClusterReconciler) installNextAddon(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, cfg *config.Config, kubeconfig []byte, networkID int64) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
 	if cluster.Status.Addons == nil {
 		cluster.Status.Addons = make(map[string]k8znerv1alpha1.AddonStatus)
 	}
 
-	// Install addons one-at-a-time. Each reconcile installs the next pending addon,
-	// updates the CRD status, and requeues immediately for the next one.
 	steps := addons.EnabledSteps(cfg)
 	for _, step := range steps {
 		if _, installed := cluster.Status.Addons[step.Name]; installed {
-			continue // Already installed in a previous reconcile
+			continue
 		}
 
-		// Found the next addon to install
 		logger.Info("installing addon", "addon", step.Name, "order", step.Order)
 		r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonAddonsInstalling,
 			"Installing addon: %s", step.Name)
@@ -527,7 +555,6 @@ func (r *ClusterReconciler) reconcileAddonsPhase(ctx context.Context, cluster *k
 			return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 		}
 
-		// Mark this addon as installed in the CRD status
 		now := metav1.Now()
 		cluster.Status.Addons[step.Name] = k8znerv1alpha1.AddonStatus{
 			Installed:          true,
@@ -538,13 +565,10 @@ func (r *ClusterReconciler) reconcileAddonsPhase(ctx context.Context, cluster *k
 		}
 
 		logger.Info("addon installed successfully", "addon", step.Name)
-
-		// Requeue immediately to install the next addon.
-		// Status update happens in the outer Reconcile() after we return.
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	// All addons installed!
+	// All addons installed
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonAddonsReady,
 		"All addons installed successfully")
 
@@ -652,42 +676,12 @@ func (r *ClusterReconciler) reconcileRunningPhase(ctx context.Context, cluster *
 
 // buildProvisioningContext creates a provisioning context for phase adapter methods.
 func (r *ClusterReconciler) buildProvisioningContext(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, creds *operatorprov.Credentials) (*provisioning.Context, error) {
-	// Create HCloud infrastructure manager
 	infraManager := hcloud.NewRealClient(creds.HCloudToken)
 
-	// IMPORTANT: Discover infrastructure from HCloud BEFORE creating Talos generator
-	// The Talos generator needs the control plane endpoint (LB IP) to generate configs
-	// This is critical for CLI-bootstrapped clusters where the CRD status may not have all infra info
+	// Discover infrastructure from HCloud BEFORE creating Talos generator.
+	// The Talos generator needs the control plane endpoint (LB IP) to generate configs.
+	r.discoverInfrastructure(ctx, cluster, infraManager)
 
-	// Discover and populate LoadBalancer info if missing
-	if cluster.Status.Infrastructure.LoadBalancerID == 0 {
-		lbName := naming.KubeAPILoadBalancer(cluster.Name)
-		lb, err := infraManager.GetLoadBalancer(ctx, lbName)
-		if err == nil && lb != nil {
-			cluster.Status.Infrastructure.LoadBalancerID = lb.ID
-			if lb.PublicNet.Enabled && lb.PublicNet.IPv4.IP.String() != "<nil>" {
-				cluster.Status.Infrastructure.LoadBalancerIP = lb.PublicNet.IPv4.IP.String()
-			}
-			// Get private IP from the first attached private network
-			if len(lb.PrivateNet) > 0 && lb.PrivateNet[0].IP != nil {
-				cluster.Status.Infrastructure.LoadBalancerPrivateIP = lb.PrivateNet[0].IP.String()
-			}
-		}
-		// Ignore error - LB might not exist yet if operator is creating infrastructure
-	}
-
-	// Discover and populate Firewall info if missing
-	if cluster.Status.Infrastructure.FirewallID == 0 {
-		fwName := naming.Firewall(cluster.Name)
-		fw, err := infraManager.GetFirewall(ctx, fwName)
-		if err == nil && fw != nil {
-			cluster.Status.Infrastructure.FirewallID = fw.ID
-		}
-		// Ignore error - Firewall might not exist yet
-	}
-
-	// Create Talos config producer from stored secrets
-	// Now that we've discovered LB info, the generator can find a valid endpoint
 	talosProducer, err := r.phaseAdapter.CreateTalosGenerator(cluster, creds)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create talos generator: %w", err)
@@ -698,21 +692,43 @@ func (r *ClusterReconciler) buildProvisioningContext(ctx context.Context, cluste
 		return nil, err
 	}
 
-	// Populate network state by looking up network by cluster name
-	// This is required when the operator is picking up from CLI bootstrap
-	// Network name always follows the cluster naming convention: {clusterName}
+	// Populate network state for CLI bootstrap clusters
 	if pCtx.State.Network == nil {
 		network, err := infraManager.GetNetwork(ctx, cluster.Name)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get network: %w", err)
 		}
 		pCtx.State.Network = network
-
-		// Also populate the infrastructure status if it's missing
 		if cluster.Status.Infrastructure.NetworkID == 0 && network != nil {
 			cluster.Status.Infrastructure.NetworkID = network.ID
 		}
 	}
 
 	return pCtx, nil
+}
+
+// discoverInfrastructure populates missing infrastructure IDs by querying HCloud.
+// This is critical for CLI-bootstrapped clusters where the CRD status may not have all infra info.
+func (r *ClusterReconciler) discoverInfrastructure(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, infraManager *hcloud.RealClient) {
+	if cluster.Status.Infrastructure.LoadBalancerID == 0 {
+		lbName := naming.KubeAPILoadBalancer(cluster.Name)
+		lb, err := infraManager.GetLoadBalancer(ctx, lbName)
+		if err == nil && lb != nil {
+			cluster.Status.Infrastructure.LoadBalancerID = lb.ID
+			if lb.PublicNet.Enabled && lb.PublicNet.IPv4.IP.String() != "<nil>" {
+				cluster.Status.Infrastructure.LoadBalancerIP = lb.PublicNet.IPv4.IP.String()
+			}
+			if len(lb.PrivateNet) > 0 && lb.PrivateNet[0].IP != nil {
+				cluster.Status.Infrastructure.LoadBalancerPrivateIP = lb.PrivateNet[0].IP.String()
+			}
+		}
+	}
+
+	if cluster.Status.Infrastructure.FirewallID == 0 {
+		fwName := naming.Firewall(cluster.Name)
+		fw, err := infraManager.GetFirewall(ctx, fwName)
+		if err == nil && fw != nil {
+			cluster.Status.Infrastructure.FirewallID = fw.ID
+		}
+	}
 }
