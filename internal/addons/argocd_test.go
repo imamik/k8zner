@@ -11,6 +11,7 @@ import (
 )
 
 func TestBuildArgoCDValues(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		argoCDCfg      config.ArgoCDConfig
@@ -63,6 +64,7 @@ func TestBuildArgoCDValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cfg := &config.Config{
 				Addons: config.AddonsConfig{
 					ArgoCD: tt.argoCDCfg,
@@ -114,6 +116,7 @@ func TestBuildArgoCDValues(t *testing.T) {
 }
 
 func TestBuildArgoCDController(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name             string
 		cfg              config.ArgoCDConfig
@@ -143,6 +146,7 @@ func TestBuildArgoCDController(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			controller := buildArgoCDController(tt.cfg)
 
 			assert.Equal(t, tt.expectedReplicas, controller["replicas"])
@@ -157,6 +161,7 @@ func TestBuildArgoCDController(t *testing.T) {
 }
 
 func TestBuildArgoCDServer(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name             string
 		cfg              *config.Config
@@ -202,6 +207,7 @@ func TestBuildArgoCDServer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			server := buildArgoCDServer(tt.cfg)
 
 			assert.Equal(t, tt.expectedReplicas, server["replicas"])
@@ -215,6 +221,7 @@ func TestBuildArgoCDServer(t *testing.T) {
 }
 
 func TestBuildArgoCDIngress(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name              string
 		cfg               *config.Config
@@ -313,6 +320,7 @@ func TestBuildArgoCDIngress(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ingress := buildArgoCDIngress(tt.cfg)
 
 			assert.Equal(t, true, ingress["enabled"])
@@ -340,6 +348,7 @@ func TestBuildArgoCDIngress(t *testing.T) {
 }
 
 func TestBuildArgoCDRedis(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		cfg           config.ArgoCDConfig
@@ -361,6 +370,7 @@ func TestBuildArgoCDRedis(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			redis := buildArgoCDRedis(tt.cfg)
 
 			assert.Equal(t, tt.expectEnabled, redis["enabled"])
@@ -375,6 +385,7 @@ func TestBuildArgoCDRedis(t *testing.T) {
 }
 
 func TestCreateArgoCDNamespace(t *testing.T) {
+	t.Parallel()
 	ns := createArgoCDNamespace()
 
 	assert.Contains(t, ns, "apiVersion: v1")
@@ -383,6 +394,7 @@ func TestCreateArgoCDNamespace(t *testing.T) {
 }
 
 func TestBuildArgoCDValuesCustomHelmValues(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		Addons: config.AddonsConfig{
 			ArgoCD: config.ArgoCDConfig{

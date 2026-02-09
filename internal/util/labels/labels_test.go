@@ -3,6 +3,7 @@ package labels
 import "testing"
 
 func TestNewLabelBuilder(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		clusterName string
@@ -15,6 +16,7 @@ func TestNewLabelBuilder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			lb := NewLabelBuilder(tt.clusterName)
 			if lb == nil {
 				t.Fatal("NewLabelBuilder returned nil")
@@ -41,6 +43,7 @@ func TestNewLabelBuilder(t *testing.T) {
 }
 
 func TestWithRole(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		role string
@@ -52,6 +55,7 @@ func TestWithRole(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			lb := NewLabelBuilder("test-cluster").WithRole(tt.role)
 			labels := lb.Build()
 
@@ -73,6 +77,7 @@ func TestWithRole(t *testing.T) {
 }
 
 func TestWithPool(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		pool string
@@ -84,6 +89,7 @@ func TestWithPool(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			lb := NewLabelBuilder("test-cluster").WithPool(tt.pool)
 			labels := lb.Build()
 
@@ -101,6 +107,7 @@ func TestWithPool(t *testing.T) {
 }
 
 func TestWithServerID(t *testing.T) {
+	t.Parallel()
 	lb := NewLabelBuilder("test-cluster").WithServerID("abc12")
 	labels := lb.Build()
 
@@ -110,6 +117,7 @@ func TestWithServerID(t *testing.T) {
 }
 
 func TestWithNodePool(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		nodepool string
@@ -121,6 +129,7 @@ func TestWithNodePool(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			lb := NewLabelBuilder("test-cluster").WithNodePool(tt.nodepool)
 			labels := lb.Build()
 
@@ -132,6 +141,7 @@ func TestWithNodePool(t *testing.T) {
 }
 
 func TestWithState(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		state string
@@ -143,6 +153,7 @@ func TestWithState(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			lb := NewLabelBuilder("test-cluster").WithState(tt.state)
 			labels := lb.Build()
 
@@ -154,6 +165,7 @@ func TestWithState(t *testing.T) {
 }
 
 func TestWithManagedBy(t *testing.T) {
+	t.Parallel()
 	lb := NewLabelBuilder("test-cluster").WithManagedBy(ManagedByOperator)
 	labels := lb.Build()
 
@@ -163,6 +175,7 @@ func TestWithManagedBy(t *testing.T) {
 }
 
 func TestWithCustom(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		key   string
@@ -176,6 +189,7 @@ func TestWithCustom(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			lb := NewLabelBuilder("test-cluster").WithCustom(tt.key, tt.value)
 			labels := lb.Build()
 
@@ -187,7 +201,9 @@ func TestWithCustom(t *testing.T) {
 }
 
 func TestMerge(t *testing.T) {
+	t.Parallel()
 	t.Run("merge empty map", func(t *testing.T) {
+		t.Parallel()
 		lb := NewLabelBuilder("test-cluster").Merge(nil)
 		labels := lb.Build()
 
@@ -198,6 +214,7 @@ func TestMerge(t *testing.T) {
 	})
 
 	t.Run("merge new labels", func(t *testing.T) {
+		t.Parallel()
 		extra := map[string]string{
 			"env":  "production",
 			"team": "platform",
@@ -217,6 +234,7 @@ func TestMerge(t *testing.T) {
 	})
 
 	t.Run("merge overwrites existing", func(t *testing.T) {
+		t.Parallel()
 		extra := map[string]string{
 			KeyCluster: "overwritten",
 		}
@@ -230,7 +248,9 @@ func TestMerge(t *testing.T) {
 }
 
 func TestBuild(t *testing.T) {
+	t.Parallel()
 	t.Run("returns copy", func(t *testing.T) {
+		t.Parallel()
 		lb := NewLabelBuilder("test-cluster")
 		labels1 := lb.Build()
 		labels2 := lb.Build()
@@ -245,6 +265,7 @@ func TestBuild(t *testing.T) {
 	})
 
 	t.Run("builder not affected by returned map", func(t *testing.T) {
+		t.Parallel()
 		lb := NewLabelBuilder("test-cluster")
 		labels := lb.Build()
 
@@ -260,7 +281,9 @@ func TestBuild(t *testing.T) {
 }
 
 func TestFluentChaining(t *testing.T) {
+	t.Parallel()
 	t.Run("full chain", func(t *testing.T) {
+		t.Parallel()
 		labels := NewLabelBuilder("test-cluster").
 			WithRole(RoleWorker).
 			WithPool("workers").
@@ -295,6 +318,7 @@ func TestFluentChaining(t *testing.T) {
 	})
 
 	t.Run("order independent", func(t *testing.T) {
+		t.Parallel()
 		labels1 := NewLabelBuilder("cluster").
 			WithRole(RoleWorker).
 			WithPool("pool").
@@ -311,6 +335,7 @@ func TestFluentChaining(t *testing.T) {
 	})
 
 	t.Run("last value wins on duplicate calls", func(t *testing.T) {
+		t.Parallel()
 		labels := NewLabelBuilder("cluster").
 			WithRole("first").
 			WithRole("second").
@@ -323,7 +348,9 @@ func TestFluentChaining(t *testing.T) {
 }
 
 func TestBuilderIsolation(t *testing.T) {
+	t.Parallel()
 	t.Run("separate builders are independent", func(t *testing.T) {
+		t.Parallel()
 		lb1 := NewLabelBuilder("cluster-1")
 		lb2 := NewLabelBuilder("cluster-2")
 
@@ -337,6 +364,7 @@ func TestBuilderIsolation(t *testing.T) {
 }
 
 func TestWithTestIDIfSet(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		testID      string
@@ -349,6 +377,7 @@ func TestWithTestIDIfSet(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			lb := NewLabelBuilder("test-cluster").WithTestIDIfSet(tt.testID)
 			labels := lb.Build()
 
@@ -364,7 +393,10 @@ func TestWithTestIDIfSet(t *testing.T) {
 }
 
 func TestWithTestIDIfSetChaining(t *testing.T) {
+	t.Parallel(
 	// Test that it works in a fluent chain
+	)
+
 	labels := NewLabelBuilder("test-cluster").
 		WithRole(RoleWorker).
 		WithTestIDIfSet("e2e-test-123").
@@ -383,6 +415,7 @@ func TestWithTestIDIfSetChaining(t *testing.T) {
 }
 
 func TestSelectorForCluster(t *testing.T) {
+	t.Parallel()
 	selector := SelectorForCluster("my-cluster")
 	expected := "k8zner.io/cluster=my-cluster"
 	if selector != expected {
@@ -391,6 +424,7 @@ func TestSelectorForCluster(t *testing.T) {
 }
 
 func TestSelectorForClusterRole(t *testing.T) {
+	t.Parallel()
 	selector := SelectorForClusterRole("my-cluster", RoleControlPlane)
 	expected := "k8zner.io/cluster=my-cluster,k8zner.io/role=control-plane"
 	if selector != expected {

@@ -11,6 +11,7 @@ import (
 )
 
 func TestBuildCertManagerValues(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name                      string
 		controlPlaneCount         int
@@ -50,6 +51,7 @@ func TestBuildCertManagerValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cfg := &config.Config{
 				ControlPlane: config.ControlPlaneConfig{
 					NodePools: []config.ControlPlaneNodePool{
@@ -156,6 +158,7 @@ func TestBuildCertManagerValues(t *testing.T) {
 }
 
 func TestBuildCertManagerValues_Tolerations(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
@@ -188,6 +191,7 @@ func TestBuildCertManagerValues_Tolerations(t *testing.T) {
 }
 
 func TestBuildCertManagerValues_GatewayAPI(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
@@ -204,6 +208,7 @@ func TestBuildCertManagerValues_GatewayAPI(t *testing.T) {
 }
 
 func TestCreateCertManagerNamespace(t *testing.T) {
+	t.Parallel()
 	ns := createCertManagerNamespace()
 
 	assert.Contains(t, ns, "apiVersion: v1")

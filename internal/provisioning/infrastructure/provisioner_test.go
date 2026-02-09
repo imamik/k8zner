@@ -28,11 +28,13 @@ func createTestContext(t *testing.T, mockInfra *hcloud_internal.MockClient, cfg 
 }
 
 func TestProvisioner_Name(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner()
 	assert.Equal(t, "infrastructure", p.Name())
 }
 
 func TestProvisionNetwork_Success(t *testing.T) {
+	t.Parallel()
 	mockInfra := &hcloud_internal.MockClient{}
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
@@ -73,6 +75,7 @@ func TestProvisionNetwork_Success(t *testing.T) {
 }
 
 func TestProvisionFirewall_Success(t *testing.T) {
+	t.Parallel()
 	mockInfra := &hcloud_internal.MockClient{}
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
@@ -103,6 +106,7 @@ func TestProvisionFirewall_Success(t *testing.T) {
 }
 
 func TestProvisionLoadBalancers_Success(t *testing.T) {
+	t.Parallel()
 	mockInfra := &hcloud_internal.MockClient{}
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
@@ -151,6 +155,7 @@ func TestProvisionLoadBalancers_Success(t *testing.T) {
 }
 
 func TestGetNetwork(t *testing.T) {
+	t.Parallel()
 	mockInfra := &hcloud_internal.MockClient{}
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
@@ -169,6 +174,7 @@ func TestGetNetwork(t *testing.T) {
 }
 
 func TestParseProtocol(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    string
@@ -185,6 +191,7 @@ func TestParseProtocol(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := parseProtocol(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -192,32 +199,39 @@ func TestParseProtocol(t *testing.T) {
 }
 
 func TestParseCIDRs(t *testing.T) {
+	t.Parallel()
 	t.Run("valid CIDRs", func(t *testing.T) {
+		t.Parallel()
 		cidrs := []string{"10.0.0.0/8", "192.168.1.0/24", "172.16.0.0/12"}
 		result := parseCIDRs(cidrs)
 		assert.Len(t, result, 3)
 	})
 
 	t.Run("mixed valid and invalid CIDRs", func(t *testing.T) {
+		t.Parallel()
 		cidrs := []string{"10.0.0.0/8", "invalid", "192.168.1.0/24"}
 		result := parseCIDRs(cidrs)
 		assert.Len(t, result, 2, "invalid CIDRs should be skipped")
 	})
 
 	t.Run("all invalid CIDRs", func(t *testing.T) {
+		t.Parallel()
 		cidrs := []string{"invalid", "also-invalid", "not-a-cidr"}
 		result := parseCIDRs(cidrs)
 		assert.Empty(t, result)
 	})
 
 	t.Run("empty slice", func(t *testing.T) {
+		t.Parallel()
 		result := parseCIDRs([]string{})
 		assert.Empty(t, result)
 	})
 }
 
 func TestCollectAPISources(t *testing.T) {
+	t.Parallel()
 	t.Run("specific sources take precedence", func(t *testing.T) {
+		t.Parallel()
 		specific := []string{"10.0.0.0/8"}
 		fallback := []string{"192.168.0.0/16"}
 		result := collectAPISources(specific, fallback, "", nil)
@@ -225,6 +239,7 @@ func TestCollectAPISources(t *testing.T) {
 	})
 
 	t.Run("fallback used when specific is empty", func(t *testing.T) {
+		t.Parallel()
 		specific := []string{}
 		fallback := []string{"192.168.0.0/16"}
 		result := collectAPISources(specific, fallback, "", nil)
@@ -232,6 +247,7 @@ func TestCollectAPISources(t *testing.T) {
 	})
 
 	t.Run("public IP appended when useCurrentIP is true", func(t *testing.T) {
+		t.Parallel()
 		specific := []string{"10.0.0.0/8"}
 		useIP := true
 		result := collectAPISources(specific, nil, "1.2.3.4", &useIP)
@@ -240,6 +256,7 @@ func TestCollectAPISources(t *testing.T) {
 	})
 
 	t.Run("public IP not appended when useCurrentIP is false", func(t *testing.T) {
+		t.Parallel()
 		specific := []string{"10.0.0.0/8"}
 		useIP := false
 		result := collectAPISources(specific, nil, "1.2.3.4", &useIP)
@@ -247,12 +264,14 @@ func TestCollectAPISources(t *testing.T) {
 	})
 
 	t.Run("public IP not appended when nil", func(t *testing.T) {
+		t.Parallel()
 		specific := []string{"10.0.0.0/8"}
 		result := collectAPISources(specific, nil, "1.2.3.4", nil)
 		assert.Equal(t, []string{"10.0.0.0/8"}, result)
 	})
 
 	t.Run("empty public IP not appended", func(t *testing.T) {
+		t.Parallel()
 		specific := []string{"10.0.0.0/8"}
 		useIP := true
 		result := collectAPISources(specific, nil, "", &useIP)
@@ -261,7 +280,9 @@ func TestCollectAPISources(t *testing.T) {
 }
 
 func TestBuildFirewallRule(t *testing.T) {
+	t.Parallel()
 	t.Run("inbound TCP rule", func(t *testing.T) {
+		t.Parallel()
 		rule := config.FirewallRule{
 			Description: "Test rule",
 			Direction:   "in",
@@ -279,6 +300,7 @@ func TestBuildFirewallRule(t *testing.T) {
 	})
 
 	t.Run("outbound UDP rule", func(t *testing.T) {
+		t.Parallel()
 		rule := config.FirewallRule{
 			Description:    "Outbound DNS",
 			Direction:      "out",
@@ -294,6 +316,7 @@ func TestBuildFirewallRule(t *testing.T) {
 	})
 
 	t.Run("rule without port", func(t *testing.T) {
+		t.Parallel()
 		rule := config.FirewallRule{
 			Description: "ICMP rule",
 			Direction:   "in",
@@ -308,7 +331,9 @@ func TestBuildFirewallRule(t *testing.T) {
 }
 
 func TestNewIngressService(t *testing.T) {
+	t.Parallel()
 	t.Run("default health check values", func(t *testing.T) {
+		t.Parallel()
 		cfg := config.IngressConfig{}
 		result := newIngressService(80, cfg)
 
@@ -321,6 +346,7 @@ func TestNewIngressService(t *testing.T) {
 	})
 
 	t.Run("custom health check values", func(t *testing.T) {
+		t.Parallel()
 		cfg := config.IngressConfig{
 			HealthCheckInt:     30,
 			HealthCheckTimeout: 20,
@@ -336,6 +362,7 @@ func TestNewIngressService(t *testing.T) {
 }
 
 func TestProvisionNetwork_WithWorkers(t *testing.T) {
+	t.Parallel()
 	mockInfra := &hcloud_internal.MockClient{}
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
@@ -373,6 +400,7 @@ func TestProvisionNetwork_WithWorkers(t *testing.T) {
 }
 
 func TestProvisionNetwork_WithAutoscaler(t *testing.T) {
+	t.Parallel()
 	mockInfra := &hcloud_internal.MockClient{}
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
@@ -412,6 +440,7 @@ func TestProvisionNetwork_WithAutoscaler(t *testing.T) {
 }
 
 func TestProvisionLoadBalancers_WithIngress(t *testing.T) {
+	t.Parallel()
 	mockInfra := &hcloud_internal.MockClient{}
 	cfg := &config.Config{
 		ClusterName: "test-cluster",

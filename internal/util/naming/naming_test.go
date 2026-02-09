@@ -7,7 +7,9 @@ import (
 )
 
 func TestGenerateID(t *testing.T) {
+	t.Parallel()
 	t.Run("generates correct length", func(t *testing.T) {
+		t.Parallel()
 		id := GenerateID(5)
 		if len(id) != 5 {
 			t.Errorf("GenerateID(5) returned %d chars, want 5", len(id))
@@ -20,6 +22,7 @@ func TestGenerateID(t *testing.T) {
 	})
 
 	t.Run("only contains valid characters", func(t *testing.T) {
+		t.Parallel()
 		validChars := regexp.MustCompile(`^[a-z0-9]+$`)
 		for i := 0; i < 100; i++ {
 			id := GenerateID(IDLength)
@@ -30,6 +33,7 @@ func TestGenerateID(t *testing.T) {
 	})
 
 	t.Run("generates unique IDs", func(t *testing.T) {
+		t.Parallel()
 		seen := make(map[string]bool)
 		for i := 0; i < 1000; i++ {
 			id := GenerateID(IDLength)
@@ -43,6 +47,7 @@ func TestGenerateID(t *testing.T) {
 }
 
 func TestNetwork(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		cluster  string
@@ -56,6 +61,7 @@ func TestNetwork(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := Network(tt.cluster)
 			if result != tt.expected {
 				t.Errorf("Network(%q) = %q, want %q", tt.cluster, result, tt.expected)
@@ -65,6 +71,7 @@ func TestNetwork(t *testing.T) {
 }
 
 func TestKubeAPILoadBalancer(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		cluster  string
@@ -78,6 +85,7 @@ func TestKubeAPILoadBalancer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := KubeAPILoadBalancer(tt.cluster)
 			if result != tt.expected {
 				t.Errorf("KubeAPILoadBalancer(%q) = %q, want %q", tt.cluster, result, tt.expected)
@@ -87,6 +95,7 @@ func TestKubeAPILoadBalancer(t *testing.T) {
 }
 
 func TestIngressLoadBalancer(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		cluster  string
@@ -98,6 +107,7 @@ func TestIngressLoadBalancer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := IngressLoadBalancer(tt.cluster)
 			if result != tt.expected {
 				t.Errorf("IngressLoadBalancer(%q) = %q, want %q", tt.cluster, result, tt.expected)
@@ -107,6 +117,7 @@ func TestIngressLoadBalancer(t *testing.T) {
 }
 
 func TestFirewall(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		cluster  string
@@ -120,6 +131,7 @@ func TestFirewall(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := Firewall(tt.cluster)
 			if result != tt.expected {
 				t.Errorf("Firewall(%q) = %q, want %q", tt.cluster, result, tt.expected)
@@ -129,6 +141,7 @@ func TestFirewall(t *testing.T) {
 }
 
 func TestSSHKey(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		cluster  string
@@ -140,6 +153,7 @@ func TestSSHKey(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := SSHKey(tt.cluster)
 			if result != tt.expected {
 				t.Errorf("SSHKey(%q) = %q, want %q", tt.cluster, result, tt.expected)
@@ -149,6 +163,7 @@ func TestSSHKey(t *testing.T) {
 }
 
 func TestPlacementGroup(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		cluster  string
@@ -162,6 +177,7 @@ func TestPlacementGroup(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := PlacementGroup(tt.cluster, tt.role)
 			if result != tt.expected {
 				t.Errorf("PlacementGroup(%q, %q) = %q, want %q", tt.cluster, tt.role, result, tt.expected)
@@ -171,6 +187,7 @@ func TestPlacementGroup(t *testing.T) {
 }
 
 func TestWorkerPlacementGroupShard(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		cluster    string
@@ -185,6 +202,7 @@ func TestWorkerPlacementGroupShard(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := WorkerPlacementGroupShard(tt.cluster, tt.poolName, tt.shardIndex)
 			if result != tt.expected {
 				t.Errorf("WorkerPlacementGroupShard(%q, %q, %d) = %q, want %q",
@@ -195,7 +213,9 @@ func TestWorkerPlacementGroupShard(t *testing.T) {
 }
 
 func TestControlPlane(t *testing.T) {
+	t.Parallel()
 	t.Run("format is correct", func(t *testing.T) {
+		t.Parallel()
 		name := ControlPlane("my-cluster")
 		if !strings.HasPrefix(name, "my-cluster-cp-") {
 			t.Errorf("ControlPlane() = %q, should start with 'my-cluster-cp-'", name)
@@ -211,6 +231,7 @@ func TestControlPlane(t *testing.T) {
 	})
 
 	t.Run("generates unique names", func(t *testing.T) {
+		t.Parallel()
 		seen := make(map[string]bool)
 		for i := 0; i < 100; i++ {
 			name := ControlPlane("test")
@@ -223,6 +244,7 @@ func TestControlPlane(t *testing.T) {
 }
 
 func TestControlPlaneWithID(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		cluster  string
 		id       string
@@ -234,6 +256,7 @@ func TestControlPlaneWithID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
+			t.Parallel()
 			result := ControlPlaneWithID(tt.cluster, tt.id)
 			if result != tt.expected {
 				t.Errorf("ControlPlaneWithID(%q, %q) = %q, want %q", tt.cluster, tt.id, result, tt.expected)
@@ -243,7 +266,9 @@ func TestControlPlaneWithID(t *testing.T) {
 }
 
 func TestWorker(t *testing.T) {
+	t.Parallel()
 	t.Run("format is correct", func(t *testing.T) {
+		t.Parallel()
 		name := Worker("my-cluster")
 		if !strings.HasPrefix(name, "my-cluster-w-") {
 			t.Errorf("Worker() = %q, should start with 'my-cluster-w-'", name)
@@ -259,6 +284,7 @@ func TestWorker(t *testing.T) {
 }
 
 func TestWorkerWithID(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		cluster  string
 		id       string
@@ -270,6 +296,7 @@ func TestWorkerWithID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
+			t.Parallel()
 			result := WorkerWithID(tt.cluster, tt.id)
 			if result != tt.expected {
 				t.Errorf("WorkerWithID(%q, %q) = %q, want %q", tt.cluster, tt.id, result, tt.expected)
@@ -279,6 +306,7 @@ func TestWorkerWithID(t *testing.T) {
 }
 
 func TestStateMarker(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		cluster  string
@@ -291,6 +319,7 @@ func TestStateMarker(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := StateMarker(tt.cluster)
 			if result != tt.expected {
 				t.Errorf("StateMarker(%q) = %q, want %q", tt.cluster, result, tt.expected)
@@ -300,6 +329,7 @@ func TestStateMarker(t *testing.T) {
 }
 
 func TestParseServerName(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		serverName  string
@@ -318,6 +348,7 @@ func TestParseServerName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cluster, role, id, ok := ParseServerName(tt.serverName)
 			if ok != tt.wantOK {
 				t.Errorf("ParseServerName(%q) ok = %v, want %v", tt.serverName, ok, tt.wantOK)
@@ -336,6 +367,7 @@ func TestParseServerName(t *testing.T) {
 }
 
 func TestIsControlPlane(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		expected bool
@@ -348,6 +380,7 @@ func TestIsControlPlane(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := IsControlPlane(tt.name)
 			if result != tt.expected {
 				t.Errorf("IsControlPlane(%q) = %v, want %v", tt.name, result, tt.expected)
@@ -357,6 +390,7 @@ func TestIsControlPlane(t *testing.T) {
 }
 
 func TestIsWorker(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		expected bool
@@ -369,6 +403,7 @@ func TestIsWorker(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := IsWorker(tt.name)
 			if result != tt.expected {
 				t.Errorf("IsWorker(%q) = %v, want %v", tt.name, result, tt.expected)
@@ -378,6 +413,7 @@ func TestIsWorker(t *testing.T) {
 }
 
 func TestE2ECluster(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		prefix string
@@ -389,6 +425,7 @@ func TestE2ECluster(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := E2ECluster(tt.prefix)
 			if !strings.HasPrefix(result, tt.prefix+"-") {
 				t.Errorf("E2ECluster(%q) = %q, should start with %q-", tt.prefix, result, tt.prefix)
@@ -409,9 +446,11 @@ func TestE2ECluster(t *testing.T) {
 }
 
 func TestNamingConsistency(t *testing.T) {
+	t.Parallel()
 	cluster := "test-cluster"
 
 	t.Run("ControlPlane can be parsed", func(t *testing.T) {
+		t.Parallel()
 		name := ControlPlane(cluster)
 		parsedCluster, role, _, ok := ParseServerName(name)
 		if !ok {
@@ -426,6 +465,7 @@ func TestNamingConsistency(t *testing.T) {
 	})
 
 	t.Run("Worker can be parsed", func(t *testing.T) {
+		t.Parallel()
 		name := Worker(cluster)
 		parsedCluster, role, _, ok := ParseServerName(name)
 		if !ok {

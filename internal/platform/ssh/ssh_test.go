@@ -20,6 +20,7 @@ func generateTestKey(t *testing.T) *keygen.KeyPair {
 }
 
 func TestNewClient_Success(t *testing.T) {
+	t.Parallel()
 	keyPair := generateTestKey(t)
 
 	cfg := &Config{
@@ -53,6 +54,7 @@ func TestNewClient_Success(t *testing.T) {
 }
 
 func TestNewClient_InvalidKey(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Host:       "192.168.1.100",
 		User:       "root",
@@ -71,6 +73,7 @@ func TestNewClient_InvalidKey(t *testing.T) {
 }
 
 func TestNewClient_NilConfig(t *testing.T) {
+	t.Parallel()
 	_, err := NewClient(nil)
 	if err == nil {
 		t.Fatal("expected error for nil config, got nil")
@@ -82,6 +85,7 @@ func TestNewClient_NilConfig(t *testing.T) {
 }
 
 func TestNewClient_EmptyHost(t *testing.T) {
+	t.Parallel()
 	keyPair := generateTestKey(t)
 
 	cfg := &Config{
@@ -102,6 +106,7 @@ func TestNewClient_EmptyHost(t *testing.T) {
 }
 
 func TestNewClient_EmptyUser(t *testing.T) {
+	t.Parallel()
 	keyPair := generateTestKey(t)
 
 	cfg := &Config{
@@ -122,6 +127,7 @@ func TestNewClient_EmptyUser(t *testing.T) {
 }
 
 func TestNewClient_EmptyPrivateKey(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Host:       "192.168.1.100",
 		User:       "root",
@@ -140,6 +146,7 @@ func TestNewClient_EmptyPrivateKey(t *testing.T) {
 }
 
 func TestNewClient_CustomConfig(t *testing.T) {
+	t.Parallel()
 	keyPair := generateTestKey(t)
 
 	customPort := 2222
@@ -178,6 +185,7 @@ func TestNewClient_CustomConfig(t *testing.T) {
 }
 
 func TestNewClient_ConfigNotMutated(t *testing.T) {
+	t.Parallel()
 	keyPair := generateTestKey(t)
 
 	cfg := &Config{
@@ -214,6 +222,7 @@ func TestNewClient_ConfigNotMutated(t *testing.T) {
 }
 
 func TestNewClient_ParsesPrivateKey(t *testing.T) {
+	t.Parallel()
 	keyPair := generateTestKey(t)
 
 	cfg := &Config{
@@ -234,6 +243,7 @@ func TestNewClient_ParsesPrivateKey(t *testing.T) {
 }
 
 func TestExecute_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	keyPair := generateTestKey(t)
 
 	cfg := &Config{
@@ -266,6 +276,7 @@ func TestExecute_ContextCancellation(t *testing.T) {
 }
 
 func TestClient_AppliesDefaults(t *testing.T) {
+	t.Parallel()
 	keyPair := generateTestKey(t)
 
 	tests := []struct {
@@ -309,6 +320,7 @@ func TestClient_AppliesDefaults(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			client, err := NewClient(tt.cfg)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)

@@ -11,6 +11,7 @@ import (
 )
 
 func TestAttachToNetwork_NilIPValidation(t *testing.T) {
+	t.Parallel()
 	client := NewRealClient("test-token")
 
 	// Create mock load balancer and network objects
@@ -34,6 +35,7 @@ func TestAttachToNetwork_NilIPValidation(t *testing.T) {
 }
 
 func TestAttachToNetwork_ValidIPFormat(t *testing.T) {
+	t.Parallel()
 	client := NewRealClient("test-token")
 
 	lb := &hcloud.LoadBalancer{

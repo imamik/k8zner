@@ -83,11 +83,13 @@ func (m *mockTalosClient) SetMachineConfigOptions(_ interface{}) {
 }
 
 func TestProvisionerName(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner(ProvisionerOptions{})
 	assert.Equal(t, "Upgrade", p.Name())
 }
 
 func TestGetControlPlaneIPs(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		servers       []*hcloudAPI.Server
@@ -142,6 +144,7 @@ func TestGetControlPlaneIPs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			mockClient := &hcloud.MockClient{
 				GetServersByLabelFunc: func(_ context.Context, labels map[string]string) ([]*hcloudAPI.Server, error) {
 					assert.Equal(t, "test-cluster", labels["cluster"])
@@ -170,6 +173,7 @@ func TestGetControlPlaneIPs(t *testing.T) {
 }
 
 func TestGetWorkerIPs(t *testing.T) {
+	t.Parallel()
 	mockClient := &hcloud.MockClient{
 		GetServersByLabelFunc: func(_ context.Context, labels map[string]string) ([]*hcloudAPI.Server, error) {
 			assert.Equal(t, "test-cluster", labels["cluster"])
@@ -207,6 +211,7 @@ func TestGetWorkerIPs(t *testing.T) {
 }
 
 func TestUpgradeControlPlane_SkipsNodesAlreadyAtTargetVersion(t *testing.T) {
+	t.Parallel()
 	nodeVersions := map[string]string{
 		"1.2.3.10": "v1.8.3", // Already at target
 		"1.2.3.11": "v1.8.2", // Needs upgrade
@@ -268,6 +273,7 @@ func TestUpgradeControlPlane_SkipsNodesAlreadyAtTargetVersion(t *testing.T) {
 }
 
 func TestUpgradeControlPlane_DryRun(t *testing.T) {
+	t.Parallel()
 	upgradeCallCount := 0
 
 	mockClient := &hcloud.MockClient{
@@ -314,6 +320,7 @@ func TestUpgradeControlPlane_DryRun(t *testing.T) {
 }
 
 func TestUpgradeWorkers_SkipsNodesAlreadyAtTargetVersion(t *testing.T) {
+	t.Parallel()
 	nodeVersions := map[string]string{
 		"1.2.3.20": "v1.8.3", // Already at target
 		"1.2.3.21": "v1.8.2", // Needs upgrade
@@ -372,6 +379,7 @@ func TestUpgradeWorkers_SkipsNodesAlreadyAtTargetVersion(t *testing.T) {
 }
 
 func TestUpgradeKubernetes_SkipsIfNoVersionSpecified(t *testing.T) {
+	t.Parallel()
 	upgradeCallCount := 0
 
 	mockClient := &hcloud.MockClient{
@@ -412,6 +420,7 @@ func TestUpgradeKubernetes_SkipsIfNoVersionSpecified(t *testing.T) {
 }
 
 func TestUpgradeKubernetes_DryRun(t *testing.T) {
+	t.Parallel()
 	upgradeCallCount := 0
 
 	mockClient := &hcloud.MockClient{
@@ -454,6 +463,7 @@ func TestUpgradeKubernetes_DryRun(t *testing.T) {
 }
 
 func TestHealthCheckWithRetry_SucceedsOnFirstAttempt(t *testing.T) {
+	t.Parallel()
 	healthCheckCalls := 0
 
 	mockClient := &hcloud.MockClient{
@@ -490,6 +500,7 @@ func TestHealthCheckWithRetry_SucceedsOnFirstAttempt(t *testing.T) {
 }
 
 func TestHealthCheckWithRetry_SucceedsOnSecondAttempt(t *testing.T) {
+	t.Parallel()
 	healthCheckCalls := 0
 
 	mockClient := &hcloud.MockClient{
@@ -529,6 +540,7 @@ func TestHealthCheckWithRetry_SucceedsOnSecondAttempt(t *testing.T) {
 }
 
 func TestUpgradeNode_BuildsCorrectImageURL(t *testing.T) {
+	t.Parallel()
 	var capturedImageURL string
 
 	mockTalos := &mockTalosClient{
@@ -556,6 +568,7 @@ func TestUpgradeNode_BuildsCorrectImageURL(t *testing.T) {
 }
 
 func TestDryRunReport(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
 		Talos: config.TalosConfig{

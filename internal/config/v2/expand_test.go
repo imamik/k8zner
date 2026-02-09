@@ -8,6 +8,7 @@ import (
 )
 
 func TestExpand_BasicConfig(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Name:   "test-cluster",
 		Region: RegionFalkenstein,
@@ -33,6 +34,7 @@ func TestExpand_BasicConfig(t *testing.T) {
 }
 
 func TestExpand_ControlPlane_DevMode(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Name:   "dev-cluster",
 		Region: RegionNuremberg,
@@ -66,6 +68,7 @@ func TestExpand_ControlPlane_DevMode(t *testing.T) {
 }
 
 func TestExpand_ControlPlane_HAMode(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Name:   "ha-cluster",
 		Region: RegionHelsinki,
@@ -93,6 +96,7 @@ func TestExpand_ControlPlane_HAMode(t *testing.T) {
 }
 
 func TestExpand_Workers(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Name:   "worker-test",
 		Region: RegionFalkenstein,
@@ -131,6 +135,7 @@ func TestExpand_Workers(t *testing.T) {
 }
 
 func TestExpand_Network(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Name:   "network-test",
 		Region: RegionFalkenstein,
@@ -162,6 +167,7 @@ func TestExpand_Network(t *testing.T) {
 }
 
 func TestExpand_Talos(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Name:   "talos-test",
 		Region: RegionFalkenstein,
@@ -190,6 +196,7 @@ func TestExpand_Talos(t *testing.T) {
 }
 
 func TestExpand_Addons(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Name:   "addon-test",
 		Region: RegionFalkenstein,
@@ -281,6 +288,7 @@ func TestExpand_WithDomain(t *testing.T) {
 }
 
 func TestExpand_WithoutDomain(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Name:   "no-domain",
 		Region: RegionFalkenstein,
@@ -383,6 +391,7 @@ func TestExpand_ArgoCDCustomSubdomain(t *testing.T) {
 }
 
 func TestExpand_ArgoCDNoIngressWithoutDomain(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Name:   "argocd-nodomain",
 		Region: RegionFalkenstein,
@@ -416,6 +425,7 @@ func TestExpand_ArgoCDNoIngressWithoutDomain(t *testing.T) {
 }
 
 func TestExpand_Ingress_DevMode(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Name:   "dev-ingress",
 		Region: RegionFalkenstein,
@@ -438,6 +448,7 @@ func TestExpand_Ingress_DevMode(t *testing.T) {
 }
 
 func TestExpand_Traefik_DevMode(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Name:   "dev-traefik",
 		Region: RegionFalkenstein,
@@ -463,6 +474,7 @@ func TestExpand_Traefik_DevMode(t *testing.T) {
 }
 
 func TestExpand_Traefik_HAMode(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Name:   "ha-traefik",
 		Region: RegionFalkenstein,
@@ -488,6 +500,7 @@ func TestExpand_Traefik_HAMode(t *testing.T) {
 }
 
 func TestExpand_Ingress_HAMode(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Name:   "ha-ingress",
 		Region: RegionFalkenstein,
@@ -510,6 +523,7 @@ func TestExpand_Ingress_HAMode(t *testing.T) {
 }
 
 func TestExpand_Kubernetes(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Name:   "k8s-test",
 		Region: RegionFalkenstein,
@@ -539,6 +553,7 @@ func TestExpand_Kubernetes(t *testing.T) {
 
 // verifyIPv6Only checks that all nodes are configured for IPv6-only
 func TestExpand_IPv6Only(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Name:   "ipv6-test",
 		Region: RegionFalkenstein,
@@ -565,6 +580,7 @@ func TestExpand_IPv6Only(t *testing.T) {
 
 // Helper to check expand returns valid internal config
 func TestExpand_ReturnsValidConfig(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Name:   "valid-test",
 		Region: RegionFalkenstein,
@@ -648,6 +664,7 @@ func TestExpand_WithBackupEnabled(t *testing.T) {
 }
 
 func TestExpand_WithBackupDisabled(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Name:   "no-backup",
 		Region: RegionFalkenstein,
@@ -739,6 +756,7 @@ func TestExpand_BackupEncryptionDisabled(t *testing.T) {
 }
 
 func TestExpand_MonitoringDisabledByDefault(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Name:   "monitoring-test",
 		Region: RegionNuremberg,
@@ -761,6 +779,7 @@ func TestExpand_MonitoringDisabledByDefault(t *testing.T) {
 }
 
 func TestExpand_MonitoringEnabledWithoutDomain(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Name:   "monitoring-test",
 		Region: RegionNuremberg,

@@ -15,9 +15,11 @@ import (
 )
 
 func TestSelfHealingControlPlaneReplacement(t *testing.T) {
+	t.Parallel()
 	scheme := setupTestScheme(t)
 
 	t.Run("successful control plane replacement with full cycle", func(t *testing.T) {
+		t.Parallel()
 		unhealthySince := metav1.NewTime(time.Now().Add(-10 * time.Minute))
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
@@ -105,6 +107,7 @@ func TestSelfHealingControlPlaneReplacement(t *testing.T) {
 	})
 
 	t.Run("control plane replacement fails on server creation", func(t *testing.T) {
+		t.Parallel()
 		unhealthySince := metav1.NewTime(time.Now().Add(-10 * time.Minute))
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
@@ -164,6 +167,7 @@ func TestSelfHealingControlPlaneReplacement(t *testing.T) {
 	})
 
 	t.Run("control plane replacement fails on config apply", func(t *testing.T) {
+		t.Parallel()
 		unhealthySince := metav1.NewTime(time.Now().Add(-10 * time.Minute))
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
@@ -232,9 +236,11 @@ func TestSelfHealingControlPlaneReplacement(t *testing.T) {
 }
 
 func TestSelfHealingWorkerReplacement(t *testing.T) {
+	t.Parallel()
 	scheme := setupTestScheme(t)
 
 	t.Run("successful worker replacement with full cycle", func(t *testing.T) {
+		t.Parallel()
 		unhealthySince := metav1.NewTime(time.Now().Add(-10 * time.Minute))
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
@@ -325,6 +331,7 @@ func TestSelfHealingWorkerReplacement(t *testing.T) {
 	})
 
 	t.Run("worker replacement continues without talos clients", func(t *testing.T) {
+		t.Parallel()
 		unhealthySince := metav1.NewTime(time.Now().Add(-10 * time.Minute))
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{

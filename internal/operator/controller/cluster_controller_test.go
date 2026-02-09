@@ -63,11 +63,13 @@ func createTestNode(name string, isControlPlane, isReady bool) *corev1.Node {
 }
 
 func TestNewClusterReconciler(t *testing.T) {
+	t.Parallel()
 	scheme := setupTestScheme(t)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 	recorder := record.NewFakeRecorder(10)
 
 	t.Run("with default options", func(t *testing.T) {
+		t.Parallel()
 		r := NewClusterReconciler(client, scheme, recorder)
 
 		assert.NotNil(t, r)
@@ -79,6 +81,7 @@ func TestNewClusterReconciler(t *testing.T) {
 	})
 
 	t.Run("with custom options", func(t *testing.T) {
+		t.Parallel()
 		mockHCloud := &MockHCloudClient{}
 		mockTalos := &MockTalosClient{}
 
@@ -97,6 +100,7 @@ func TestNewClusterReconciler(t *testing.T) {
 	})
 
 	t.Run("with HCloud token for lazy initialization", func(t *testing.T) {
+		t.Parallel()
 		r := NewClusterReconciler(client, scheme, recorder,
 			WithHCloudToken("test-token"),
 		)
@@ -108,9 +112,11 @@ func TestNewClusterReconciler(t *testing.T) {
 }
 
 func TestClusterReconciler_Reconcile(t *testing.T) {
+	t.Parallel()
 	scheme := setupTestScheme(t)
 
 	t.Run("cluster not found returns no error", func(t *testing.T) {
+		t.Parallel()
 		client := fake.NewClientBuilder().WithScheme(scheme).Build()
 		recorder := record.NewFakeRecorder(10)
 
@@ -130,6 +136,7 @@ func TestClusterReconciler_Reconcile(t *testing.T) {
 	})
 
 	t.Run("paused cluster skips reconciliation", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
@@ -163,6 +170,7 @@ func TestClusterReconciler_Reconcile(t *testing.T) {
 	})
 
 	t.Run("reconciles healthy cluster", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
@@ -225,9 +233,11 @@ func TestClusterReconciler_Reconcile(t *testing.T) {
 }
 
 func TestBuildClusterState(t *testing.T) {
+	t.Parallel()
 	scheme := setupTestScheme(t)
 
 	t.Run("builds state with SSH keys from annotations", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "my-cluster",
@@ -278,6 +288,7 @@ func TestBuildClusterState(t *testing.T) {
 	})
 
 	t.Run("uses default SSH key naming when no annotation", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "my-cluster",
@@ -309,6 +320,7 @@ func TestBuildClusterState(t *testing.T) {
 }
 
 func TestGenerateReplacementServerName(t *testing.T) {
+	t.Parallel()
 	scheme := setupTestScheme(t)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 	recorder := record.NewFakeRecorder(10)
@@ -324,6 +336,7 @@ func TestGenerateReplacementServerName(t *testing.T) {
 	}
 
 	t.Run("generates new name for control plane with cp role", func(t *testing.T) {
+		t.Parallel()
 		name := r.generateReplacementServerName(cluster, "control-plane", "my-cluster-control-plane-3")
 		assert.True(t, strings.HasPrefix(name, "my-cluster-cp-"), "expected name to start with my-cluster-cp-, got %s", name)
 		parts := strings.Split(name, "-")
@@ -332,6 +345,7 @@ func TestGenerateReplacementServerName(t *testing.T) {
 	})
 
 	t.Run("generates new name for worker with w role", func(t *testing.T) {
+		t.Parallel()
 		name := r.generateReplacementServerName(cluster, "worker", "my-cluster-workers-2")
 		assert.True(t, strings.HasPrefix(name, "my-cluster-w-"), "expected name to start with my-cluster-w-, got %s", name)
 		parts := strings.Split(name, "-")
@@ -340,6 +354,7 @@ func TestGenerateReplacementServerName(t *testing.T) {
 	})
 
 	t.Run("generates unique names each time", func(t *testing.T) {
+		t.Parallel()
 		name1 := r.generateReplacementServerName(cluster, "worker", "old-name")
 		name2 := r.generateReplacementServerName(cluster, "worker", "old-name")
 		assert.NotEqual(t, name1, name2, "expected unique names on each call")

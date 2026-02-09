@@ -5,6 +5,7 @@ import (
 )
 
 func TestCIDRSubnet(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		prefix  string
 		newbits int
@@ -34,6 +35,7 @@ func TestCIDRSubnet(t *testing.T) {
 }
 
 func TestCalculateSubnets(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Network: NetworkConfig{
 			IPv4CIDR: "10.0.0.0/16",
@@ -60,6 +62,7 @@ func TestCalculateSubnets(t *testing.T) {
 }
 
 func TestGetSubnetForRole(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Network: NetworkConfig{
 			IPv4CIDR: "10.0.0.0/16",
@@ -105,6 +108,7 @@ func TestGetSubnetForRole(t *testing.T) {
 }
 
 func TestCIDRHost(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		prefix  string
@@ -179,6 +183,7 @@ func TestCIDRHost(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := CIDRHost(tt.prefix, tt.hostnum)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CIDRHost() error = %v, wantErr %v", err, tt.wantErr)
@@ -192,6 +197,7 @@ func TestCIDRHost(t *testing.T) {
 }
 
 func TestCIDRSubnet_IPv6Error(t *testing.T) {
+	t.Parallel()
 	_, err := CIDRSubnet("2001:db8::/32", 8, 0)
 	if err == nil {
 		t.Error("CIDRSubnet() expected error for IPv6, got nil")
@@ -199,6 +205,7 @@ func TestCIDRSubnet_IPv6Error(t *testing.T) {
 }
 
 func TestCIDRHost_IPv6Error(t *testing.T) {
+	t.Parallel()
 	_, err := CIDRHost("2001:db8::/32", 1)
 	if err == nil {
 		t.Error("CIDRHost() expected error for IPv6, got nil")
@@ -206,7 +213,10 @@ func TestCIDRHost_IPv6Error(t *testing.T) {
 }
 
 func TestCIDRSubnet_InvalidNewbits(t *testing.T) {
+	t.Parallel(
 	// Test when newbits would exceed 32 bits total
+	)
+
 	_, err := CIDRSubnet("10.0.0.0/24", 16, 0)
 	if err == nil {
 		t.Error("CIDRSubnet() expected error for newbits exceeding 32, got nil")
@@ -214,6 +224,7 @@ func TestCIDRSubnet_InvalidNewbits(t *testing.T) {
 }
 
 func TestCalculateSubnets_DefaultCIDR(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Network: NetworkConfig{
 			IPv4CIDR: "", // Should default to 10.0.0.0/16
@@ -229,6 +240,7 @@ func TestCalculateSubnets_DefaultCIDR(t *testing.T) {
 }
 
 func TestCalculateSubnets_PreservesExisting(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Network: NetworkConfig{
 			IPv4CIDR:           "10.0.0.0/16",
@@ -255,6 +267,7 @@ func TestCalculateSubnets_PreservesExisting(t *testing.T) {
 }
 
 func TestCalculateSubnets_InvalidCIDR(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Network: NetworkConfig{
 			IPv4CIDR: "invalid-cidr",
@@ -267,6 +280,7 @@ func TestCalculateSubnets_InvalidCIDR(t *testing.T) {
 }
 
 func TestCalculateSubnetIndex(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		role    string
@@ -321,6 +335,7 @@ func TestCalculateSubnetIndex(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := calculateSubnetIndex(tt.role, tt.index, tt.newBits)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("calculateSubnetIndex() error = %v, wantErr %v", err, tt.wantErr)
@@ -334,6 +349,7 @@ func TestCalculateSubnetIndex(t *testing.T) {
 }
 
 func TestGetSubnetForRole_InvalidNodeCIDR(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Network: NetworkConfig{
 			NodeIPv4CIDR:       "invalid-cidr",
@@ -347,6 +363,7 @@ func TestGetSubnetForRole_InvalidNodeCIDR(t *testing.T) {
 }
 
 func TestGetSubnetForRole_AllRoles(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Network: NetworkConfig{
 			IPv4CIDR: "10.0.0.0/16",
@@ -367,6 +384,7 @@ func TestGetSubnetForRole_AllRoles(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.role, func(t *testing.T) {
+			t.Parallel()
 			got, err := cfg.GetSubnetForRole(tt.role, tt.index)
 			if err != nil {
 				t.Fatalf("GetSubnetForRole() error = %v", err)
@@ -379,6 +397,7 @@ func TestGetSubnetForRole_AllRoles(t *testing.T) {
 }
 
 func TestCalculateNodeSubnetMask_InvalidPodCIDR(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Network: NetworkConfig{
 			PodIPv4CIDR: "invalid-cidr",
@@ -391,6 +410,7 @@ func TestCalculateNodeSubnetMask_InvalidPodCIDR(t *testing.T) {
 }
 
 func TestCalculateSubnets_InvalidIPv4CIDR(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Network: NetworkConfig{
 			IPv4CIDR: "invalid-cidr",
@@ -403,6 +423,7 @@ func TestCalculateSubnets_InvalidIPv4CIDR(t *testing.T) {
 }
 
 func TestCalculateServiceSubnet_InvalidIPv4CIDR(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Network: NetworkConfig{
 			IPv4CIDR:     "invalid-cidr",
@@ -416,6 +437,7 @@ func TestCalculateServiceSubnet_InvalidIPv4CIDR(t *testing.T) {
 }
 
 func TestCalculatePodSubnet_InvalidIPv4CIDR(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Network: NetworkConfig{
 			IPv4CIDR:        "invalid-cidr",
@@ -430,6 +452,7 @@ func TestCalculatePodSubnet_InvalidIPv4CIDR(t *testing.T) {
 }
 
 func TestGetSubnetForRole_Autoscaler(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Network: NetworkConfig{
 			IPv4CIDR: "10.0.0.0/16",

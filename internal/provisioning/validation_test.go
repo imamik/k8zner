@@ -10,7 +10,10 @@ import (
 )
 
 func TestValidationPhase_RequiredFields(t *testing.T) {
+	t.Parallel(
 	// Missing cluster name
+	)
+
 	cfg := &config.Config{
 		Location: "nbg1",
 		Network: config.NetworkConfig{
@@ -33,6 +36,7 @@ func TestValidationPhase_RequiredFields(t *testing.T) {
 }
 
 func TestValidationPhase_NetworkCIDR(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		cidr          string
@@ -63,6 +67,7 @@ func TestValidationPhase_NetworkCIDR(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cfg := &config.Config{
 				Network: config.NetworkConfig{
 					IPv4CIDR: tt.cidr,
@@ -103,6 +108,7 @@ func TestValidationPhase_NetworkCIDR(t *testing.T) {
 }
 
 func TestValidationPhase_ServerTypes(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
@@ -129,6 +135,7 @@ func TestValidationPhase_ServerTypes(t *testing.T) {
 }
 
 func TestValidationPhase_SSHKeys(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		SSHKeys: []string{}, // No SSH keys
 	}
@@ -147,6 +154,7 @@ func TestValidationPhase_SSHKeys(t *testing.T) {
 }
 
 func TestValidationPhase_Versions(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		talosVersion   string
@@ -175,6 +183,7 @@ func TestValidationPhase_Versions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cfg := &config.Config{
 				Talos: config.TalosConfig{
 					Version: tt.talosVersion,
@@ -205,6 +214,7 @@ func TestValidationPhase_Versions(t *testing.T) {
 }
 
 func TestValidationPhase_Integration(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
 		Location:    "nbg1",
@@ -239,6 +249,7 @@ func TestValidationPhase_Integration(t *testing.T) {
 }
 
 func TestValidationError(t *testing.T) {
+	t.Parallel()
 	err := ValidationError{
 		Field:    "test.field",
 		Message:  "test message",

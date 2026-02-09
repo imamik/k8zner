@@ -10,7 +10,9 @@ import (
 )
 
 func TestEnabledSteps(t *testing.T) {
+	t.Parallel()
 	t.Run("all addons enabled", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.Config{
 			Addons: config.AddonsConfig{
 				CCM:                 config.CCMConfig{Enabled: true},
@@ -48,6 +50,7 @@ func TestEnabledSteps(t *testing.T) {
 	})
 
 	t.Run("minimal config - only CCM and CSI", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.Config{
 			Addons: config.AddonsConfig{
 				CCM: config.CCMConfig{Enabled: true},
@@ -63,6 +66,7 @@ func TestEnabledSteps(t *testing.T) {
 	})
 
 	t.Run("no addons enabled", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.Config{}
 
 		steps := EnabledSteps(cfg)
@@ -71,6 +75,7 @@ func TestEnabledSteps(t *testing.T) {
 	})
 
 	t.Run("order values are ascending", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.Config{
 			Addons: config.AddonsConfig{
 				CCM:                 config.CCMConfig{Enabled: true},
@@ -95,6 +100,7 @@ func TestEnabledSteps(t *testing.T) {
 	})
 
 	t.Run("CCM is always first when enabled", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.Config{
 			Addons: config.AddonsConfig{
 				CCM:     config.CCMConfig{Enabled: true},
@@ -110,6 +116,7 @@ func TestEnabledSteps(t *testing.T) {
 	})
 
 	t.Run("ArgoCD and monitoring are last", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.Config{
 			Addons: config.AddonsConfig{
 				CCM:                 config.CCMConfig{Enabled: true},
@@ -130,13 +137,17 @@ func TestEnabledSteps(t *testing.T) {
 }
 
 func TestInstallStep_UnknownStep(t *testing.T) {
+	t.Parallel()
 	err := InstallStep(t.Context(), "nonexistent-addon", &config.Config{}, []byte("fake-kubeconfig"), 0)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to create kubernetes client")
 }
 
 func TestStepConstants(t *testing.T) {
+	t.Parallel(
 	// Verify step constants match expected addon names
+	)
+
 	assert.Equal(t, "hcloud-ccm", StepCCM)
 	assert.Equal(t, "hcloud-csi", StepCSI)
 	assert.Equal(t, "metrics-server", StepMetricsServer)

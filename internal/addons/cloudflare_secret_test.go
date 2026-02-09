@@ -14,6 +14,7 @@ import (
 // Note: Uses mockK8sClient from kubectl_test.go (same package)
 
 func TestCreateCloudflareSecret(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		namespace   string
@@ -48,6 +49,7 @@ func TestCreateCloudflareSecret(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			client := new(mockK8sClient)
 
 			var capturedSecret *corev1.Secret
@@ -77,6 +79,7 @@ func TestCreateCloudflareSecret(t *testing.T) {
 }
 
 func TestCreateExternalDNSNamespace(t *testing.T) {
+	t.Parallel()
 	namespaceYAML := createExternalDNSNamespace()
 
 	assert.Contains(t, namespaceYAML, "apiVersion: v1")
@@ -85,11 +88,15 @@ func TestCreateExternalDNSNamespace(t *testing.T) {
 }
 
 func TestCreateCloudflareSecret_SecretNameConstant(t *testing.T) {
+	t.Parallel(
 	// Verify the constant is set correctly
+	)
+
 	assert.Equal(t, "cloudflare-api-token", cloudflareSecretName)
 }
 
 func TestCreateCloudflareSecret_SecretKeyName(t *testing.T) {
+	t.Parallel()
 	client := new(mockK8sClient)
 
 	var capturedSecret *corev1.Secret
@@ -109,7 +116,10 @@ func TestCreateCloudflareSecret_SecretKeyName(t *testing.T) {
 }
 
 func TestCloudflareSecretName_UsedInCertManagerCloudflare(t *testing.T) {
+	t.Parallel(
 	// Verify the constant is used in ClusterIssuer manifest
+	)
+
 	manifest, err := buildClusterIssuerManifest("test@example.com", false)
 	require.NoError(t, err)
 
@@ -117,8 +127,11 @@ func TestCloudflareSecretName_UsedInCertManagerCloudflare(t *testing.T) {
 }
 
 func TestCloudflareSecretName_UsedInExternalDNSValues(t *testing.T) {
+	t.Parallel(
 	// Verify the constant is used in external-dns values
 	// This is implicitly tested via the env var reference
+	)
+
 	cfg := &struct {
 		Name string
 	}{

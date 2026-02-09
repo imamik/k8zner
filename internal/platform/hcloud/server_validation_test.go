@@ -8,6 +8,7 @@ import (
 )
 
 func TestCreateServer_NetworkParameterValidation(t *testing.T) {
+	t.Parallel()
 	client := NewRealClient("test-token")
 
 	// Test that various network parameter combinations are accepted.
@@ -41,6 +42,7 @@ func TestCreateServer_NetworkParameterValidation(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			ctx := context.Background()
 			_, err := client.CreateServer(ctx, "test", "image", "type", "nbg1", nil, nil, "", nil, tc.networkID, tc.privateIP, true, true)
 

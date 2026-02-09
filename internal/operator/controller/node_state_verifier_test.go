@@ -9,6 +9,7 @@ import (
 )
 
 func TestDetermineNodePhaseFromState(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		info          *NodeStateInfo
@@ -121,6 +122,7 @@ func TestDetermineNodePhaseFromState(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			phase, reason := DetermineNodePhaseFromState(tt.info)
 			assert.Equal(t, tt.expectedPhase, phase)
 			assert.NotEmpty(t, reason, "reason should always be provided")
@@ -129,7 +131,9 @@ func TestDetermineNodePhaseFromState(t *testing.T) {
 }
 
 func TestDetermineNodePhaseFromState_ReasonContent(t *testing.T) {
+	t.Parallel()
 	t.Run("ready node has descriptive reason", func(t *testing.T) {
+		t.Parallel()
 		info := &NodeStateInfo{
 			K8sNodeExists: true,
 			K8sNodeReady:  true,
@@ -139,6 +143,7 @@ func TestDetermineNodePhaseFromState_ReasonContent(t *testing.T) {
 	})
 
 	t.Run("failed node mentions HCloud", func(t *testing.T) {
+		t.Parallel()
 		info := &NodeStateInfo{
 			ServerExists: false,
 		}
@@ -147,6 +152,7 @@ func TestDetermineNodePhaseFromState_ReasonContent(t *testing.T) {
 	})
 
 	t.Run("waiting for talos includes IP in reason", func(t *testing.T) {
+		t.Parallel()
 		info := &NodeStateInfo{
 			ServerExists: true,
 			ServerStatus: "running",

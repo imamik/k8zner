@@ -8,6 +8,7 @@ import (
 )
 
 func TestDestroy(t *testing.T) {
+	t.Parallel()
 	cmd := Destroy()
 
 	require.NotNil(t, cmd)
@@ -17,6 +18,7 @@ func TestDestroy(t *testing.T) {
 }
 
 func TestDestroy_ConfigFlag(t *testing.T) {
+	t.Parallel()
 	cmd := Destroy()
 
 	flag := cmd.Flags().Lookup("config")
@@ -27,6 +29,7 @@ func TestDestroy_ConfigFlag(t *testing.T) {
 }
 
 func TestDestroy_ConfigFlagRequired(t *testing.T) {
+	t.Parallel()
 	cmd := Destroy()
 
 	flag := cmd.Flags().Lookup("config")
@@ -39,11 +42,13 @@ func TestDestroy_ConfigFlagRequired(t *testing.T) {
 }
 
 func TestDestroy_RunE(t *testing.T) {
+	t.Parallel()
 	cmd := Destroy()
 	assert.NotNil(t, cmd.RunE, "Destroy command should have RunE function")
 }
 
 func TestDestroy_LongDescription(t *testing.T) {
+	t.Parallel()
 	cmd := Destroy()
 
 	// Verify the long description mentions key resources

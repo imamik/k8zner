@@ -8,6 +8,7 @@ import (
 )
 
 func TestBigIntFromIP(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		ip       net.IP
@@ -42,6 +43,7 @@ func TestBigIntFromIP(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := bigIntFromIP(tt.ip)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -49,6 +51,7 @@ func TestBigIntFromIP(t *testing.T) {
 }
 
 func TestIpFromBigInt(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		val      uint64
@@ -78,6 +81,7 @@ func TestIpFromBigInt(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := ipFromBigInt(tt.val)
 			assert.Equal(t, tt.expected, result)
 		})

@@ -17,11 +17,13 @@ import (
 )
 
 func TestLoadTalosClients(t *testing.T) {
+	t.Parallel()
 	scheme := setupTestScheme(t)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 	recorder := record.NewFakeRecorder(10)
 
 	t.Run("returns injected mocks directly", func(t *testing.T) {
+		t.Parallel()
 		mockTalos := &MockTalosClient{}
 		mockGen := &MockTalosConfigGenerator{}
 
@@ -42,6 +44,7 @@ func TestLoadTalosClients(t *testing.T) {
 	})
 
 	t.Run("returns nil clients when no credentials ref", func(t *testing.T) {
+		t.Parallel()
 		r := NewClusterReconciler(client, scheme, recorder,
 			WithHCloudClient(&MockHCloudClient{}),
 			WithMetrics(false),
@@ -58,11 +61,13 @@ func TestLoadTalosClients(t *testing.T) {
 }
 
 func TestGetSnapshot(t *testing.T) {
+	t.Parallel()
 	scheme := setupTestScheme(t)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 	recorder := record.NewFakeRecorder(10)
 
 	t.Run("returns snapshot on success", func(t *testing.T) {
+		t.Parallel()
 		expectedSnapshot := &hcloudgo.Image{ID: 42, Name: "talos-v1.9"}
 		mockHCloud := &MockHCloudClient{
 			GetSnapshotByLabelsFunc: func(ctx context.Context, labels map[string]string) (*hcloudgo.Image, error) {
@@ -82,6 +87,7 @@ func TestGetSnapshot(t *testing.T) {
 	})
 
 	t.Run("returns error when no snapshot found", func(t *testing.T) {
+		t.Parallel()
 		mockHCloud := &MockHCloudClient{
 			GetSnapshotByLabelsFunc: func(ctx context.Context, labels map[string]string) (*hcloudgo.Image, error) {
 				return nil, nil
@@ -99,6 +105,7 @@ func TestGetSnapshot(t *testing.T) {
 	})
 
 	t.Run("returns error on API failure", func(t *testing.T) {
+		t.Parallel()
 		mockHCloud := &MockHCloudClient{
 			GetSnapshotByLabelsFunc: func(ctx context.Context, labels map[string]string) (*hcloudgo.Image, error) {
 				return nil, fmt.Errorf("API error")
@@ -117,6 +124,7 @@ func TestGetSnapshot(t *testing.T) {
 }
 
 func TestCreateEphemeralSSHKey(t *testing.T) {
+	t.Parallel()
 	scheme := setupTestScheme(t)
 	k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 	recorder := record.NewFakeRecorder(10)
@@ -126,6 +134,7 @@ func TestCreateEphemeralSSHKey(t *testing.T) {
 	}
 
 	t.Run("creates key and returns cleanup function", func(t *testing.T) {
+		t.Parallel()
 		mockHCloud := &MockHCloudClient{}
 
 		r := NewClusterReconciler(k8sClient, scheme, recorder,
@@ -151,6 +160,7 @@ func TestCreateEphemeralSSHKey(t *testing.T) {
 	})
 
 	t.Run("returns error on SSH key creation failure", func(t *testing.T) {
+		t.Parallel()
 		mockHCloud := &MockHCloudClient{
 			CreateSSHKeyFunc: func(ctx context.Context, name, publicKey string, labels map[string]string) (string, error) {
 				return "", fmt.Errorf("SSH key limit reached")
@@ -170,10 +180,12 @@ func TestCreateEphemeralSSHKey(t *testing.T) {
 }
 
 func TestProvisionServer(t *testing.T) {
+	t.Parallel()
 	scheme := setupTestScheme(t)
 	recorder := record.NewFakeRecorder(10)
 
 	t.Run("successful provisioning with private IP", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
@@ -240,6 +252,7 @@ func TestProvisionServer(t *testing.T) {
 	})
 
 	t.Run("server creation failure", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
@@ -283,6 +296,7 @@ func TestProvisionServer(t *testing.T) {
 	})
 
 	t.Run("falls back to public IP when no private IP", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
@@ -337,10 +351,12 @@ func TestProvisionServer(t *testing.T) {
 }
 
 func TestHandleProvisioningFailure(t *testing.T) {
+	t.Parallel()
 	scheme := setupTestScheme(t)
 	recorder := record.NewFakeRecorder(10)
 
 	t.Run("marks node failed, deletes server, removes from status", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
@@ -380,6 +396,7 @@ func TestHandleProvisioningFailure(t *testing.T) {
 	})
 
 	t.Run("handles delete server failure gracefully", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
@@ -419,11 +436,13 @@ func TestHandleProvisioningFailure(t *testing.T) {
 }
 
 func TestDiscoverLoadBalancerInfo(t *testing.T) {
+	t.Parallel()
 	scheme := setupTestScheme(t)
 	k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 	recorder := record.NewFakeRecorder(10)
 
 	t.Run("skips when LB info already present", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-cluster"},
 			Status: k8znerv1alpha1.K8znerClusterStatus{

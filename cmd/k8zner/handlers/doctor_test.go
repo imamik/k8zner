@@ -11,6 +11,7 @@ import (
 )
 
 func TestPhaseIndicator(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		phase    string
 		expected string
@@ -25,6 +26,7 @@ func TestPhaseIndicator(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.phase, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.expected, phaseIndicator(tt.phase))
 		})
 	}
@@ -59,6 +61,7 @@ func TestPrintRow(t *testing.T) {
 }
 
 func TestAddonExtra(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		addon    AddonHealth
@@ -93,18 +96,22 @@ func TestAddonExtra(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.expected, addonExtra(tt.addon))
 		})
 	}
 }
 
 func TestBuildAddonHealth(t *testing.T) {
+	t.Parallel()
 	t.Run("empty addons", func(t *testing.T) {
+		t.Parallel()
 		result := buildAddonHealth(nil)
 		assert.Empty(t, result)
 	})
 
 	t.Run("converts addon statuses", func(t *testing.T) {
+		t.Parallel()
 		input := map[string]k8znerv1alpha1.AddonStatus{
 			"cilium": {
 				Installed: true,

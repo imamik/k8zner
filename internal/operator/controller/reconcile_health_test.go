@@ -16,9 +16,11 @@ import (
 )
 
 func TestClusterReconciler_reconcileHealthCheck(t *testing.T) {
+	t.Parallel()
 	scheme := setupTestScheme(t)
 
 	t.Run("correctly categorizes control plane and worker nodes", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
@@ -53,6 +55,7 @@ func TestClusterReconciler_reconcileHealthCheck(t *testing.T) {
 	})
 
 	t.Run("detects unhealthy nodes", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
@@ -88,7 +91,9 @@ func TestClusterReconciler_reconcileHealthCheck(t *testing.T) {
 }
 
 func TestClusterReconciler_updateClusterPhase(t *testing.T) {
+	t.Parallel()
 	t.Run("sets Running when all healthy", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			Status: k8znerv1alpha1.K8znerClusterStatus{
 				ControlPlanes: k8znerv1alpha1.NodeGroupStatus{
@@ -109,6 +114,7 @@ func TestClusterReconciler_updateClusterPhase(t *testing.T) {
 	})
 
 	t.Run("sets Degraded when unhealthy", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			Status: k8znerv1alpha1.K8znerClusterStatus{
 				ControlPlanes: k8znerv1alpha1.NodeGroupStatus{
@@ -129,6 +135,7 @@ func TestClusterReconciler_updateClusterPhase(t *testing.T) {
 	})
 
 	t.Run("preserves Healing phase", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			Status: k8znerv1alpha1.K8znerClusterStatus{
 				Phase: k8znerv1alpha1.ClusterPhaseHealing,
@@ -151,7 +158,9 @@ func TestClusterReconciler_updateClusterPhase(t *testing.T) {
 }
 
 func TestHelperFunctions(t *testing.T) {
+	t.Parallel()
 	t.Run("isNodeReady", func(t *testing.T) {
+		t.Parallel()
 		readyNode := &corev1.Node{
 			Status: corev1.NodeStatus{
 				Conditions: []corev1.NodeCondition{
@@ -179,6 +188,7 @@ func TestHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("getNodeUnhealthyReason", func(t *testing.T) {
+		t.Parallel()
 		notReadyNode := &corev1.Node{
 			Status: corev1.NodeStatus{
 				Conditions: []corev1.NodeCondition{
@@ -210,7 +220,10 @@ func TestHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("parseThreshold", func(t *testing.T) {
+		t.Parallel(
 		// Nil health check uses defaults
+		)
+
 		assert.Equal(t, defaultNodeNotReadyThreshold, parseThreshold(nil, "node"))
 		assert.Equal(t, defaultEtcdUnhealthyThreshold, parseThreshold(nil, "etcd"))
 
@@ -230,11 +243,13 @@ func TestHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("conditionStatus", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, metav1.ConditionTrue, conditionStatus(true))
 		assert.Equal(t, metav1.ConditionFalse, conditionStatus(false))
 	})
 
 	t.Run("conditionReason", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, "Ready", conditionReason(true, "Ready", "NotReady"))
 		assert.Equal(t, "NotReady", conditionReason(false, "Ready", "NotReady"))
 	})

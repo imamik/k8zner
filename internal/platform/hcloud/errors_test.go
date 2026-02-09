@@ -8,6 +8,7 @@ import (
 )
 
 func TestIsResourceLocked(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		err      error
@@ -52,6 +53,7 @@ func TestIsResourceLocked(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := isResourceLocked(tt.err)
 			if result != tt.expected {
 				t.Errorf("isResourceLocked(%v) = %v, want %v", tt.err, result, tt.expected)
@@ -61,6 +63,7 @@ func TestIsResourceLocked(t *testing.T) {
 }
 
 func TestIsInvalidParameter(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		err      error
@@ -100,6 +103,7 @@ func TestIsInvalidParameter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := isInvalidParameter(tt.err)
 			if result != tt.expected {
 				t.Errorf("isInvalidParameter(%v) = %v, want %v", tt.err, result, tt.expected)
@@ -109,6 +113,7 @@ func TestIsInvalidParameter(t *testing.T) {
 }
 
 func TestIsNotFound(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		err      error
@@ -133,6 +138,7 @@ func TestIsNotFound(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := IsNotFound(tt.err)
 			if result != tt.expected {
 				t.Errorf("IsNotFound(%v) = %v, want %v", tt.err, result, tt.expected)
@@ -140,4 +146,3 @@ func TestIsNotFound(t *testing.T) {
 		})
 	}
 }
-

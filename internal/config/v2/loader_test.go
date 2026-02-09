@@ -7,7 +7,10 @@ import (
 )
 
 func TestLoad_ValidConfig(t *testing.T) {
+	t.Parallel(
 	// Create a temporary config file
+	)
+
 	content := `
 name: my-cluster
 region: fsn1
@@ -75,6 +78,7 @@ domain: example.com
 }
 
 func TestLoad_MinimalDevConfig(t *testing.T) {
+	t.Parallel()
 	content := `
 name: dev
 region: fsn1
@@ -106,6 +110,7 @@ workers:
 }
 
 func TestLoad_FileNotFound(t *testing.T) {
+	t.Parallel()
 	_, err := Load("/nonexistent/path/k8zner.yaml")
 	if err == nil {
 		t.Error("Load() expected error for nonexistent file")
@@ -113,6 +118,7 @@ func TestLoad_FileNotFound(t *testing.T) {
 }
 
 func TestLoad_InvalidYAML(t *testing.T) {
+	t.Parallel()
 	content := `
 name: my-cluster
 region: [invalid yaml
@@ -130,6 +136,7 @@ region: [invalid yaml
 }
 
 func TestLoad_ValidationFailure(t *testing.T) {
+	t.Parallel()
 	content := `
 name: INVALID_NAME
 region: fsn1
@@ -151,6 +158,7 @@ workers:
 }
 
 func TestLoadWithoutValidation(t *testing.T) {
+	t.Parallel()
 	content := `
 name: INVALID_NAME
 region: invalid
@@ -177,6 +185,7 @@ workers:
 }
 
 func TestLoadFromBytes(t *testing.T) {
+	t.Parallel()
 	content := []byte(`
 name: test-cluster
 region: hel1
@@ -200,6 +209,7 @@ workers:
 }
 
 func TestDefaultConfigPath(t *testing.T) {
+	t.Parallel()
 	path := DefaultConfigPath()
 	if path == "" {
 		t.Error("DefaultConfigPath() returned empty string")

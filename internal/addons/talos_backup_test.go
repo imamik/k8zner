@@ -8,6 +8,7 @@ import (
 )
 
 func TestGenerateTalosBackupManifests(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
 		Addons: config.AddonsConfig{
@@ -33,6 +34,7 @@ func TestGenerateTalosBackupManifests(t *testing.T) {
 }
 
 func TestGenerateTalosServiceAccount(t *testing.T) {
+	t.Parallel()
 	sa := generateTalosServiceAccount()
 
 	if !strings.Contains(sa, "kind: ServiceAccount") {
@@ -53,6 +55,7 @@ func TestGenerateTalosServiceAccount(t *testing.T) {
 }
 
 func TestGenerateTalosBackupSecret(t *testing.T) {
+	t.Parallel()
 	backup := config.TalosBackupConfig{
 		S3AccessKey: "test-access-key",
 		S3SecretKey: "test-secret-key",
@@ -75,6 +78,7 @@ func TestGenerateTalosBackupSecret(t *testing.T) {
 }
 
 func TestGenerateTalosBackupCronJob(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
 		Addons: config.AddonsConfig{
@@ -112,6 +116,7 @@ func TestGenerateTalosBackupCronJob(t *testing.T) {
 }
 
 func TestBuildTalosBackupEnv_EncryptionEnabled(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
 		Addons: config.AddonsConfig{
@@ -143,6 +148,7 @@ func TestBuildTalosBackupEnv_EncryptionEnabled(t *testing.T) {
 }
 
 func TestBuildTalosBackupEnv_EncryptionDisabled(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
 		Addons: config.AddonsConfig{
@@ -174,6 +180,7 @@ func TestBuildTalosBackupEnv_EncryptionDisabled(t *testing.T) {
 }
 
 func TestBuildTalosBackupEnv_AllEnvVars(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
 		Addons: config.AddonsConfig{
@@ -236,6 +243,7 @@ func TestBuildTalosBackupEnv_AllEnvVars(t *testing.T) {
 }
 
 func TestTalosBackupVersion(t *testing.T) {
+	t.Parallel()
 	version := talosBackupVersion()
 
 	// Version should not be empty
@@ -250,8 +258,11 @@ func TestTalosBackupVersion(t *testing.T) {
 }
 
 func TestGenerateTalosBackupCronJob_Tolerations(t *testing.T) {
+	t.Parallel(
 	// Tolerations are critical for the backup CronJob to schedule on control plane nodes.
 	// Without the uninitialized toleration, the job may fail to schedule during bootstrap.
+	)
+
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
 		Addons: config.AddonsConfig{

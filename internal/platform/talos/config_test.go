@@ -10,6 +10,7 @@ import (
 )
 
 func TestGenerateControlPlaneConfig(t *testing.T) {
+	t.Parallel()
 	clusterName := "test-cluster"
 	k8sVersion := "v1.30.0"
 	talosVersion := "v1.7.0"
@@ -46,6 +47,7 @@ func TestGenerateControlPlaneConfig(t *testing.T) {
 }
 
 func TestGenerateWorkerConfig(t *testing.T) {
+	t.Parallel()
 	clusterName := "test-cluster"
 	k8sVersion := "v1.30.0"
 	talosVersion := "v1.7.0"
@@ -78,6 +80,7 @@ func TestGenerateWorkerConfig(t *testing.T) {
 }
 
 func TestSecrets(t *testing.T) {
+	t.Parallel()
 	talosVersion := "v1.7.0"
 	tempDir := t.TempDir()
 	secretsFile := filepath.Join(tempDir, "secrets.yaml")
@@ -103,7 +106,9 @@ func TestSecrets(t *testing.T) {
 }
 
 func TestDeepMerge(t *testing.T) {
+	t.Parallel()
 	t.Run("simple merge", func(t *testing.T) {
+		t.Parallel()
 		dst := map[string]any{"a": 1, "b": 2}
 		src := map[string]any{"b": 3, "c": 4}
 		deepMerge(dst, src)
@@ -113,6 +118,7 @@ func TestDeepMerge(t *testing.T) {
 	})
 
 	t.Run("nested merge", func(t *testing.T) {
+		t.Parallel()
 		dst := map[string]any{
 			"machine": map[string]any{
 				"type":     "controlplane",
@@ -136,6 +142,7 @@ func TestDeepMerge(t *testing.T) {
 	})
 
 	t.Run("deeply nested merge", func(t *testing.T) {
+		t.Parallel()
 		dst := map[string]any{
 			"level1": map[string]any{
 				"level2": map[string]any{
@@ -162,6 +169,7 @@ func TestDeepMerge(t *testing.T) {
 	})
 
 	t.Run("non-map overwrites map", func(t *testing.T) {
+		t.Parallel()
 		dst := map[string]any{
 			"config": map[string]any{"key": "value"},
 		}
@@ -173,6 +181,7 @@ func TestDeepMerge(t *testing.T) {
 	})
 
 	t.Run("map overwrites non-map", func(t *testing.T) {
+		t.Parallel()
 		dst := map[string]any{
 			"config": "simple-string",
 		}
@@ -184,6 +193,7 @@ func TestDeepMerge(t *testing.T) {
 	})
 
 	t.Run("empty source", func(t *testing.T) {
+		t.Parallel()
 		dst := map[string]any{"a": 1}
 		src := map[string]any{}
 		deepMerge(dst, src)
@@ -191,6 +201,7 @@ func TestDeepMerge(t *testing.T) {
 	})
 
 	t.Run("empty destination", func(t *testing.T) {
+		t.Parallel()
 		dst := map[string]any{}
 		src := map[string]any{"a": 1}
 		deepMerge(dst, src)
@@ -199,7 +210,9 @@ func TestDeepMerge(t *testing.T) {
 }
 
 func TestStripComments(t *testing.T) {
+	t.Parallel()
 	t.Run("removes comment lines", func(t *testing.T) {
+		t.Parallel()
 		input := []byte("# comment\nkey: value\n# another comment\nother: data")
 		result := stripComments(input)
 		assert.NotContains(t, string(result), "# comment")
@@ -209,6 +222,7 @@ func TestStripComments(t *testing.T) {
 	})
 
 	t.Run("removes empty lines", func(t *testing.T) {
+		t.Parallel()
 		input := []byte("key: value\n\n\nother: data")
 		result := stripComments(input)
 		lines := len(splitLines(string(result)))
@@ -216,6 +230,7 @@ func TestStripComments(t *testing.T) {
 	})
 
 	t.Run("preserves indented content", func(t *testing.T) {
+		t.Parallel()
 		input := []byte("root:\n  nested: value\n  # comment\n  other: data")
 		result := stripComments(input)
 		assert.Contains(t, string(result), "  nested: value")
@@ -224,6 +239,7 @@ func TestStripComments(t *testing.T) {
 	})
 
 	t.Run("handles indented comments", func(t *testing.T) {
+		t.Parallel()
 		input := []byte("root:\n    # indented comment\n  key: value")
 		result := stripComments(input)
 		assert.NotContains(t, string(result), "# indented comment")
@@ -231,11 +247,13 @@ func TestStripComments(t *testing.T) {
 	})
 
 	t.Run("empty input", func(t *testing.T) {
+		t.Parallel()
 		result := stripComments([]byte(""))
 		assert.Empty(t, result)
 	})
 
 	t.Run("only comments", func(t *testing.T) {
+		t.Parallel()
 		input := []byte("# comment 1\n# comment 2\n   # comment 3")
 		result := stripComments(input)
 		assert.Empty(t, result)
@@ -273,7 +291,9 @@ func splitString(s, sep string) []string {
 }
 
 func TestApplyConfigPatch(t *testing.T) {
+	t.Parallel()
 	t.Run("applies simple patch", func(t *testing.T) {
+		t.Parallel()
 		baseConfig := []byte("machine:\n  type: worker\n")
 		patch := map[string]any{
 			"machine": map[string]any{
@@ -293,6 +313,7 @@ func TestApplyConfigPatch(t *testing.T) {
 	})
 
 	t.Run("deep merges nested structures", func(t *testing.T) {
+		t.Parallel()
 		baseConfig := []byte("machine:\n  network:\n    hostname: original\n    interfaces: []\n")
 		patch := map[string]any{
 			"machine": map[string]any{
@@ -316,6 +337,7 @@ func TestApplyConfigPatch(t *testing.T) {
 	})
 
 	t.Run("handles invalid YAML", func(t *testing.T) {
+		t.Parallel()
 		baseConfig := []byte("invalid: yaml: content: [")
 		patch := map[string]any{"key": "value"}
 		_, err := applyConfigPatch(baseConfig, patch)
@@ -324,7 +346,9 @@ func TestApplyConfigPatch(t *testing.T) {
 }
 
 func TestGetInstallerImageURL(t *testing.T) {
+	t.Parallel()
 	t.Run("default installer without schematic", func(t *testing.T) {
+		t.Parallel()
 		gen := &Generator{
 			talosVersion: "v1.7.0",
 			machineOpts:  &MachineConfigOptions{},
@@ -334,6 +358,7 @@ func TestGetInstallerImageURL(t *testing.T) {
 	})
 
 	t.Run("factory installer with schematic", func(t *testing.T) {
+		t.Parallel()
 		gen := &Generator{
 			talosVersion: "v1.7.0",
 			machineOpts: &MachineConfigOptions{
@@ -345,6 +370,7 @@ func TestGetInstallerImageURL(t *testing.T) {
 	})
 
 	t.Run("nil machine opts", func(t *testing.T) {
+		t.Parallel()
 		gen := &Generator{
 			talosVersion: "v1.7.0",
 			machineOpts:  nil,
@@ -355,19 +381,23 @@ func TestGetInstallerImageURL(t *testing.T) {
 }
 
 func TestNewGenerator(t *testing.T) {
+	t.Parallel()
 	t.Run("strips v prefix from kubernetes version", func(t *testing.T) {
+		t.Parallel()
 		sb, _ := NewSecrets("v1.7.0")
 		gen := NewGenerator("test", "v1.30.0", "v1.7.0", "https://endpoint", sb)
 		assert.Equal(t, "1.30.0", gen.kubernetesVersion)
 	})
 
 	t.Run("handles version without v prefix", func(t *testing.T) {
+		t.Parallel()
 		sb, _ := NewSecrets("v1.7.0")
 		gen := NewGenerator("test", "1.30.0", "v1.7.0", "https://endpoint", sb)
 		assert.Equal(t, "1.30.0", gen.kubernetesVersion)
 	})
 
 	t.Run("initializes with empty machine opts", func(t *testing.T) {
+		t.Parallel()
 		sb, _ := NewSecrets("v1.7.0")
 		gen := NewGenerator("test", "v1.30.0", "v1.7.0", "https://endpoint", sb)
 		assert.NotNil(t, gen.machineOpts)
@@ -375,7 +405,9 @@ func TestNewGenerator(t *testing.T) {
 }
 
 func TestSetMachineConfigOptions(t *testing.T) {
+	t.Parallel()
 	t.Run("sets options from valid pointer", func(t *testing.T) {
+		t.Parallel()
 		sb, _ := NewSecrets("v1.7.0")
 		gen := NewGenerator("test", "v1.30.0", "v1.7.0", "https://endpoint", sb)
 
@@ -387,6 +419,7 @@ func TestSetMachineConfigOptions(t *testing.T) {
 	})
 
 	t.Run("ignores nil options", func(t *testing.T) {
+		t.Parallel()
 		sb, _ := NewSecrets("v1.7.0")
 		gen := NewGenerator("test", "v1.30.0", "v1.7.0", "https://endpoint", sb)
 		original := gen.machineOpts
@@ -396,6 +429,7 @@ func TestSetMachineConfigOptions(t *testing.T) {
 	})
 
 	t.Run("ignores non-MachineConfigOptions type", func(t *testing.T) {
+		t.Parallel()
 		sb, _ := NewSecrets("v1.7.0")
 		gen := NewGenerator("test", "v1.30.0", "v1.7.0", "https://endpoint", sb)
 		original := gen.machineOpts
@@ -406,6 +440,7 @@ func TestSetMachineConfigOptions(t *testing.T) {
 }
 
 func TestSetEndpoint(t *testing.T) {
+	t.Parallel()
 	sb, _ := NewSecrets("v1.7.0")
 	gen := NewGenerator("test", "v1.30.0", "v1.7.0", "https://original", sb)
 	assert.Equal(t, "https://original", gen.endpoint)
@@ -415,7 +450,9 @@ func TestSetEndpoint(t *testing.T) {
 }
 
 func TestGetOrGenerateSecrets(t *testing.T) {
+	t.Parallel()
 	t.Run("generates new secrets when file doesn't exist", func(t *testing.T) {
+		t.Parallel()
 		tempDir := t.TempDir()
 		secretsFile := filepath.Join(tempDir, "new-secrets.yaml")
 
@@ -425,6 +462,7 @@ func TestGetOrGenerateSecrets(t *testing.T) {
 	})
 
 	t.Run("loads existing secrets", func(t *testing.T) {
+		t.Parallel()
 		tempDir := t.TempDir()
 		secretsFile := filepath.Join(tempDir, "secrets.yaml")
 
@@ -442,12 +480,15 @@ func TestGetOrGenerateSecrets(t *testing.T) {
 }
 
 func TestLoadSecrets_Errors(t *testing.T) {
+	t.Parallel()
 	t.Run("returns error for non-existent file", func(t *testing.T) {
+		t.Parallel()
 		_, err := LoadSecrets("/nonexistent/path/secrets.yaml")
 		assert.Error(t, err)
 	})
 
 	t.Run("returns error for invalid file", func(t *testing.T) {
+		t.Parallel()
 		tempDir := t.TempDir()
 		invalidFile := filepath.Join(tempDir, "invalid.yaml")
 		err := writeTestFile(invalidFile, "not valid yaml: [")
@@ -463,12 +504,14 @@ func writeTestFile(path, content string) error {
 }
 
 func TestGenerateAutoscalerConfig(t *testing.T) {
+	t.Parallel()
 	sb, err := NewSecrets("v1.7.0")
 	assert.NoError(t, err)
 
 	gen := NewGenerator("test-cluster", "v1.30.0", "v1.7.0", "https://endpoint", sb)
 
 	t.Run("generates config with labels", func(t *testing.T) {
+		t.Parallel()
 		labels := map[string]string{
 			"env":  "production",
 			"tier": "compute",
@@ -488,6 +531,7 @@ func TestGenerateAutoscalerConfig(t *testing.T) {
 	})
 
 	t.Run("generates config with taints", func(t *testing.T) {
+		t.Parallel()
 		taints := []string{"dedicated=gpu:NoSchedule"}
 		configBytes, err := gen.GenerateAutoscalerConfig("gpu-pool", nil, taints)
 		assert.NoError(t, err)
@@ -502,6 +546,7 @@ func TestGenerateAutoscalerConfig(t *testing.T) {
 	})
 
 	t.Run("ignores invalid taint format", func(t *testing.T) {
+		t.Parallel()
 		taints := []string{"invalid-taint", "valid=value:NoSchedule"}
 		configBytes, err := gen.GenerateAutoscalerConfig("pool1", nil, taints)
 		assert.NoError(t, err)

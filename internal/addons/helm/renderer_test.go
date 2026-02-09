@@ -13,6 +13,7 @@ import (
 
 // TestGetChartSpec verifies GetChartSpec returns correct defaults.
 func TestGetChartSpec(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		addon    string
@@ -99,6 +100,7 @@ func TestGetChartSpec(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			spec := GetChartSpec(tt.addon, tt.helmCfg)
 
 			if spec.Repository != tt.wantRepo {
@@ -116,6 +118,7 @@ func TestGetChartSpec(t *testing.T) {
 
 // TestDefaultChartSpecsComplete verifies all expected addons have specs defined.
 func TestDefaultChartSpecsComplete(t *testing.T) {
+	t.Parallel()
 	expectedAddons := []string{
 		"hcloud-ccm",
 		"hcloud-csi",
@@ -130,6 +133,7 @@ func TestDefaultChartSpecsComplete(t *testing.T) {
 
 	for _, addon := range expectedAddons {
 		t.Run(addon, func(t *testing.T) {
+			t.Parallel()
 			spec, ok := DefaultChartSpecs[addon]
 			if !ok {
 				t.Fatalf("DefaultChartSpecs missing entry for %s", addon)
@@ -149,6 +153,7 @@ func TestDefaultChartSpecsComplete(t *testing.T) {
 
 // TestGetCachePath verifies cache path is returned correctly.
 func TestGetCachePath(t *testing.T) {
+	t.Parallel()
 	cachePath := GetCachePath()
 
 	if cachePath == "" {
@@ -171,13 +176,17 @@ func TestGetCachePath_WithXDGEnv(t *testing.T) {
 
 // TestClearMemoryCache verifies memory cache can be cleared.
 func TestClearMemoryCache(t *testing.T) {
+	t.Parallel(
 	// This should not panic
+	)
+
 	ClearMemoryCache()
 }
 
 // Renderer tests
 
 func TestNewRenderer(t *testing.T) {
+	t.Parallel()
 	r := NewRenderer("my-chart", "my-namespace")
 
 	require.NotNil(t, r)
@@ -186,6 +195,7 @@ func TestNewRenderer(t *testing.T) {
 }
 
 func TestNewRenderer_EmptyValues(t *testing.T) {
+	t.Parallel()
 	r := NewRenderer("", "")
 
 	require.NotNil(t, r)
@@ -194,6 +204,7 @@ func TestNewRenderer_EmptyValues(t *testing.T) {
 }
 
 func TestRenderChart_MinimalChart(t *testing.T) {
+	t.Parallel()
 	r := NewRenderer("test-chart", "test-namespace")
 
 	ch := &chart.Chart{
@@ -229,6 +240,7 @@ data:
 }
 
 func TestRenderChart_WithChartDefaults(t *testing.T) {
+	t.Parallel()
 	r := NewRenderer("test-chart", "default")
 
 	ch := &chart.Chart{
@@ -262,6 +274,7 @@ imagePullPolicy: {{ .Values.imagePullPolicy }}
 }
 
 func TestRenderChart_SkipsNotesFile(t *testing.T) {
+	t.Parallel()
 	r := NewRenderer("test-chart", "default")
 
 	ch := &chart.Chart{
@@ -294,6 +307,7 @@ metadata:
 }
 
 func TestRenderChart_SkipsEmptyTemplates(t *testing.T) {
+	t.Parallel()
 	r := NewRenderer("test-chart", "default")
 
 	ch := &chart.Chart{
@@ -332,6 +346,7 @@ kind: Secret
 }
 
 func TestRenderChart_MultipleDocuments(t *testing.T) {
+	t.Parallel()
 	r := NewRenderer("test-chart", "default")
 
 	ch := &chart.Chart{
@@ -369,6 +384,7 @@ metadata:
 }
 
 func TestRenderChart_DeepMergesValues(t *testing.T) {
+	t.Parallel()
 	r := NewRenderer("test-chart", "default")
 
 	ch := &chart.Chart{

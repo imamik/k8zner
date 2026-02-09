@@ -18,7 +18,9 @@ import (
 )
 
 func TestLoadConfig(t *testing.T) {
+	t.Parallel()
 	t.Run("no config file found", func(t *testing.T) {
+		t.Parallel()
 		orig := findV2ConfigFile
 		defer func() { findV2ConfigFile = orig }()
 
@@ -32,6 +34,7 @@ func TestLoadConfig(t *testing.T) {
 	})
 
 	t.Run("loads v2 config", func(t *testing.T) {
+		t.Parallel()
 		origFind := findV2ConfigFile
 		origLoad := loadV2ConfigFile
 		origExpand := expandV2Config
@@ -86,6 +89,7 @@ func (m *mockTalosProducer) HealthCheck(_ context.Context, _ string) error { ret
 
 // Verify factory variables exist and can be saved/restored.
 func TestFactoryVariables(t *testing.T) {
+	t.Parallel()
 	origInfra := newInfraClient
 	origSecrets := getOrGenerateSecrets
 	origTalos := newTalosGenerator

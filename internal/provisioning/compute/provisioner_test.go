@@ -94,11 +94,13 @@ func createTestContext(t *testing.T, mockInfra *hcloud_internal.MockClient, cfg 
 }
 
 func TestProvisioner_Name(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner()
 	assert.Equal(t, "compute", p.Name())
 }
 
 func TestProvisioner_Provision_EmptyConfig(t *testing.T) {
+	t.Parallel()
 	mockInfra := &hcloud_internal.MockClient{}
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
@@ -126,6 +128,7 @@ func TestProvisioner_Provision_EmptyConfig(t *testing.T) {
 }
 
 func TestProvisionControlPlane_SingleNode(t *testing.T) {
+	t.Parallel()
 	mockInfra := &hcloud_internal.MockClient{}
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
@@ -214,6 +217,7 @@ func TestProvisionControlPlane_SingleNode(t *testing.T) {
 }
 
 func TestProvisionWorkers_MultipleNodes(t *testing.T) {
+	t.Parallel()
 	mockInfra := &hcloud_internal.MockClient{}
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
@@ -278,6 +282,7 @@ func TestProvisionWorkers_MultipleNodes(t *testing.T) {
 }
 
 func TestProvisionControlPlane_ExistingServer(t *testing.T) {
+	t.Parallel()
 	mockInfra := &hcloud_internal.MockClient{}
 	cfg := &config.Config{
 		ClusterName: "test-cluster",

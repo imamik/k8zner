@@ -10,7 +10,9 @@ import (
 )
 
 func TestBuildKubePrometheusStackValues(t *testing.T) {
+	t.Parallel()
 	t.Run("basic configuration", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.Config{
 			Addons: config.AddonsConfig{
 				KubePrometheusStack: config.KubePrometheusStackConfig{
@@ -35,6 +37,7 @@ func TestBuildKubePrometheusStackValues(t *testing.T) {
 	})
 
 	t.Run("with grafana ingress", func(t *testing.T) {
+		t.Parallel()
 		enabled := true
 		cfg := &config.Config{
 			Addons: config.AddonsConfig{
@@ -89,6 +92,7 @@ func TestBuildKubePrometheusStackValues(t *testing.T) {
 	})
 
 	t.Run("with prometheus persistence", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.Config{
 			Addons: config.AddonsConfig{
 				KubePrometheusStack: config.KubePrometheusStackConfig{
@@ -120,6 +124,7 @@ func TestBuildKubePrometheusStackValues(t *testing.T) {
 	})
 
 	t.Run("disabled components", func(t *testing.T) {
+		t.Parallel()
 		disabled := false
 		cfg := &config.Config{
 			Addons: config.AddonsConfig{
@@ -146,7 +151,9 @@ func TestBuildKubePrometheusStackValues(t *testing.T) {
 }
 
 func TestBuildIngressAnnotations(t *testing.T) {
+	t.Parallel()
 	t.Run("with cloudflare staging", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.Config{
 			Addons: config.AddonsConfig{
 				CertManager: config.CertManagerConfig{
@@ -171,6 +178,7 @@ func TestBuildIngressAnnotations(t *testing.T) {
 	})
 
 	t.Run("without cloudflare", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.Config{
 			Addons: config.AddonsConfig{
 				CertManager: config.CertManagerConfig{
@@ -192,7 +200,9 @@ func TestBuildIngressAnnotations(t *testing.T) {
 }
 
 func TestBuildPrometheusIngress(t *testing.T) {
+	t.Parallel()
 	t.Run("with TLS enabled", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.Config{
 			Addons: config.AddonsConfig{
 				KubePrometheusStack: config.KubePrometheusStackConfig{
@@ -236,6 +246,7 @@ func TestBuildPrometheusIngress(t *testing.T) {
 	})
 
 	t.Run("with default ingress class", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.Config{
 			Addons: config.AddonsConfig{
 				KubePrometheusStack: config.KubePrometheusStackConfig{
@@ -257,7 +268,9 @@ func TestBuildPrometheusIngress(t *testing.T) {
 }
 
 func TestBuildAlertmanagerIngress(t *testing.T) {
+	t.Parallel()
 	t.Run("with TLS enabled", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.Config{
 			Addons: config.AddonsConfig{
 				KubePrometheusStack: config.KubePrometheusStackConfig{
@@ -302,7 +315,9 @@ func TestBuildAlertmanagerIngress(t *testing.T) {
 }
 
 func TestBuildAlertmanagerValues(t *testing.T) {
+	t.Parallel()
 	t.Run("with ingress enabled", func(t *testing.T) {
+		t.Parallel()
 		enabled := true
 		cfg := &config.Config{
 			Addons: config.AddonsConfig{
@@ -331,6 +346,7 @@ func TestBuildAlertmanagerValues(t *testing.T) {
 	})
 
 	t.Run("disabled by default pointer", func(t *testing.T) {
+		t.Parallel()
 		disabled := false
 		cfg := &config.Config{
 			Addons: config.AddonsConfig{
@@ -348,6 +364,7 @@ func TestBuildAlertmanagerValues(t *testing.T) {
 }
 
 func TestBuildPrometheusOperatorValues(t *testing.T) {
+	t.Parallel()
 	values := buildPrometheusOperatorValues()
 
 	// Check tolerations are set
@@ -364,7 +381,9 @@ func TestBuildPrometheusOperatorValues(t *testing.T) {
 }
 
 func TestBuildResourceValues(t *testing.T) {
+	t.Parallel()
 	t.Run("with custom values", func(t *testing.T) {
+		t.Parallel()
 		resources := config.KubePrometheusResourcesConfig{
 			Requests: config.KubePrometheusResourceSpec{
 				CPU:    "1",
@@ -388,6 +407,7 @@ func TestBuildResourceValues(t *testing.T) {
 	})
 
 	t.Run("with defaults", func(t *testing.T) {
+		t.Parallel()
 		resources := config.KubePrometheusResourcesConfig{}
 
 		values := buildResourceValues(resources, "100m", "128Mi", "500m", "256Mi")
@@ -403,6 +423,7 @@ func TestBuildResourceValues(t *testing.T) {
 }
 
 func TestCreateMonitoringNamespace(t *testing.T) {
+	t.Parallel()
 	ns := createMonitoringNamespace()
 
 	assert.Contains(t, ns, "apiVersion: v1")
@@ -411,7 +432,9 @@ func TestCreateMonitoringNamespace(t *testing.T) {
 }
 
 func TestHelperFunctions(t *testing.T) {
+	t.Parallel()
 	t.Run("getBoolWithDefault", func(t *testing.T) {
+		t.Parallel()
 		trueVal := true
 		falseVal := false
 
@@ -422,6 +445,7 @@ func TestHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("getIntWithDefault", func(t *testing.T) {
+		t.Parallel()
 		val := 42
 
 		assert.Equal(t, 42, getIntWithDefault(&val, 10))
@@ -429,6 +453,7 @@ func TestHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("getStringWithDefault", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, "custom", getStringWithDefault("custom", "default"))
 		assert.Equal(t, "default", getStringWithDefault("", "default"))
 	})

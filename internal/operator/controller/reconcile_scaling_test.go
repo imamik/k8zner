@@ -17,9 +17,11 @@ import (
 )
 
 func TestClusterReconciler_reconcileControlPlanes(t *testing.T) {
+	t.Parallel()
 	scheme := setupTestScheme(t)
 
 	t.Run("skips replacement for single control plane", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
@@ -48,6 +50,7 @@ func TestClusterReconciler_reconcileControlPlanes(t *testing.T) {
 	})
 
 	t.Run("replaces unhealthy control plane with quorum", func(t *testing.T) {
+		t.Parallel()
 		unhealthySince := metav1.NewTime(time.Now().Add(-10 * time.Minute))
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
@@ -102,6 +105,7 @@ func TestClusterReconciler_reconcileControlPlanes(t *testing.T) {
 	})
 
 	t.Run("refuses replacement without quorum", func(t *testing.T) {
+		t.Parallel()
 		unhealthySince := metav1.NewTime(time.Now().Add(-10 * time.Minute))
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
@@ -159,9 +163,11 @@ func TestClusterReconciler_reconcileControlPlanes(t *testing.T) {
 }
 
 func TestClusterReconciler_reconcileWorkers(t *testing.T) {
+	t.Parallel()
 	scheme := setupTestScheme(t)
 
 	t.Run("replaces unhealthy workers", func(t *testing.T) {
+		t.Parallel()
 		unhealthySince := metav1.NewTime(time.Now().Add(-10 * time.Minute))
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
@@ -209,6 +215,7 @@ func TestClusterReconciler_reconcileWorkers(t *testing.T) {
 	})
 
 	t.Run("respects maxConcurrentHeals limit", func(t *testing.T) {
+		t.Parallel()
 		unhealthySince := metav1.NewTime(time.Now().Add(-10 * time.Minute))
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
@@ -257,6 +264,7 @@ func TestClusterReconciler_reconcileWorkers(t *testing.T) {
 	})
 
 	t.Run("skips scaling when workers are provisioning", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
@@ -298,6 +306,7 @@ func TestClusterReconciler_reconcileWorkers(t *testing.T) {
 	})
 
 	t.Run("scales up when no workers are provisioning", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
@@ -341,7 +350,9 @@ func TestClusterReconciler_reconcileWorkers(t *testing.T) {
 }
 
 func TestProvisioningDetectionHelpers(t *testing.T) {
+	t.Parallel()
 	t.Run("isNodeInEarlyProvisioningPhase", func(t *testing.T) {
+		t.Parallel()
 		earlyPhases := []k8znerv1alpha1.NodePhase{
 			k8znerv1alpha1.NodePhaseCreatingServer,
 			k8znerv1alpha1.NodePhaseWaitingForIP,
@@ -371,6 +382,7 @@ func TestProvisioningDetectionHelpers(t *testing.T) {
 	})
 
 	t.Run("countWorkersInEarlyProvisioning", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, 0, countWorkersInEarlyProvisioning(nil))
 		assert.Equal(t, 0, countWorkersInEarlyProvisioning([]k8znerv1alpha1.NodeStatus{}))
 
@@ -405,9 +417,11 @@ func TestProvisioningDetectionHelpers(t *testing.T) {
 }
 
 func TestScaleUpWorkers(t *testing.T) {
+	t.Parallel()
 	scheme := setupTestScheme(t)
 
 	t.Run("creates new workers successfully", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
@@ -490,6 +504,7 @@ func TestScaleUpWorkers(t *testing.T) {
 	})
 
 	t.Run("respects maxConcurrentHeals limit", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
@@ -546,6 +561,7 @@ func TestScaleUpWorkers(t *testing.T) {
 	})
 
 	t.Run("handles missing snapshot", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
@@ -589,6 +605,7 @@ func TestScaleUpWorkers(t *testing.T) {
 	})
 
 	t.Run("works without talos clients", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",

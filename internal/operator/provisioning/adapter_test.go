@@ -32,12 +32,14 @@ func newTestCluster(name, domain string, addons *k8znerv1alpha1.AddonSpec) *k8zn
 }
 
 func TestSpecToConfig_DomainIngress(t *testing.T) {
+	t.Parallel()
 	baseCreds := &Credentials{
 		HCloudToken:        "test-token",
 		CloudflareAPIToken: "cf-token",
 	}
 
 	t.Run("domain with ArgoCD enables ingress", func(t *testing.T) {
+		t.Parallel()
 		cluster := newTestCluster("test-cluster", "example.com", &k8znerv1alpha1.AddonSpec{
 			ArgoCD:      true,
 			ExternalDNS: true,
@@ -56,6 +58,7 @@ func TestSpecToConfig_DomainIngress(t *testing.T) {
 	})
 
 	t.Run("domain with Monitoring enables Grafana ingress", func(t *testing.T) {
+		t.Parallel()
 		cluster := newTestCluster("test-cluster", "example.com", &k8znerv1alpha1.AddonSpec{
 			Monitoring:  true,
 			ExternalDNS: true,
@@ -74,6 +77,7 @@ func TestSpecToConfig_DomainIngress(t *testing.T) {
 	})
 
 	t.Run("no domain means no ingress even if addon enabled", func(t *testing.T) {
+		t.Parallel()
 		cluster := newTestCluster("test-cluster", "", &k8znerv1alpha1.AddonSpec{
 			ArgoCD:     true,
 			Monitoring: true,
@@ -92,6 +96,7 @@ func TestSpecToConfig_DomainIngress(t *testing.T) {
 	})
 
 	t.Run("custom subdomains override defaults", func(t *testing.T) {
+		t.Parallel()
 		cluster := newTestCluster("test-cluster", "example.com", &k8znerv1alpha1.AddonSpec{
 			ArgoCD:           true,
 			Monitoring:       true,
@@ -110,6 +115,7 @@ func TestSpecToConfig_DomainIngress(t *testing.T) {
 	})
 
 	t.Run("domain with ExternalDNS sets Cloudflare domain and TXTOwnerID", func(t *testing.T) {
+		t.Parallel()
 		cluster := newTestCluster("my-cluster", "example.com", &k8znerv1alpha1.AddonSpec{
 			ExternalDNS: true,
 			CertManager: true,
@@ -127,6 +133,7 @@ func TestSpecToConfig_DomainIngress(t *testing.T) {
 	})
 
 	t.Run("CertManager Cloudflare enabled with production and email", func(t *testing.T) {
+		t.Parallel()
 		cluster := newTestCluster("test-cluster", "example.com", &k8znerv1alpha1.AddonSpec{
 			ExternalDNS: true,
 			CertManager: true,
@@ -141,6 +148,7 @@ func TestSpecToConfig_DomainIngress(t *testing.T) {
 	})
 
 	t.Run("Traefik uses Deployment with LoadBalancer", func(t *testing.T) {
+		t.Parallel()
 		cluster := newTestCluster("test-cluster", "example.com", &k8znerv1alpha1.AddonSpec{
 			Traefik:     true,
 			ExternalDNS: true,
@@ -158,6 +166,7 @@ func TestSpecToConfig_DomainIngress(t *testing.T) {
 	})
 
 	t.Run("Cilium uses kube-proxy replacement with tunnel routing", func(t *testing.T) {
+		t.Parallel()
 		cluster := newTestCluster("test-cluster", "example.com", &k8znerv1alpha1.AddonSpec{
 			Traefik: true,
 		})
@@ -174,6 +183,7 @@ func TestSpecToConfig_DomainIngress(t *testing.T) {
 	})
 
 	t.Run("firewall has no extra rules for 80/443 (LB handles ingress)", func(t *testing.T) {
+		t.Parallel()
 		cluster := newTestCluster("test-cluster", "example.com", &k8znerv1alpha1.AddonSpec{
 			Traefik: true,
 		})
@@ -189,6 +199,7 @@ func TestSpecToConfig_DomainIngress(t *testing.T) {
 	})
 
 	t.Run("firewall has no extra rules without Traefik", func(t *testing.T) {
+		t.Parallel()
 		cluster := newTestCluster("test-cluster", "", &k8znerv1alpha1.AddonSpec{
 			ArgoCD: true,
 		})

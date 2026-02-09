@@ -11,6 +11,7 @@ import (
 )
 
 func TestBuildExternalDNSValues(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		config         *config.Config
@@ -154,6 +155,7 @@ func TestBuildExternalDNSValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			values := buildExternalDNSValues(tt.config)
 
 			// Check owner ID
@@ -190,6 +192,7 @@ func TestBuildExternalDNSValues(t *testing.T) {
 }
 
 func TestBuildExternalDNSValues_StructureComplete(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
 		Addons: config.AddonsConfig{
@@ -239,6 +242,7 @@ func TestBuildExternalDNSValues_StructureComplete(t *testing.T) {
 }
 
 func TestBuildExternalDNSValues_NoDomain(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
 		Addons: config.AddonsConfig{
@@ -258,6 +262,7 @@ func TestBuildExternalDNSValues_NoDomain(t *testing.T) {
 }
 
 func TestBuildExternalDNSValues_PDBConfig(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
 		Addons: config.AddonsConfig{

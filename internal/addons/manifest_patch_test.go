@@ -42,7 +42,9 @@ spec:
 `
 
 func TestPatchDeploymentDNSPolicy(t *testing.T) {
+	t.Parallel()
 	t.Run("patches target deployment", func(t *testing.T) {
+		t.Parallel()
 		result, err := patchDeploymentDNSPolicy([]byte(testMultiDocYAML), "hcloud-csi-controller", "Default")
 		require.NoError(t, err)
 
@@ -60,6 +62,7 @@ func TestPatchDeploymentDNSPolicy(t *testing.T) {
 	})
 
 	t.Run("preserves all documents", func(t *testing.T) {
+		t.Parallel()
 		result, err := patchDeploymentDNSPolicy([]byte(testMultiDocYAML), "hcloud-csi-controller", "Default")
 		require.NoError(t, err)
 
@@ -69,12 +72,14 @@ func TestPatchDeploymentDNSPolicy(t *testing.T) {
 	})
 
 	t.Run("errors on non-matching deployment name", func(t *testing.T) {
+		t.Parallel()
 		_, err := patchDeploymentDNSPolicy([]byte(testMultiDocYAML), "nonexistent-deployment", "Default")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not found")
 	})
 
 	t.Run("does not modify other deployments", func(t *testing.T) {
+		t.Parallel()
 		multiDeployYAML := `apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -111,6 +116,7 @@ spec:
 	})
 
 	t.Run("adds dnsPolicy when not present", func(t *testing.T) {
+		t.Parallel()
 		noPolicyYAML := `apiVersion: apps/v1
 kind: Deployment
 metadata:

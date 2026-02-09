@@ -8,12 +8,14 @@ import (
 )
 
 func TestCCMUninitializedToleration(t *testing.T) {
+	t.Parallel()
 	tol := CCMUninitializedToleration()
 	assert.Equal(t, "node.cloudprovider.kubernetes.io/uninitialized", tol["key"])
 	assert.Equal(t, "Exists", tol["operator"])
 }
 
 func TestBootstrapTolerations(t *testing.T) {
+	t.Parallel()
 	tols := BootstrapTolerations()
 	require.Len(t, tols, 3)
 	assert.Equal(t, "node-role.kubernetes.io/control-plane", tols[0]["key"])
@@ -23,11 +25,13 @@ func TestBootstrapTolerations(t *testing.T) {
 }
 
 func TestControlPlaneNodeSelector(t *testing.T) {
+	t.Parallel()
 	ns := ControlPlaneNodeSelector()
 	assert.Equal(t, "", ns["node-role.kubernetes.io/control-plane"])
 }
 
 func TestTopologySpreadFunc(t *testing.T) {
+	t.Parallel()
 	constraints := TopologySpread("my-instance", "my-name", "DoNotSchedule")
 	require.Len(t, constraints, 2)
 
@@ -44,7 +48,9 @@ func TestTopologySpreadFunc(t *testing.T) {
 }
 
 func TestNamespaceManifest(t *testing.T) {
+	t.Parallel()
 	t.Run("with labels", func(t *testing.T) {
+		t.Parallel()
 		ns := NamespaceManifest("test-ns", map[string]string{"name": "test-ns"})
 		assert.Contains(t, ns, "apiVersion: v1")
 		assert.Contains(t, ns, "kind: Namespace")
@@ -53,6 +59,7 @@ func TestNamespaceManifest(t *testing.T) {
 	})
 
 	t.Run("without labels", func(t *testing.T) {
+		t.Parallel()
 		ns := NamespaceManifest("cert-manager", nil)
 		assert.Contains(t, ns, "name: cert-manager")
 		assert.NotContains(t, ns, "labels:")

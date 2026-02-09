@@ -18,16 +18,19 @@ import (
 )
 
 func TestNewProvisioner(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner()
 	require.NotNil(t, p)
 }
 
 func TestProvisioner_Name(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner()
 	assert.Equal(t, "cluster", p.Name())
 }
 
 func TestGenerateDummyCert(t *testing.T) {
+	t.Parallel()
 	cert, key, err := generateDummyCert()
 	require.NoError(t, err)
 
@@ -52,9 +55,11 @@ func TestGenerateDummyCert(t *testing.T) {
 }
 
 func TestGetFirstControlPlaneIP(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner()
 
 	t.Run("with control plane nodes", func(t *testing.T) {
+		t.Parallel()
 		ctx := &provisioning.Context{
 			State: provisioning.NewState(),
 		}
@@ -69,6 +74,7 @@ func TestGetFirstControlPlaneIP(t *testing.T) {
 	})
 
 	t.Run("with no control plane nodes", func(t *testing.T) {
+		t.Parallel()
 		ctx := &provisioning.Context{
 			State: provisioning.NewState(),
 		}
@@ -80,7 +86,10 @@ func TestGetFirstControlPlaneIP(t *testing.T) {
 }
 
 func TestWaitForPort_Success(t *testing.T) {
+	t.Parallel(
 	// Start a test server
+	)
+
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	defer func() { _ = listener.Close() }()
@@ -96,7 +105,10 @@ func TestWaitForPort_Success(t *testing.T) {
 }
 
 func TestWaitForPort_Timeout(t *testing.T) {
+	t.Parallel(
 	// Use a port that's definitely not listening
+	)
+
 	ctx := context.Background()
 	timeouts := config.TestTimeouts()
 	err := waitForPort(ctx, "127.0.0.1", 59999, 100*time.Millisecond, timeouts.PortPoll, timeouts.DialTimeout)
@@ -105,6 +117,7 @@ func TestWaitForPort_Timeout(t *testing.T) {
 }
 
 func TestWaitForPort_ContextCancelled(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
@@ -115,9 +128,11 @@ func TestWaitForPort_ContextCancelled(t *testing.T) {
 }
 
 func TestIsAlreadyBootstrapped(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner()
 
 	t.Run("marker exists", func(t *testing.T) {
+		t.Parallel()
 		mockInfra := &hcloud_internal.MockClient{
 			GetCertificateFunc: func(_ context.Context, name string) (*hcloud.Certificate, error) {
 				if name == "test-cluster-state" {
@@ -141,6 +156,7 @@ func TestIsAlreadyBootstrapped(t *testing.T) {
 	})
 
 	t.Run("marker does not exist", func(t *testing.T) {
+		t.Parallel()
 		mockInfra := &hcloud_internal.MockClient{
 			GetCertificateFunc: func(_ context.Context, _ string) (*hcloud.Certificate, error) {
 				return nil, nil
@@ -162,9 +178,11 @@ func TestIsAlreadyBootstrapped(t *testing.T) {
 }
 
 func TestEnsureTalosConfigInState(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner()
 
 	t.Run("config already in state", func(t *testing.T) {
+		t.Parallel()
 		ctx := &provisioning.Context{
 			State: provisioning.NewState(),
 		}
@@ -177,6 +195,7 @@ func TestEnsureTalosConfigInState(t *testing.T) {
 }
 
 func TestBootstrap_StateMarkerPresent(t *testing.T) {
+	t.Parallel()
 	mockInfra := new(hcloud_internal.MockClient)
 	p := NewProvisioner()
 
@@ -211,7 +230,10 @@ func TestBootstrap_StateMarkerPresent(t *testing.T) {
 }
 
 func TestProvision(t *testing.T) {
+	t.Parallel(
 	// Test that Provision() delegates to BootstrapCluster()
+	)
+
 	p := NewProvisioner()
 	mockInfra := &hcloud_internal.MockClient{
 		GetCertificateFunc: func(_ context.Context, name string) (*hcloud.Certificate, error) {
@@ -240,6 +262,7 @@ func TestProvision(t *testing.T) {
 }
 
 func TestApplyWorkerConfigs_NoWorkers(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner()
 
 	observer := provisioning.NewConsoleObserver()
@@ -258,9 +281,11 @@ func TestApplyWorkerConfigs_NoWorkers(t *testing.T) {
 }
 
 func TestCreateStateMarker(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner()
 
 	t.Run("success", func(t *testing.T) {
+		t.Parallel()
 		var capturedLabels map[string]string
 		var capturedName string
 
@@ -290,6 +315,7 @@ func TestCreateStateMarker(t *testing.T) {
 	})
 
 	t.Run("failure", func(t *testing.T) {
+		t.Parallel()
 		mockInfra := &hcloud_internal.MockClient{
 			EnsureCertificateFunc: func(_ context.Context, _, _, _ string, _ map[string]string) (*hcloud.Certificate, error) {
 				return nil, context.DeadlineExceeded
@@ -313,6 +339,7 @@ func TestCreateStateMarker(t *testing.T) {
 }
 
 func TestTryRetrieveExistingKubeconfig(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner()
 
 	// This tests the error path - when kubeconfig cannot be retrieved
@@ -337,6 +364,7 @@ func TestTryRetrieveExistingKubeconfig(t *testing.T) {
 }
 
 func TestRetrieveAndStoreKubeconfig_Error(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner()
 
 	observer := provisioning.NewConsoleObserver()

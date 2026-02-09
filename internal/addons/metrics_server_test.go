@@ -10,7 +10,10 @@ import (
 )
 
 func TestBuildMetricsServerValues_Tolerations(t *testing.T) {
+	t.Parallel(
 	// When scheduling on control plane, should have 2 tolerations
+	)
+
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
@@ -29,6 +32,7 @@ func TestBuildMetricsServerValues_Tolerations(t *testing.T) {
 }
 
 func TestBuildMetricsServerValues_Args(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
@@ -49,7 +53,10 @@ func TestBuildMetricsServerValues_Args(t *testing.T) {
 }
 
 func TestBuildMetricsServerValues(t *testing.T) {
+	t.Parallel(
 	// Helper for creating bool pointers
+	)
+
 	boolPtr := func(b bool) *bool { return &b }
 	intPtr := func(i int) *int { return &i }
 
@@ -197,6 +204,7 @@ func TestBuildMetricsServerValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			values := buildMetricsServerValues(tt.cfg)
 
 			// Check replicas

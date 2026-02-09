@@ -13,11 +13,13 @@ import (
 )
 
 func TestProvisionerName(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner()
 	assert.Equal(t, "Destroy", p.Name())
 }
 
 func TestProvision(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		clusterName   string
@@ -77,7 +79,10 @@ func TestProvision(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel(
 			// Setup mock client
+			)
+
 			mockClient := &hcloud.MockClient{}
 			tt.setupMock(mockClient)
 
@@ -107,6 +112,7 @@ func TestProvision(t *testing.T) {
 }
 
 func TestProvisionCallsCleanupWithCorrectLabels(t *testing.T) {
+	t.Parallel()
 	var capturedLabels map[string]string
 
 	mockClient := &hcloud.MockClient{

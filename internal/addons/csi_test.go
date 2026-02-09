@@ -11,6 +11,7 @@ import (
 )
 
 func TestBuildCSIValues(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name                        string
 		controlPlaneCount           int
@@ -36,6 +37,7 @@ func TestBuildCSIValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cfg := &config.Config{
 				ControlPlane: config.ControlPlaneConfig{
 					NodePools: []config.ControlPlaneNodePool{
@@ -109,6 +111,7 @@ func TestBuildCSIValues(t *testing.T) {
 }
 
 func TestBuildCSIValues_DefaultStorageClass(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name                string
 		defaultStorageClass bool
@@ -119,6 +122,7 @@ func TestBuildCSIValues_DefaultStorageClass(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cfg := &config.Config{
 				ControlPlane: config.ControlPlaneConfig{
 					NodePools: []config.ControlPlaneNodePool{
@@ -145,6 +149,7 @@ func TestBuildCSIValues_DefaultStorageClass(t *testing.T) {
 }
 
 func TestBuildCSIValues_Tolerations(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
@@ -175,6 +180,7 @@ func TestBuildCSIValues_Tolerations(t *testing.T) {
 }
 
 func TestGenerateEncryptionKey(t *testing.T) {
+	t.Parallel()
 	key, err := generateEncryptionKey(32)
 	require.NoError(t, err)
 

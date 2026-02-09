@@ -8,6 +8,7 @@ import (
 )
 
 func TestCompletion(t *testing.T) {
+	t.Parallel()
 	cmd := Completion()
 
 	require.NotNil(t, cmd)
@@ -17,6 +18,7 @@ func TestCompletion(t *testing.T) {
 }
 
 func TestCompletion_ValidArgs(t *testing.T) {
+	t.Parallel()
 	cmd := Completion()
 
 	expectedArgs := []string{"bash", "zsh", "fish", "powershell"}
@@ -24,11 +26,13 @@ func TestCompletion_ValidArgs(t *testing.T) {
 }
 
 func TestCompletion_DisableFlagsInUseLine(t *testing.T) {
+	t.Parallel()
 	cmd := Completion()
 	assert.True(t, cmd.DisableFlagsInUseLine)
 }
 
 func TestCompletion_ExactArgs(t *testing.T) {
+	t.Parallel()
 	cmd := Completion()
 
 	// Test that exactly 1 argument is required
@@ -36,6 +40,7 @@ func TestCompletion_ExactArgs(t *testing.T) {
 }
 
 func TestCompletion_RunE(t *testing.T) {
+	t.Parallel()
 	cmd := Completion()
 	assert.NotNil(t, cmd.RunE, "Completion command should have RunE function")
 }
@@ -44,6 +49,7 @@ func TestCompletion_RunE(t *testing.T) {
 // so we just verify they execute without error.
 
 func TestCompletion_BashOutput(t *testing.T) {
+	t.Parallel()
 	root := Root()
 	root.SetArgs([]string{"completion", "bash"})
 
@@ -52,6 +58,7 @@ func TestCompletion_BashOutput(t *testing.T) {
 }
 
 func TestCompletion_ZshOutput(t *testing.T) {
+	t.Parallel()
 	root := Root()
 	root.SetArgs([]string{"completion", "zsh"})
 
@@ -60,6 +67,7 @@ func TestCompletion_ZshOutput(t *testing.T) {
 }
 
 func TestCompletion_FishOutput(t *testing.T) {
+	t.Parallel()
 	root := Root()
 	root.SetArgs([]string{"completion", "fish"})
 
@@ -68,6 +76,7 @@ func TestCompletion_FishOutput(t *testing.T) {
 }
 
 func TestCompletion_PowershellOutput(t *testing.T) {
+	t.Parallel()
 	root := Root()
 	root.SetArgs([]string{"completion", "powershell"})
 
@@ -76,6 +85,7 @@ func TestCompletion_PowershellOutput(t *testing.T) {
 }
 
 func TestCompletion_InvalidShell(t *testing.T) {
+	t.Parallel()
 	root := Root()
 	root.SetArgs([]string{"completion", "invalid"})
 
@@ -84,6 +94,7 @@ func TestCompletion_InvalidShell(t *testing.T) {
 }
 
 func TestCompletion_NoArgs(t *testing.T) {
+	t.Parallel()
 	root := Root()
 	root.SetArgs([]string{"completion"})
 

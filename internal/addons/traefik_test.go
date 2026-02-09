@@ -11,6 +11,7 @@ import (
 )
 
 func TestBuildTraefikValues(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name             string
 		workerCount      int
@@ -45,6 +46,7 @@ func TestBuildTraefikValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cfg := &config.Config{
 				ClusterName: "test-cluster",
 				Workers: []config.WorkerNodePool{
@@ -156,6 +158,7 @@ func TestBuildTraefikValues(t *testing.T) {
 }
 
 func TestTopologySpread(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name                          string
 		hostnamePolicy                string
@@ -175,6 +178,7 @@ func TestTopologySpread(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			constraints := helm.TopologySpread("traefik", "traefik", tt.hostnamePolicy)
 
 			assert.Len(t, constraints, 2)
@@ -185,6 +189,7 @@ func TestTopologySpread(t *testing.T) {
 }
 
 func TestCreateTraefikNamespace(t *testing.T) {
+	t.Parallel()
 	ns := createTraefikNamespace()
 
 	assert.Contains(t, ns, "apiVersion: v1")
@@ -193,6 +198,7 @@ func TestCreateTraefikNamespace(t *testing.T) {
 }
 
 func TestBuildTraefikValuesKind(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		kind         string
@@ -217,6 +223,7 @@ func TestBuildTraefikValuesKind(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cfg := &config.Config{
 				ClusterName: "test-cluster",
 				Workers:     []config.WorkerNodePool{{Count: 2}},
@@ -236,6 +243,7 @@ func TestBuildTraefikValuesKind(t *testing.T) {
 }
 
 func TestBuildTraefikValuesReplicas(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name             string
 		replicas         *int
@@ -264,6 +272,7 @@ func TestBuildTraefikValuesReplicas(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cfg := &config.Config{
 				ClusterName: "test-cluster",
 				Workers:     []config.WorkerNodePool{{Count: tt.workerCount}},
@@ -283,6 +292,7 @@ func TestBuildTraefikValuesReplicas(t *testing.T) {
 }
 
 func TestBuildTraefikValuesExternalTrafficPolicy(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		policy         string
@@ -307,6 +317,7 @@ func TestBuildTraefikValuesExternalTrafficPolicy(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cfg := &config.Config{
 				ClusterName: "test-cluster",
 				Workers:     []config.WorkerNodePool{{Count: 2}},
@@ -327,6 +338,7 @@ func TestBuildTraefikValuesExternalTrafficPolicy(t *testing.T) {
 }
 
 func TestBuildTraefikValuesIngressClass(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		ingressClass  string
@@ -346,6 +358,7 @@ func TestBuildTraefikValuesIngressClass(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cfg := &config.Config{
 				ClusterName: "test-cluster",
 				Workers:     []config.WorkerNodePool{{Count: 2}},
@@ -365,7 +378,10 @@ func TestBuildTraefikValuesIngressClass(t *testing.T) {
 }
 
 func TestBuildTraefikValuesIngressRoute(t *testing.T) {
+	t.Parallel(
 	// IngressRoute is always disabled - we use standard Kubernetes Ingress
+	)
+
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
 		Workers:     []config.WorkerNodePool{{Count: 2}},
@@ -383,7 +399,10 @@ func TestBuildTraefikValuesIngressRoute(t *testing.T) {
 }
 
 func TestBuildTraefikValuesAlwaysLoadBalancer(t *testing.T) {
+	t.Parallel(
 	// Traefik always uses LoadBalancer service with Deployment, regardless of config
+	)
+
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
 		Location:    "fsn1",
@@ -437,6 +456,7 @@ func TestBuildTraefikValuesAlwaysLoadBalancer(t *testing.T) {
 }
 
 func TestTraefikChartRenderLoadBalancer(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
 		Location:    "fsn1",

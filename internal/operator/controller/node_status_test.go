@@ -14,6 +14,7 @@ import (
 )
 
 func TestShouldUpdatePhase(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		current  k8znerv1alpha1.NodePhase
@@ -66,6 +67,7 @@ func TestShouldUpdatePhase(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := shouldUpdatePhase(tt.current, tt.newPhase)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -73,6 +75,7 @@ func TestShouldUpdatePhase(t *testing.T) {
 }
 
 func TestIsNodeInEarlyProvisioningPhase(t *testing.T) {
+	t.Parallel()
 	earlyPhases := []k8znerv1alpha1.NodePhase{
 		k8znerv1alpha1.NodePhaseCreatingServer,
 		k8znerv1alpha1.NodePhaseWaitingForIP,
@@ -102,11 +105,14 @@ func TestIsNodeInEarlyProvisioningPhase(t *testing.T) {
 }
 
 func TestCountWorkersInEarlyProvisioning(t *testing.T) {
+	t.Parallel()
 	t.Run("no workers", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, 0, countWorkersInEarlyProvisioning(nil))
 	})
 
 	t.Run("all ready", func(t *testing.T) {
+		t.Parallel()
 		nodes := []k8znerv1alpha1.NodeStatus{
 			{Name: "w-1", Phase: k8znerv1alpha1.NodePhaseReady},
 			{Name: "w-2", Phase: k8znerv1alpha1.NodePhaseReady},
@@ -115,6 +121,7 @@ func TestCountWorkersInEarlyProvisioning(t *testing.T) {
 	})
 
 	t.Run("some provisioning", func(t *testing.T) {
+		t.Parallel()
 		nodes := []k8znerv1alpha1.NodeStatus{
 			{Name: "w-1", Phase: k8znerv1alpha1.NodePhaseReady},
 			{Name: "w-2", Phase: k8znerv1alpha1.NodePhaseCreatingServer},
@@ -126,6 +133,7 @@ func TestCountWorkersInEarlyProvisioning(t *testing.T) {
 }
 
 func TestCheckStuckNodes(t *testing.T) {
+	t.Parallel()
 	scheme := setupTestScheme(t)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 	recorder := record.NewFakeRecorder(10)
@@ -134,6 +142,7 @@ func TestCheckStuckNodes(t *testing.T) {
 	)
 
 	t.Run("no stuck nodes", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			Status: k8znerv1alpha1.K8znerClusterStatus{
 				ControlPlanes: k8znerv1alpha1.NodeGroupStatus{
@@ -152,6 +161,7 @@ func TestCheckStuckNodes(t *testing.T) {
 	})
 
 	t.Run("node stuck in creating server", func(t *testing.T) {
+		t.Parallel()
 		pastTime := metav1.NewTime(time.Now().Add(-15 * time.Minute))
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			Status: k8znerv1alpha1.K8znerClusterStatus{
@@ -175,6 +185,7 @@ func TestCheckStuckNodes(t *testing.T) {
 	})
 
 	t.Run("node not yet timed out", func(t *testing.T) {
+		t.Parallel()
 		recentTime := metav1.NewTime(time.Now().Add(-1 * time.Minute))
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			Status: k8znerv1alpha1.K8znerClusterStatus{
@@ -196,6 +207,7 @@ func TestCheckStuckNodes(t *testing.T) {
 }
 
 func TestRemoveNodeFromStatus(t *testing.T) {
+	t.Parallel()
 	scheme := setupTestScheme(t)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 	recorder := record.NewFakeRecorder(10)
@@ -204,6 +216,7 @@ func TestRemoveNodeFromStatus(t *testing.T) {
 	)
 
 	t.Run("remove control plane node", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			Status: k8znerv1alpha1.K8znerClusterStatus{
 				ControlPlanes: k8znerv1alpha1.NodeGroupStatus{
@@ -227,6 +240,7 @@ func TestRemoveNodeFromStatus(t *testing.T) {
 	})
 
 	t.Run("remove worker node", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			Status: k8znerv1alpha1.K8znerClusterStatus{
 				Workers: k8znerv1alpha1.NodeGroupStatus{
@@ -244,6 +258,7 @@ func TestRemoveNodeFromStatus(t *testing.T) {
 	})
 
 	t.Run("remove nonexistent node is no-op", func(t *testing.T) {
+		t.Parallel()
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			Status: k8znerv1alpha1.K8znerClusterStatus{
 				ControlPlanes: k8znerv1alpha1.NodeGroupStatus{
