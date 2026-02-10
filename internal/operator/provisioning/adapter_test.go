@@ -9,6 +9,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	"github.com/imamik/k8zner/internal/config"
+	"github.com/imamik/k8zner/internal/provisioning"
 )
 
 func newTestCluster(name, domain string, addons *k8znerv1alpha1.AddonSpec) *k8znerv1alpha1.K8znerCluster {
@@ -212,3 +214,59 @@ func TestSpecToConfig_DomainIngress(t *testing.T) {
 		assert.Empty(t, cfg.Firewall.ExtraRules)
 	})
 }
+
+func TestPopulateBootstrapState_DoesNotMutateOriginalConfig(t *testing.T) {
+	t.Parallel()
+
+	// Create a config with known counts
+	cfg := &config.Config{
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{
+				{Name: "cp", Count: 3, ServerType: "cx23", Location: "fsn1"},
+			},
+		},
+		Workers: []config.WorkerNodePool{
+			{Name: "workers", Count: 5, ServerType: "cx33", Location: "fsn1"},
+		},
+	}
+
+	// Keep a reference to the original slices
+	origCPPools := cfg.ControlPlane.NodePools
+	origWorkers := cfg.Workers
+
+	pCtx := &provisioning.Context{
+		Config: cfg,
+		State:  provisioning.NewState(),
+	}
+
+	cluster := &k8znerv1alpha1.K8znerCluster{
+		Spec: k8znerv1alpha1.K8znerClusterSpec{
+			Bootstrap: &k8znerv1alpha1.BootstrapState{
+				Completed:       true,
+				BootstrapNode:   "cp-abc12",
+				BootstrapNodeID: 999,
+				PublicIP:        "1.2.3.4",
+			},
+		},
+	}
+
+	// Call the function under test
+	populateBootstrapState(pCtx, cluster, &discardLogger{})
+
+	// pCtx.Config should have limited counts (1 CP, 0 workers)
+	assert.Equal(t, 1, pCtx.Config.ControlPlane.NodePools[0].Count, "pCtx CP count should be limited to 1")
+	assert.Equal(t, 0, pCtx.Config.Workers[0].Count, "pCtx worker count should be limited to 0")
+
+	// Original slices must NOT be mutated
+	assert.Equal(t, 3, origCPPools[0].Count, "original CP count must remain 3")
+	assert.Equal(t, 5, origWorkers[0].Count, "original worker count must remain 5")
+
+	// Bootstrap node should be in state
+	assert.Equal(t, "1.2.3.4", pCtx.State.ControlPlaneIPs["cp-abc12"])
+	assert.Equal(t, int64(999), pCtx.State.ControlPlaneServerIDs["cp-abc12"])
+}
+
+// discardLogger implements the logger interface used by populateBootstrapState.
+type discardLogger struct{}
+
+func (d *discardLogger) Info(_ string, _ ...interface{}) {}

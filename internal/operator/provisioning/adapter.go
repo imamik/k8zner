@@ -258,12 +258,23 @@ func (a *PhaseAdapter) ReconcileCompute(pCtx *provisioning.Context, k8sCluster *
 }
 
 // populateBootstrapState adds bootstrap node info to state and limits counts for CLI-bootstrapped clusters.
+// It copies the node pool slices before modifying counts to avoid mutating the shared config.
 func populateBootstrapState(pCtx *provisioning.Context, k8sCluster *k8znerv1alpha1.K8znerCluster, logger interface{ Info(string, ...interface{}) }) {
 	bootstrapName := k8sCluster.Spec.Bootstrap.BootstrapNode
 	if bootstrapName != "" {
 		pCtx.State.ControlPlaneIPs[bootstrapName] = k8sCluster.Spec.Bootstrap.PublicIP
 		pCtx.State.ControlPlaneServerIDs[bootstrapName] = k8sCluster.Spec.Bootstrap.BootstrapNodeID
 	}
+
+	// Copy node pool slices before mutating counts — the original config must not be modified
+	// because later phases (e.g., scaling) need the user's requested counts.
+	cpPools := make([]config.ControlPlaneNodePool, len(pCtx.Config.ControlPlane.NodePools))
+	copy(cpPools, pCtx.Config.ControlPlane.NodePools)
+	pCtx.Config.ControlPlane.NodePools = cpPools
+
+	workers := make([]config.WorkerNodePool, len(pCtx.Config.Workers))
+	copy(workers, pCtx.Config.Workers)
+	pCtx.Config.Workers = workers
 
 	// Limit counts for CLI-bootstrapped clusters - Running-phase handles scale-up
 	for i := range pCtx.Config.ControlPlane.NodePools {
