@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
@@ -156,4 +157,245 @@ func TestNewFromClients(t *testing.T) {
 	}
 	err := c.CreateSecret(ctx, secret)
 	assert.NoError(t, err)
+}
+
+// --- splitCRDName tests ---
+
+func TestSplitCRDName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected []string
+	}{
+		{
+			name:     "group/version format",
+			input:    "talos.dev/v1alpha1",
+			expected: []string{"talos.dev", "v1alpha1"},
+		},
+		{
+			name:     "group/version/kind format",
+			input:    "cert-manager.io/v1/ClusterIssuer",
+			expected: []string{"cert-manager.io", "v1", "ClusterIssuer"},
+		},
+		{
+			name:     "single part (no slash)",
+			input:    "configmaps",
+			expected: []string{"configmaps"},
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := splitCRDName(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// --- HasReadyEndpoints tests ---
+
+func TestHasReadyEndpoints_WithReadyAddresses(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	endpoints := &corev1.Endpoints{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-service",
+			Namespace: "default",
+		},
+		Subsets: []corev1.EndpointSubset{
+			{
+				Addresses: []corev1.EndpointAddress{
+					{IP: "10.0.0.1"},
+				},
+			},
+		},
+	}
+
+	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
+	fakeClientset := fake.NewSimpleClientset(endpoints)
+	c := &client{clientset: fakeClientset}
+
+	ready, err := c.HasReadyEndpoints(ctx, "default", "my-service")
+	require.NoError(t, err)
+	assert.True(t, ready)
+}
+
+func TestHasReadyEndpoints_NoReadyAddresses(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	endpoints := &corev1.Endpoints{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-service",
+			Namespace: "default",
+		},
+		Subsets: []corev1.EndpointSubset{
+			{
+				NotReadyAddresses: []corev1.EndpointAddress{
+					{IP: "10.0.0.1"},
+				},
+			},
+		},
+	}
+
+	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
+	fakeClientset := fake.NewSimpleClientset(endpoints)
+	c := &client{clientset: fakeClientset}
+
+	ready, err := c.HasReadyEndpoints(ctx, "default", "my-service")
+	require.NoError(t, err)
+	assert.False(t, ready)
+}
+
+func TestHasReadyEndpoints_ServiceNotFound(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
+	fakeClientset := fake.NewSimpleClientset()
+	c := &client{clientset: fakeClientset}
+
+	ready, err := c.HasReadyEndpoints(ctx, "default", "nonexistent")
+	require.NoError(t, err)
+	assert.False(t, ready)
+}
+
+func TestHasReadyEndpoints_EmptySubsets(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	endpoints := &corev1.Endpoints{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-service",
+			Namespace: "default",
+		},
+		Subsets: []corev1.EndpointSubset{},
+	}
+
+	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
+	fakeClientset := fake.NewSimpleClientset(endpoints)
+	c := &client{clientset: fakeClientset}
+
+	ready, err := c.HasReadyEndpoints(ctx, "default", "my-service")
+	require.NoError(t, err)
+	assert.False(t, ready)
+}
+
+func TestHasReadyEndpoints_MultipleSubsets(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	endpoints := &corev1.Endpoints{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-service",
+			Namespace: "kube-system",
+		},
+		Subsets: []corev1.EndpointSubset{
+			{
+				// First subset has no ready addresses
+				NotReadyAddresses: []corev1.EndpointAddress{
+					{IP: "10.0.0.1"},
+				},
+			},
+			{
+				// Second subset has ready addresses
+				Addresses: []corev1.EndpointAddress{
+					{IP: "10.0.0.2"},
+				},
+			},
+		},
+	}
+
+	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
+	fakeClientset := fake.NewSimpleClientset(endpoints)
+	c := &client{clientset: fakeClientset}
+
+	ready, err := c.HasReadyEndpoints(ctx, "kube-system", "my-service")
+	require.NoError(t, err)
+	assert.True(t, ready)
+}
+
+// --- RefreshDiscovery tests ---
+
+func TestRefreshDiscovery_EmptyKubeconfig(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Test client (no kubeconfig) should skip refresh
+	c := &client{}
+	err := c.RefreshDiscovery(ctx)
+	require.NoError(t, err)
+}
+
+// --- HasCRD tests ---
+
+func TestHasCRD_TestClient(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Test client (no kubeconfig) should assume CRDs exist
+	c := &client{}
+	found, err := c.HasCRD(ctx, "talos.dev/v1alpha1")
+	require.NoError(t, err)
+	assert.True(t, found)
+}
+
+// --- HasIngressClass tests ---
+
+func TestHasIngressClass_TestClient(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Test client (no kubeconfig) should assume IngressClass exists
+	c := &client{}
+	found, err := c.HasIngressClass(ctx, "traefik")
+	require.NoError(t, err)
+	assert.True(t, found)
+}
+
+func TestHasIngressClass_NotFound(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
+	fakeClientset := fake.NewSimpleClientset()
+	c := &client{
+		clientset:  fakeClientset,
+		kubeconfig: []byte("fake-kubeconfig"), // Non-empty to bypass test client shortcut
+	}
+
+	found, err := c.HasIngressClass(ctx, "traefik")
+	require.NoError(t, err)
+	assert.False(t, found)
+}
+
+func TestHasIngressClass_Found(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	ingressClass := &networkingv1.IngressClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "traefik",
+		},
+	}
+
+	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
+	fakeClientset := fake.NewSimpleClientset(ingressClass)
+	c := &client{
+		clientset:  fakeClientset,
+		kubeconfig: []byte("fake-kubeconfig"),
+	}
+
+	found, err := c.HasIngressClass(ctx, "traefik")
+	require.NoError(t, err)
+	assert.True(t, found)
 }

@@ -1,11 +1,16 @@
 package image
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
+	hcloudgo "github.com/hetznercloud/hcloud-go/v2/hcloud"
+
 	"github.com/imamik/k8zner/internal/config"
+	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning"
 )
 
@@ -181,6 +186,169 @@ func TestGetImageBuilderConfig(t *testing.T) {
 			assert.Equal(t, tt.expectedLocation, location, "location mismatch")
 		})
 	}
+}
+
+func TestNewProvisioner(t *testing.T) {
+	t.Parallel()
+	p := NewProvisioner()
+	assert.NotNil(t, p)
+	assert.Equal(t, "image", p.Name())
+}
+
+func TestEnsureAllImages_NoTalosPoolsNeeded(t *testing.T) {
+	t.Parallel()
+	p := NewProvisioner()
+
+	cfg := &config.Config{
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{
+				{Image: "custom-image", ServerType: "cx22"},
+			},
+		},
+		Workers: []config.WorkerNodePool{
+			{Image: "custom-image", ServerType: "cx32"},
+		},
+	}
+
+	mockClient := &hcloud.MockClient{}
+	ctx := createTestContext(t, mockClient, cfg)
+
+	err := p.EnsureAllImages(ctx)
+	assert.NoError(t, err)
+}
+
+func TestEnsureAllImages_EmptyPools(t *testing.T) {
+	t.Parallel()
+	p := NewProvisioner()
+
+	cfg := &config.Config{
+		ControlPlane: config.ControlPlaneConfig{NodePools: nil},
+		Workers:      nil,
+	}
+
+	mockClient := &hcloud.MockClient{}
+	ctx := createTestContext(t, mockClient, cfg)
+
+	err := p.EnsureAllImages(ctx)
+	assert.NoError(t, err)
+}
+
+func TestEnsureAllImages_SnapshotExists(t *testing.T) {
+	t.Parallel()
+	p := NewProvisioner()
+
+	cfg := &config.Config{
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{
+				{ServerType: "cx22", Location: "nbg1"},
+			},
+		},
+		Talos:      config.TalosConfig{Version: "v1.8.3"},
+		Kubernetes: config.KubernetesConfig{Version: "v1.31.0"},
+	}
+
+	mockClient := &hcloud.MockClient{
+		GetSnapshotByLabelsFunc: func(_ context.Context, _ map[string]string) (*hcloudgo.Image, error) {
+			return &hcloudgo.Image{ID: 123, Description: "existing"}, nil
+		},
+	}
+	ctx := createTestContext(t, mockClient, cfg)
+
+	err := p.EnsureAllImages(ctx)
+	assert.NoError(t, err)
+}
+
+func TestEnsureAllImages_SnapshotCheckError(t *testing.T) {
+	t.Parallel()
+	p := NewProvisioner()
+
+	cfg := &config.Config{
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{
+				{ServerType: "cx22", Location: "nbg1"},
+			},
+		},
+		Talos:      config.TalosConfig{Version: "v1.8.3"},
+		Kubernetes: config.KubernetesConfig{Version: "v1.31.0"},
+	}
+
+	mockClient := &hcloud.MockClient{
+		GetSnapshotByLabelsFunc: func(_ context.Context, _ map[string]string) (*hcloudgo.Image, error) {
+			return nil, errors.New("API error")
+		},
+	}
+	ctx := createTestContext(t, mockClient, cfg)
+
+	err := p.EnsureAllImages(ctx)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to check for existing snapshot")
+}
+
+func TestEnsureAllImages_DefaultVersions(t *testing.T) {
+	t.Parallel()
+	p := NewProvisioner()
+
+	// Config with empty versions - should use defaults
+	cfg := &config.Config{
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{
+				{ServerType: "cx22", Location: "nbg1"},
+			},
+		},
+		Talos:      config.TalosConfig{Version: ""},      // Empty = use default
+		Kubernetes: config.KubernetesConfig{Version: ""}, // Empty = use default
+	}
+
+	var capturedLabels map[string]string
+	mockClient := &hcloud.MockClient{
+		GetSnapshotByLabelsFunc: func(_ context.Context, labels map[string]string) (*hcloudgo.Image, error) {
+			capturedLabels = labels
+			return &hcloudgo.Image{ID: 1, Description: "exists"}, nil
+		},
+	}
+	ctx := createTestContext(t, mockClient, cfg)
+
+	err := p.EnsureAllImages(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "v1.8.3", capturedLabels["talos-version"])
+	assert.Equal(t, "v1.31.0", capturedLabels["k8s-version"])
+}
+
+func TestEnsureAllImages_TalosImageFilter(t *testing.T) {
+	t.Parallel()
+	p := NewProvisioner()
+
+	// Mix of Talos and custom image pools
+	cfg := &config.Config{
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{
+				{ServerType: "cx22", Image: "talos", Location: "nbg1"},      // Needs image
+				{ServerType: "cx32", Image: "custom-img", Location: "nbg1"}, // Custom, skip
+			},
+		},
+		Workers: []config.WorkerNodePool{
+			{ServerType: "cx22", Image: "", Location: "nbg1"},       // Empty = talos
+			{ServerType: "cax21", Image: "other", Location: "nbg1"}, // Custom, skip
+		},
+		Talos:      config.TalosConfig{Version: "v1.8.3"},
+		Kubernetes: config.KubernetesConfig{Version: "v1.31.0"},
+	}
+
+	snapshotCallCount := 0
+	mockClient := &hcloud.MockClient{
+		GetSnapshotByLabelsFunc: func(_ context.Context, _ map[string]string) (*hcloudgo.Image, error) {
+			snapshotCallCount++
+			return &hcloudgo.Image{ID: 1, Description: "exists"}, nil
+		},
+	}
+	ctx := createTestContext(t, mockClient, cfg)
+
+	err := p.EnsureAllImages(ctx)
+	assert.NoError(t, err)
+	// Only amd64 pools (cx22, cx32) need images, but cx32 is custom.
+	// cx22 appears in both CP and worker with talos/empty.
+	// So only amd64 arch is needed (1 call).
+	assert.Equal(t, 1, snapshotCallCount)
 }
 
 func TestImageBuilderConfigDefaults(t *testing.T) {
