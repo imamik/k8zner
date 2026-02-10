@@ -470,6 +470,139 @@ func TestConvertToInterface_SliceTypes(t *testing.T) {
 	})
 }
 
+func TestConvertToInterface_SliceOfMapStringAny(t *testing.T) {
+	t.Parallel()
+	// Tests the []map[string]any branch with nested values to ensure
+	// deep conversion happens within each map element.
+	input := []map[string]any{
+		{
+			"name": "container1",
+			"ports": Values{
+				"http":  80,
+				"https": 443,
+			},
+		},
+		{
+			"name": "container2",
+			"env": map[string]any{
+				"KEY": "value",
+			},
+		},
+	}
+	result := convertToInterface(input)
+
+	arr, ok := result.([]any)
+	require.True(t, ok, "result should be []any")
+	require.Len(t, arr, 2)
+
+	container1, ok := arr[0].(map[string]interface{})
+	require.True(t, ok, "container1 should be map[string]interface{}")
+	assert.Equal(t, "container1", container1["name"])
+
+	// Verify nested Values within the map were also converted
+	ports, ok := container1["ports"].(map[string]interface{})
+	require.True(t, ok, "ports should be map[string]interface{}")
+	assert.Equal(t, 80, ports["http"])
+	assert.Equal(t, 443, ports["https"])
+
+	container2, ok := arr[1].(map[string]interface{})
+	require.True(t, ok, "container2 should be map[string]interface{}")
+	assert.Equal(t, "container2", container2["name"])
+
+	env, ok := container2["env"].(map[string]interface{})
+	require.True(t, ok, "env should be map[string]interface{}")
+	assert.Equal(t, "value", env["KEY"])
+}
+
+func TestConvertToInterface_StringSlice(t *testing.T) {
+	t.Parallel()
+	input := []string{"a", "b", "c"}
+	result := convertToInterface(input)
+
+	arr, ok := result.([]any)
+	require.True(t, ok, "result should be []any")
+	require.Len(t, arr, 3)
+	assert.Equal(t, "a", arr[0])
+	assert.Equal(t, "b", arr[1])
+	assert.Equal(t, "c", arr[2])
+}
+
+func TestConvertToInterface_IntSlice(t *testing.T) {
+	t.Parallel()
+	input := []int{1, 2, 3}
+	result := convertToInterface(input)
+
+	arr, ok := result.([]any)
+	require.True(t, ok, "result should be []any")
+	require.Len(t, arr, 3)
+	assert.Equal(t, 1, arr[0])
+	assert.Equal(t, 2, arr[1])
+	assert.Equal(t, 3, arr[2])
+}
+
+func TestMergeCustomValues_EmptyCustom(t *testing.T) {
+	t.Parallel()
+	base := Values{
+		"replicas": 2,
+		"image":    "nginx",
+		"nested": Values{
+			"key": "value",
+		},
+	}
+
+	// nil custom values
+	result := MergeCustomValues(base, nil)
+	assert.Equal(t, base, result)
+
+	// empty custom values
+	result = MergeCustomValues(base, map[string]any{})
+	assert.Equal(t, base, result)
+}
+
+func TestMergeCustomValues_WithValues(t *testing.T) {
+	t.Parallel()
+	base := Values{
+		"replicas": 2,
+		"image":    "nginx",
+		"config": Values{
+			"setting1": "value1",
+			"setting2": "value2",
+		},
+	}
+	custom := map[string]any{
+		"replicas": 5,
+		"config": map[string]any{
+			"setting2": "overridden",
+			"setting3": "new-value",
+		},
+		"newKey": "added",
+	}
+
+	result := MergeCustomValues(base, custom)
+
+	assert.Equal(t, 5, result["replicas"])
+	assert.Equal(t, "nginx", result["image"])
+	assert.Equal(t, "added", result["newKey"])
+
+	config := toValuesMap(result["config"])
+	require.NotNil(t, config)
+	assert.Equal(t, "value1", config["setting1"], "setting1 should be preserved from base")
+	assert.Equal(t, "overridden", config["setting2"], "setting2 should be overridden")
+	assert.Equal(t, "new-value", config["setting3"], "setting3 should be added from custom")
+}
+
+func TestToYAML_Error(t *testing.T) {
+	t.Parallel()
+	// The yaml.v3 encoder panics (rather than returning an error) for
+	// unmarshallable types like functions, channels, and complex numbers.
+	// We verify this panic behavior to document that the error branch in
+	// ToYAML is only reachable if the YAML library changes behavior.
+	v := Values{"fn": func() {}}
+	assert.Panics(t, func() {
+		_, _ = v.ToYAML()
+	})
+}
+
 func TestMergeCustomValues(t *testing.T) {
 	t.Parallel()
 	t.Run("nil custom values returns base unchanged", func(t *testing.T) {

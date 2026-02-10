@@ -445,6 +445,44 @@ func TestE2ECluster(t *testing.T) {
 	}
 }
 
+func TestRoleAbbrev(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		role     string
+		expected string
+	}{
+		{"control-plane", "control-plane", "cp"},
+		{"controlplane", "controlplane", "cp"},
+		{"cp", "cp", "cp"},
+		{"worker", "worker", "w"},
+		{"workers", "workers", "w"},
+		{"w", "w", "w"},
+		{"unknown long role", "autoscaler", "au"},
+		{"unknown short role", "x", "x"},
+		{"unknown empty role", "", ""},
+		{"unknown uppercase", "MyRole", "my"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := roleAbbrev(tt.role)
+			if result != tt.expected {
+				t.Errorf("roleAbbrev(%q) = %q, want %q", tt.role, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGenerateIDZeroLength(t *testing.T) {
+	t.Parallel()
+	id := GenerateID(0)
+	if id != "" {
+		t.Errorf("GenerateID(0) = %q, want empty string", id)
+	}
+}
+
 func TestNamingConsistency(t *testing.T) {
 	t.Parallel()
 	cluster := "test-cluster"

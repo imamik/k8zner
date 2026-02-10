@@ -413,6 +413,33 @@ func TestWithTestIDIfSetChaining(t *testing.T) {
 	}
 }
 
+func TestWithTestID(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		testID string
+	}{
+		{"non-empty test ID", "e2e-12345"},
+		{"empty test ID", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			lb := NewLabelBuilder("test-cluster").WithTestID(tt.testID)
+			labels := lb.Build()
+
+			val, exists := labels[LegacyKeyTestID]
+			if !exists {
+				t.Errorf("WithTestID(%q): expected label %s to exist", tt.testID, LegacyKeyTestID)
+			}
+			if val != tt.testID {
+				t.Errorf("WithTestID(%q): expected %s=%q, got %q", tt.testID, LegacyKeyTestID, tt.testID, val)
+			}
+		})
+	}
+}
+
 func TestSelectorForCluster(t *testing.T) {
 	t.Parallel()
 	selector := SelectorForCluster("my-cluster")
