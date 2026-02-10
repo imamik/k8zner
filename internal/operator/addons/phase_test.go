@@ -624,4 +624,160 @@ func TestIsCiliumReady(t *testing.T) {
 		assert.False(t, ready)
 		assert.Contains(t, err.Error(), "api server unavailable")
 	})
+
+	t.Run("returns true for pod running with multiple conditions", func(t *testing.T) {
+		t.Parallel()
+
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "cilium-multi",
+				Namespace: "kube-system",
+				Labels:    map[string]string{"k8s-app": "cilium"},
+			},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodRunning,
+				Conditions: []corev1.PodCondition{
+					{
+						Type:   corev1.PodScheduled,
+						Status: corev1.ConditionTrue,
+					},
+					{
+						Type:   corev1.PodReady,
+						Status: corev1.ConditionTrue,
+					},
+					{
+						Type:   corev1.ContainersReady,
+						Status: corev1.ConditionTrue,
+					},
+				},
+			},
+		}
+
+		k8sClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(pod).
+			Build()
+		pm := NewPhaseManager(nil)
+
+		ready, err := pm.isCiliumReady(context.Background(), k8sClient)
+		require.NoError(t, err)
+		assert.True(t, ready)
+	})
+}
+
+func TestWaitForCiliumReady_InvalidKubeconfig(t *testing.T) {
+	t.Parallel()
+
+	pm := NewPhaseManager(nil)
+	err := pm.waitForCiliumReady(context.Background(), []byte("not-valid-kubeconfig"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create rest config")
+}
+
+func TestWaitForCiliumReady_NilKubeconfig(t *testing.T) {
+	t.Parallel()
+
+	pm := NewPhaseManager(nil)
+	err := pm.waitForCiliumReady(context.Background(), nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create rest config")
+}
+
+func TestWaitForCiliumReady_EmptyKubeconfig(t *testing.T) {
+	t.Parallel()
+
+	pm := NewPhaseManager(nil)
+	err := pm.waitForCiliumReady(context.Background(), []byte{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create rest config")
+}
+
+func TestInstallAddons_ErrorWrapping(t *testing.T) {
+	t.Parallel()
+
+	// InstallAddons wraps errors from ApplyWithoutCilium. We cannot directly test
+	// the success path without a real K8s cluster, but we can verify the method
+	// exists and returns nil when the underlying function succeeds.
+	// Since ApplyWithoutCilium will fail with nil kubeconfig, test error wrapping.
+	pm := NewPhaseManager(nil)
+	err := pm.InstallAddons(context.Background(), nil, nil, 0)
+	// Should fail because cfg and kubeconfig are nil
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to install addons")
+}
+
+func TestInstallCilium_ErrorWrapping(t *testing.T) {
+	t.Parallel()
+
+	// InstallCilium wraps errors from ApplyCilium. Test that it wraps correctly.
+	pm := NewPhaseManager(nil)
+	err := pm.InstallCilium(context.Background(), nil, nil)
+	// Should fail because cfg and kubeconfig are nil
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to install Cilium")
+}
+
+func TestUpdateAddonStatus_UnknownAddonOrder(t *testing.T) {
+	t.Parallel()
+
+	pm := NewPhaseManager(nil)
+	cluster := &k8znerv1alpha1.K8znerCluster{}
+
+	pm.UpdateAddonStatus(cluster, "custom-addon", true, true, k8znerv1alpha1.AddonPhaseInstalled, "ok")
+
+	status, ok := cluster.Status.Addons["custom-addon"]
+	require.True(t, ok)
+	assert.Equal(t, 99, status.InstallOrder, "unknown addon should get order 99")
+	assert.True(t, status.Installed)
+	assert.True(t, status.Healthy)
+}
+
+func TestUpdateAddonStatus_MultipleAddons(t *testing.T) {
+	t.Parallel()
+
+	pm := NewPhaseManager(nil)
+	cluster := &k8znerv1alpha1.K8znerCluster{}
+
+	pm.UpdateAddonStatus(cluster, k8znerv1alpha1.AddonNameCilium, true, true, k8znerv1alpha1.AddonPhaseInstalled, "ok")
+	pm.UpdateAddonStatus(cluster, k8znerv1alpha1.AddonNameCCM, true, true, k8znerv1alpha1.AddonPhaseInstalled, "ok")
+	pm.UpdateAddonStatus(cluster, k8znerv1alpha1.AddonNameCSI, true, false, k8znerv1alpha1.AddonPhaseFailed, "error")
+
+	require.Len(t, cluster.Status.Addons, 3)
+
+	cilium := cluster.Status.Addons[k8znerv1alpha1.AddonNameCilium]
+	assert.Equal(t, k8znerv1alpha1.AddonOrderCilium, cilium.InstallOrder)
+
+	ccm := cluster.Status.Addons[k8znerv1alpha1.AddonNameCCM]
+	assert.Equal(t, k8znerv1alpha1.AddonOrderCCM, ccm.InstallOrder)
+
+	csi := cluster.Status.Addons[k8znerv1alpha1.AddonNameCSI]
+	assert.Equal(t, k8znerv1alpha1.AddonOrderCSI, csi.InstallOrder)
+	assert.False(t, csi.Healthy)
+	assert.Equal(t, k8znerv1alpha1.AddonPhaseFailed, csi.Phase)
+}
+
+func TestUpdateAddonStatus_AllAddonPhases(t *testing.T) {
+	t.Parallel()
+
+	phases := []k8znerv1alpha1.AddonPhase{
+		k8znerv1alpha1.AddonPhasePending,
+		k8znerv1alpha1.AddonPhaseInstalling,
+		k8znerv1alpha1.AddonPhaseInstalled,
+		k8znerv1alpha1.AddonPhaseFailed,
+		k8znerv1alpha1.AddonPhaseUpgrading,
+	}
+
+	for _, phase := range phases {
+		t.Run(string(phase), func(t *testing.T) {
+			t.Parallel()
+
+			pm := NewPhaseManager(nil)
+			cluster := &k8znerv1alpha1.K8znerCluster{}
+
+			pm.UpdateAddonStatus(cluster, k8znerv1alpha1.AddonNameCilium, false, false, phase, "msg")
+
+			status := cluster.Status.Addons[k8znerv1alpha1.AddonNameCilium]
+			assert.Equal(t, phase, status.Phase)
+		})
+	}
 }

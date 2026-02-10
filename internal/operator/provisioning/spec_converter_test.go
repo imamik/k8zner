@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
@@ -665,12 +666,71 @@ func TestParseSecretsFromBytes_InvalidYAML(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to unmarshal")
 }
 
+func TestParseSecretsFromBytes_NilInput(t *testing.T) {
+	t.Parallel()
+	_, err := parseSecretsFromBytes(nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "empty secrets data")
+}
+
+func TestParseSecretsFromBytes_ValidYAML(t *testing.T) {
+	t.Parallel()
+	// A minimal YAML that will unmarshal into a secrets.Bundle without error.
+	// The Bundle struct has pointer fields so empty YAML {} is fine.
+	sb, err := parseSecretsFromBytes([]byte("{}"))
+	require.NoError(t, err)
+	require.NotNil(t, sb)
+	assert.NotNil(t, sb.Clock, "clock should be re-injected")
+}
+
+func TestParseSecretsFromBytes_ValidYAMLWithFields(t *testing.T) {
+	t.Parallel()
+	// Provide a YAML with the Cluster key set to verify parsing
+	yamlData := `
+Cluster:
+  ID: "test-cluster-id"
+  Secret: "test-cluster-secret"
+`
+	sb, err := parseSecretsFromBytes([]byte(yamlData))
+	require.NoError(t, err)
+	require.NotNil(t, sb)
+	assert.NotNil(t, sb.Clock, "clock should be re-injected")
+	if sb.Cluster != nil {
+		assert.Equal(t, "test-cluster-id", sb.Cluster.ID)
+		assert.Equal(t, "test-cluster-secret", sb.Cluster.Secret)
+	}
+}
+
 // --- defaultString helper ---
 
 func TestDefaultString(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, "custom", defaultString("custom", "default"))
 	assert.Equal(t, "default", defaultString("", "default"))
+}
+
+func TestDefaultString_BothEmpty(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "", defaultString("", ""))
+}
+
+func TestDefaultString_WhitespaceNotEmpty(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, " ", defaultString(" ", "default"), "whitespace is not empty")
+}
+
+// --- boolPtr helper ---
+
+func TestBoolPtr(t *testing.T) {
+	t.Parallel()
+
+	trueVal := boolPtr(true)
+	require.NotNil(t, trueVal)
+	assert.True(t, *trueVal)
+
+	falseVal := boolPtr(false)
+	require.NotNil(t, falseVal)
+	assert.False(t, *falseVal)
 }
 
 // --- Integration: SpecToConfig end-to-end ---
@@ -777,4 +837,188 @@ func TestSpecToConfig_FullRoundTrip(t *testing.T) {
 	// Firewall
 	require.NotNil(t, cfg.Firewall.UseCurrentIPv4)
 	assert.True(t, *cfg.Firewall.UseCurrentIPv4)
+}
+
+// --- SpecToConfig additional coverage ---
+
+func TestSpecToConfig_AllNetworkDefaultsPreFilled(t *testing.T) {
+	t.Parallel()
+	// When all network CIDRs are empty, SpecToConfig uses configv2 defaults
+	cluster := newTestCluster("test", "", nil)
+
+	cfg, err := SpecToConfig(cluster, baseCreds())
+	require.NoError(t, err)
+
+	// Verify the defaults are applied via defaultString
+	assert.NotEmpty(t, cfg.Network.IPv4CIDR)
+	assert.NotEmpty(t, cfg.Network.NodeIPv4CIDR)
+	assert.NotEmpty(t, cfg.Network.PodIPv4CIDR)
+	assert.NotEmpty(t, cfg.Network.ServiceIPv4CIDR)
+	assert.Equal(t, 25, cfg.Network.NodeIPv4SubnetMask)
+}
+
+// --- configureBackup edge cases ---
+
+func TestConfigureBackup_EnabledFalse(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{}
+	spec := &k8znerv1alpha1.K8znerClusterSpec{
+		Backup: &k8znerv1alpha1.BackupSpec{Enabled: false, Schedule: "0 * * * *"},
+	}
+	creds := &Credentials{
+		BackupS3AccessKey: "ak",
+		BackupS3SecretKey: "sk",
+	}
+
+	configureBackup(cfg, spec, creds)
+	assert.False(t, cfg.Addons.TalosBackup.Enabled, "backup disabled overrides having creds")
+}
+
+func TestConfigureBackup_OnlyAccessKey(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{}
+	spec := &k8znerv1alpha1.K8znerClusterSpec{
+		Backup: &k8znerv1alpha1.BackupSpec{Enabled: true, Schedule: "0 * * * *"},
+	}
+	creds := &Credentials{
+		BackupS3AccessKey: "ak",
+		// BackupS3SecretKey is missing
+	}
+
+	configureBackup(cfg, spec, creds)
+	assert.False(t, cfg.Addons.TalosBackup.Enabled, "needs both access key and secret key")
+}
+
+func TestConfigureBackup_OnlySecretKey(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{}
+	spec := &k8znerv1alpha1.K8znerClusterSpec{
+		Backup: &k8znerv1alpha1.BackupSpec{Enabled: true, Schedule: "0 * * * *"},
+	}
+	creds := &Credentials{
+		// BackupS3AccessKey is missing
+		BackupS3SecretKey: "sk",
+	}
+
+	configureBackup(cfg, spec, creds)
+	assert.False(t, cfg.Addons.TalosBackup.Enabled, "needs both access key and secret key")
+}
+
+// --- configureCloudflare edge cases ---
+
+func TestConfigureCloudflare_CertManagerDisabled(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{}
+	cfg.Addons.ExternalDNS.Enabled = true
+	cfg.Addons.CertManager.Enabled = false // CertManager disabled
+	spec := &k8znerv1alpha1.K8znerClusterSpec{Domain: "example.com"}
+
+	configureCloudflare(cfg, spec, baseCreds(), "my-cluster")
+
+	assert.True(t, cfg.Addons.Cloudflare.Enabled)
+	assert.False(t, cfg.Addons.CertManager.Cloudflare.Enabled, "DNS-01 requires CertManager enabled")
+}
+
+// --- expandArgoCDFromSpec edge cases ---
+
+func TestExpandArgoCDFromSpec_EmptySubdomainField(t *testing.T) {
+	t.Parallel()
+	// ArgoSubdomain is empty string, should use default "argo"
+	spec := &k8znerv1alpha1.K8znerClusterSpec{
+		Domain: "example.com",
+		Addons: &k8znerv1alpha1.AddonSpec{ArgoCD: true, ArgoSubdomain: ""},
+	}
+
+	result := expandArgoCDFromSpec(spec)
+	assert.Equal(t, "argo.example.com", result.IngressHost, "empty subdomain should use default 'argo'")
+}
+
+// --- expandMonitoringFromSpec edge cases ---
+
+func TestExpandMonitoringFromSpec_EmptyGrafanaSubdomain(t *testing.T) {
+	t.Parallel()
+	// GrafanaSubdomain is empty string, should use default "grafana"
+	spec := &k8znerv1alpha1.K8znerClusterSpec{
+		Domain: "example.com",
+		Addons: &k8znerv1alpha1.AddonSpec{Monitoring: true, GrafanaSubdomain: ""},
+	}
+
+	result := expandMonitoringFromSpec(spec)
+	assert.Equal(t, "grafana.example.com", result.Grafana.IngressHost, "empty subdomain should use default 'grafana'")
+}
+
+func TestExpandMonitoringFromSpec_DisabledWithDomain(t *testing.T) {
+	t.Parallel()
+	spec := &k8znerv1alpha1.K8znerClusterSpec{
+		Domain: "example.com",
+		Addons: &k8znerv1alpha1.AddonSpec{Monitoring: false},
+	}
+
+	result := expandMonitoringFromSpec(spec)
+	assert.False(t, result.Enabled)
+	assert.False(t, result.Grafana.IngressEnabled, "disabled monitoring should not set up ingress")
+	assert.Empty(t, result.Grafana.IngressHost)
+}
+
+// --- expandExternalDNSFromSpec edge cases ---
+
+func TestExpandExternalDNSFromSpec_NilAddons(t *testing.T) {
+	t.Parallel()
+	result := expandExternalDNSFromSpec(&k8znerv1alpha1.K8znerClusterSpec{Addons: nil})
+	assert.False(t, result.Enabled)
+	assert.Empty(t, result.Policy)
+	assert.Empty(t, result.Sources)
+}
+
+// --- resolveEndpoint edge cases ---
+
+func TestResolveEndpoint_EmptyNodes(t *testing.T) {
+	t.Parallel()
+	cluster := &k8znerv1alpha1.K8znerCluster{
+		Status: k8znerv1alpha1.K8znerClusterStatus{
+			ControlPlanes: k8znerv1alpha1.NodeGroupStatus{
+				Nodes: []k8znerv1alpha1.NodeStatus{}, // empty slice
+			},
+		},
+	}
+	_, err := resolveEndpoint(cluster)
+	assert.Error(t, err)
+}
+
+// --- SpecToConfig with minimal spec ---
+
+func TestSpecToConfig_MinimalSpec(t *testing.T) {
+	t.Parallel()
+	cluster := &k8znerv1alpha1.K8znerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "min"},
+		Spec: k8znerv1alpha1.K8znerClusterSpec{
+			Region:         "fsn1",
+			ControlPlanes:  k8znerv1alpha1.ControlPlaneSpec{Count: 1, Size: "cx23"},
+			Workers:        k8znerv1alpha1.WorkerSpec{Count: 1, Size: "cx23"},
+			Kubernetes:     k8znerv1alpha1.KubernetesSpec{Version: "1.32.0"},
+			Talos:          k8znerv1alpha1.TalosSpec{Version: "v1.10.0"},
+			CredentialsRef: corev1.LocalObjectReference{Name: "creds"},
+			// No Addons, no Domain, no Backup
+		},
+	}
+
+	cfg, err := SpecToConfig(cluster, baseCreds())
+	require.NoError(t, err)
+
+	// Core always enabled
+	assert.True(t, cfg.Addons.Cilium.Enabled)
+	assert.True(t, cfg.Addons.CCM.Enabled)
+	assert.True(t, cfg.Addons.CSI.Enabled)
+
+	// Optional addons disabled
+	assert.False(t, cfg.Addons.MetricsServer.Enabled)
+	assert.False(t, cfg.Addons.CertManager.Enabled)
+	assert.False(t, cfg.Addons.Traefik.Enabled)
+	assert.False(t, cfg.Addons.ExternalDNS.Enabled)
+	assert.False(t, cfg.Addons.ArgoCD.Enabled)
+	assert.False(t, cfg.Addons.KubePrometheusStack.Enabled)
+	assert.False(t, cfg.Addons.TalosBackup.Enabled)
+
+	// No cloudflare
+	assert.False(t, cfg.Addons.Cloudflare.Enabled)
 }

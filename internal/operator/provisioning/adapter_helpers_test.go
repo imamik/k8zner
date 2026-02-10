@@ -4,12 +4,15 @@ import (
 	"context"
 	"testing"
 
+	"github.com/go-logr/logr"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	"github.com/imamik/k8zner/internal/config"
@@ -700,4 +703,441 @@ func TestBuildProvisioningContext_PassesInfraAndTalos(t *testing.T) {
 	assert.Nil(t, pCtx.Infra)
 	assert.Nil(t, pCtx.Talos)
 	assert.NotNil(t, pCtx.Timeouts)
+}
+
+func TestBuildProvisioningContext_NilCredentials(t *testing.T) {
+	t.Parallel()
+	cluster := newTestCluster("test-cluster", "", nil)
+	adapter := &PhaseAdapter{}
+
+	// Nil credentials should cause SpecToConfig to use empty token
+	pCtx, err := adapter.BuildProvisioningContext(context.Background(), cluster, &Credentials{}, nil, nil)
+	require.NoError(t, err)
+	assert.NotNil(t, pCtx)
+	assert.Empty(t, pCtx.Config.HCloudToken)
+}
+
+func TestBuildProvisioningContext_LoggerSetToObserver(t *testing.T) {
+	t.Parallel()
+	cluster := newTestCluster("test-cluster", "", nil)
+	creds := baseCreds()
+
+	adapter := &PhaseAdapter{}
+	pCtx, err := adapter.BuildProvisioningContext(context.Background(), cluster, creds, nil, nil)
+	require.NoError(t, err)
+	// Logger should be set to the same Observer
+	assert.NotNil(t, pCtx.Logger)
+	assert.Equal(t, pCtx.Observer, pCtx.Logger)
+}
+
+// --- NewPhaseAdapter test ---
+
+func TestNewPhaseAdapter(t *testing.T) {
+	t.Parallel()
+	fakeClient := fake.NewClientBuilder().WithScheme(newFakeScheme()).Build()
+	adapter := NewPhaseAdapter(fakeClient)
+
+	require.NotNil(t, adapter)
+	assert.NotNil(t, adapter.client)
+	assert.NotNil(t, adapter.infraProvisioner)
+	assert.NotNil(t, adapter.imageProvisioner)
+	assert.NotNil(t, adapter.computeProvisioner)
+	assert.NotNil(t, adapter.clusterProvisioner)
+}
+
+func TestNewPhaseAdapter_NilClient(t *testing.T) {
+	t.Parallel()
+	adapter := NewPhaseAdapter(nil)
+
+	require.NotNil(t, adapter)
+	assert.Nil(t, adapter.client)
+	assert.NotNil(t, adapter.infraProvisioner)
+	assert.NotNil(t, adapter.imageProvisioner)
+	assert.NotNil(t, adapter.computeProvisioner)
+	assert.NotNil(t, adapter.clusterProvisioner)
+}
+
+// --- AttachBootstrapNodeToInfrastructure tests ---
+
+// logCtx creates a context with a discard logger for tests that use log.FromContext.
+func logCtx() context.Context {
+	return log.IntoContext(context.Background(), logr.Discard())
+}
+
+func TestAttachBootstrapNodeToInfrastructure_NilBootstrap(t *testing.T) {
+	t.Parallel()
+	adapter := &PhaseAdapter{}
+	cluster := &k8znerv1alpha1.K8znerCluster{
+		Spec: k8znerv1alpha1.K8znerClusterSpec{
+			Bootstrap: nil,
+		},
+	}
+	pCtx := &provisioning.Context{
+		Context: logCtx(),
+		State:   provisioning.NewState(),
+	}
+
+	err := adapter.AttachBootstrapNodeToInfrastructure(pCtx, cluster)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bootstrap state not available")
+}
+
+func TestAttachBootstrapNodeToInfrastructure_NotCompleted(t *testing.T) {
+	t.Parallel()
+	adapter := &PhaseAdapter{}
+	cluster := &k8znerv1alpha1.K8znerCluster{
+		Spec: k8znerv1alpha1.K8znerClusterSpec{
+			Bootstrap: &k8znerv1alpha1.BootstrapState{
+				Completed: false,
+			},
+		},
+	}
+	pCtx := &provisioning.Context{
+		Context: logCtx(),
+		State:   provisioning.NewState(),
+	}
+
+	err := adapter.AttachBootstrapNodeToInfrastructure(pCtx, cluster)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bootstrap state not available")
+}
+
+func TestAttachBootstrapNodeToInfrastructure_EmptyBootstrapNode(t *testing.T) {
+	t.Parallel()
+	adapter := &PhaseAdapter{}
+	cluster := &k8znerv1alpha1.K8znerCluster{
+		Spec: k8znerv1alpha1.K8znerClusterSpec{
+			Bootstrap: &k8znerv1alpha1.BootstrapState{
+				Completed:     true,
+				BootstrapNode: "",
+			},
+		},
+	}
+	pCtx := &provisioning.Context{
+		Context: logCtx(),
+		State:   provisioning.NewState(),
+	}
+
+	err := adapter.AttachBootstrapNodeToInfrastructure(pCtx, cluster)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bootstrap node name is not set")
+}
+
+func TestAttachBootstrapNodeToInfrastructure_NoNetworkID(t *testing.T) {
+	t.Parallel()
+	adapter := &PhaseAdapter{}
+	cluster := &k8znerv1alpha1.K8znerCluster{
+		Spec: k8znerv1alpha1.K8znerClusterSpec{
+			Bootstrap: &k8znerv1alpha1.BootstrapState{
+				Completed:       true,
+				BootstrapNode:   "cp-1",
+				BootstrapNodeID: 100,
+			},
+		},
+	}
+	state := provisioning.NewState()
+	state.Network = &hcloud.Network{ID: 0} // Network exists but ID is 0
+	pCtx := &provisioning.Context{
+		Context: logCtx(),
+		State:   state,
+	}
+	// No networkID in state or CRD status
+
+	err := adapter.AttachBootstrapNodeToInfrastructure(pCtx, cluster)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "network ID not available")
+}
+
+func TestAttachBootstrapNodeToInfrastructure_FallbackToStatusNetworkID(t *testing.T) {
+	t.Parallel()
+	adapter := &PhaseAdapter{}
+
+	// Set networkID via CRD status (fallback), but no infra manager to get server
+	cluster := &k8znerv1alpha1.K8znerCluster{
+		Spec: k8znerv1alpha1.K8znerClusterSpec{
+			Bootstrap: &k8znerv1alpha1.BootstrapState{
+				Completed:       true,
+				BootstrapNode:   "cp-1",
+				BootstrapNodeID: 100,
+			},
+		},
+		Status: k8znerv1alpha1.K8znerClusterStatus{
+			Infrastructure: k8znerv1alpha1.InfrastructureStatus{
+				NetworkID: 42,
+			},
+		},
+	}
+	state := provisioning.NewState()
+	state.Network = &hcloud.Network{ID: 0} // Network with ID 0, will fallback to CRD status
+	pCtx := &provisioning.Context{
+		Context: logCtx(),
+		State:   state,
+		Infra:   nil, // Will panic when GetServerByName is called
+	}
+
+	// This will fail because Infra is nil (panic on GetServerByName),
+	// which proves we passed the networkID check (fallback to CRD status worked).
+	assert.Panics(t, func() {
+		_ = adapter.AttachBootstrapNodeToInfrastructure(pCtx, cluster)
+	}, "should panic because Infra is nil - proves we passed the networkID check")
+}
+
+func TestAttachBootstrapNodeToInfrastructure_NetworkIDFromState(t *testing.T) {
+	t.Parallel()
+	adapter := &PhaseAdapter{}
+
+	cluster := &k8znerv1alpha1.K8znerCluster{
+		Spec: k8znerv1alpha1.K8znerClusterSpec{
+			Bootstrap: &k8znerv1alpha1.BootstrapState{
+				Completed:       true,
+				BootstrapNode:   "cp-1",
+				BootstrapNodeID: 100,
+			},
+		},
+	}
+	state := provisioning.NewState()
+	state.Network = &hcloud.Network{ID: 99} // Valid network ID in state
+	pCtx := &provisioning.Context{
+		Context: logCtx(),
+		State:   state,
+		Infra:   nil, // Will panic when GetServerByName is called
+	}
+
+	// Should get past networkID check (uses state.Network.ID=99) and
+	// then panic on nil Infra when calling GetServerByName.
+	assert.Panics(t, func() {
+		_ = adapter.AttachBootstrapNodeToInfrastructure(pCtx, cluster)
+	}, "should panic because Infra is nil - proves we passed the networkID check with state network")
+}
+
+// --- populateBootstrapState with multiple node pools ---
+
+func TestPopulateBootstrapState_MultipleNodePools(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{
+				{Name: "cp-pool-1", Count: 3, ServerType: "cx23", Location: "fsn1"},
+				{Name: "cp-pool-2", Count: 5, ServerType: "cx33", Location: "nbg1"},
+			},
+		},
+		Workers: []config.WorkerNodePool{
+			{Name: "workers-1", Count: 2, ServerType: "cx23", Location: "fsn1"},
+			{Name: "workers-2", Count: 4, ServerType: "cx33", Location: "nbg1"},
+		},
+	}
+
+	// Keep references to original slices
+	origCPPools := cfg.ControlPlane.NodePools
+	origWorkers := cfg.Workers
+
+	pCtx := &provisioning.Context{
+		Config: cfg,
+		State:  provisioning.NewState(),
+	}
+
+	cluster := &k8znerv1alpha1.K8znerCluster{
+		Spec: k8znerv1alpha1.K8znerClusterSpec{
+			Bootstrap: &k8znerv1alpha1.BootstrapState{
+				Completed:       true,
+				BootstrapNode:   "cp-abc",
+				BootstrapNodeID: 111,
+				PublicIP:        "5.5.5.5",
+			},
+		},
+	}
+
+	populateBootstrapState(pCtx, cluster, &discardLogger{})
+
+	// Both CP pools should be limited to 1
+	assert.Equal(t, 1, pCtx.Config.ControlPlane.NodePools[0].Count)
+	assert.Equal(t, 1, pCtx.Config.ControlPlane.NodePools[1].Count)
+
+	// Both worker pools should be limited to 0
+	assert.Equal(t, 0, pCtx.Config.Workers[0].Count)
+	assert.Equal(t, 0, pCtx.Config.Workers[1].Count)
+
+	// Originals should not be mutated
+	assert.Equal(t, 3, origCPPools[0].Count)
+	assert.Equal(t, 5, origCPPools[1].Count)
+	assert.Equal(t, 2, origWorkers[0].Count)
+	assert.Equal(t, 4, origWorkers[1].Count)
+
+	// Bootstrap node state
+	assert.Equal(t, "5.5.5.5", pCtx.State.ControlPlaneIPs["cp-abc"])
+	assert.Equal(t, int64(111), pCtx.State.ControlPlaneServerIDs["cp-abc"])
+}
+
+// --- populateStateFromCRD with only private LB IP ---
+
+func TestPopulateStateFromCRD_OnlyPrivateLBIP(t *testing.T) {
+	t.Parallel()
+	state := provisioning.NewState()
+	pCtx := &provisioning.Context{State: state}
+
+	cluster := &k8znerv1alpha1.K8znerCluster{
+		Status: k8znerv1alpha1.K8znerClusterStatus{
+			Infrastructure: k8znerv1alpha1.InfrastructureStatus{
+				LoadBalancerPrivateIP: "10.0.0.100",
+			},
+		},
+	}
+
+	populateStateFromCRD(pCtx, cluster, &discardLogger{})
+
+	assert.Equal(t, []string{"10.0.0.100"}, pCtx.State.SANs)
+}
+
+func TestPopulateStateFromCRD_NoLBIPs(t *testing.T) {
+	t.Parallel()
+	state := provisioning.NewState()
+	pCtx := &provisioning.Context{State: state}
+
+	cluster := &k8znerv1alpha1.K8znerCluster{
+		Status: k8znerv1alpha1.K8znerClusterStatus{
+			ControlPlanes: k8znerv1alpha1.NodeGroupStatus{
+				Nodes: []k8znerv1alpha1.NodeStatus{
+					{Name: "cp-1", PublicIP: "1.1.1.1", ServerID: 101},
+				},
+			},
+		},
+	}
+
+	populateStateFromCRD(pCtx, cluster, &discardLogger{})
+
+	// SANs should be empty (nil) when no LB IPs
+	assert.Empty(t, pCtx.State.SANs)
+}
+
+// --- mergeNodePool edge cases ---
+
+func TestMergeNodePool_NilNodes(t *testing.T) {
+	t.Parallel()
+	var nodes []k8znerv1alpha1.NodeStatus
+	ips := map[string]string{"n1": "1.1.1.1"}
+	serverIDs := map[string]int64{"n1": 1}
+
+	mergeNodePool(&nodes, ips, serverIDs)
+
+	require.Len(t, nodes, 1)
+	assert.Equal(t, "n1", nodes[0].Name)
+	assert.Equal(t, "1.1.1.1", nodes[0].PublicIP)
+	assert.Equal(t, int64(1), nodes[0].ServerID)
+}
+
+func TestMergeNodePool_ServerIDNotInMap(t *testing.T) {
+	t.Parallel()
+	var nodes []k8znerv1alpha1.NodeStatus
+	ips := map[string]string{"n1": "1.1.1.1"}
+	serverIDs := map[string]int64{} // n1 not in serverIDs
+
+	mergeNodePool(&nodes, ips, serverIDs)
+
+	require.Len(t, nodes, 1)
+	assert.Equal(t, "n1", nodes[0].Name)
+	assert.Equal(t, "1.1.1.1", nodes[0].PublicIP)
+	assert.Equal(t, int64(0), nodes[0].ServerID, "should be zero when not in serverIDs map")
+}
+
+// --- extractCredentials edge cases ---
+
+func TestExtractCredentials_NilData(t *testing.T) {
+	t.Parallel()
+	secret := &corev1.Secret{
+		Data: nil,
+	}
+
+	_, err := extractCredentials(secret)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "missing key")
+}
+
+func TestExtractCredentials_OnlyOptionalFields(t *testing.T) {
+	t.Parallel()
+	secret := &corev1.Secret{
+		Data: map[string][]byte{
+			k8znerv1alpha1.CredentialsKeyHCloudToken:  []byte("token"),
+			k8znerv1alpha1.CredentialsKeyTalosSecrets: []byte("secrets-data"),
+		},
+	}
+
+	creds, err := extractCredentials(secret)
+	require.NoError(t, err)
+	assert.Equal(t, "token", creds.HCloudToken)
+	assert.Equal(t, []byte("secrets-data"), creds.TalosSecrets)
+	assert.Nil(t, creds.TalosConfig, "TalosConfig should be nil when not present")
+	assert.Empty(t, creds.CloudflareAPIToken, "CloudflareAPIToken should be empty when not present")
+}
+
+// --- setCondition edge cases ---
+
+func TestSetCondition_TransitionFromUnknown(t *testing.T) {
+	t.Parallel()
+	cluster := &k8znerv1alpha1.K8znerCluster{
+		Status: k8znerv1alpha1.K8znerClusterStatus{
+			Conditions: []metav1.Condition{
+				{
+					Type:   k8znerv1alpha1.ConditionInfrastructureReady,
+					Status: metav1.ConditionUnknown,
+					Reason: "Unknown",
+				},
+			},
+		},
+	}
+
+	setCondition(cluster, k8znerv1alpha1.ConditionInfrastructureReady, metav1.ConditionTrue,
+		"Provisioned", "Done")
+
+	require.Len(t, cluster.Status.Conditions, 1)
+	assert.Equal(t, metav1.ConditionTrue, cluster.Status.Conditions[0].Status)
+	assert.Equal(t, "Provisioned", cluster.Status.Conditions[0].Reason)
+}
+
+func TestSetCondition_LastTransitionTimeSet(t *testing.T) {
+	t.Parallel()
+	cluster := &k8znerv1alpha1.K8znerCluster{}
+
+	setCondition(cluster, "TestCondition", metav1.ConditionTrue, "Ready", "all good")
+
+	require.Len(t, cluster.Status.Conditions, 1)
+	assert.False(t, cluster.Status.Conditions[0].LastTransitionTime.IsZero())
+}
+
+// --- calculateBootstrapNodeIP additional tests ---
+
+func TestCalculateBootstrapNodeIP_ExplicitDefault(t *testing.T) {
+	t.Parallel()
+	// Explicitly set the same value as the default
+	cluster := &k8znerv1alpha1.K8znerCluster{
+		Spec: k8znerv1alpha1.K8znerClusterSpec{
+			Network: k8znerv1alpha1.NetworkSpec{
+				IPv4CIDR: "10.0.0.0/16",
+			},
+		},
+	}
+
+	ipExplicit, err := calculateBootstrapNodeIP(cluster)
+	require.NoError(t, err)
+
+	// Compare with default behavior
+	clusterDefault := &k8znerv1alpha1.K8znerCluster{}
+	ipDefault, err := calculateBootstrapNodeIP(clusterDefault)
+	require.NoError(t, err)
+
+	assert.Equal(t, ipDefault, ipExplicit, "explicit default should match implicit default")
+}
+
+func TestCalculateBootstrapNodeIP_SmallCIDR(t *testing.T) {
+	t.Parallel()
+	cluster := &k8znerv1alpha1.K8znerCluster{
+		Spec: k8znerv1alpha1.K8znerClusterSpec{
+			Network: k8znerv1alpha1.NetworkSpec{
+				IPv4CIDR: "192.168.0.0/16",
+			},
+		},
+	}
+
+	ip, err := calculateBootstrapNodeIP(cluster)
+	require.NoError(t, err)
+	assert.Contains(t, ip, "192.168.")
 }
