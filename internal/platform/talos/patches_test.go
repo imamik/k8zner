@@ -662,6 +662,378 @@ func TestBuildWorkerPatch(t *testing.T) {
 	assert.Nil(t, cluster["externalCloudProvider"])
 }
 
+func TestBuildMachinePatch_KernelArgs(t *testing.T) {
+	t.Parallel()
+	opts := &MachineConfigOptions{
+		KernelArgs:        []string{"console=tty0", "quiet"},
+		PublicIPv4Enabled: true,
+	}
+	result := buildMachinePatch("node-1", 0, opts, "installer:v1", nil, false)
+
+	install := result["install"].(map[string]any)
+	assert.Equal(t, []string{"console=tty0", "quiet"}, install["extraKernelArgs"])
+}
+
+func TestBuildMachinePatch_CertSANs(t *testing.T) {
+	t.Parallel()
+	opts := &MachineConfigOptions{
+		PublicIPv4Enabled: true,
+	}
+	result := buildMachinePatch("node-1", 0, opts, "installer:v1", []string{"api.example.com", "10.0.0.1"}, true)
+
+	certSANs := result["certSANs"].([]string)
+	assert.Equal(t, []string{"api.example.com", "10.0.0.1"}, certSANs)
+}
+
+func TestBuildMachinePatch_CertSANsEmpty(t *testing.T) {
+	t.Parallel()
+	opts := &MachineConfigOptions{
+		PublicIPv4Enabled: true,
+	}
+	result := buildMachinePatch("node-1", 0, opts, "installer:v1", nil, false)
+
+	_, hasCertSANs := result["certSANs"]
+	assert.False(t, hasCertSANs, "certSANs should not be set when empty")
+}
+
+func TestBuildMachinePatch_NodeLabelsWithServerID(t *testing.T) {
+	t.Parallel()
+	opts := &MachineConfigOptions{
+		PublicIPv4Enabled: true,
+	}
+	result := buildMachinePatch("node-1", 54321, opts, "installer:v1", nil, false)
+
+	nodeLabels := result["nodeLabels"].(map[string]any)
+	assert.Equal(t, "54321", nodeLabels["nodeid"])
+}
+
+func TestBuildMachinePatch_NodeLabelsWithoutServerID(t *testing.T) {
+	t.Parallel()
+	opts := &MachineConfigOptions{
+		PublicIPv4Enabled: true,
+	}
+	result := buildMachinePatch("node-1", 0, opts, "installer:v1", nil, false)
+
+	_, hasNodeLabels := result["nodeLabels"]
+	assert.False(t, hasNodeLabels, "nodeLabels should not be set when serverID is 0")
+}
+
+func TestBuildMachinePatch_KernelModules(t *testing.T) {
+	t.Parallel()
+	t.Run("modules without parameters", func(t *testing.T) {
+		t.Parallel()
+		opts := &MachineConfigOptions{
+			PublicIPv4Enabled: true,
+			KernelModules: []config.TalosKernelModule{
+				{Name: "br_netfilter"},
+			},
+		}
+		result := buildMachinePatch("node-1", 0, opts, "installer:v1", nil, false)
+
+		kernel := result["kernel"].(map[string]any)
+		modules := kernel["modules"].([]map[string]any)
+		require.Len(t, modules, 1)
+		assert.Equal(t, "br_netfilter", modules[0]["name"])
+		_, hasParams := modules[0]["parameters"]
+		assert.False(t, hasParams, "parameters should not be set when empty")
+	})
+
+	t.Run("modules with parameters", func(t *testing.T) {
+		t.Parallel()
+		opts := &MachineConfigOptions{
+			PublicIPv4Enabled: true,
+			KernelModules: []config.TalosKernelModule{
+				{Name: "bonding", Parameters: []string{"mode=802.3ad", "miimon=100"}},
+			},
+		}
+		result := buildMachinePatch("node-1", 0, opts, "installer:v1", nil, false)
+
+		kernel := result["kernel"].(map[string]any)
+		modules := kernel["modules"].([]map[string]any)
+		require.Len(t, modules, 1)
+		assert.Equal(t, "bonding", modules[0]["name"])
+		assert.Equal(t, []string{"mode=802.3ad", "miimon=100"}, modules[0]["parameters"])
+	})
+}
+
+func TestBuildMachinePatch_Registries(t *testing.T) {
+	t.Parallel()
+	t.Run("with mirrors", func(t *testing.T) {
+		t.Parallel()
+		opts := &MachineConfigOptions{
+			PublicIPv4Enabled: true,
+			Registries: &config.TalosRegistryConfig{
+				Mirrors: map[string]config.TalosRegistryMirror{
+					"docker.io": {Endpoints: []string{"https://mirror.example.com"}},
+				},
+			},
+		}
+		result := buildMachinePatch("node-1", 0, opts, "installer:v1", nil, false)
+
+		registries := result["registries"].(map[string]any)
+		mirrors := registries["mirrors"].(map[string]any)
+		dockerMirror := mirrors["docker.io"].(map[string]any)
+		assert.Equal(t, []string{"https://mirror.example.com"}, dockerMirror["endpoints"])
+	})
+
+	t.Run("nil registries", func(t *testing.T) {
+		t.Parallel()
+		opts := &MachineConfigOptions{
+			PublicIPv4Enabled: true,
+			Registries:        nil,
+		}
+		result := buildMachinePatch("node-1", 0, opts, "installer:v1", nil, false)
+
+		_, hasRegistries := result["registries"]
+		assert.False(t, hasRegistries, "registries should not be set when nil")
+	})
+
+	t.Run("empty mirrors", func(t *testing.T) {
+		t.Parallel()
+		opts := &MachineConfigOptions{
+			PublicIPv4Enabled: true,
+			Registries: &config.TalosRegistryConfig{
+				Mirrors: map[string]config.TalosRegistryMirror{},
+			},
+		}
+		result := buildMachinePatch("node-1", 0, opts, "installer:v1", nil, false)
+
+		_, hasRegistries := result["registries"]
+		assert.False(t, hasRegistries, "registries should not be set when mirrors are empty")
+	})
+}
+
+func TestBuildMachinePatch_LoggingDestinations(t *testing.T) {
+	t.Parallel()
+	t.Run("basic endpoint only", func(t *testing.T) {
+		t.Parallel()
+		opts := &MachineConfigOptions{
+			PublicIPv4Enabled: true,
+			LoggingDestinations: []config.TalosLoggingDestination{
+				{Endpoint: "tcp://logs.example.com:514"},
+			},
+		}
+		result := buildMachinePatch("node-1", 0, opts, "installer:v1", nil, false)
+
+		logging := result["logging"].(map[string]any)
+		dests := logging["destinations"].([]map[string]any)
+		require.Len(t, dests, 1)
+		assert.Equal(t, "tcp://logs.example.com:514", dests[0]["endpoint"])
+		_, hasFormat := dests[0]["format"]
+		assert.False(t, hasFormat, "format should not be set when empty")
+		_, hasTags := dests[0]["extraTags"]
+		assert.False(t, hasTags, "extraTags should not be set when empty")
+	})
+
+	t.Run("with format and extra tags", func(t *testing.T) {
+		t.Parallel()
+		opts := &MachineConfigOptions{
+			PublicIPv4Enabled: true,
+			LoggingDestinations: []config.TalosLoggingDestination{
+				{
+					Endpoint:  "tcp://logs.example.com:514",
+					Format:    "json_lines",
+					ExtraTags: map[string]string{"cluster": "prod", "env": "production"},
+				},
+			},
+		}
+		result := buildMachinePatch("node-1", 0, opts, "installer:v1", nil, false)
+
+		logging := result["logging"].(map[string]any)
+		dests := logging["destinations"].([]map[string]any)
+		require.Len(t, dests, 1)
+		assert.Equal(t, "json_lines", dests[0]["format"])
+		tags := dests[0]["extraTags"].(map[string]string)
+		assert.Equal(t, "prod", tags["cluster"])
+		assert.Equal(t, "production", tags["env"])
+	})
+}
+
+func TestBuildMachinePatch_TimeServers(t *testing.T) {
+	t.Parallel()
+	t.Run("with time servers", func(t *testing.T) {
+		t.Parallel()
+		opts := &MachineConfigOptions{
+			PublicIPv4Enabled: true,
+			TimeServers:       []string{"time.google.com", "ntp.ubuntu.com"},
+		}
+		result := buildMachinePatch("node-1", 0, opts, "installer:v1", nil, false)
+
+		timeSection := result["time"].(map[string]any)
+		assert.Equal(t, []string{"time.google.com", "ntp.ubuntu.com"}, timeSection["servers"])
+	})
+
+	t.Run("without time servers", func(t *testing.T) {
+		t.Parallel()
+		opts := &MachineConfigOptions{
+			PublicIPv4Enabled: true,
+		}
+		result := buildMachinePatch("node-1", 0, opts, "installer:v1", nil, false)
+
+		_, hasTime := result["time"]
+		assert.False(t, hasTime, "time should not be set when no time servers configured")
+	})
+}
+
+func TestBuildKubeletPatch_ExtraMounts(t *testing.T) {
+	t.Parallel()
+	t.Run("with full mount spec", func(t *testing.T) {
+		t.Parallel()
+		opts := &MachineConfigOptions{
+			KubeletExtraMounts: []config.TalosKubeletMount{
+				{
+					Source:      "/var/local-path-provisioner",
+					Destination: "/opt/local-path-provisioner",
+					Type:        "tmpfs",
+					Options:     []string{"noexec", "nosuid"},
+				},
+			},
+		}
+		result := buildKubeletPatch(opts, false, 12345)
+
+		mounts := result["extraMounts"].([]map[string]any)
+		require.Len(t, mounts, 1)
+		assert.Equal(t, "/var/local-path-provisioner", mounts[0]["source"])
+		assert.Equal(t, "/opt/local-path-provisioner", mounts[0]["destination"])
+		assert.Equal(t, "tmpfs", mounts[0]["type"])
+		assert.Equal(t, []string{"noexec", "nosuid"}, mounts[0]["options"])
+	})
+
+	t.Run("defaults destination to source", func(t *testing.T) {
+		t.Parallel()
+		opts := &MachineConfigOptions{
+			KubeletExtraMounts: []config.TalosKubeletMount{
+				{Source: "/var/data"},
+			},
+		}
+		result := buildKubeletPatch(opts, false, 12345)
+
+		mounts := result["extraMounts"].([]map[string]any)
+		require.Len(t, mounts, 1)
+		assert.Equal(t, "/var/data", mounts[0]["destination"])
+	})
+
+	t.Run("defaults type to bind", func(t *testing.T) {
+		t.Parallel()
+		opts := &MachineConfigOptions{
+			KubeletExtraMounts: []config.TalosKubeletMount{
+				{Source: "/var/data"},
+			},
+		}
+		result := buildKubeletPatch(opts, false, 12345)
+
+		mounts := result["extraMounts"].([]map[string]any)
+		assert.Equal(t, "bind", mounts[0]["type"])
+	})
+
+	t.Run("defaults options to bind,rshared,rw", func(t *testing.T) {
+		t.Parallel()
+		opts := &MachineConfigOptions{
+			KubeletExtraMounts: []config.TalosKubeletMount{
+				{Source: "/var/data"},
+			},
+		}
+		result := buildKubeletPatch(opts, false, 12345)
+
+		mounts := result["extraMounts"].([]map[string]any)
+		assert.Equal(t, []string{"bind", "rshared", "rw"}, mounts[0]["options"])
+	})
+}
+
+func TestBuildKubeletPatch_ExtraArgsMerge(t *testing.T) {
+	t.Parallel()
+	opts := &MachineConfigOptions{
+		KubeletExtraArgs: map[string]string{
+			"max-pods":       "200",
+			"cloud-provider": "custom", // Override base value
+		},
+	}
+	result := buildKubeletPatch(opts, false, 12345)
+
+	extraArgs := result["extraArgs"].(map[string]any)
+	assert.Equal(t, "custom", extraArgs["cloud-provider"], "user args should override base")
+	assert.Equal(t, "200", extraArgs["max-pods"], "user args should be merged in")
+}
+
+func TestBuildKubeletPatch_ExtraConfigMerge(t *testing.T) {
+	t.Parallel()
+	opts := &MachineConfigOptions{
+		KubeletExtraConfig: map[string]any{
+			"maxPods":                         200,
+			"shutdownGracePeriod":             "120s", // Override base value
+			"shutdownGracePeriodCriticalPods": "30s",  // Override base value
+		},
+	}
+	result := buildKubeletPatch(opts, false, 12345)
+
+	extraConfig := result["extraConfig"].(map[string]any)
+	assert.Equal(t, 200, extraConfig["maxPods"], "user config should be merged in")
+	assert.Equal(t, "120s", extraConfig["shutdownGracePeriod"], "user config should override base")
+	assert.Equal(t, "30s", extraConfig["shutdownGracePeriodCriticalPods"], "user config should override base")
+}
+
+func TestBuildKubeletPatch_NodeIPEmpty(t *testing.T) {
+	t.Parallel()
+	opts := &MachineConfigOptions{
+		NodeIPv4CIDR: "",
+	}
+	result := buildKubeletPatch(opts, false, 12345)
+
+	_, hasNodeIP := result["nodeIP"]
+	assert.False(t, hasNodeIP, "nodeIP should not be set when CIDR is empty")
+}
+
+func TestBuildClusterPatch_APIServerExtraArgs(t *testing.T) {
+	t.Parallel()
+	opts := &MachineConfigOptions{
+		ClusterDomain:           "cluster.local",
+		CoreDNSEnabled:          true,
+		DiscoveryServiceEnabled: true,
+		APIServerExtraArgs: map[string]string{
+			"audit-log-path":    "/var/log/kube-audit.log",
+			"audit-log-maxsize": "100",
+		},
+	}
+	result := buildClusterPatch(opts, true)
+
+	apiServer := result["apiServer"].(map[string]any)
+	extraArgs := apiServer["extraArgs"].(map[string]any)
+	assert.Equal(t, true, extraArgs["enable-aggregator-routing"], "base args preserved")
+	assert.Equal(t, "/var/log/kube-audit.log", extraArgs["audit-log-path"], "user args merged")
+	assert.Equal(t, "100", extraArgs["audit-log-maxsize"], "user args merged")
+}
+
+func TestBuildClusterPatch_EtcdSubnet(t *testing.T) {
+	t.Parallel()
+	opts := &MachineConfigOptions{
+		ClusterDomain:           "cluster.local",
+		CoreDNSEnabled:          true,
+		DiscoveryServiceEnabled: true,
+		EtcdSubnet:              "10.0.0.0/16",
+	}
+	result := buildClusterPatch(opts, true)
+
+	etcd := result["etcd"].(map[string]any)
+	subnets := etcd["advertisedSubnets"].([]string)
+	assert.Contains(t, subnets, "10.0.0.0/16")
+	extraArgs := etcd["extraArgs"].(map[string]any)
+	assert.Equal(t, "http://0.0.0.0:2381", extraArgs["listen-metrics-urls"])
+}
+
+func TestBuildClusterPatch_EtcdSubnetEmpty(t *testing.T) {
+	t.Parallel()
+	opts := &MachineConfigOptions{
+		ClusterDomain:           "cluster.local",
+		CoreDNSEnabled:          true,
+		DiscoveryServiceEnabled: true,
+		EtcdSubnet:              "",
+	}
+	result := buildClusterPatch(opts, true)
+
+	_, hasEtcd := result["etcd"]
+	assert.False(t, hasEtcd, "etcd should not be set when subnet is empty")
+}
+
 // Helper function
 func boolPtr(b bool) *bool {
 	return &b

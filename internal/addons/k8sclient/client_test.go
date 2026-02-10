@@ -2,6 +2,7 @@ package k8sclient
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,7 +11,9 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 func TestCreateSecret(t *testing.T) {
@@ -398,4 +401,24 @@ func TestHasIngressClass_Found(t *testing.T) {
 	found, err := c.HasIngressClass(ctx, "traefik")
 	require.NoError(t, err)
 	assert.True(t, found)
+}
+
+func TestHasIngressClass_APIError(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
+	fakeClientset := fake.NewSimpleClientset()
+	fakeClientset.PrependReactor("get", "ingressclasses", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, fmt.Errorf("server timeout")
+	})
+	c := &client{
+		clientset:  fakeClientset,
+		kubeconfig: []byte("fake-kubeconfig"),
+	}
+
+	found, err := c.HasIngressClass(ctx, "traefik")
+	require.Error(t, err)
+	assert.False(t, found)
+	assert.Contains(t, err.Error(), "failed to check IngressClass")
 }

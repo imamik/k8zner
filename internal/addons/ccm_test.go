@@ -321,6 +321,34 @@ func TestGetLBSubnetIPRange(t *testing.T) {
 	})
 }
 
+func TestBuildCCMEnvVarsPrivateSubnetIPRange(t *testing.T) {
+	t.Parallel()
+	boolPtr := func(b bool) *bool { return &b }
+
+	cfg := &config.Config{
+		Location: "fsn1",
+		Network: config.NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+		},
+		Addons: config.AddonsConfig{
+			CCM: config.CCMConfig{
+				Enabled: true,
+				LoadBalancers: config.CCMLoadBalancerConfig{
+					Enabled: boolPtr(true),
+				},
+			},
+		},
+	}
+	// Calculate subnets so getLBSubnetIPRange returns a value
+	_ = cfg.CalculateSubnets()
+
+	env := buildCCMEnvVars(cfg, &cfg.Addons.CCM.LoadBalancers)
+
+	subnetRange, ok := env["HCLOUD_LOAD_BALANCERS_PRIVATE_SUBNET_IP_RANGE"].(helm.Values)
+	require.True(t, ok, "PRIVATE_SUBNET_IP_RANGE should be present when subnets are calculated")
+	assert.NotEmpty(t, subnetRange["value"])
+}
+
 func TestGetClusterCIDR(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
