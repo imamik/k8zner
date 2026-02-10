@@ -374,6 +374,130 @@ metadata:
 	assert.Contains(t, output, "---")
 }
 
+func TestRenderChart_InvalidTemplate(t *testing.T) {
+	t.Parallel()
+	ch := &chart.Chart{
+		Metadata: &chart.Metadata{
+			Name:    "test-chart",
+			Version: "1.0.0",
+		},
+		Templates: []*chart.File{
+			{
+				Name: "templates/bad.yaml",
+				Data: []byte("{{ .Values.nonexistent.deep.path }}"),
+			},
+		},
+	}
+
+	r := &Renderer{chartName: "test", namespace: "default"}
+	_, err := r.renderChart(ch, Values{})
+	// With Strict=false, this might not error but produce empty output
+	// So we just verify it doesn't panic
+	_ = err
+}
+
+func TestRenderChart_SchemaValidationError(t *testing.T) {
+	t.Parallel()
+	// A chart with a JSON schema that rejects the provided values
+	// triggers the ToRenderValues error branch
+	ch := &chart.Chart{
+		Metadata: &chart.Metadata{
+			Name:    "test-chart",
+			Version: "1.0.0",
+		},
+		Schema: []byte(`{
+			"$schema": "http://json-schema.org/draft-07/schema#",
+			"type": "object",
+			"required": ["requiredField"],
+			"properties": {
+				"requiredField": {
+					"type": "string"
+				}
+			}
+		}`),
+		Templates: []*chart.File{
+			{
+				Name: "templates/configmap.yaml",
+				Data: []byte(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test
+`),
+			},
+		},
+	}
+
+	r := &Renderer{chartName: "test", namespace: "default"}
+	// Provide values that don't include the required field
+	_, err := r.renderChart(ch, Values{"other": "value"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to prepare values")
+}
+
+func TestRenderChart_StrictModeRenderError(t *testing.T) {
+	t.Parallel()
+	// Use engine.Render with a template that calls a non-existent function
+	// to trigger the render error branch
+	ch := &chart.Chart{
+		Metadata: &chart.Metadata{
+			Name:    "test-chart",
+			Version: "1.0.0",
+		},
+		Templates: []*chart.File{
+			{
+				Name: "templates/bad.yaml",
+				Data: []byte("{{ .Values.name | nonExistentFunction }}"),
+			},
+		},
+	}
+
+	r := &Renderer{chartName: "test", namespace: "default"}
+	_, err := r.renderChart(ch, Values{"name": "test"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to render templates")
+}
+
+func TestRenderChart_EmptyChart(t *testing.T) {
+	t.Parallel()
+	ch := &chart.Chart{
+		Metadata: &chart.Metadata{
+			Name:    "test-chart",
+			Version: "1.0.0",
+		},
+		Templates: []*chart.File{},
+	}
+
+	r := &Renderer{chartName: "test", namespace: "default"}
+	result, err := r.renderChart(ch, Values{})
+	require.NoError(t, err)
+	assert.Empty(t, result)
+}
+
+func TestRenderChart_NilValues(t *testing.T) {
+	t.Parallel()
+	ch := &chart.Chart{
+		Metadata: &chart.Metadata{
+			Name:    "test-chart",
+			Version: "1.0.0",
+		},
+		Templates: []*chart.File{
+			{
+				Name: "templates/configmap.yaml",
+				Data: []byte(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}
+`),
+			},
+		},
+	}
+
+	r := &Renderer{chartName: "test", namespace: "default"}
+	result, err := r.renderChart(ch, nil)
+	require.NoError(t, err)
+	assert.Contains(t, string(result), "name: test")
+}
+
 func TestRenderChart_DeepMergesValues(t *testing.T) {
 	t.Parallel()
 	r := NewRenderer("test-chart", "default")

@@ -2,7 +2,10 @@ package v2
 
 import (
 	"os"
+	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestRegion_IsValid(t *testing.T) {
@@ -808,4 +811,108 @@ func containsSubstring(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func TestMode_ControlPlaneCount_Default(t *testing.T) {
+	t.Parallel()
+	// Unknown mode should return 0
+	assert.Equal(t, 0, Mode("unknown").ControlPlaneCount())
+}
+
+func TestMode_LoadBalancerCount_Default(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, 0, Mode("unknown").LoadBalancerCount())
+}
+
+func TestMode_String_Default(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "custom-mode", Mode("custom-mode").String())
+}
+
+func TestConfig_ControlPlaneSize(t *testing.T) {
+	t.Parallel()
+	t.Run("nil control plane returns default", func(t *testing.T) {
+		t.Parallel()
+		c := Config{ControlPlane: nil}
+		assert.Equal(t, SizeCX23, c.ControlPlaneSize())
+	})
+
+	t.Run("empty size returns default", func(t *testing.T) {
+		t.Parallel()
+		c := Config{ControlPlane: &ControlPlane{Size: ""}}
+		assert.Equal(t, SizeCX23, c.ControlPlaneSize())
+	})
+
+	t.Run("explicit size is returned", func(t *testing.T) {
+		t.Parallel()
+		c := Config{ControlPlane: &ControlPlane{Size: SizeCX33}}
+		assert.Equal(t, SizeCX33, c.ControlPlaneSize())
+	})
+
+	t.Run("old size name is normalized", func(t *testing.T) {
+		t.Parallel()
+		c := Config{ControlPlane: &ControlPlane{Size: SizeCX32}}
+		assert.Equal(t, SizeCX33, c.ControlPlaneSize())
+	})
+}
+
+func TestIsValidDNSName(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"valid simple", "myapp", true},
+		{"valid with hyphen", "my-app", true},
+		{"valid with number", "app1", true},
+		{"empty", "", false},
+		{"starts with digit", "1app", false},
+		{"starts with hyphen", "-app", false},
+		{"ends with hyphen", "app-", false},
+		{"uppercase", "MyApp", false},
+		{"underscore", "my_app", false},
+		{"consecutive hyphens", "my--app", false},
+		{"too long", "a" + strings.Repeat("b", 63), false},
+		{"max length valid", "a" + strings.Repeat("b", 61) + "c", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, isValidDNSName(tt.input))
+		})
+	}
+}
+
+func TestIsValidDomain(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"valid", "example.com", true},
+		{"valid subdomain", "sub.example.com", true},
+		{"empty", "", false},
+		{"too long", func() string { s := ""; for i := 0; i < 50; i++ { s += "abcde." }; return s + "com" }(), false},
+		{"no dot", "localhost", false},
+		{"spaces", "exa mple.com", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, isValidDomain(tt.input))
+		})
+	}
+}
+
+func TestServerSize_Specs_Default(t *testing.T) {
+	t.Parallel()
+	// Unknown size should return zero specs
+	specs := ServerSize("unknown").Specs()
+	assert.Equal(t, 0, specs.VCPU)
+	assert.Equal(t, 0, specs.RAMGB)
+	assert.Equal(t, 0, specs.DiskGB)
 }

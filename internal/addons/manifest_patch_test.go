@@ -351,3 +351,60 @@ spec:
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no containers found")
 }
+
+func TestPatchDeploymentDNSPolicy_NonDeploymentKind(t *testing.T) {
+	t.Parallel()
+	// A DaemonSet named the same as the target should NOT be patched,
+	// because patchDeploymentDNSPolicy only matches kind=Deployment.
+	daemonSetYAML := `apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: my-deploy
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+      dnsPolicy: ClusterFirst
+`
+	_, err := patchDeploymentDNSPolicy([]byte(daemonSetYAML), "my-deploy", "Default")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found in manifests")
+}
+
+func TestPatchManifestObjects_EmptyInput(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil input", func(t *testing.T) {
+		t.Parallel()
+		_, err := patchManifestObjects(nil, "test",
+			func(_ *unstructured.Unstructured) bool { return true },
+			func(_ *unstructured.Unstructured) error { return nil },
+		)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not found in manifests")
+	})
+
+	t.Run("empty byte slice", func(t *testing.T) {
+		t.Parallel()
+		_, err := patchManifestObjects([]byte{}, "test",
+			func(_ *unstructured.Unstructured) bool { return true },
+			func(_ *unstructured.Unstructured) error { return nil },
+		)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not found in manifests")
+	})
+}
+
+func TestPatchManifestObjects_InvalidYAMLUnmarshal(t *testing.T) {
+	t.Parallel()
+	// Use YAML that the decoder can partially parse but will fail on unmarshal
+	// into an Unstructured object - a bare scalar is not a valid k8s object.
+	invalidYAML := []byte(":\n  - :\n    - [[[")
+
+	_, err := patchManifestObjects(invalidYAML, "test",
+		func(_ *unstructured.Unstructured) bool { return true },
+		func(_ *unstructured.Unstructured) error { return nil },
+	)
+	require.Error(t, err)
+}

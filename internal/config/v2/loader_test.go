@@ -207,6 +207,26 @@ workers:
 	}
 }
 
+func TestLoadFromBytes_ValidationError(t *testing.T) {
+	t.Parallel()
+	// Valid YAML but invalid config (uppercase name)
+	content := []byte(`
+name: INVALID
+region: fsn1
+mode: ha
+workers:
+  count: 3
+  size: cx32
+`)
+	_, err := LoadFromBytes(content)
+	if err == nil {
+		t.Error("LoadFromBytes() expected validation error for invalid name")
+	}
+	if !containsString(err.Error(), "validation failed") {
+		t.Errorf("Expected validation error, got: %v", err)
+	}
+}
+
 func TestDefaultConfigPath(t *testing.T) {
 	t.Parallel()
 	path := DefaultConfigPath()
@@ -215,5 +235,89 @@ func TestDefaultConfigPath(t *testing.T) {
 	}
 	if filepath.Base(path) != "k8zner.yaml" {
 		t.Errorf("DefaultConfigPath() = %q, want filename k8zner.yaml", path)
+	}
+}
+
+func TestSave(t *testing.T) {
+	t.Parallel()
+	cfg := &Config{
+		Name:   "test-cluster",
+		Region: RegionFalkenstein,
+		Mode:   ModeHA,
+		Workers: Worker{
+			Count: 3,
+			Size:  SizeCX32,
+		},
+	}
+
+	tmpDir := t.TempDir()
+	savePath := filepath.Join(tmpDir, "output.yaml")
+
+	err := Save(cfg, savePath)
+	if err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Verify file was written and can be loaded back
+	loaded, err := LoadWithoutValidation(savePath)
+	if err != nil {
+		t.Fatalf("LoadWithoutValidation() error = %v", err)
+	}
+	if loaded.Name != "test-cluster" {
+		t.Errorf("Name = %q, want %q", loaded.Name, "test-cluster")
+	}
+}
+
+func TestSave_InvalidPath(t *testing.T) {
+	t.Parallel()
+	cfg := &Config{Name: "test"}
+	err := Save(cfg, "/nonexistent/directory/k8zner.yaml")
+	if err == nil {
+		t.Error("Save() expected error for invalid path")
+	}
+}
+
+func TestFindConfigFile(t *testing.T) {
+	// Create a temp directory with a config file
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "k8zner.yaml")
+	if err := os.WriteFile(configPath, []byte("name: test"), 0644); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
+
+	// Change to temp dir for the test
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get cwd: %v", err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to chdir: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	found, err := FindConfigFile()
+	if err != nil {
+		t.Fatalf("FindConfigFile() error = %v", err)
+	}
+	if found != configPath {
+		t.Errorf("FindConfigFile() = %q, want %q", found, configPath)
+	}
+}
+
+func TestFindConfigFile_NotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get cwd: %v", err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to chdir: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	_, err = FindConfigFile()
+	if err == nil {
+		t.Error("FindConfigFile() expected error when no config file exists")
 	}
 }

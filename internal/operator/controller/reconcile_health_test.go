@@ -157,6 +157,126 @@ func TestClusterReconciler_updateClusterPhase(t *testing.T) {
 	})
 }
 
+func TestBuildNodeGroupStatus_WithProviderIDAndAddresses(t *testing.T) {
+	t.Parallel()
+	scheme := setupTestScheme(t)
+
+	cluster := &k8znerv1alpha1.K8znerCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "default",
+		},
+		Spec: k8znerv1alpha1.K8znerClusterSpec{
+			ControlPlanes: k8znerv1alpha1.ControlPlaneSpec{Count: 1},
+			Workers:       k8znerv1alpha1.WorkerSpec{Count: 1},
+		},
+	}
+
+	// Create a CP node with provider ID and addresses
+	cpNode := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cp-1",
+			Labels: map[string]string{
+				"node-role.kubernetes.io/control-plane": "",
+			},
+		},
+		Spec: corev1.NodeSpec{
+			ProviderID: "hcloud://12345",
+		},
+		Status: corev1.NodeStatus{
+			Conditions: []corev1.NodeCondition{
+				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+			},
+			Addresses: []corev1.NodeAddress{
+				{Type: corev1.NodeInternalIP, Address: "10.0.0.5"},
+				{Type: corev1.NodeExternalIP, Address: "203.0.113.10"},
+			},
+		},
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(cluster, cpNode).
+		WithStatusSubresource(cluster).
+		Build()
+	recorder := record.NewFakeRecorder(10)
+
+	r := NewClusterReconciler(client, scheme, recorder,
+		WithHCloudClient(&MockHCloudClient{}),
+		WithMetrics(false),
+	)
+
+	err := r.reconcileHealthCheck(context.Background(), cluster)
+	require.NoError(t, err)
+
+	// Verify provider ID was parsed
+	require.Len(t, cluster.Status.ControlPlanes.Nodes, 1)
+	node := cluster.Status.ControlPlanes.Nodes[0]
+	assert.Equal(t, int64(12345), node.ServerID)
+	assert.Equal(t, "10.0.0.5", node.PrivateIP)
+	assert.Equal(t, "203.0.113.10", node.PublicIP)
+	assert.True(t, node.Healthy)
+}
+
+func TestBuildNodeGroupStatus_UnhealthySince(t *testing.T) {
+	t.Parallel()
+	scheme := setupTestScheme(t)
+
+	cluster := &k8znerv1alpha1.K8znerCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "default",
+		},
+		Spec: k8znerv1alpha1.K8znerClusterSpec{
+			ControlPlanes: k8znerv1alpha1.ControlPlaneSpec{Count: 1},
+			Workers:       k8znerv1alpha1.WorkerSpec{Count: 0},
+		},
+	}
+
+	transitionTime := metav1.NewTime(time.Now().Add(-10 * time.Minute).Truncate(time.Second))
+	unhealthyNode := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cp-1",
+			Labels: map[string]string{
+				"node-role.kubernetes.io/control-plane": "",
+			},
+		},
+		Status: corev1.NodeStatus{
+			Conditions: []corev1.NodeCondition{
+				{
+					Type:               corev1.NodeReady,
+					Status:             corev1.ConditionFalse,
+					Message:            "Kubelet stopped posting",
+					LastTransitionTime: transitionTime,
+				},
+			},
+		},
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(cluster, unhealthyNode).
+		WithStatusSubresource(cluster).
+		Build()
+	recorder := record.NewFakeRecorder(10)
+
+	r := NewClusterReconciler(client, scheme, recorder,
+		WithHCloudClient(&MockHCloudClient{}),
+		WithMetrics(false),
+	)
+
+	err := r.reconcileHealthCheck(context.Background(), cluster)
+	require.NoError(t, err)
+
+	require.Len(t, cluster.Status.ControlPlanes.Nodes, 1)
+	node := cluster.Status.ControlPlanes.Nodes[0]
+	assert.False(t, node.Healthy)
+	assert.Contains(t, node.UnhealthyReason, "NodeNotReady")
+	require.NotNil(t, node.UnhealthySince)
+	assert.Equal(t, transitionTime.Time, node.UnhealthySince.Time)
+	assert.Equal(t, 1, cluster.Status.ControlPlanes.Unhealthy)
+}
+
 func TestHelperFunctions(t *testing.T) {
 	t.Parallel()
 	t.Run("isNodeReady", func(t *testing.T) {
