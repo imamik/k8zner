@@ -51,53 +51,124 @@ The operator reconciles through ordered phases:
 | Addons | Install remaining addons (CCM, CSI, Traefik, cert-manager, etc.) |
 | Running | Cluster is healthy, continuous monitoring |
 
+## Dual-Path Architecture
+
+The codebase has two entry points that share the same core layers:
+
+```
+                    ┌──────────────────────────────────────────────────────┐
+                    │                   Entry Points                       │
+                    │                                                      │
+                    │   ┌──────────────┐        ┌───────────────────┐     │
+                    │   │  CLI (k8zner)│        │ Operator (CRD)    │     │
+                    │   │  k8zner.yaml │        │ K8znerCluster     │     │
+                    │   └──────┬───────┘        └────────┬──────────┘     │
+                    │          │                         │                 │
+                    │          ▼                         ▼                 │
+                    │   ┌──────────────┐        ┌───────────────────┐     │
+                    │   │ v2.Expand()  │        │ SpecToConfig()    │     │
+                    │   └──────┬───────┘        └────────┬──────────┘     │
+                    │          │                         │                 │
+                    │          └────────────┬────────────┘                 │
+                    │                       ▼                              │
+                    │              ┌─────────────────┐                    │
+                    │              │  config.Config   │  (shared runtime  │
+                    │              │  (internal)      │   representation) │
+                    │              └────────┬────────┘                    │
+                    │                       │                              │
+                    │          ┌────────────┼────────────┐                │
+                    │          ▼            ▼            ▼                │
+                    │   ┌────────────┐ ┌─────────┐ ┌──────────┐         │
+                    │   │provisioning│ │ addons  │ │ platform │         │
+                    │   │ (shared)   │ │(shared) │ │ (shared) │         │
+                    │   └────────────┘ └─────────┘ └──────────┘         │
+                    └──────────────────────────────────────────────────────┘
+```
+
+**CLI path** (`cmd/k8zner/`): Bootstraps a single CP node, installs all addons in one shot.
+**Operator path** (`cmd/operator/`): Reconciles `K8znerCluster` CRDs, scales CP 1→N, installs addons in phases.
+
+### Addon Entry Points
+
+The shared `internal/addons/` package has three entry points to support both paths:
+
+| Function | Used by | Installs |
+|----------|---------|----------|
+| `Apply()` | CLI | Everything (Cilium + addons + operator) |
+| `ApplyCilium()` | Operator CNI phase | Cilium only |
+| `ApplyWithoutCilium()` | Operator addons phase | All addons except Cilium and operator |
+
+All three delegate to a shared `applyAddons()` with options controlling inclusion.
+
+### Config Round-Trip
+
+Three representations of cluster configuration must stay in sync:
+
+1. **v2 YAML spec** (`internal/config/v2/types.go`) — user-facing config file
+2. **Internal Config** (`internal/config/types.go`) — runtime representation with expanded defaults
+3. **CRD spec** (`api/v1alpha1/types.go`) — Kubernetes-native representation
+
+```
+CLI:      k8zner.yaml  ──▶  v2.Expand()     ──▶  config.Config  ──▶  provisioning/addons
+Operator: CRD spec     ──▶  SpecToConfig()  ──▶  config.Config  ──▶  provisioning/addons
+```
+
+`SpecToConfig()` references the same constants from `config/v2/versions.go` that `v2.Expand()` uses,
+ensuring both paths produce identical `config.Config` for equivalent inputs.
+
 ## Project Structure
 
 ```
 cmd/
 ├── k8zner/
 │   ├── commands/         # CLI command definitions (Cobra)
-│   │   ├── root.go       # Root command and global flags
-│   │   ├── init.go       # Interactive wizard
-│   │   ├── apply.go      # Create or update cluster
-│   │   ├── destroy.go    # Tear down cluster
-│   │   └── doctor.go     # Cluster diagnostics
 │   └── handlers/         # Business logic for commands
+├── operator/             # Operator entrypoint (controller-runtime)
+└── cleanup/              # Standalone cleanup utility
 │
 internal/
+├── operator/             # Kubernetes operator
+│   ├── controller/       # CRD reconciliation (phases, scaling, healing, health)
+│   ├── provisioning/     # CRD spec → internal Config adapter
+│   └── addons/           # Operator-specific addon phase manager
+│
 ├── config/               # Configuration handling
 │   ├── types.go          # Internal config struct
-│   ├── v2/              # Simplified config (k8zner.yaml)
-│   │   ├── config.go     # V2 config types
-│   │   ├── expand.go     # V2 → internal config expansion
-│   │   └── defaults.go   # Version matrix, constants
-│   ├── wizard/           # Interactive configuration wizard
-│   └── validate.go       # Configuration validation
-│
-├── operator/             # Kubernetes operator
-│   ├── controller/       # Reconciler logic
-│   ├── adapter.go        # Bridges operator ↔ provisioning
-│   └── installer.go      # Operator deployment into cluster
+│   └── v2/               # Simplified config (k8zner.yaml)
+│       ├── types.go       # V2 config types
+│       ├── expand.go      # V2 → internal config expansion
+│       └── versions.go    # Version matrix, network CIDRs, constants
 │
 ├── provisioning/         # Infrastructure provisioning
 │   ├── infrastructure/   # Network, firewall, LB
-│   ├── compute/          # Server creation
+│   ├── compute/          # Servers, node pools
 │   ├── image/            # Talos image building
-│   └── cluster/          # Bootstrap and config
+│   ├── cluster/          # Bootstrap and Talos config
+│   ├── destroy/          # Resource cleanup and teardown
+│   └── upgrade/          # Node upgrade provisioning
 │
-├── addons/               # Kubernetes addon management
-│   ├── k8sclient/        # Embedded Kubernetes client
-│   └── helm/             # Helm chart rendering
+├── addons/               # Kubernetes addon management (shared by CLI and operator)
+│   ├── helm/             # Helm chart rendering and value building
+│   └── k8sclient/        # Kubernetes API operations
 │
 ├── platform/             # External integrations
-│   ├── hcloud/           # Hetzner Cloud API client
-│   ├── talos/            # Talos configuration
-│   └── ssh/              # SSH command execution
+│   ├── hcloud/           # Hetzner Cloud API client (generic operations)
+│   ├── talos/            # Talos configuration and patches
+│   ├── ssh/              # SSH command execution
+│   └── s3/               # S3/backup integration
 │
 └── util/                 # Shared utilities
-    ├── retry/            # Retry with backoff
+    ├── async/            # Async operations
+    ├── keygen/           # SSH key generation
+    ├── labels/           # Label management
     ├── naming/           # Resource naming
-    └── labels/           # Label management
+    ├── rdns/             # Reverse DNS
+    └── retry/            # Retry with backoff
+
+api/v1alpha1/             # CRD types (zero internal imports)
+tests/
+├── e2e/                  # End-to-end tests (real Hetzner infrastructure)
+└── kind/                 # KinD integration tests (local)
 ```
 
 ## Key Design Decisions
