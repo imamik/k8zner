@@ -97,6 +97,95 @@ func TestRecordEtcdStatusMetric(t *testing.T) {
 	assert.Equal(t, float64(0), testutil.ToFloat64(healthyGauge))
 }
 
+// --- Wrapper method tests (test enableMetrics guard) ---
+
+func TestRecordNodeCounts_MetricsEnabled(t *testing.T) {
+	nodesTotal.Reset()
+	nodesHealthy.Reset()
+	nodesDesired.Reset()
+
+	r := &ClusterReconciler{enableMetrics: true}
+	r.recordNodeCounts("wrapper-cluster", "worker", 5, 4, 5)
+
+	totalGauge, err := nodesTotal.GetMetricWithLabelValues("wrapper-cluster", "worker", "total")
+	assert.NoError(t, err)
+	assert.Equal(t, float64(5), testutil.ToFloat64(totalGauge))
+
+	healthyGauge, err := nodesHealthy.GetMetricWithLabelValues("wrapper-cluster", "worker")
+	assert.NoError(t, err)
+	assert.Equal(t, float64(4), testutil.ToFloat64(healthyGauge))
+}
+
+func TestRecordNodeCounts_MetricsDisabled(t *testing.T) {
+	nodesTotal.Reset()
+	nodesHealthy.Reset()
+	nodesDesired.Reset()
+
+	r := &ClusterReconciler{enableMetrics: false}
+	r.recordNodeCounts("disabled-cluster", "worker", 5, 4, 5)
+
+	// With metrics disabled, the gauge should not have been set
+	totalGauge, err := nodesTotal.GetMetricWithLabelValues("disabled-cluster", "worker", "total")
+	assert.NoError(t, err)
+	assert.Equal(t, float64(0), testutil.ToFloat64(totalGauge))
+}
+
+func TestRecordReconcile_MetricsEnabled(t *testing.T) {
+	reconcileTotal.Reset()
+	reconcileDuration.Reset()
+
+	r := &ClusterReconciler{enableMetrics: true}
+	r.recordReconcile("wrapper-cluster", "success", 1.0)
+
+	counter, err := reconcileTotal.GetMetricWithLabelValues("wrapper-cluster", "success")
+	assert.NoError(t, err)
+	assert.Equal(t, float64(1), testutil.ToFloat64(counter))
+}
+
+func TestRecordReconcile_MetricsDisabled(t *testing.T) {
+	reconcileTotal.Reset()
+
+	r := &ClusterReconciler{enableMetrics: false}
+	r.recordReconcile("disabled-cluster", "success", 1.0)
+
+	counter, err := reconcileTotal.GetMetricWithLabelValues("disabled-cluster", "success")
+	assert.NoError(t, err)
+	assert.Equal(t, float64(0), testutil.ToFloat64(counter))
+}
+
+func TestRecordNodeReplacement_MetricsEnabled(t *testing.T) {
+	nodeReplacementsTotal.Reset()
+
+	r := &ClusterReconciler{enableMetrics: true}
+	r.recordNodeReplacement("wrapper-cluster", "control-plane", "StuckProvisioning")
+
+	counter, err := nodeReplacementsTotal.GetMetricWithLabelValues("wrapper-cluster", "control-plane", "StuckProvisioning")
+	assert.NoError(t, err)
+	assert.Equal(t, float64(1), testutil.ToFloat64(counter))
+}
+
+func TestRecordNodeReplacementDuration_MetricsEnabled(t *testing.T) {
+	nodeReplacementDuration.Reset()
+
+	r := &ClusterReconciler{enableMetrics: true}
+	r.recordNodeReplacementDuration("wrapper-cluster", "worker", 90.0)
+
+	_, err := nodeReplacementDuration.GetMetricWithLabelValues("wrapper-cluster", "worker")
+	assert.NoError(t, err)
+}
+
+func TestRecordHCloudAPICall_MetricsEnabled(t *testing.T) {
+	hcloudAPICallsTotal.Reset()
+	hcloudAPILatency.Reset()
+
+	r := &ClusterReconciler{enableMetrics: true}
+	r.recordHCloudAPICall("list_servers", "success", 0.5)
+
+	counter, err := hcloudAPICallsTotal.GetMetricWithLabelValues("list_servers", "success")
+	assert.NoError(t, err)
+	assert.Equal(t, float64(1), testutil.ToFloat64(counter))
+}
+
 func TestRecordHCloudAPICallMetric(t *testing.T) {
 	// Reset metrics for testing
 	hcloudAPICallsTotal.Reset()

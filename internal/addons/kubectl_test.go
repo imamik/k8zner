@@ -197,6 +197,41 @@ metadata:
 	assert.Contains(t, err.Error(), "failed to apply manifests for addon test-addon")
 }
 
+func TestFetchManifestURL_Success(t *testing.T) {
+	t.Parallel()
+	expectedContent := "apiVersion: v1\nkind: ConfigMap"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(expectedContent))
+	}))
+	defer server.Close()
+
+	result, err := fetchManifestURL(context.Background(), server.URL)
+	require.NoError(t, err)
+	assert.Equal(t, expectedContent, string(result))
+}
+
+func TestFetchManifestURL_Non200Status(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer server.Close()
+
+	_, err := fetchManifestURL(context.Background(), server.URL)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "HTTP 403")
+}
+
+func TestFetchManifestURL_InvalidURL(t *testing.T) {
+	t.Parallel()
+	// Use a URL with a null byte which makes NewRequestWithContext fail
+	_, err := fetchManifestURL(context.Background(), "http://example.com/\x00invalid")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create request")
+}
+
 func TestApplyFromURL_ContextCanceled(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

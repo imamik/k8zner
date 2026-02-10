@@ -208,6 +208,175 @@ func TestCheckStuckNodes(t *testing.T) {
 	})
 }
 
+func TestUpdateNodePhase_UpdateExistingWithIPs(t *testing.T) {
+	t.Parallel()
+	scheme := setupTestScheme(t)
+	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+	recorder := record.NewFakeRecorder(10)
+	r := NewClusterReconciler(client, scheme, recorder,
+		WithHCloudClient(&MockHCloudClient{}),
+	)
+
+	cluster := &k8znerv1alpha1.K8znerCluster{
+		Status: k8znerv1alpha1.K8znerClusterStatus{
+			ControlPlanes: k8znerv1alpha1.NodeGroupStatus{
+				Nodes: []k8znerv1alpha1.NodeStatus{
+					{
+						Name:  "cp-1",
+						Phase: k8znerv1alpha1.NodePhaseCreatingServer,
+					},
+				},
+			},
+		},
+	}
+
+	// Update with ServerID, PublicIP, and PrivateIP
+	r.updateNodePhase(t.Context(), cluster, "control-plane", nodeStatusUpdate{
+		Name:      "cp-1",
+		Phase:     k8znerv1alpha1.NodePhaseWaitingForIP,
+		Reason:    "Server created, waiting for IP assignment",
+		ServerID:  12345,
+		PublicIP:   "1.2.3.4",
+		PrivateIP: "10.0.0.5",
+	})
+
+	require.Len(t, cluster.Status.ControlPlanes.Nodes, 1)
+	node := cluster.Status.ControlPlanes.Nodes[0]
+	assert.Equal(t, k8znerv1alpha1.NodePhaseWaitingForIP, node.Phase)
+	assert.Equal(t, int64(12345), node.ServerID)
+	assert.Equal(t, "1.2.3.4", node.PublicIP)
+	assert.Equal(t, "10.0.0.5", node.PrivateIP)
+	assert.NotNil(t, node.PhaseTransitionTime, "transition time should be set on phase change")
+}
+
+func TestUpdateNodePhase_AddNewNode(t *testing.T) {
+	t.Parallel()
+	scheme := setupTestScheme(t)
+	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+	recorder := record.NewFakeRecorder(10)
+	r := NewClusterReconciler(client, scheme, recorder,
+		WithHCloudClient(&MockHCloudClient{}),
+	)
+
+	cluster := &k8znerv1alpha1.K8znerCluster{
+		Status: k8znerv1alpha1.K8znerClusterStatus{},
+	}
+
+	// Add a new worker node
+	r.updateNodePhase(t.Context(), cluster, "worker", nodeStatusUpdate{
+		Name:      "w-1",
+		Phase:     k8znerv1alpha1.NodePhaseCreatingServer,
+		Reason:    "Creating server",
+		ServerID:  99999,
+		PublicIP:   "5.6.7.8",
+		PrivateIP: "10.0.1.1",
+	})
+
+	require.Len(t, cluster.Status.Workers.Nodes, 1)
+	node := cluster.Status.Workers.Nodes[0]
+	assert.Equal(t, "w-1", node.Name)
+	assert.Equal(t, k8znerv1alpha1.NodePhaseCreatingServer, node.Phase)
+	assert.Equal(t, int64(99999), node.ServerID)
+	assert.Equal(t, "5.6.7.8", node.PublicIP)
+	assert.Equal(t, "10.0.1.1", node.PrivateIP)
+}
+
+func TestUpdateNodePhase_SamePhaseNoTransitionTimeUpdate(t *testing.T) {
+	t.Parallel()
+	scheme := setupTestScheme(t)
+	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+	recorder := record.NewFakeRecorder(10)
+	r := NewClusterReconciler(client, scheme, recorder,
+		WithHCloudClient(&MockHCloudClient{}),
+	)
+
+	pastTime := metav1.NewTime(time.Now().Add(-5 * time.Minute))
+	cluster := &k8znerv1alpha1.K8znerCluster{
+		Status: k8znerv1alpha1.K8znerClusterStatus{
+			Workers: k8znerv1alpha1.NodeGroupStatus{
+				Nodes: []k8znerv1alpha1.NodeStatus{
+					{
+						Name:                "w-1",
+						Phase:               k8znerv1alpha1.NodePhaseWaitingForK8s,
+						PhaseTransitionTime: &pastTime,
+					},
+				},
+			},
+		},
+	}
+
+	// Update with same phase - should NOT change transition time
+	r.updateNodePhase(t.Context(), cluster, "worker", nodeStatusUpdate{
+		Name:   "w-1",
+		Phase:  k8znerv1alpha1.NodePhaseWaitingForK8s,
+		Reason: "Still waiting",
+	})
+
+	node := cluster.Status.Workers.Nodes[0]
+	assert.Equal(t, pastTime.Time, node.PhaseTransitionTime.Time,
+		"transition time should not change when phase stays the same")
+}
+
+func TestCheckStuckNodes_NilTransitionTime(t *testing.T) {
+	t.Parallel()
+	scheme := setupTestScheme(t)
+	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+	recorder := record.NewFakeRecorder(10)
+	r := NewClusterReconciler(client, scheme, recorder,
+		WithHCloudClient(&MockHCloudClient{}),
+	)
+
+	cluster := &k8znerv1alpha1.K8znerCluster{
+		Status: k8znerv1alpha1.K8znerClusterStatus{
+			Workers: k8znerv1alpha1.NodeGroupStatus{
+				Nodes: []k8znerv1alpha1.NodeStatus{
+					{
+						Name:                "w-1",
+						Phase:               k8znerv1alpha1.NodePhaseCreatingServer,
+						PhaseTransitionTime: nil, // nil transition time should be skipped
+					},
+				},
+			},
+		},
+	}
+
+	stuck := r.checkStuckNodes(t.Context(), cluster)
+	assert.Empty(t, stuck, "nodes with nil PhaseTransitionTime should be skipped")
+}
+
+func TestCheckStuckNodes_SkipsUnhealthyAndFailed(t *testing.T) {
+	t.Parallel()
+	scheme := setupTestScheme(t)
+	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+	recorder := record.NewFakeRecorder(10)
+	r := NewClusterReconciler(client, scheme, recorder,
+		WithHCloudClient(&MockHCloudClient{}),
+	)
+
+	pastTime := metav1.NewTime(time.Now().Add(-30 * time.Minute))
+	cluster := &k8znerv1alpha1.K8znerCluster{
+		Status: k8znerv1alpha1.K8znerClusterStatus{
+			ControlPlanes: k8znerv1alpha1.NodeGroupStatus{
+				Nodes: []k8znerv1alpha1.NodeStatus{
+					{
+						Name:                "cp-1",
+						Phase:               k8znerv1alpha1.NodePhaseUnhealthy,
+						PhaseTransitionTime: &pastTime,
+					},
+					{
+						Name:                "cp-2",
+						Phase:               k8znerv1alpha1.NodePhaseFailed,
+						PhaseTransitionTime: &pastTime,
+					},
+				},
+			},
+		},
+	}
+
+	stuck := r.checkStuckNodes(t.Context(), cluster)
+	assert.Empty(t, stuck, "Unhealthy and Failed nodes should be skipped")
+}
+
 func TestRemoveNodeFromStatus(t *testing.T) {
 	t.Parallel()
 	scheme := setupTestScheme(t)

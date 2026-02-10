@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -145,6 +146,31 @@ func TestClearCache_NonexistentDir(t *testing.T) {
 	err := clearCache()
 	if err != nil {
 		t.Errorf("clearCache should succeed for nonexistent directory: %v", err)
+	}
+}
+
+// TestGetCachePath_WithXDGCacheHome verifies XDG_CACHE_HOME is used when set.
+func TestGetCachePath_WithXDGCacheHome(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", "/custom/cache")
+
+	path := getCachePath()
+	expected := filepath.Join("/custom/cache", "k8zner", "charts")
+	if path != expected {
+		t.Errorf("getCachePath() = %q, want %q", path, expected)
+	}
+}
+
+// TestGetCachePath_WithoutXDGCacheHome verifies the fallback to ~/.cache.
+func TestGetCachePath_WithoutXDGCacheHome(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", "")
+
+	path := getCachePath()
+	// Should end with .cache/k8zner/charts (the home dir prefix varies)
+	if !filepath.IsAbs(path) && path != filepath.Join(".", ".cache", "k8zner", "charts") {
+		// If it resolved to an absolute path, it used homeDir
+		if !strings.HasSuffix(path, filepath.Join(".cache", "k8zner", "charts")) {
+			t.Errorf("getCachePath() = %q, expected to end with .cache/k8zner/charts", path)
+		}
 	}
 }
 

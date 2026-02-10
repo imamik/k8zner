@@ -364,6 +364,12 @@ func TestGenerateReplacementServerName(t *testing.T) {
 		name2 := r.generateReplacementServerName(cluster, "worker", "old-name")
 		assert.NotEqual(t, name1, name2, "expected unique names on each call")
 	})
+
+	t.Run("handles unknown role with fallback format", func(t *testing.T) {
+		t.Parallel()
+		name := r.generateReplacementServerName(cluster, "storage", "old-storage-node")
+		assert.True(t, strings.HasPrefix(name, "my-cluster-st-"), "expected name to start with my-cluster-st-, got %s", name)
+	})
 }
 
 func TestNodeEventHandler(t *testing.T) {
