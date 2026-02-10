@@ -170,7 +170,7 @@ type MockTalosClient struct {
 	// Configurable responses
 	ApplyConfigFunc             func(ctx context.Context, nodeIP string, config []byte) error
 	IsNodeInMaintenanceModeFunc func(ctx context.Context, nodeIP string) (bool, error)
-	GetEtcdMembersFunc          func(ctx context.Context, nodeIP string) ([]EtcdMember, error)
+	GetEtcdMembersFunc          func(ctx context.Context, nodeIP string) ([]etcdMember, error)
 	RemoveEtcdMemberFunc        func(ctx context.Context, nodeIP string, memberID string) error
 	WaitForNodeReadyFunc        func(ctx context.Context, nodeIP string, timeout int) error
 
@@ -220,7 +220,7 @@ func (m *MockTalosClient) IsNodeInMaintenanceMode(ctx context.Context, nodeIP st
 	return true, nil
 }
 
-func (m *MockTalosClient) GetEtcdMembers(ctx context.Context, nodeIP string) ([]EtcdMember, error) {
+func (m *MockTalosClient) GetEtcdMembers(ctx context.Context, nodeIP string) ([]etcdMember, error) {
 	m.mu.Lock()
 	m.GetEtcdMembersCalls = append(m.GetEtcdMembersCalls, nodeIP)
 	m.mu.Unlock()
@@ -228,7 +228,7 @@ func (m *MockTalosClient) GetEtcdMembers(ctx context.Context, nodeIP string) ([]
 	if m.GetEtcdMembersFunc != nil {
 		return m.GetEtcdMembersFunc(ctx, nodeIP)
 	}
-	return []EtcdMember{
+	return []etcdMember{
 		{ID: "1", Name: "cp-1", Endpoint: "10.0.0.1:2379", IsLeader: true},
 		{ID: "2", Name: "cp-2", Endpoint: "10.0.0.2:2379", IsLeader: false},
 		{ID: "3", Name: "cp-3", Endpoint: "10.0.0.3:2379", IsLeader: false},

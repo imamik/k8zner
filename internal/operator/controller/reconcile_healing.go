@@ -33,7 +33,7 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 func (r *ClusterReconciler) removeFromEtcd(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, tc talosClients, node *k8znerv1alpha1.NodeStatus) {
 	logger := log.FromContext(ctx)
 
-	r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
+	r.updateNodePhase(ctx, cluster, "control-plane", nodeStatusUpdate{
 		Name: node.Name, Phase: k8znerv1alpha1.NodePhaseRemovingFromEtcd,
 		Reason: "Removing etcd member before server deletion",
 	})
@@ -70,7 +70,7 @@ func (r *ClusterReconciler) removeFromEtcd(ctx context.Context, cluster *k8znerv
 func (r *ClusterReconciler) deleteNodeAndServer(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, node *k8znerv1alpha1.NodeStatus, role string) error {
 	logger := log.FromContext(ctx)
 
-	r.updateNodePhase(ctx, cluster, role, NodeStatusUpdate{
+	r.updateNodePhase(ctx, cluster, role, nodeStatusUpdate{
 		Name: node.Name, Phase: k8znerv1alpha1.NodePhaseDeletingServer,
 		Reason: "Deleting Kubernetes node and HCloud server",
 	})
@@ -136,7 +136,7 @@ func (r *ClusterReconciler) replaceWorker(ctx context.Context, cluster *k8znerv1
 func (r *ClusterReconciler) drainAndDeleteWorker(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, node *k8znerv1alpha1.NodeStatus) error {
 	logger := log.FromContext(ctx)
 
-	r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+	r.updateNodePhase(ctx, cluster, "worker", nodeStatusUpdate{
 		Name: node.Name, Phase: k8znerv1alpha1.NodePhaseDraining,
 		Reason: "Cordoning and draining node before replacement",
 	})

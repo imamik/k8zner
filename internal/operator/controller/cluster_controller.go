@@ -106,9 +106,9 @@ type ClusterReconciler struct {
 	Recorder record.EventRecorder
 
 	// Dependencies (injected via options).
-	hcloudClient       HCloudClient
-	talosClient        TalosClient
-	talosConfigGen     TalosConfigGenerator
+	hcloudClient       hcloudClient
+	talosClient        talosClient
+	talosConfigGen     talosConfigGenerator
 	hcloudToken        string
 	enableMetrics      bool
 	maxConcurrentHeals int
@@ -138,21 +138,21 @@ func (r *ClusterReconciler) logAndRecordError(ctx context.Context, cluster *k8zn
 }
 
 // WithHCloudClient sets a custom HCloud client.
-func WithHCloudClient(c HCloudClient) Option {
+func WithHCloudClient(c hcloudClient) Option {
 	return func(r *ClusterReconciler) {
 		r.hcloudClient = c
 	}
 }
 
 // WithTalosClient sets a custom Talos client.
-func WithTalosClient(c TalosClient) Option {
+func WithTalosClient(c talosClient) Option {
 	return func(r *ClusterReconciler) {
 		r.talosClient = c
 	}
 }
 
 // WithTalosConfigGenerator sets a custom Talos config generator.
-func WithTalosConfigGenerator(g TalosConfigGenerator) Option {
+func WithTalosConfigGenerator(g talosConfigGenerator) Option {
 	return func(r *ClusterReconciler) {
 		r.talosConfigGen = g
 	}

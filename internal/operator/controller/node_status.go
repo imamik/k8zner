@@ -25,8 +25,8 @@ var phaseTimeouts = map[k8znerv1alpha1.NodePhase]time.Duration{
 	k8znerv1alpha1.NodePhaseDeletingServer:      5 * time.Minute,
 }
 
-// NodeStatusUpdate represents an update to a node's status.
-type NodeStatusUpdate struct {
+// nodeStatusUpdate represents an update to a node's status.
+type nodeStatusUpdate struct {
 	Name      string
 	ServerID  int64
 	PublicIP  string
@@ -38,7 +38,7 @@ type NodeStatusUpdate struct {
 // updateNodePhase updates or adds a node's phase in the cluster status.
 // If the node doesn't exist in the status, it will be added.
 // This allows tracking nodes during provisioning before they become k8s nodes.
-func (r *ClusterReconciler) updateNodePhase(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, role string, update NodeStatusUpdate) {
+func (r *ClusterReconciler) updateNodePhase(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, role string, update nodeStatusUpdate) {
 	logger := log.FromContext(ctx)
 	now := metav1.Now()
 
@@ -102,7 +102,7 @@ func (r *ClusterReconciler) updateNodePhase(ctx context.Context, cluster *k8zner
 
 // updateNodePhaseAndPersist updates the node phase and persists to the CRD.
 // Use this when you need the status change to be immediately visible.
-func (r *ClusterReconciler) updateNodePhaseAndPersist(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, role string, update NodeStatusUpdate) error {
+func (r *ClusterReconciler) updateNodePhaseAndPersist(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, role string, update nodeStatusUpdate) error {
 	r.updateNodePhase(ctx, cluster, role, update)
 	return r.persistClusterStatus(ctx, cluster)
 }
@@ -138,9 +138,9 @@ func (r *ClusterReconciler) removeNodeFromStatus(cluster *k8znerv1alpha1.K8znerC
 
 // checkStuckNodes checks for nodes that have been stuck in a phase too long.
 // Returns a list of stuck nodes that should be cleaned up.
-func (r *ClusterReconciler) checkStuckNodes(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) []StuckNode {
+func (r *ClusterReconciler) checkStuckNodes(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) []stuckNode {
 	logger := log.FromContext(ctx)
-	var stuck []StuckNode
+	var stuck []stuckNode
 
 	checkNodes := func(nodes []k8znerv1alpha1.NodeStatus, role string) {
 		for _, node := range nodes {
@@ -166,7 +166,7 @@ func (r *ClusterReconciler) checkStuckNodes(ctx context.Context, cluster *k8zner
 					"stuckFor", elapsed.Round(time.Second),
 					"timeout", timeout,
 				)
-				stuck = append(stuck, StuckNode{
+				stuck = append(stuck, stuckNode{
 					Name:    node.Name,
 					Role:    role,
 					Phase:   node.Phase,
@@ -183,8 +183,8 @@ func (r *ClusterReconciler) checkStuckNodes(ctx context.Context, cluster *k8zner
 	return stuck
 }
 
-// StuckNode represents a node that has been stuck in a phase too long.
-type StuckNode struct {
+// stuckNode represents a node that has been stuck in a phase too long.
+type stuckNode struct {
 	Name    string
 	Role    string
 	Phase   k8znerv1alpha1.NodePhase
@@ -194,7 +194,7 @@ type StuckNode struct {
 
 // handleStuckNode handles a node that has been stuck too long by marking it as failed
 // and cleaning up resources.
-func (r *ClusterReconciler) handleStuckNode(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, stuck StuckNode) error {
+func (r *ClusterReconciler) handleStuckNode(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, stuck stuckNode) error {
 	logger := log.FromContext(ctx)
 
 	logger.Info("handling stuck node",
@@ -205,7 +205,7 @@ func (r *ClusterReconciler) handleStuckNode(ctx context.Context, cluster *k8zner
 	)
 
 	// Mark as failed
-	r.updateNodePhase(ctx, cluster, stuck.Role, NodeStatusUpdate{
+	r.updateNodePhase(ctx, cluster, stuck.Role, nodeStatusUpdate{
 		Name:   stuck.Name,
 		Phase:  k8znerv1alpha1.NodePhaseFailed,
 		Reason: fmt.Sprintf("Stuck in %s phase for %s (timeout: %s)", stuck.Phase, stuck.Elapsed.Round(time.Second), stuck.Timeout),
@@ -263,7 +263,7 @@ func (r *ClusterReconciler) verifyAndUpdateNodeStates(ctx context.Context, clust
 					"newPhase", actualPhase,
 					"reason", reason,
 				)
-				r.updateNodePhase(ctx, cluster, role, NodeStatusUpdate{
+				r.updateNodePhase(ctx, cluster, role, nodeStatusUpdate{
 					Name:      node.Name,
 					Phase:     actualPhase,
 					Reason:    reason,

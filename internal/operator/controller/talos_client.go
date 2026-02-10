@@ -14,24 +14,24 @@ import (
 	"github.com/siderolabs/talos/pkg/machinery/client/config"
 )
 
-// RealTalosClient implements TalosClient using the actual Talos API.
-type RealTalosClient struct {
+// realTalosClient implements TalosClient using the actual Talos API.
+type realTalosClient struct {
 	// talosConfig is the client configuration for authenticated connections
 	talosConfig *config.Config
 }
 
-// NewRealTalosClient creates a new TalosClient from talosconfig bytes.
-func NewRealTalosClient(talosconfigBytes []byte) (*RealTalosClient, error) {
+// newRealTalosClient creates a new TalosClient from talosconfig bytes.
+func newRealTalosClient(talosconfigBytes []byte) (*realTalosClient, error) {
 	cfg, err := config.FromString(string(talosconfigBytes))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse talosconfig: %w", err)
 	}
-	return &RealTalosClient{talosConfig: cfg}, nil
+	return &realTalosClient{talosConfig: cfg}, nil
 }
 
 // ApplyConfig applies a machine configuration to a node.
 // For nodes in maintenance mode (unconfigured), this uses an insecure connection.
-func (c *RealTalosClient) ApplyConfig(ctx context.Context, nodeIP string, configData []byte) error {
+func (c *realTalosClient) ApplyConfig(ctx context.Context, nodeIP string, configData []byte) error {
 	// Wait for Talos API to be available (5 minutes to allow for server boot time)
 	if err := waitForTalosAPI(ctx, nodeIP, 5*time.Minute); err != nil {
 		return fmt.Errorf("failed to wait for Talos API: %w", err)
@@ -65,7 +65,7 @@ func (c *RealTalosClient) ApplyConfig(ctx context.Context, nodeIP string, config
 }
 
 // IsNodeInMaintenanceMode checks if a node is unconfigured (in maintenance mode).
-func (c *RealTalosClient) IsNodeInMaintenanceMode(ctx context.Context, nodeIP string) (bool, error) {
+func (c *realTalosClient) IsNodeInMaintenanceMode(ctx context.Context, nodeIP string) (bool, error) {
 	// Try to connect with insecure client
 	talosClient, err := client.New(ctx,
 		client.WithEndpoints(nodeIP),
@@ -88,7 +88,7 @@ func (c *RealTalosClient) IsNodeInMaintenanceMode(ctx context.Context, nodeIP st
 }
 
 // GetEtcdMembers returns the list of etcd members.
-func (c *RealTalosClient) GetEtcdMembers(ctx context.Context, nodeIP string) ([]EtcdMember, error) {
+func (c *realTalosClient) GetEtcdMembers(ctx context.Context, nodeIP string) ([]etcdMember, error) {
 	talosClient, err := client.New(ctx,
 		client.WithConfig(c.talosConfig),
 		client.WithEndpoints(nodeIP),
@@ -103,10 +103,10 @@ func (c *RealTalosClient) GetEtcdMembers(ctx context.Context, nodeIP string) ([]
 		return nil, fmt.Errorf("failed to list etcd members: %w", err)
 	}
 
-	var members []EtcdMember
+	var members []etcdMember
 	for _, msg := range resp.Messages {
 		for _, member := range msg.Members {
-			members = append(members, EtcdMember{
+			members = append(members, etcdMember{
 				ID:       fmt.Sprintf("%d", member.Id),
 				Name:     member.Hostname,
 				Endpoint: member.Hostname,
@@ -119,7 +119,7 @@ func (c *RealTalosClient) GetEtcdMembers(ctx context.Context, nodeIP string) ([]
 }
 
 // RemoveEtcdMember removes a member from the etcd cluster.
-func (c *RealTalosClient) RemoveEtcdMember(ctx context.Context, nodeIP string, memberID string) error {
+func (c *realTalosClient) RemoveEtcdMember(ctx context.Context, nodeIP string, memberID string) error {
 	talosClient, err := client.New(ctx,
 		client.WithConfig(c.talosConfig),
 		client.WithEndpoints(nodeIP),
@@ -146,7 +146,7 @@ func (c *RealTalosClient) RemoveEtcdMember(ctx context.Context, nodeIP string, m
 }
 
 // WaitForNodeReady waits for a node to become ready after configuration.
-func (c *RealTalosClient) WaitForNodeReady(ctx context.Context, nodeIP string, timeoutSec int) error {
+func (c *realTalosClient) WaitForNodeReady(ctx context.Context, nodeIP string, timeoutSec int) error {
 	// Initial wait for reboot to begin
 	time.Sleep(5 * time.Second)
 

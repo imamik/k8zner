@@ -177,19 +177,19 @@ func (r *ClusterReconciler) scaleUpControlPlanes(ctx context.Context, cluster *k
 // configureCPNode generates and applies Talos config to a CP node, then waits for it to become ready.
 // Used by both scale-up and healing paths. Returns a fatal error if the node has joined etcd but is
 // not ready (server must be preserved to avoid breaking etcd quorum).
-func (r *ClusterReconciler) configureCPNode(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, clusterState *ClusterState, tc talosClients, result *serverProvisionResult) error {
+func (r *ClusterReconciler) configureCPNode(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, clusterState *clusterState, tc talosClients, result *serverProvisionResult) error {
 	logger := log.FromContext(ctx)
 
 	if tc.configGen == nil || tc.client == nil {
 		logger.Info("skipping Talos config application (no credentials available)", "name", result.Name)
-		r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
+		r.updateNodePhase(ctx, cluster, "control-plane", nodeStatusUpdate{
 			Name: result.Name, Phase: k8znerv1alpha1.NodePhaseWaitingForK8s,
 			Reason: "Waiting for node to join cluster (no Talos credentials)",
 		})
 		return nil
 	}
 
-	r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
+	r.updateNodePhase(ctx, cluster, "control-plane", nodeStatusUpdate{
 		Name: result.Name, Phase: k8znerv1alpha1.NodePhaseApplyingTalosConfig,
 		Reason: "Generating and applying Talos machine configuration",
 	})
@@ -230,13 +230,13 @@ func (r *ClusterReconciler) configureCPNode(ctx context.Context, cluster *k8zner
 func (r *ClusterReconciler) waitForCPReady(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, tc talosClients, serverName, talosIP string) error {
 	logger := log.FromContext(ctx)
 
-	r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
+	r.updateNodePhase(ctx, cluster, "control-plane", nodeStatusUpdate{
 		Name: serverName, Phase: k8znerv1alpha1.NodePhaseRebootingWithConfig,
 		Reason: "Talos config applied, node is rebooting with new configuration",
 	})
 
 	logger.Info("waiting for CP node to become ready", "name", serverName, "ip", talosIP)
-	r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
+	r.updateNodePhase(ctx, cluster, "control-plane", nodeStatusUpdate{
 		Name: serverName, Phase: k8znerv1alpha1.NodePhaseWaitingForK8s,
 		Reason: "Waiting for kubelet to register node with Kubernetes",
 	})
@@ -249,14 +249,14 @@ func (r *ClusterReconciler) waitForCPReady(ctx context.Context, cluster *k8znerv
 			"name", serverName, "ip", talosIP)
 		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonNodeReadyTimeout,
 			"CP %s not ready yet (will retry): %v", serverName, err)
-		r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
+		r.updateNodePhase(ctx, cluster, "control-plane", nodeStatusUpdate{
 			Name: serverName, Phase: k8znerv1alpha1.NodePhaseWaitingForK8s,
 			Reason: fmt.Sprintf("Node not ready yet, will retry: %v", err),
 		})
 		return fmt.Errorf("CP %s not ready yet after config applied (etcd member added, server preserved): %w", serverName, err)
 	}
 
-	r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
+	r.updateNodePhase(ctx, cluster, "control-plane", nodeStatusUpdate{
 		Name: serverName, Phase: k8znerv1alpha1.NodePhaseNodeInitializing,
 		Reason: "Kubelet running, waiting for CNI and system pods",
 	})

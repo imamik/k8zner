@@ -26,10 +26,10 @@ func (r *ClusterReconciler) findHealthyControlPlaneIP(cluster *k8znerv1alpha1.K8
 }
 
 // buildClusterState extracts cluster metadata needed for server creation.
-func (r *ClusterReconciler) buildClusterState(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (*ClusterState, error) {
+func (r *ClusterReconciler) buildClusterState(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (*clusterState, error) {
 	logger := log.FromContext(ctx)
 
-	state := &ClusterState{
+	state := &clusterState{
 		Name:   cluster.Name,
 		Region: cluster.Spec.Region,
 		Labels: map[string]string{

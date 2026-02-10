@@ -9,9 +9,9 @@ import (
 	"github.com/imamik/k8zner/internal/platform/hcloud"
 )
 
-// HCloudClient defines the interface for Hetzner Cloud operations.
+// hcloudClient defines the interface for Hetzner Cloud operations.
 // This interface enables testing with mocks.
-type HCloudClient interface {
+type hcloudClient interface {
 	// Server operations
 	CreateServer(ctx context.Context, opts hcloud.ServerCreateOpts) (string, error)
 	DeleteServer(ctx context.Context, name string) error
@@ -31,9 +31,9 @@ type HCloudClient interface {
 	GetSnapshotByLabels(ctx context.Context, labels map[string]string) (*hcloudgo.Image, error)
 }
 
-// TalosConfigGenerator defines the interface for generating Talos machine configs.
+// talosConfigGenerator defines the interface for generating Talos machine configs.
 // This interface is a subset of provisioning.TalosConfigProducer and uses the same method names.
-type TalosConfigGenerator interface {
+type talosConfigGenerator interface {
 	// GenerateControlPlaneConfig generates a Talos config for a control plane node.
 	GenerateControlPlaneConfig(sans []string, hostname string, serverID int64) ([]byte, error)
 
@@ -47,8 +47,8 @@ type TalosConfigGenerator interface {
 	GetClientConfig() ([]byte, error)
 }
 
-// TalosClient defines the interface for Talos API operations.
-type TalosClient interface {
+// talosClient defines the interface for Talos API operations.
+type talosClient interface {
 	// ApplyConfig applies a machine configuration to a node.
 	ApplyConfig(ctx context.Context, nodeIP string, config []byte) error
 
@@ -56,7 +56,7 @@ type TalosClient interface {
 	IsNodeInMaintenanceMode(ctx context.Context, nodeIP string) (bool, error)
 
 	// GetEtcdMembers returns the list of etcd members.
-	GetEtcdMembers(ctx context.Context, nodeIP string) ([]EtcdMember, error)
+	GetEtcdMembers(ctx context.Context, nodeIP string) ([]etcdMember, error)
 
 	// RemoveEtcdMember removes a member from the etcd cluster.
 	RemoveEtcdMember(ctx context.Context, nodeIP string, memberID string) error
@@ -65,16 +65,16 @@ type TalosClient interface {
 	WaitForNodeReady(ctx context.Context, nodeIP string, timeout int) error
 }
 
-// EtcdMember represents an etcd cluster member.
-type EtcdMember struct {
+// etcdMember represents an etcd cluster member.
+type etcdMember struct {
 	ID       string
 	Name     string
 	Endpoint string
 	IsLeader bool
 }
 
-// ClusterState holds the current state of a cluster for node operations.
-type ClusterState struct {
+// clusterState holds the current state of a cluster for node operations.
+type clusterState struct {
 	Name           string
 	Region         string
 	NetworkID      int64

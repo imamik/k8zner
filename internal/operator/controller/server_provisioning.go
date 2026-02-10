@@ -19,8 +19,8 @@ import (
 
 // talosClients holds the Talos API clients resolved from injected mocks or credentials.
 type talosClients struct {
-	configGen TalosConfigGenerator
-	client    TalosClient
+	configGen talosConfigGenerator
+	client    talosClient
 }
 
 // loadTalosClients resolves Talos clients from injected mocks or cluster credentials.
@@ -58,7 +58,7 @@ func (r *ClusterReconciler) loadTalosClients(ctx context.Context, cluster *k8zne
 	}
 
 	if len(creds.TalosConfig) > 0 {
-		talosClientInstance, err := NewRealTalosClient(creds.TalosConfig)
+		talosClientInstance, err := newRealTalosClient(creds.TalosConfig)
 		if err != nil {
 			logger.Error(err, "failed to create Talos client")
 		} else {
@@ -101,7 +101,7 @@ func (r *ClusterReconciler) discoverLoadBalancerInfo(ctx context.Context, cluste
 
 // provisioningPrereqs holds the common prerequisites for provisioning new nodes.
 type provisioningPrereqs struct {
-	ClusterState *ClusterState
+	ClusterState *clusterState
 	TC           talosClients
 	SnapshotID   int64
 	SSHKeyName   string
@@ -222,7 +222,7 @@ func (r *ClusterReconciler) provisionServer(ctx context.Context, cluster *k8zner
 	logger := log.FromContext(ctx)
 
 	// Create the server
-	r.updateNodePhase(ctx, cluster, opts.Role, NodeStatusUpdate{
+	r.updateNodePhase(ctx, cluster, opts.Role, nodeStatusUpdate{
 		Name:   opts.Name,
 		Phase:  k8znerv1alpha1.NodePhaseCreatingServer,
 		Reason: fmt.Sprintf("Creating HCloud server with snapshot %d", opts.SnapshotID),
@@ -242,7 +242,7 @@ func (r *ClusterReconciler) provisionServer(ctx context.Context, cluster *k8zner
 	})
 	if err != nil {
 		r.recordHCloudAPICall("create_server", "error", time.Since(startTime).Seconds())
-		r.updateNodePhase(ctx, cluster, opts.Role, NodeStatusUpdate{
+		r.updateNodePhase(ctx, cluster, opts.Role, nodeStatusUpdate{
 			Name:   opts.Name,
 			Phase:  k8znerv1alpha1.NodePhaseFailed,
 			Reason: fmt.Sprintf("Failed to create server: %v", err),
@@ -253,7 +253,7 @@ func (r *ClusterReconciler) provisionServer(ctx context.Context, cluster *k8zner
 	logger.Info("created server", "name", opts.Name)
 
 	// Wait for server IP assignment
-	r.updateNodePhase(ctx, cluster, opts.Role, NodeStatusUpdate{
+	r.updateNodePhase(ctx, cluster, opts.Role, nodeStatusUpdate{
 		Name:   opts.Name,
 		Phase:  k8znerv1alpha1.NodePhaseWaitingForIP,
 		Reason: "Waiting for HCloud to assign IP address",
@@ -354,7 +354,7 @@ func (r *ClusterReconciler) provisionAndConfigureNode(ctx context.Context, clust
 		logger.Error(err, "failed to persist status after server creation", "name", params.Name)
 	}
 
-	if err := r.updateNodePhaseAndPersist(ctx, cluster, params.Role, NodeStatusUpdate{
+	if err := r.updateNodePhaseAndPersist(ctx, cluster, params.Role, nodeStatusUpdate{
 		Name:      params.Name,
 		ServerID:  result.ServerID,
 		PublicIP:  result.PublicIP,
@@ -388,7 +388,7 @@ func (r *ClusterReconciler) provisionAndConfigureNode(ctx context.Context, clust
 func (r *ClusterReconciler) handleProvisioningFailure(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, role, serverName, reason string) {
 	logger := log.FromContext(ctx)
 
-	r.updateNodePhase(ctx, cluster, role, NodeStatusUpdate{
+	r.updateNodePhase(ctx, cluster, role, nodeStatusUpdate{
 		Name:   serverName,
 		Phase:  k8znerv1alpha1.NodePhaseFailed,
 		Reason: reason,

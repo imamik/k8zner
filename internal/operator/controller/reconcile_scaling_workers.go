@@ -169,14 +169,14 @@ func (r *ClusterReconciler) configureWorkerNode(ctx context.Context, cluster *k8
 
 	if tc.configGen == nil || tc.client == nil {
 		logger.Info("skipping Talos config application (no credentials available)", "name", result.Name)
-		r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+		r.updateNodePhase(ctx, cluster, "worker", nodeStatusUpdate{
 			Name: result.Name, Phase: k8znerv1alpha1.NodePhaseWaitingForK8s,
 			Reason: "Waiting for node to join cluster (no Talos credentials)",
 		})
 		return nil
 	}
 
-	r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+	r.updateNodePhase(ctx, cluster, "worker", nodeStatusUpdate{
 		Name: result.Name, Phase: k8znerv1alpha1.NodePhaseApplyingTalosConfig,
 		Reason: "Generating and applying Talos machine configuration",
 	})
@@ -208,13 +208,13 @@ func (r *ClusterReconciler) configureWorkerNode(ctx context.Context, cluster *k8
 func (r *ClusterReconciler) waitForWorkerReady(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, serverName, talosIP string) error {
 	logger := log.FromContext(ctx)
 
-	r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+	r.updateNodePhase(ctx, cluster, "worker", nodeStatusUpdate{
 		Name: serverName, Phase: k8znerv1alpha1.NodePhaseRebootingWithConfig,
 		Reason: "Talos config applied, node is rebooting with new configuration",
 	})
 
 	logger.Info("waiting for worker node to become ready", "name", serverName, "ip", talosIP)
-	r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+	r.updateNodePhase(ctx, cluster, "worker", nodeStatusUpdate{
 		Name: serverName, Phase: k8znerv1alpha1.NodePhaseWaitingForK8s,
 		Reason: "Waiting for kubelet to register node with Kubernetes",
 	})
@@ -228,7 +228,7 @@ func (r *ClusterReconciler) waitForWorkerReady(ctx context.Context, cluster *k8z
 		return err
 	}
 
-	r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
+	r.updateNodePhase(ctx, cluster, "worker", nodeStatusUpdate{
 		Name: serverName, Phase: k8znerv1alpha1.NodePhaseNodeInitializing,
 		Reason: "Kubelet running, waiting for CNI and system pods",
 	})
