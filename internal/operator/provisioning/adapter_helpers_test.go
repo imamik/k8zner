@@ -186,8 +186,8 @@ func TestPopulateStateFromCRD_SkipsNodesWithEmptyFields(t *testing.T) {
 			ControlPlanes: k8znerv1alpha1.NodeGroupStatus{
 				Nodes: []k8znerv1alpha1.NodeStatus{
 					{Name: "cp-1", PublicIP: "1.1.1.1", ServerID: 101},
-					{Name: "", PublicIP: "2.2.2.2", ServerID: 102},    // empty name
-					{Name: "cp-3", PublicIP: "", ServerID: 103},       // empty IP
+					{Name: "", PublicIP: "2.2.2.2", ServerID: 102}, // empty name
+					{Name: "cp-3", PublicIP: "", ServerID: 103},    // empty IP
 				},
 			},
 		},
@@ -420,7 +420,7 @@ func TestPopulateBootstrapState_CountsAlreadyAtLimit(t *testing.T) {
 			Bootstrap: &k8znerv1alpha1.BootstrapState{
 				Completed:     true,
 				BootstrapNode: "cp-1",
-				PublicIP:       "1.2.3.4",
+				PublicIP:      "1.2.3.4",
 			},
 		},
 	}

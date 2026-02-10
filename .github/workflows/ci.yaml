@@ -169,7 +169,14 @@ jobs:
       - name: Run controller tests
         run: |
           export KUBEBUILDER_ASSETS="$(setup-envtest use -p path)"
-          go test -v -race -tags=integration ./internal/operator/controller/...
+          go test -v -race -coverprofile=coverage-envtest.txt -covermode=atomic -tags=integration ./internal/operator/controller/...
+
+      - name: Upload envtest coverage
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-envtest
+          path: coverage-envtest.txt
+          retention-days: 1
 
   # ==========================================================================
   # Combined test status for branch protection
@@ -287,7 +294,7 @@ jobs:
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
-    needs: [test-unit, test-integration]
+    needs: [test-unit, test-integration, test-envtest]
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -302,11 +309,17 @@ jobs:
         with:
           name: coverage-integration
 
+      - name: Download envtest coverage
+        uses: actions/download-artifact@v7
+        with:
+          name: coverage-envtest
+
       - name: Merge coverage files
         run: |
           echo "mode: atomic" > coverage.txt
           tail -n +2 coverage-unit.txt >> coverage.txt
           tail -n +2 coverage-integration.txt >> coverage.txt
+          tail -n +2 coverage-envtest.txt >> coverage.txt
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5

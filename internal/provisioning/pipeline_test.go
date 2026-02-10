@@ -14,7 +14,7 @@ type mockPhase struct {
 	err  error
 }
 
-func (m *mockPhase) Name() string            { return m.name }
+func (m *mockPhase) Name() string               { return m.name }
 func (m *mockPhase) Provision(_ *Context) error { return m.err }
 
 func TestNewPipeline(t *testing.T) {
@@ -169,5 +169,5 @@ func phaseFunc(name string, fn func(*Context) error) Phase {
 	return &phaseFuncImpl{name: name, fn: fn}
 }
 
-func (p *phaseFuncImpl) Name() string              { return p.name }
+func (p *phaseFuncImpl) Name() string                 { return p.name }
 func (p *phaseFuncImpl) Provision(ctx *Context) error { return p.fn(ctx) }
