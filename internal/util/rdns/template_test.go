@@ -455,6 +455,33 @@ func parseIP(t *testing.T, s string) net.IP {
 	return ip
 }
 
+func TestExpandIPv6_NilInput(t *testing.T) {
+	t.Parallel()
+
+	t.Run("invalid length IP returns empty string", func(t *testing.T) {
+		t.Parallel()
+		// net.IP with length != 4 and != 16 causes To16() to return nil.
+		// This exercises the nil guard at line 144 of template.go.
+		invalidIP := net.IP([]byte{1, 2, 3})
+		got := expandIPv6(invalidIP)
+		assert.Equal(t, "", got)
+	})
+
+	t.Run("nil IP returns empty string", func(t *testing.T) {
+		t.Parallel()
+		var nilIP net.IP
+		got := expandIPv6(nilIP)
+		assert.Equal(t, "", got)
+	})
+
+	t.Run("empty IP returns empty string", func(t *testing.T) {
+		t.Parallel()
+		emptyIP := net.IP{}
+		got := expandIPv6(emptyIP)
+		assert.Equal(t, "", got)
+	})
+}
+
 func TestResolveTemplate(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

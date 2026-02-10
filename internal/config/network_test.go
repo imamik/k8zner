@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -470,3 +471,90 @@ func TestGetSubnetForRole_Autoscaler(t *testing.T) {
 		t.Errorf("Autoscaler Subnet = %v, want 10.0.95.128/25", subnet)
 	}
 }
+
+// TestCalculateSubnets_ServiceSubnetError tests the error path when calculateServiceSubnet
+// fails inside CalculateSubnets (line 36-38). NodeIPv4CIDR is pre-set so calculateNodeSubnet
+// succeeds, but IPv4CIDR is invalid causing calculateServiceSubnet to fail.
+func TestCalculateSubnets_ServiceSubnetError(t *testing.T) {
+	t.Parallel()
+	cfg := &Config{
+		Network: NetworkConfig{
+			IPv4CIDR:     "invalid",
+			NodeIPv4CIDR: "10.0.64.0/19", // pre-set so node calculation is skipped
+		},
+	}
+	err := cfg.CalculateSubnets()
+	if err == nil {
+		t.Fatal("CalculateSubnets() expected error from calculateServiceSubnet, got nil")
+	}
+	if !strings.Contains(err.Error(), "service subnet") {
+		t.Errorf("expected service subnet error, got: %v", err)
+	}
+}
+
+// TestCalculateSubnets_PodSubnetError tests the error path when calculatePodSubnet
+// fails inside CalculateSubnets (line 40-42). NodeIPv4CIDR and ServiceIPv4CIDR are
+// pre-set so those calculations are skipped, but IPv4CIDR is invalid causing
+// calculatePodSubnet to fail.
+func TestCalculateSubnets_PodSubnetError(t *testing.T) {
+	t.Parallel()
+	cfg := &Config{
+		Network: NetworkConfig{
+			IPv4CIDR:        "invalid",
+			NodeIPv4CIDR:    "10.0.64.0/19",
+			ServiceIPv4CIDR: "10.0.96.0/19",
+		},
+	}
+	err := cfg.CalculateSubnets()
+	if err == nil {
+		t.Fatal("CalculateSubnets() expected error from calculatePodSubnet, got nil")
+	}
+	if !strings.Contains(err.Error(), "pod subnet") {
+		t.Errorf("expected pod subnet error, got: %v", err)
+	}
+}
+
+// TestCalculateSubnets_NodeSubnetMaskError tests the error path when calculateNodeSubnetMask
+// fails inside CalculateSubnets (line 44-46). Node, service, and pod CIDRs are pre-set so
+// those calculations are skipped, but PodIPv4CIDR is invalid causing calculateNodeSubnetMask
+// to fail when it tries to parse the pod CIDR.
+func TestCalculateSubnets_NodeSubnetMaskError(t *testing.T) {
+	t.Parallel()
+	cfg := &Config{
+		Network: NetworkConfig{
+			IPv4CIDR:        "10.0.0.0/16",
+			NodeIPv4CIDR:    "10.0.64.0/19",
+			ServiceIPv4CIDR: "10.0.96.0/19",
+			PodIPv4CIDR:     "invalid-pod-cidr",
+		},
+	}
+	err := cfg.CalculateSubnets()
+	if err == nil {
+		t.Fatal("CalculateSubnets() expected error from calculateNodeSubnetMask, got nil")
+	}
+	if !strings.Contains(err.Error(), "parse pod CIDR") {
+		t.Errorf("expected pod CIDR parse error, got: %v", err)
+	}
+}
+
+// TestGetSubnetForRole_UnknownRole tests the error path when GetSubnetForRole is called
+// with an unknown role, exercising the calculateSubnetIndex error path via GetSubnetForRole
+// (lines 127-129).
+func TestGetSubnetForRole_UnknownRole(t *testing.T) {
+	t.Parallel()
+	cfg := &Config{
+		Network: NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+		},
+	}
+	_ = cfg.CalculateSubnets()
+
+	_, err := cfg.GetSubnetForRole("nonexistent-role", 0)
+	if err == nil {
+		t.Fatal("GetSubnetForRole() expected error for unknown role, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown role") {
+		t.Errorf("expected unknown role error, got: %v", err)
+	}
+}
+

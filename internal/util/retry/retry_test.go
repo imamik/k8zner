@@ -3,6 +3,7 @@ package retry
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -247,6 +248,56 @@ func TestIsFatal(t *testing.T) {
 		wrapped := errors.Join(err, errors.New("additional context"))
 		if !IsFatal(wrapped) {
 			t.Error("Expected wrapped fatal error to be detected")
+		}
+	})
+}
+
+func TestFatalError_Unwrap(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Unwrap returns underlying error", func(t *testing.T) {
+		t.Parallel()
+		originalErr := errors.New("original error")
+		fatalErr := &FatalError{Err: originalErr}
+
+		unwrapped := fatalErr.Unwrap()
+		if unwrapped != originalErr {
+			t.Errorf("Unwrap() returned %v, want %v", unwrapped, originalErr)
+		}
+	})
+
+	t.Run("errors.Unwrap returns underlying error", func(t *testing.T) {
+		t.Parallel()
+		originalErr := errors.New("original error")
+		fatalErr := Fatal(originalErr)
+
+		unwrapped := errors.Unwrap(fatalErr)
+		if unwrapped != originalErr {
+			t.Errorf("errors.Unwrap() returned %v, want %v", unwrapped, originalErr)
+		}
+	})
+
+	t.Run("errors.Is traverses Unwrap chain", func(t *testing.T) {
+		t.Parallel()
+		sentinel := errors.New("sentinel error")
+		fatalErr := Fatal(sentinel)
+
+		if !errors.Is(fatalErr, sentinel) {
+			t.Error("errors.Is should find sentinel through FatalError.Unwrap()")
+		}
+	})
+
+	t.Run("errors.Is with fmt.Errorf wrapped fatal", func(t *testing.T) {
+		t.Parallel()
+		sentinel := errors.New("sentinel error")
+		fatalErr := Fatal(sentinel)
+		doubleWrapped := fmt.Errorf("context: %w", fatalErr)
+
+		if !errors.Is(doubleWrapped, sentinel) {
+			t.Error("errors.Is should find sentinel through double-wrapped FatalError")
+		}
+		if !IsFatal(doubleWrapped) {
+			t.Error("IsFatal should detect FatalError through fmt.Errorf wrapping")
 		}
 	})
 }

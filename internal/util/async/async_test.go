@@ -230,3 +230,66 @@ func TestRunParallel_TaskNameInError(t *testing.T) {
 		t.Errorf("error message should contain task name, got: %s", errStr)
 	}
 }
+
+func TestRunParallel_WithLogging(t *testing.T) {
+	t.Parallel()
+
+	t.Run("success with logging", func(t *testing.T) {
+		t.Parallel()
+		var count atomic.Int32
+
+		tasks := []Task{
+			{Name: "logged-task-1", Func: func(_ context.Context) error {
+				count.Add(1)
+				return nil
+			}},
+			{Name: "logged-task-2", Func: func(_ context.Context) error {
+				count.Add(1)
+				return nil
+			}},
+		}
+
+		err := RunParallel(context.Background(), tasks, true)
+		if err != nil {
+			t.Errorf("expected no error, got: %v", err)
+		}
+
+		if count.Load() != 2 {
+			t.Errorf("expected 2 tasks to run, got %d", count.Load())
+		}
+	})
+
+	t.Run("error with logging", func(t *testing.T) {
+		t.Parallel()
+		expectedErr := errors.New("logged failure")
+
+		tasks := []Task{
+			{Name: "logged-failing-task", Func: func(_ context.Context) error {
+				return expectedErr
+			}},
+		}
+
+		err := RunParallel(context.Background(), tasks, true)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+
+		if !errors.Is(err, expectedErr) {
+			t.Errorf("expected error to wrap %v, got: %v", expectedErr, err)
+		}
+	})
+
+	t.Run("single task with logging", func(t *testing.T) {
+		t.Parallel()
+		tasks := []Task{
+			{Name: "single-logged", Func: func(_ context.Context) error {
+				return nil
+			}},
+		}
+
+		err := RunParallel(context.Background(), tasks, true)
+		if err != nil {
+			t.Errorf("expected no error, got: %v", err)
+		}
+	})
+}
