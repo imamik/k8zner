@@ -95,7 +95,7 @@ func (r *ClusterReconciler) installAndWaitForCNI(ctx context.Context, cluster *k
 	if err := r.waitForCiliumReady(ctx, kubeconfig); err != nil {
 		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCNIFailed,
 			"Cilium not ready: %v", err)
-		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: fastRequeueAfter}, nil
 	}
 
 	cluster.Status.Addons[k8znerv1alpha1.AddonNameCilium] = k8znerv1alpha1.AddonStatus{
@@ -124,10 +124,10 @@ func (r *ClusterReconciler) waitForCiliumReady(ctx context.Context, kubeconfig [
 		return fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
-	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	checkCtx, cancel := context.WithTimeout(ctx, ciliumReadyTimeout)
 	defer cancel()
 
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(ciliumCheckInterval)
 	defer ticker.Stop()
 
 	for {
@@ -232,7 +232,7 @@ func (r *ClusterReconciler) ensureWorkersReady(ctx context.Context, cluster *k8z
 
 	logger.Info("waiting for workers to be ready before installing addons",
 		"ready", readyWorkers, "desired", desiredWorkers)
-	return ctrl.Result{RequeueAfter: 15 * time.Second}, true
+	return ctrl.Result{RequeueAfter: workerReadyRequeueAfter}, true
 }
 
 // resolveNetworkID returns the network ID from status, or looks it up from HCloud.
@@ -349,7 +349,7 @@ func (r *ClusterReconciler) getKubeconfigFromTalos(ctx context.Context, cluster 
 	}
 	defer func() { _ = talosClient.Close() }()
 
-	kubeconfigCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	kubeconfigCtx, cancel := context.WithTimeout(ctx, kubeconfigTimeout)
 	defer cancel()
 
 	kubeconfig, err := talosClient.Kubeconfig(kubeconfigCtx)

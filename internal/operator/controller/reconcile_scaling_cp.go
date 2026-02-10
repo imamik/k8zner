@@ -31,7 +31,7 @@ func (r *ClusterReconciler) reconcileControlPlanes(ctx context.Context, cluster 
 			"current", currentCount,
 			"desired", desiredCount,
 		)
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
 	if currentCount < desiredCount {
@@ -60,7 +60,7 @@ func (r *ClusterReconciler) handleCPScaleUp(ctx context.Context, cluster *k8zner
 			logger.Error(err, "failed to scale up control planes")
 		}
 	}
-	return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 }
 
 // replaceUnhealthyCPIfNeeded finds an unhealthy CP past the threshold and replaces it.
@@ -125,7 +125,7 @@ func (r *ClusterReconciler) replaceUnhealthyCPIfNeeded(ctx context.Context, clus
 	r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonNodeReplaced,
 		"Successfully replaced control plane %s", unhealthyCP.Name)
 
-	return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 }
 
 // findUnhealthyNode returns the first node that has been unhealthy past the given threshold.

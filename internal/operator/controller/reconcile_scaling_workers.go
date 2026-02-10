@@ -30,7 +30,7 @@ func (r *ClusterReconciler) reconcileWorkers(ctx context.Context, cluster *k8zne
 	}
 
 	if replaced > 0 || len(unhealthyWorkers) > 0 {
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
 	return ctrl.Result{}, nil
@@ -106,7 +106,7 @@ func (r *ClusterReconciler) scaleWorkers(ctx context.Context, cluster *k8znerv1a
 			"current", currentCount,
 			"desired", desiredCount,
 		)
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
 	if currentCount < desiredCount {
@@ -121,7 +121,7 @@ func (r *ClusterReconciler) scaleWorkers(ctx context.Context, cluster *k8znerv1a
 				logger.Error(err, "failed to scale up workers")
 			}
 		}
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	} else if currentCount > desiredCount {
 		logger.Info("scaling down workers", "current", currentCount, "desired", desiredCount)
 		r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonScalingDown,
@@ -134,7 +134,7 @@ func (r *ClusterReconciler) scaleWorkers(ctx context.Context, cluster *k8znerv1a
 				logger.Error(err, "failed to scale down workers")
 			}
 		}
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
 	return ctrl.Result{}, nil

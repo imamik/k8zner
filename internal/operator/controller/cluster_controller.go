@@ -34,9 +34,22 @@ const (
 	defaultNodeNotReadyThreshold  = 3 * time.Minute
 	defaultEtcdUnhealthyThreshold = 2 * time.Minute
 
+	// Fast requeue for in-progress operations (CNI readiness checks, provisioning waits).
+	fastRequeueAfter = 10 * time.Second
+
+	// Requeue for waiting on external dependencies (worker readiness before addons).
+	workerReadyRequeueAfter = 15 * time.Second
+
 	// Server creation timeouts.
 	serverIPTimeout  = 2 * time.Minute
 	nodeReadyTimeout = 5 * time.Minute
+
+	// Cilium readiness check settings.
+	ciliumReadyTimeout  = 5 * time.Minute
+	ciliumCheckInterval = 10 * time.Second
+
+	// Kubeconfig retrieval timeout.
+	kubeconfigTimeout = 2 * time.Minute
 
 	// Status update retry settings.
 	statusUpdateRetries = 3
