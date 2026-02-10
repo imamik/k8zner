@@ -197,7 +197,7 @@ func (a *PhaseAdapter) ReconcileInfrastructure(pCtx *provisioning.Context, k8sCl
 	}
 	k8sCluster.Status.Infrastructure.SSHKeyID = pCtx.State.SSHKeyID
 
-	SetCondition(k8sCluster, k8znerv1alpha1.ConditionInfrastructureReady, metav1.ConditionTrue,
+	setCondition(k8sCluster, k8znerv1alpha1.ConditionInfrastructureReady, metav1.ConditionTrue,
 		"InfrastructureProvisioned", "Network, firewall, and load balancer created")
 
 	return nil
@@ -226,7 +226,7 @@ func (a *PhaseAdapter) ReconcileImage(pCtx *provisioning.Context, k8sCluster *k8
 		k8sCluster.Status.Infrastructure.SnapshotID = snapshot.ID
 	}
 
-	SetCondition(k8sCluster, k8znerv1alpha1.ConditionImageReady, metav1.ConditionTrue,
+	setCondition(k8sCluster, k8znerv1alpha1.ConditionImageReady, metav1.ConditionTrue,
 		"ImageAvailable", "Talos image snapshot is available")
 
 	return nil
@@ -305,7 +305,7 @@ func (a *PhaseAdapter) ReconcileBootstrap(pCtx *provisioning.Context, k8sCluster
 		return fmt.Errorf("cluster bootstrap failed: %w", err)
 	}
 
-	SetCondition(k8sCluster, k8znerv1alpha1.ConditionBootstrapped, metav1.ConditionTrue,
+	setCondition(k8sCluster, k8znerv1alpha1.ConditionBootstrapped, metav1.ConditionTrue,
 		"ClusterBootstrapped", "Cluster has been bootstrapped successfully")
 
 	return nil
@@ -480,8 +480,8 @@ func updateNodeStatuses(k8sCluster *k8znerv1alpha1.K8znerCluster, state *provisi
 	}
 }
 
-// SetCondition sets a condition on the cluster status.
-func SetCondition(k8sCluster *k8znerv1alpha1.K8znerCluster, condType string, status metav1.ConditionStatus, reason, message string) {
+// setCondition sets a condition on the cluster status.
+func setCondition(k8sCluster *k8znerv1alpha1.K8znerCluster, condType string, status metav1.ConditionStatus, reason, message string) {
 	now := metav1.Now()
 	condition := metav1.Condition{
 		Type:               condType,

@@ -243,8 +243,8 @@ func defaultString(value, defaultValue string) string {
 	return value
 }
 
-// ParseSecretsFromBytes parses a Talos secrets bundle from YAML bytes.
-func ParseSecretsFromBytes(data []byte) (*secrets.Bundle, error) {
+// parseSecretsFromBytes parses a Talos secrets bundle from YAML bytes.
+func parseSecretsFromBytes(data []byte) (*secrets.Bundle, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("empty secrets data")
 	}
@@ -265,7 +265,7 @@ func (a *PhaseAdapter) CreateTalosGenerator(
 	k8sCluster *k8znerv1alpha1.K8znerCluster,
 	creds *Credentials,
 ) (provisioning.TalosConfigProducer, error) {
-	sb, err := ParseSecretsFromBytes(creds.TalosSecrets)
+	sb, err := parseSecretsFromBytes(creds.TalosSecrets)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse talos secrets: %w", err)
 	}

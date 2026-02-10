@@ -649,18 +649,18 @@ func TestBuildMachineConfigOptions_NetworkCustom(t *testing.T) {
 	assert.Equal(t, "172.16.0.0/16", opts.EtcdSubnet)
 }
 
-// --- ParseSecretsFromBytes ---
+// --- parseSecretsFromBytes ---
 
 func TestParseSecretsFromBytes_Empty(t *testing.T) {
 	t.Parallel()
-	_, err := ParseSecretsFromBytes([]byte{})
+	_, err := parseSecretsFromBytes([]byte{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "empty secrets data")
 }
 
 func TestParseSecretsFromBytes_InvalidYAML(t *testing.T) {
 	t.Parallel()
-	_, err := ParseSecretsFromBytes([]byte("not: valid: yaml: {{{"))
+	_, err := parseSecretsFromBytes([]byte("not: valid: yaml: {{{"))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to unmarshal")
 }
