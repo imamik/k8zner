@@ -145,7 +145,7 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 			NetworkID:     prereqs.ClusterState.NetworkID,
 			MetricsReason: "scale-up",
 			Configure: func(serverName string, result *serverProvisionResult) error {
-				return r.configureAndWaitForWorker(ctx, cluster, prereqs.TC, serverName, result)
+				return r.configureWorkerNode(ctx, cluster, prereqs.TC, result)
 			},
 		})
 		if err != nil {
@@ -162,45 +162,46 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 	return nil
 }
 
-// configureAndWaitForWorker generates and applies Talos config to a worker node, then waits for readiness.
-func (r *ClusterReconciler) configureAndWaitForWorker(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, tc talosClients, serverName string, result *serverProvisionResult) error {
+// configureWorkerNode generates and applies Talos config to a worker node, then waits for readiness.
+// Used by both scale-up and healing paths.
+func (r *ClusterReconciler) configureWorkerNode(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, tc talosClients, result *serverProvisionResult) error {
 	logger := log.FromContext(ctx)
 
 	if tc.configGen == nil || tc.client == nil {
-		logger.Info("skipping Talos config application (no credentials available)", "name", serverName)
+		logger.Info("skipping Talos config application (no credentials available)", "name", result.Name)
 		r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
-			Name: serverName, Phase: k8znerv1alpha1.NodePhaseWaitingForK8s,
+			Name: result.Name, Phase: k8znerv1alpha1.NodePhaseWaitingForK8s,
 			Reason: "Waiting for node to join cluster (no Talos credentials)",
 		})
 		return nil
 	}
 
 	r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
-		Name: serverName, Phase: k8znerv1alpha1.NodePhaseApplyingTalosConfig,
+		Name: result.Name, Phase: k8znerv1alpha1.NodePhaseApplyingTalosConfig,
 		Reason: "Generating and applying Talos machine configuration",
 	})
 
-	machineConfig, err := tc.configGen.GenerateWorkerConfig(serverName, result.ServerID)
+	machineConfig, err := tc.configGen.GenerateWorkerConfig(result.Name, result.ServerID)
 	if err != nil {
-		logger.Error(err, "failed to generate worker config", "name", serverName)
+		logger.Error(err, "failed to generate worker config", "name", result.Name)
 		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
-			"Failed to generate config for worker %s: %v", serverName, err)
-		r.handleProvisioningFailure(ctx, cluster, "worker", serverName,
+			"Failed to generate config for worker %s: %v", result.Name, err)
+		r.handleProvisioningFailure(ctx, cluster, "worker", result.Name,
 			fmt.Sprintf("Failed to generate Talos config: %v", err))
 		return err
 	}
 
-	logger.Info("applying Talos config to worker", "name", serverName, "ip", result.TalosIP)
+	logger.Info("applying Talos config to worker", "name", result.Name, "ip", result.TalosIP)
 	if err := tc.client.ApplyConfig(ctx, result.TalosIP, machineConfig); err != nil {
-		logger.Error(err, "failed to apply Talos config", "name", serverName)
+		logger.Error(err, "failed to apply Talos config", "name", result.Name)
 		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
-			"Failed to apply config to worker %s: %v", serverName, err)
-		r.handleProvisioningFailure(ctx, cluster, "worker", serverName,
+			"Failed to apply config to worker %s: %v", result.Name, err)
+		r.handleProvisioningFailure(ctx, cluster, "worker", result.Name,
 			fmt.Sprintf("Failed to apply Talos config: %v", err))
 		return err
 	}
 
-	return r.waitForWorkerReady(ctx, cluster, serverName, result.TalosIP)
+	return r.waitForWorkerReady(ctx, cluster, result.Name, result.TalosIP)
 }
 
 // waitForWorkerReady waits for a worker node to become ready after Talos config is applied.

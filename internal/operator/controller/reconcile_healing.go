@@ -115,53 +115,9 @@ func (r *ClusterReconciler) provisionReplacementCP(ctx context.Context, cluster 
 		SSHKeyName: prereqs.SSHKeyName,
 		NetworkID:  prereqs.ClusterState.NetworkID,
 		Configure: func(serverName string, result *serverProvisionResult) error {
-			return r.configureReplacementCP(ctx, cluster, prereqs.ClusterState, prereqs.TC, result)
+			return r.configureCPNode(ctx, cluster, prereqs.ClusterState, prereqs.TC, result)
 		},
 	})
-}
-
-// configureReplacementCP applies Talos config and waits for a replacement CP to become ready.
-func (r *ClusterReconciler) configureReplacementCP(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, clusterState *ClusterState, tc talosClients, result *serverProvisionResult) error {
-	logger := log.FromContext(ctx)
-
-	if tc.configGen == nil || tc.client == nil {
-		logger.Info("skipping Talos config application (no credentials available)", "name", result.Name)
-		r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
-			Name: result.Name, Phase: k8znerv1alpha1.NodePhaseWaitingForK8s,
-			Reason: "Waiting for node to join cluster (no Talos credentials)",
-		})
-		return nil
-	}
-
-	r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
-		Name: result.Name, Phase: k8znerv1alpha1.NodePhaseApplyingTalosConfig,
-		Reason: "Generating and applying Talos machine configuration",
-	})
-
-	sans := append([]string{}, clusterState.SANs...)
-	sans = append(sans, result.PublicIP)
-
-	machineConfig, err := tc.configGen.GenerateControlPlaneConfig(sans, result.Name, result.ServerID)
-	if err != nil {
-		logger.Error(err, "failed to generate control plane config", "name", result.Name)
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
-			"Failed to generate config for control plane %s: %v", result.Name, err)
-		r.handleProvisioningFailure(ctx, cluster, "control-plane", result.Name,
-			fmt.Sprintf("Failed to generate Talos config: %v", err))
-		return fmt.Errorf("failed to generate config: %w", err)
-	}
-
-	logger.Info("applying Talos config to control plane", "name", result.Name, "ip", result.TalosIP)
-	if err := tc.client.ApplyConfig(ctx, result.TalosIP, machineConfig); err != nil {
-		logger.Error(err, "failed to apply Talos config", "name", result.Name)
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
-			"Failed to apply config to control plane %s: %v", result.Name, err)
-		r.handleProvisioningFailure(ctx, cluster, "control-plane", result.Name,
-			fmt.Sprintf("Failed to apply Talos config: %v", err))
-		return fmt.Errorf("failed to apply config: %w", err)
-	}
-
-	return r.waitForReplacementNodeReady(ctx, cluster, "control-plane", tc, result)
 }
 
 // replaceWorker replaces an unhealthy worker node.
@@ -222,81 +178,7 @@ func (r *ClusterReconciler) provisionReplacementWorker(ctx context.Context, clus
 		SSHKeyName: prereqs.SSHKeyName,
 		NetworkID:  prereqs.ClusterState.NetworkID,
 		Configure: func(serverName string, result *serverProvisionResult) error {
-			return r.configureReplacementWorker(ctx, cluster, prereqs.TC, result)
+			return r.configureWorkerNode(ctx, cluster, prereqs.TC, result)
 		},
 	})
-}
-
-// configureReplacementWorker applies Talos config and waits for a replacement worker to become ready.
-func (r *ClusterReconciler) configureReplacementWorker(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, tc talosClients, result *serverProvisionResult) error {
-	logger := log.FromContext(ctx)
-
-	if tc.configGen == nil || tc.client == nil {
-		logger.Info("skipping Talos config application (no credentials available)", "name", result.Name)
-		r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
-			Name: result.Name, Phase: k8znerv1alpha1.NodePhaseWaitingForK8s,
-			Reason: "Waiting for node to join cluster (no Talos credentials)",
-		})
-		return nil
-	}
-
-	r.updateNodePhase(ctx, cluster, "worker", NodeStatusUpdate{
-		Name: result.Name, Phase: k8znerv1alpha1.NodePhaseApplyingTalosConfig,
-		Reason: "Generating and applying Talos machine configuration",
-	})
-
-	machineConfig, err := tc.configGen.GenerateWorkerConfig(result.Name, result.ServerID)
-	if err != nil {
-		logger.Error(err, "failed to generate worker config", "name", result.Name)
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
-			"Failed to generate config for worker %s: %v", result.Name, err)
-		r.handleProvisioningFailure(ctx, cluster, "worker", result.Name,
-			fmt.Sprintf("Failed to generate Talos config: %v", err))
-		return fmt.Errorf("failed to generate config: %w", err)
-	}
-
-	logger.Info("applying Talos config to worker", "name", result.Name, "ip", result.TalosIP)
-	if err := tc.client.ApplyConfig(ctx, result.TalosIP, machineConfig); err != nil {
-		logger.Error(err, "failed to apply Talos config", "name", result.Name)
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
-			"Failed to apply config to worker %s: %v", result.Name, err)
-		r.handleProvisioningFailure(ctx, cluster, "worker", result.Name,
-			fmt.Sprintf("Failed to apply Talos config: %v", err))
-		return fmt.Errorf("failed to apply config: %w", err)
-	}
-
-	return r.waitForReplacementNodeReady(ctx, cluster, "worker", tc, result)
-}
-
-// waitForReplacementNodeReady waits for a replacement node (CP or worker) to become ready.
-func (r *ClusterReconciler) waitForReplacementNodeReady(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, role string, tc talosClients, result *serverProvisionResult) error {
-	logger := log.FromContext(ctx)
-
-	r.updateNodePhase(ctx, cluster, role, NodeStatusUpdate{
-		Name: result.Name, Phase: k8znerv1alpha1.NodePhaseRebootingWithConfig,
-		Reason: "Talos config applied, node is rebooting with new configuration",
-	})
-
-	logger.Info("waiting for node to become ready", "role", role, "name", result.Name, "ip", result.TalosIP)
-	r.updateNodePhase(ctx, cluster, role, NodeStatusUpdate{
-		Name: result.Name, Phase: k8znerv1alpha1.NodePhaseWaitingForK8s,
-		Reason: "Waiting for kubelet to register node with Kubernetes",
-	})
-
-	if err := tc.client.WaitForNodeReady(ctx, result.TalosIP, int(nodeReadyTimeout.Seconds())); err != nil {
-		logger.Error(err, "node failed to become ready", "role", role, "name", result.Name)
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonNodeReadyTimeout,
-			"%s %s failed to become ready: %v", role, result.Name, err)
-		r.handleProvisioningFailure(ctx, cluster, role, result.Name,
-			fmt.Sprintf("Node not ready in time: %v", err))
-		return fmt.Errorf("node failed to become ready: %w", err)
-	}
-
-	r.updateNodePhase(ctx, cluster, role, NodeStatusUpdate{
-		Name: result.Name, Phase: k8znerv1alpha1.NodePhaseNodeInitializing,
-		Reason: "Kubelet running, waiting for CNI and system pods",
-	})
-	logger.Info("node kubelet is running", "role", role, "name", result.Name)
-
-	return nil
 }

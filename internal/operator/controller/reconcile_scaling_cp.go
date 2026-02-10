@@ -153,12 +153,12 @@ func (r *ClusterReconciler) scaleUpControlPlanes(ctx context.Context, cluster *k
 			NetworkID:     prereqs.ClusterState.NetworkID,
 			MetricsReason: "scale-up",
 			Configure: func(serverName string, result *serverProvisionResult) error {
-				return r.configureAndWaitForCP(ctx, cluster, prereqs.ClusterState, prereqs.TC, serverName, result)
+				return r.configureCPNode(ctx, cluster, prereqs.ClusterState, prereqs.TC, result)
 			},
 		})
 		if err != nil {
 			logger.Error(err, "failed to provision control plane")
-			// configureAndWaitForCP returns a fatal error for etcd-safety reasons
+			// configureCPNode returns a fatal error for etcd-safety reasons
 			if created == 0 {
 				return err
 			}
@@ -174,45 +174,46 @@ func (r *ClusterReconciler) scaleUpControlPlanes(ctx context.Context, cluster *k
 	return nil
 }
 
-// configureAndWaitForCP generates and applies Talos config to a CP node, then waits for it to become ready.
-// Returns a fatal error if the node has joined etcd but is not ready (server must be preserved).
-func (r *ClusterReconciler) configureAndWaitForCP(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, clusterState *ClusterState, tc talosClients, serverName string, result *serverProvisionResult) error {
+// configureCPNode generates and applies Talos config to a CP node, then waits for it to become ready.
+// Used by both scale-up and healing paths. Returns a fatal error if the node has joined etcd but is
+// not ready (server must be preserved to avoid breaking etcd quorum).
+func (r *ClusterReconciler) configureCPNode(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, clusterState *ClusterState, tc talosClients, result *serverProvisionResult) error {
 	logger := log.FromContext(ctx)
 
 	if tc.configGen == nil || tc.client == nil {
-		logger.Info("skipping Talos config application (no credentials available)", "name", serverName)
+		logger.Info("skipping Talos config application (no credentials available)", "name", result.Name)
 		r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
-			Name:  serverName,
-			Phase: k8znerv1alpha1.NodePhaseWaitingForK8s, Reason: "Waiting for node to join cluster (no Talos credentials)",
+			Name: result.Name, Phase: k8znerv1alpha1.NodePhaseWaitingForK8s,
+			Reason: "Waiting for node to join cluster (no Talos credentials)",
 		})
 		return nil
 	}
 
 	r.updateNodePhase(ctx, cluster, "control-plane", NodeStatusUpdate{
-		Name: serverName, Phase: k8znerv1alpha1.NodePhaseApplyingTalosConfig,
+		Name: result.Name, Phase: k8znerv1alpha1.NodePhaseApplyingTalosConfig,
 		Reason: "Generating and applying Talos machine configuration",
 	})
 
 	sans := append([]string{}, clusterState.SANs...)
 	sans = append(sans, result.PublicIP)
 
-	machineConfig, err := tc.configGen.GenerateControlPlaneConfig(sans, serverName, result.ServerID)
+	machineConfig, err := tc.configGen.GenerateControlPlaneConfig(sans, result.Name, result.ServerID)
 	if err != nil {
-		logger.Error(err, "failed to generate CP config", "name", serverName)
+		logger.Error(err, "failed to generate CP config", "name", result.Name)
 		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
-			"Failed to generate config for CP %s: %v", serverName, err)
-		r.handleProvisioningFailure(ctx, cluster, "control-plane", serverName,
+			"Failed to generate config for CP %s: %v", result.Name, err)
+		r.handleProvisioningFailure(ctx, cluster, "control-plane", result.Name,
 			fmt.Sprintf("Failed to generate Talos config: %v", err))
 		return err
 	}
 
-	logger.Info("applying Talos config to CP", "name", serverName, "ip", result.TalosIP)
+	logger.Info("applying Talos config to CP", "name", result.Name, "ip", result.TalosIP)
 	if err := tc.client.ApplyConfig(ctx, result.TalosIP, machineConfig); err != nil {
-		logger.Error(err, "failed to apply Talos config", "name", serverName)
+		logger.Error(err, "failed to apply Talos config", "name", result.Name)
 		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonConfigApplyError,
-			"Failed to apply config to CP %s: %v", serverName, err)
+			"Failed to apply config to CP %s: %v", result.Name, err)
 		// Safe to delete: config was never applied, so etcd member wasn't added
-		r.handleProvisioningFailure(ctx, cluster, "control-plane", serverName,
+		r.handleProvisioningFailure(ctx, cluster, "control-plane", result.Name,
 			fmt.Sprintf("Failed to apply Talos config: %v", err))
 		return err
 	}
@@ -221,7 +222,7 @@ func (r *ClusterReconciler) configureAndWaitForCP(ctx context.Context, cluster *
 	// We must NOT delete this server on failure, as removing an etcd member
 	// that was added but is unreachable can break etcd quorum.
 
-	return r.waitForCPReady(ctx, cluster, tc, serverName, result.TalosIP)
+	return r.waitForCPReady(ctx, cluster, tc, result.Name, result.TalosIP)
 }
 
 // waitForCPReady waits for a control plane node to become ready after Talos config is applied.

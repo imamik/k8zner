@@ -230,7 +230,6 @@ func TestSelfHealingControlPlaneReplacement(t *testing.T) {
 		}
 		err := r.replaceControlPlane(context.Background(), cluster, node)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to apply config")
 
 		assert.Len(t, mockHCloud.CreateServerCalls, 1)
 	})
@@ -297,11 +296,16 @@ func TestSelfHealingWorkerReplacement(t *testing.T) {
 		mockTalos := &MockTalosClient{}
 		mockTalosGen := &MockTalosConfigGenerator{}
 
+		var nodeReadyWaiterCalls []string
 		r := NewClusterReconciler(client, scheme, recorder,
 			WithHCloudClient(mockHCloud),
 			WithTalosClient(mockTalos),
 			WithTalosConfigGenerator(mockTalosGen),
 			WithMetrics(false),
+			WithNodeReadyWaiter(func(ctx context.Context, nodeName string, timeout time.Duration) error {
+				nodeReadyWaiterCalls = append(nodeReadyWaiterCalls, nodeName)
+				return nil
+			}),
 		)
 
 		node := &k8znerv1alpha1.NodeStatus{
@@ -328,7 +332,7 @@ func TestSelfHealingWorkerReplacement(t *testing.T) {
 		assert.Len(t, mockTalos.ApplyConfigCalls, 1)
 		assert.Equal(t, "10.0.0.12", mockTalos.ApplyConfigCalls[0].NodeIP)
 
-		assert.Len(t, mockTalos.WaitForNodeReadyCalls, 1)
+		assert.Len(t, nodeReadyWaiterCalls, 1, "nodeReadyWaiter should be called for worker")
 	})
 
 	t.Run("worker replacement continues without talos clients", func(t *testing.T) {
