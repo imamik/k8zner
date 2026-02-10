@@ -135,38 +135,11 @@ func findUnhealthyNode(nodes []k8znerv1alpha1.NodeStatus, threshold time.Duratio
 func (r *ClusterReconciler) scaleUpControlPlanes(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, count int) error {
 	logger := log.FromContext(ctx)
 
-	clusterState, err := r.buildClusterState(ctx, cluster)
-	if err != nil {
-		logger.Error(err, "failed to build cluster state")
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
-			"Failed to build cluster state for CP scaling: %v", err)
-		return fmt.Errorf("failed to build cluster state: %w", err)
-	}
-
-	// Discover LB info if needed, then load Talos clients.
-	// LB discovery must happen BEFORE loadTalosClients because the Talos generator
-	// needs the control plane endpoint (LB IP) to generate valid configs.
-	if r.talosClient == nil && cluster.Spec.CredentialsRef.Name != "" {
-		creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
-		if err == nil {
-			r.discoverLoadBalancerInfo(ctx, cluster, creds.HCloudToken)
-		}
-	}
-	tc := r.loadTalosClients(ctx, cluster)
-
-	snapshot, err := r.getSnapshot(ctx)
-	if err != nil {
-		logger.Error(err, "failed to get Talos snapshot")
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
-			"Talos snapshot not found for CP scaling")
-		return err
-	}
-
-	sshKeyName, cleanupKey, err := r.createEphemeralSSHKey(ctx, cluster, "cp")
+	prereqs, cleanup, err := r.prepareForProvisioning(ctx, cluster, "cp")
 	if err != nil {
 		return err
 	}
-	defer cleanupKey()
+	defer cleanup()
 
 	created := 0
 	for i := 0; i < count; i++ {
@@ -175,12 +148,12 @@ func (r *ClusterReconciler) scaleUpControlPlanes(ctx context.Context, cluster *k
 			Role:          "control-plane",
 			Pool:          "control-plane",
 			ServerType:    normalizeServerSize(cluster.Spec.ControlPlanes.Size),
-			SnapshotID:    snapshot.ID,
-			SSHKeyName:    sshKeyName,
-			NetworkID:     clusterState.NetworkID,
+			SnapshotID:    prereqs.SnapshotID,
+			SSHKeyName:    prereqs.SSHKeyName,
+			NetworkID:     prereqs.ClusterState.NetworkID,
 			MetricsReason: "scale-up",
 			Configure: func(serverName string, result *serverProvisionResult) error {
-				return r.configureAndWaitForCP(ctx, cluster, clusterState, tc, serverName, result)
+				return r.configureAndWaitForCP(ctx, cluster, prereqs.ClusterState, prereqs.TC, serverName, result)
 			},
 		})
 		if err != nil {

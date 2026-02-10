@@ -127,36 +127,11 @@ func (r *ClusterReconciler) scaleWorkers(ctx context.Context, cluster *k8znerv1a
 func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, count int) error {
 	logger := log.FromContext(ctx)
 
-	clusterState, err := r.buildClusterState(ctx, cluster)
-	if err != nil {
-		logger.Error(err, "failed to build cluster state")
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
-			"Failed to build cluster state for worker scaling: %v", err)
-		return fmt.Errorf("failed to build cluster state: %w", err)
-	}
-
-	// Discover LB info if needed, then load Talos clients.
-	if r.talosClient == nil && cluster.Spec.CredentialsRef.Name != "" {
-		creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
-		if err == nil {
-			r.discoverLoadBalancerInfo(ctx, cluster, creds.HCloudToken)
-		}
-	}
-	tc := r.loadTalosClients(ctx, cluster)
-
-	snapshot, err := r.getSnapshot(ctx)
-	if err != nil {
-		logger.Error(err, "failed to get Talos snapshot")
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
-			"Talos snapshot not found for worker scaling")
-		return err
-	}
-
-	sshKeyName, cleanupKey, err := r.createEphemeralSSHKey(ctx, cluster, "worker")
+	prereqs, cleanup, err := r.prepareForProvisioning(ctx, cluster, "worker")
 	if err != nil {
 		return err
 	}
-	defer cleanupKey()
+	defer cleanup()
 
 	created := 0
 	for i := 0; i < count && created < r.maxConcurrentHeals; i++ {
@@ -165,12 +140,12 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 			Role:          "worker",
 			Pool:          "workers",
 			ServerType:    normalizeServerSize(cluster.Spec.Workers.Size),
-			SnapshotID:    snapshot.ID,
-			SSHKeyName:    sshKeyName,
-			NetworkID:     clusterState.NetworkID,
+			SnapshotID:    prereqs.SnapshotID,
+			SSHKeyName:    prereqs.SSHKeyName,
+			NetworkID:     prereqs.ClusterState.NetworkID,
 			MetricsReason: "scale-up",
 			Configure: func(serverName string, result *serverProvisionResult) error {
-				return r.configureAndWaitForWorker(ctx, cluster, tc, serverName, result)
+				return r.configureAndWaitForWorker(ctx, cluster, prereqs.TC, serverName, result)
 			},
 		})
 		if err != nil {

@@ -99,6 +99,56 @@ func (r *ClusterReconciler) discoverLoadBalancerInfo(ctx context.Context, cluste
 	)
 }
 
+// provisioningPrereqs holds the common prerequisites for provisioning new nodes.
+type provisioningPrereqs struct {
+	ClusterState *ClusterState
+	TC           talosClients
+	SnapshotID   int64
+	SSHKeyName   string
+}
+
+// prepareForProvisioning gathers all prerequisites for provisioning a new node:
+// cluster state, Talos clients, snapshot, and an ephemeral SSH key.
+// Returns a cleanup function that must be deferred by the caller.
+func (r *ClusterReconciler) prepareForProvisioning(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, role string) (*provisioningPrereqs, func(), error) {
+	clusterState, err := r.buildClusterState(ctx, cluster)
+	if err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
+			"Failed to build cluster state: %v", err)
+		return nil, nil, fmt.Errorf("failed to build cluster state: %w", err)
+	}
+
+	// Discover LB info if needed, then load Talos clients.
+	// LB discovery must happen BEFORE loadTalosClients because the Talos generator
+	// needs the control plane endpoint (LB IP) to generate valid configs.
+	if r.talosClient == nil && cluster.Spec.CredentialsRef.Name != "" {
+		creds, err := r.phaseAdapter.LoadCredentials(ctx, cluster)
+		if err == nil {
+			r.discoverLoadBalancerInfo(ctx, cluster, creds.HCloudToken)
+		}
+	}
+	tc := r.loadTalosClients(ctx, cluster)
+
+	snapshot, err := r.getSnapshot(ctx)
+	if err != nil {
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
+			"Talos snapshot not found: %v", err)
+		return nil, nil, err
+	}
+
+	sshKeyName, cleanup, err := r.createEphemeralSSHKey(ctx, cluster, role)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return &provisioningPrereqs{
+		ClusterState: clusterState,
+		TC:           tc,
+		SnapshotID:   snapshot.ID,
+		SSHKeyName:   sshKeyName,
+	}, cleanup, nil
+}
+
 // getSnapshot retrieves the Talos OS snapshot for server creation.
 func (r *ClusterReconciler) getSnapshot(ctx context.Context) (*hcloudgo.Image, error) {
 	snapshotLabels := map[string]string{"os": "talos"}

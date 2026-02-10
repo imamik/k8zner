@@ -26,7 +26,7 @@ func (r *ClusterReconciler) replaceControlPlane(ctx context.Context, cluster *k8
 	r.removeNodeFromStatus(cluster, "control-plane", node.Name)
 
 	// Provision replacement
-	return r.provisionReplacementCP(ctx, cluster, tc, node)
+	return r.provisionReplacementCP(ctx, cluster, node)
 }
 
 // removeFromEtcd removes the unhealthy node's etcd member via the Talos API.
@@ -99,40 +99,23 @@ func (r *ClusterReconciler) deleteNodeAndServer(ctx context.Context, cluster *k8
 }
 
 // provisionReplacementCP creates a new control plane server to replace the deleted one.
-func (r *ClusterReconciler) provisionReplacementCP(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, tc talosClients, oldNode *k8znerv1alpha1.NodeStatus) error {
-	logger := log.FromContext(ctx)
-
-	clusterState, err := r.buildClusterState(ctx, cluster)
-	if err != nil {
-		logger.Error(err, "failed to build cluster state")
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
-			"Failed to build cluster state for control plane replacement: %v", err)
-		return fmt.Errorf("failed to build cluster state: %w", err)
-	}
-
-	snapshot, err := r.getSnapshot(ctx)
-	if err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
-			"Snapshot error for CP replacement: %v", err)
-		return err
-	}
-
-	sshKeyName, cleanupKey, err := r.createEphemeralSSHKey(ctx, cluster, "cp")
+func (r *ClusterReconciler) provisionReplacementCP(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, oldNode *k8znerv1alpha1.NodeStatus) error {
+	prereqs, cleanup, err := r.prepareForProvisioning(ctx, cluster, "cp")
 	if err != nil {
 		return err
 	}
-	defer cleanupKey()
+	defer cleanup()
 
 	return r.provisionAndConfigureNode(ctx, cluster, nodeProvisionParams{
 		Name:       naming.ControlPlane(cluster.Name),
 		Role:       "control-plane",
 		Pool:       "control-plane",
 		ServerType: normalizeServerSize(cluster.Spec.ControlPlanes.Size),
-		SnapshotID: snapshot.ID,
-		SSHKeyName: sshKeyName,
-		NetworkID:  clusterState.NetworkID,
+		SnapshotID: prereqs.SnapshotID,
+		SSHKeyName: prereqs.SSHKeyName,
+		NetworkID:  prereqs.ClusterState.NetworkID,
 		Configure: func(serverName string, result *serverProvisionResult) error {
-			return r.configureReplacementCP(ctx, cluster, clusterState, tc, result)
+			return r.configureReplacementCP(ctx, cluster, prereqs.ClusterState, prereqs.TC, result)
 		},
 	})
 }
@@ -224,41 +207,22 @@ func (r *ClusterReconciler) drainAndDeleteWorker(ctx context.Context, cluster *k
 
 // provisionReplacementWorker creates a new worker server to replace the deleted one.
 func (r *ClusterReconciler) provisionReplacementWorker(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, oldNode *k8znerv1alpha1.NodeStatus) error {
-	logger := log.FromContext(ctx)
-
-	clusterState, err := r.buildClusterState(ctx, cluster)
-	if err != nil {
-		logger.Error(err, "failed to build cluster state")
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
-			"Failed to build cluster state for worker replacement: %v", err)
-		return fmt.Errorf("failed to build cluster state: %w", err)
-	}
-
-	tc := r.loadTalosClients(ctx, cluster)
-
-	snapshot, err := r.getSnapshot(ctx)
-	if err != nil {
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
-			"Snapshot error for worker replacement: %v", err)
-		return err
-	}
-
-	sshKeyName, cleanupKey, err := r.createEphemeralSSHKey(ctx, cluster, "worker")
+	prereqs, cleanup, err := r.prepareForProvisioning(ctx, cluster, "worker")
 	if err != nil {
 		return err
 	}
-	defer cleanupKey()
+	defer cleanup()
 
 	return r.provisionAndConfigureNode(ctx, cluster, nodeProvisionParams{
 		Name:       naming.Worker(cluster.Name),
 		Role:       "worker",
 		Pool:       "workers",
 		ServerType: normalizeServerSize(cluster.Spec.Workers.Size),
-		SnapshotID: snapshot.ID,
-		SSHKeyName: sshKeyName,
-		NetworkID:  clusterState.NetworkID,
+		SnapshotID: prereqs.SnapshotID,
+		SSHKeyName: prereqs.SSHKeyName,
+		NetworkID:  prereqs.ClusterState.NetworkID,
 		Configure: func(serverName string, result *serverProvisionResult) error {
-			return r.configureReplacementWorker(ctx, cluster, tc, result)
+			return r.configureReplacementWorker(ctx, cluster, prereqs.TC, result)
 		},
 	})
 }
