@@ -947,3 +947,120 @@ func TestMockClient_CustomFuncs(t *testing.T) {
 		}
 	})
 }
+
+// Tests for GetServerByName (0% coverage)
+
+func TestMockClient_GetServerByName_DefaultReturnsNil(t *testing.T) {
+	m := &MockClient{}
+	ctx := context.Background()
+
+	server, err := m.GetServerByName(ctx, "test-server")
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if server != nil {
+		t.Errorf("expected nil server from default, got %v", server)
+	}
+}
+
+func TestMockClient_GetServerByName_CustomFunc(t *testing.T) {
+	expectedServer := &hcloud.Server{ID: 42, Name: "my-server"}
+	m := &MockClient{
+		GetServerByNameFunc: func(_ context.Context, name string) (*hcloud.Server, error) {
+			if name != "my-server" {
+				t.Errorf("expected name 'my-server', got %q", name)
+			}
+			return expectedServer, nil
+		},
+	}
+	ctx := context.Background()
+
+	server, err := m.GetServerByName(ctx, "my-server")
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if server == nil {
+		t.Fatal("expected non-nil server")
+	}
+	if server.ID != 42 {
+		t.Errorf("expected server ID 42, got %d", server.ID)
+	}
+	if server.Name != "my-server" {
+		t.Errorf("expected server name 'my-server', got %q", server.Name)
+	}
+}
+
+func TestMockClient_GetServerByName_CustomFuncError(t *testing.T) {
+	expectedErr := errors.New("lookup failed")
+	m := &MockClient{
+		GetServerByNameFunc: func(_ context.Context, _ string) (*hcloud.Server, error) {
+			return nil, expectedErr
+		},
+	}
+	ctx := context.Background()
+
+	server, err := m.GetServerByName(ctx, "any-server")
+	if !errors.Is(err, expectedErr) {
+		t.Errorf("expected error %v, got %v", expectedErr, err)
+	}
+	if server != nil {
+		t.Errorf("expected nil server on error, got %v", server)
+	}
+}
+
+// Tests for AttachServerToNetwork (0% coverage)
+
+func TestMockClient_AttachServerToNetwork_DefaultReturnsNil(t *testing.T) {
+	m := &MockClient{}
+	ctx := context.Background()
+
+	err := m.AttachServerToNetwork(ctx, "test-server", 100, "10.0.0.5")
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestMockClient_AttachServerToNetwork_CustomFunc(t *testing.T) {
+	var capturedName string
+	var capturedNetworkID int64
+	var capturedPrivateIP string
+
+	m := &MockClient{
+		AttachServerToNetworkFunc: func(_ context.Context, serverName string, networkID int64, privateIP string) error {
+			capturedName = serverName
+			capturedNetworkID = networkID
+			capturedPrivateIP = privateIP
+			return nil
+		},
+	}
+	ctx := context.Background()
+
+	err := m.AttachServerToNetwork(ctx, "my-server", 200, "10.0.1.5")
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if capturedName != "my-server" {
+		t.Errorf("expected server name 'my-server', got %q", capturedName)
+	}
+	if capturedNetworkID != 200 {
+		t.Errorf("expected network ID 200, got %d", capturedNetworkID)
+	}
+	if capturedPrivateIP != "10.0.1.5" {
+		t.Errorf("expected private IP '10.0.1.5', got %q", capturedPrivateIP)
+	}
+}
+
+func TestMockClient_AttachServerToNetwork_CustomFuncError(t *testing.T) {
+	expectedErr := errors.New("attach failed")
+	m := &MockClient{
+		AttachServerToNetworkFunc: func(_ context.Context, _ string, _ int64, _ string) error {
+			return expectedErr
+		},
+	}
+	ctx := context.Background()
+
+	err := m.AttachServerToNetwork(ctx, "test-server", 100, "10.0.0.5")
+	if !errors.Is(err, expectedErr) {
+		t.Errorf("expected error %v, got %v", expectedErr, err)
+	}
+}

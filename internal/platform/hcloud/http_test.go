@@ -1879,6 +1879,80 @@ func TestRealClient_CreateServer_WithHTTPMock(t *testing.T) {
 		}
 	})
 
+	t.Run("creates server without public IPv4", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		ts.handleFunc("/server_types", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ServerTypeListResponse{
+				ServerTypes: []schema.ServerType{{ID: 1, Name: "cx21", Architecture: "x86"}},
+			})
+		})
+		ts.handleFunc("/images", func(w http.ResponseWriter, _ *http.Request) {
+			imageName := "ubuntu-22.04"
+			jsonResponse(w, http.StatusOK, schema.ImageListResponse{
+				Images: []schema.Image{{ID: 10, Name: &imageName, Type: "system", Architecture: "x86", Status: "available"}},
+			})
+		})
+		ts.handleFunc("/locations", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.LocationListResponse{
+				Locations: []schema.Location{{ID: 1, Name: "nbg1"}},
+			})
+		})
+		ts.handleFunc("/servers", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost {
+				jsonResponse(w, http.StatusCreated, schema.ServerCreateResponse{
+					Server: schema.Server{ID: 1001, Name: "ipv6-server"},
+					Action: schema.Action{ID: 102, Status: "success"},
+				})
+				return
+			}
+			jsonResponse(w, http.StatusOK, schema.ServerListResponse{Servers: []schema.Server{}})
+		})
+		ts.handleFunc("/actions/102", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+				Action: schema.Action{ID: 102, Status: "success", Progress: 100},
+			})
+		})
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		// Create with only IPv6 enabled, no IPv4
+		serverID, err := client.CreateServer(ctx, ServerCreateOpts{
+			Name: "ipv6-server", ImageType: "ubuntu-22.04", ServerType: "cx21", Location: "nbg1",
+			SSHKeys: []string{}, EnablePublicIPv4: false, EnablePublicIPv6: true,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if serverID != "1001" {
+			t.Errorf("expected server ID '1001', got %q", serverID)
+		}
+	})
+
+	t.Run("server type not found", func(t *testing.T) {
+		ts := newTestServer()
+		defer ts.close()
+
+		ts.handleFunc("/server_types", func(w http.ResponseWriter, _ *http.Request) {
+			jsonResponse(w, http.StatusOK, schema.ServerTypeListResponse{
+				ServerTypes: []schema.ServerType{},
+			})
+		})
+
+		client := ts.realClient()
+		ctx := context.Background()
+
+		_, err := client.CreateServer(ctx, ServerCreateOpts{
+			Name: "test", ImageType: "ubuntu-22.04", ServerType: "nonexistent-type", Location: "nbg1",
+			SSHKeys: []string{}, EnablePublicIPv4: true, EnablePublicIPv6: true,
+		})
+		if err == nil {
+			t.Fatal("expected error for nonexistent server type")
+		}
+	})
+
 	t.Run("resolves talos image by label", func(t *testing.T) {
 		ts := newTestServer()
 		defer ts.close()
@@ -1948,4 +2022,721 @@ func TestRealClient_CreateServer_WithHTTPMock(t *testing.T) {
 			t.Errorf("expected server ID '1000', got %q", serverID)
 		}
 	})
+}
+
+func TestRealClient_GetServerIP_IPv6Only(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers", func(w http.ResponseWriter, r *http.Request) {
+		name := r.URL.Query().Get("name")
+		if name == "ipv6-server" {
+			jsonResponse(w, http.StatusOK, schema.ServerListResponse{
+				Servers: []schema.Server{
+					{
+						ID:   500,
+						Name: "ipv6-server",
+						PublicNet: schema.ServerPublicNet{
+							IPv4: schema.ServerPublicNetIPv4{
+								// empty IPv4 IP
+							},
+							IPv6: schema.ServerPublicNetIPv6{
+								IP: "2001:db8::/64",
+							},
+						},
+					},
+				},
+			})
+			return
+		}
+		jsonResponse(w, http.StatusOK, schema.ServerListResponse{Servers: []schema.Server{}})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	ip, err := client.GetServerIP(ctx, "ipv6-server")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Should return the IPv6 address with ::1 suffix
+	if ip == "" {
+		t.Fatal("expected non-empty IP for IPv6-only server")
+	}
+	// Verify it is an IPv6 address containing a colon
+	if !containsColon(ip) {
+		t.Errorf("expected IPv6 address, got %q", ip)
+	}
+}
+
+func TestRealClient_GetServerIP_NoPublicIP(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers", func(w http.ResponseWriter, r *http.Request) {
+		name := r.URL.Query().Get("name")
+		if name == "no-ip-server" {
+			jsonResponse(w, http.StatusOK, schema.ServerListResponse{
+				Servers: []schema.Server{
+					{
+						ID:   501,
+						Name: "no-ip-server",
+						PublicNet: schema.ServerPublicNet{
+							IPv4: schema.ServerPublicNetIPv4{},
+							IPv6: schema.ServerPublicNetIPv6{},
+						},
+					},
+				},
+			})
+			return
+		}
+		jsonResponse(w, http.StatusOK, schema.ServerListResponse{Servers: []schema.Server{}})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	_, err := client.GetServerIP(ctx, "no-ip-server")
+	if err == nil {
+		t.Fatal("expected error for server with no public IP")
+	}
+	if err.Error() != "server has no public IP (neither IPv4 nor IPv6)" {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestRealClient_GetServerIP_APIError(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers", func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	_, err := client.GetServerIP(ctx, "test-server")
+	if err == nil {
+		t.Fatal("expected error for API failure")
+	}
+}
+
+func TestRealClient_GetServerByName_WithHTTPMock(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers", func(w http.ResponseWriter, r *http.Request) {
+		name := r.URL.Query().Get("name")
+		if name == "existing-server" {
+			jsonResponse(w, http.StatusOK, schema.ServerListResponse{
+				Servers: []schema.Server{
+					{ID: 777, Name: "existing-server"},
+				},
+			})
+			return
+		}
+		jsonResponse(w, http.StatusOK, schema.ServerListResponse{Servers: []schema.Server{}})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	t.Run("server found", func(t *testing.T) {
+		server, err := client.GetServerByName(ctx, "existing-server")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if server == nil {
+			t.Fatal("expected server, got nil")
+		}
+		if server.ID != 777 {
+			t.Errorf("expected ID 777, got %d", server.ID)
+		}
+	})
+
+	t.Run("server not found", func(t *testing.T) {
+		server, err := client.GetServerByName(ctx, "nonexistent")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if server != nil {
+			t.Errorf("expected nil for nonexistent server, got %v", server)
+		}
+	})
+
+	t.Run("API error", func(t *testing.T) {
+		tsErr := newTestServer()
+		defer tsErr.close()
+		tsErr.handleFunc("/servers", func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+		})
+		errClient := tsErr.realClient()
+		_, err := errClient.GetServerByName(ctx, "test-server")
+		if err == nil {
+			t.Fatal("expected error for API failure")
+		}
+	})
+}
+
+func TestRealClient_GetServersByLabel_Error(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers", func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	_, err := client.GetServersByLabel(ctx, map[string]string{"cluster": "test"})
+	if err == nil {
+		t.Fatal("expected error for API failure")
+	}
+}
+
+func TestRealClient_GetServerID_APIError(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers", func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	_, err := client.GetServerID(ctx, "test-server")
+	if err == nil {
+		t.Fatal("expected error for API failure")
+	}
+}
+
+func TestRealClient_EnableRescue_APIError(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers/123/actions/enable_rescue", func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	_, err := client.EnableRescue(ctx, "123", []string{"456"})
+	if err == nil {
+		t.Fatal("expected error for API failure")
+	}
+}
+
+func TestRealClient_ResetServer_APIError(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers/123/actions/reset", func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	err := client.ResetServer(ctx, "123")
+	if err == nil {
+		t.Fatal("expected error for API failure")
+	}
+}
+
+func TestRealClient_PoweroffServer_APIError(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers/123/actions/poweroff", func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	err := client.PoweroffServer(ctx, "123")
+	if err == nil {
+		t.Fatal("expected error for API failure")
+	}
+}
+
+func TestRealClient_GetServersByLabel_EmptyLabels(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ServerListResponse{
+			Servers: []schema.Server{},
+		})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	servers, err := client.GetServersByLabel(ctx, map[string]string{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(servers) != 0 {
+		t.Errorf("expected empty slice, got %d servers", len(servers))
+	}
+}
+
+// containsColon is a helper for checking IPv6 addresses.
+func containsColon(s string) bool {
+	for _, c := range s {
+		if c == ':' {
+			return true
+		}
+	}
+	return false
+}
+
+// Tests for AttachServerToNetwork (0% coverage on RealClient)
+
+func TestRealClient_AttachServerToNetwork_ServerNotFound(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ServerListResponse{
+			Servers: []schema.Server{},
+		})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	err := client.AttachServerToNetwork(ctx, "nonexistent-server", 100, "10.0.0.5")
+	if err == nil {
+		t.Fatal("expected error for nonexistent server")
+	}
+	if err.Error() != "server not found: nonexistent-server" {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestRealClient_AttachServerToNetwork_APIError(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers", func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	err := client.AttachServerToNetwork(ctx, "test-server", 100, "10.0.0.5")
+	if err == nil {
+		t.Fatal("expected error for API failure")
+	}
+}
+
+func TestRealClient_AttachServerToNetwork_AlreadyAttachedAndRunning(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers", func(w http.ResponseWriter, r *http.Request) {
+		name := r.URL.Query().Get("name")
+		if name == "attached-server" {
+			jsonResponse(w, http.StatusOK, schema.ServerListResponse{
+				Servers: []schema.Server{
+					{
+						ID:     123,
+						Name:   "attached-server",
+						Status: "running",
+						PrivateNet: []schema.ServerPrivateNet{
+							{
+								Network: 100,
+								IP:      "10.0.0.5",
+							},
+						},
+					},
+				},
+			})
+			return
+		}
+		jsonResponse(w, http.StatusOK, schema.ServerListResponse{Servers: []schema.Server{}})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	// Server already attached and running - should be a no-op
+	err := client.AttachServerToNetwork(ctx, "attached-server", 100, "10.0.0.5")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRealClient_AttachServerToNetwork_AlreadyAttachedButStopped(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers", func(w http.ResponseWriter, r *http.Request) {
+		name := r.URL.Query().Get("name")
+		if name == "stopped-server" {
+			jsonResponse(w, http.StatusOK, schema.ServerListResponse{
+				Servers: []schema.Server{
+					{
+						ID:     124,
+						Name:   "stopped-server",
+						Status: "off",
+						PrivateNet: []schema.ServerPrivateNet{
+							{
+								Network: 100,
+								IP:      "10.0.0.5",
+							},
+						},
+					},
+				},
+			})
+			return
+		}
+		jsonResponse(w, http.StatusOK, schema.ServerListResponse{Servers: []schema.Server{}})
+	})
+
+	ts.handleFunc("/servers/124/actions/poweron", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ServerActionPoweronResponse{
+			Action: schema.Action{ID: 90, Status: "success"},
+		})
+	})
+
+	ts.handleFunc("/actions/90", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+			Action: schema.Action{ID: 90, Status: "success", Progress: 100},
+		})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	// Server already attached but stopped - should power on
+	err := client.AttachServerToNetwork(ctx, "stopped-server", 100, "10.0.0.5")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRealClient_AttachServerToNetwork_NotAttachedYet(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers", func(w http.ResponseWriter, r *http.Request) {
+		name := r.URL.Query().Get("name")
+		if name == "new-server" {
+			jsonResponse(w, http.StatusOK, schema.ServerListResponse{
+				Servers: []schema.Server{
+					{
+						ID:         125,
+						Name:       "new-server",
+						Status:     "off",
+						PrivateNet: []schema.ServerPrivateNet{}, // No networks
+					},
+				},
+			})
+			return
+		}
+		jsonResponse(w, http.StatusOK, schema.ServerListResponse{Servers: []schema.Server{}})
+	})
+
+	ts.handleFunc("/servers/125/actions/attach_to_network", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ServerActionAttachToNetworkResponse{
+			Action: schema.Action{ID: 91, Status: "success"},
+		})
+	})
+
+	ts.handleFunc("/servers/125/actions/poweron", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ServerActionPoweronResponse{
+			Action: schema.Action{ID: 92, Status: "success"},
+		})
+	})
+
+	ts.handleFunc("/actions/91", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+			Action: schema.Action{ID: 91, Status: "success", Progress: 100},
+		})
+	})
+
+	ts.handleFunc("/actions/92", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+			Action: schema.Action{ID: 92, Status: "success", Progress: 100},
+		})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	err := client.AttachServerToNetwork(ctx, "new-server", 100, "10.0.0.5")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRealClient_CreateServer_WithNetworkAttachment(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/server_types", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ServerTypeListResponse{
+			ServerTypes: []schema.ServerType{{ID: 1, Name: "cx21", Architecture: "x86"}},
+		})
+	})
+
+	imageName := "ubuntu-22.04"
+	ts.handleFunc("/images", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ImageListResponse{
+			Images: []schema.Image{{ID: 10, Name: &imageName, Type: "system", Architecture: "x86", Status: "available"}},
+		})
+	})
+
+	ts.handleFunc("/locations", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.LocationListResponse{
+			Locations: []schema.Location{{ID: 1, Name: "nbg1"}},
+		})
+	})
+
+	ts.handleFunc("/servers", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			jsonResponse(w, http.StatusCreated, schema.ServerCreateResponse{
+				Server: schema.Server{
+					ID:     200,
+					Name:   "server-with-net",
+					Status: "off",
+				},
+				Action: schema.Action{ID: 110, Status: "success"},
+			})
+			return
+		}
+		jsonResponse(w, http.StatusOK, schema.ServerListResponse{Servers: []schema.Server{}})
+	})
+
+	ts.handleFunc("/actions/110", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+			Action: schema.Action{ID: 110, Status: "success", Progress: 100},
+		})
+	})
+
+	ts.handleFunc("/servers/200/actions/attach_to_network", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ServerActionAttachToNetworkResponse{
+			Action: schema.Action{ID: 111, Status: "success"},
+		})
+	})
+
+	ts.handleFunc("/actions/111", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+			Action: schema.Action{ID: 111, Status: "success", Progress: 100},
+		})
+	})
+
+	ts.handleFunc("/servers/200/actions/poweron", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ServerActionPoweronResponse{
+			Action: schema.Action{ID: 112, Status: "success"},
+		})
+	})
+
+	ts.handleFunc("/actions/112", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+			Action: schema.Action{ID: 112, Status: "success", Progress: 100},
+		})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	serverID, err := client.CreateServer(ctx, ServerCreateOpts{
+		Name:            "server-with-net",
+		ImageType:       "ubuntu-22.04",
+		ServerType:      "cx21",
+		Location:        "nbg1",
+		SSHKeys:         []string{},
+		NetworkID:       100,
+		PrivateIP:       "10.0.0.5",
+		EnablePublicIPv4: true,
+		EnablePublicIPv6: true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if serverID != "200" {
+		t.Errorf("expected server ID '200', got %q", serverID)
+	}
+}
+
+func TestRealClient_CreateServer_RetryOnTransientError(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/server_types", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ServerTypeListResponse{
+			ServerTypes: []schema.ServerType{{ID: 1, Name: "cx21", Architecture: "x86"}},
+		})
+	})
+
+	imageName := "ubuntu-22.04"
+	ts.handleFunc("/images", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ImageListResponse{
+			Images: []schema.Image{{ID: 10, Name: &imageName, Type: "system", Architecture: "x86", Status: "available"}},
+		})
+	})
+
+	ts.handleFunc("/locations", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.LocationListResponse{
+			Locations: []schema.Location{{ID: 1, Name: "nbg1"}},
+		})
+	})
+
+	// Server creation fails on first attempt, succeeds on second
+	attempt := 0
+	ts.handleFunc("/servers", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			attempt++
+			if attempt == 1 {
+				// Transient error (not an invalid parameter)
+				http.Error(w, "service temporarily unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			jsonResponse(w, http.StatusCreated, schema.ServerCreateResponse{
+				Server: schema.Server{ID: 300, Name: "retry-server"},
+				Action: schema.Action{ID: 120, Status: "success"},
+			})
+			return
+		}
+		jsonResponse(w, http.StatusOK, schema.ServerListResponse{Servers: []schema.Server{}})
+	})
+
+	ts.handleFunc("/actions/120", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+			Action: schema.Action{ID: 120, Status: "success", Progress: 100},
+		})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	serverID, err := client.CreateServer(ctx, ServerCreateOpts{
+		Name:             "retry-server",
+		ImageType:        "ubuntu-22.04",
+		ServerType:       "cx21",
+		Location:         "nbg1",
+		SSHKeys:          []string{},
+		EnablePublicIPv4: true,
+		EnablePublicIPv6: true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if serverID != "300" {
+		t.Errorf("expected server ID '300', got %q", serverID)
+	}
+	if attempt < 2 {
+		t.Errorf("expected at least 2 attempts, got %d", attempt)
+	}
+}
+
+func TestRealClient_CreateServer_FatalErrorNoRetry(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/server_types", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ServerTypeListResponse{
+			ServerTypes: []schema.ServerType{{ID: 1, Name: "cx21", Architecture: "x86"}},
+		})
+	})
+
+	imageName := "ubuntu-22.04"
+	ts.handleFunc("/images", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ImageListResponse{
+			Images: []schema.Image{{ID: 10, Name: &imageName, Type: "system", Architecture: "x86", Status: "available"}},
+		})
+	})
+
+	ts.handleFunc("/locations", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.LocationListResponse{
+			Locations: []schema.Location{{ID: 1, Name: "nbg1"}},
+		})
+	})
+
+	attempt := 0
+	ts.handleFunc("/servers", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			attempt++
+			// Return an "invalid_input" error which should NOT be retried
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": map[string]interface{}{
+					"code":    "invalid_input",
+					"message": "invalid server name",
+				},
+			})
+			return
+		}
+		jsonResponse(w, http.StatusOK, schema.ServerListResponse{Servers: []schema.Server{}})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	_, err := client.CreateServer(ctx, ServerCreateOpts{
+		Name:             "bad-server",
+		ImageType:        "ubuntu-22.04",
+		ServerType:       "cx21",
+		Location:         "nbg1",
+		SSHKeys:          []string{},
+		EnablePublicIPv4: true,
+		EnablePublicIPv6: true,
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid input")
+	}
+	// Fatal errors should NOT be retried - only 1 attempt
+	if attempt != 1 {
+		t.Errorf("expected exactly 1 attempt for fatal error, got %d", attempt)
+	}
+}
+
+func TestRealClient_AttachServerToNetwork_PowerOnError(t *testing.T) {
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers", func(w http.ResponseWriter, r *http.Request) {
+		name := r.URL.Query().Get("name")
+		if name == "stopped-server" {
+			jsonResponse(w, http.StatusOK, schema.ServerListResponse{
+				Servers: []schema.Server{
+					{
+						ID:     126,
+						Name:   "stopped-server",
+						Status: "off",
+						PrivateNet: []schema.ServerPrivateNet{
+							{
+								Network: 100,
+								IP:      "10.0.0.5",
+							},
+						},
+					},
+				},
+			})
+			return
+		}
+		jsonResponse(w, http.StatusOK, schema.ServerListResponse{Servers: []schema.Server{}})
+	})
+
+	ts.handleFunc("/servers/126/actions/poweron", func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "power on failed", http.StatusInternalServerError)
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	err := client.AttachServerToNetwork(ctx, "stopped-server", 100, "10.0.0.5")
+	if err == nil {
+		t.Fatal("expected error for power on failure")
+	}
 }
