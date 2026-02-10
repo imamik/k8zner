@@ -138,7 +138,7 @@ func (a *PhaseAdapter) loadBackupCredentials(ctx context.Context, k8sCluster *k8
 	}
 
 	if err := a.client.Get(ctx, backupKey, backupSecret); err != nil {
-		return err
+		return fmt.Errorf("failed to get backup S3 credentials secret %q: %w", backupKey.Name, err)
 	}
 
 	creds.BackupS3AccessKey = string(backupSecret.Data["access-key"])
