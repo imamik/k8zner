@@ -143,31 +143,31 @@ func init() {
 	)
 }
 
-// RecordReconcile records a reconciliation result.
-func RecordReconcile(cluster string, result string, duration float64) {
+// recordReconcileMetric records a reconciliation result.
+func recordReconcileMetric(cluster string, result string, duration float64) {
 	reconcileTotal.WithLabelValues(cluster, result).Inc()
 	reconcileDuration.WithLabelValues(cluster).Observe(duration)
 }
 
-// RecordNodeCounts records the node counts for a cluster.
-func RecordNodeCounts(cluster, role string, total, healthy, desired int) {
+// recordNodeCountsMetric records the node counts for a cluster.
+func recordNodeCountsMetric(cluster, role string, total, healthy, desired int) {
 	nodesTotal.WithLabelValues(cluster, role, "total").Set(float64(total))
 	nodesHealthy.WithLabelValues(cluster, role).Set(float64(healthy))
 	nodesDesired.WithLabelValues(cluster, role).Set(float64(desired))
 }
 
-// RecordNodeReplacement records a node replacement.
-func RecordNodeReplacement(cluster, role, reason string) {
+// recordNodeReplacementMetric records a node replacement.
+func recordNodeReplacementMetric(cluster, role, reason string) {
 	nodeReplacementsTotal.WithLabelValues(cluster, role, reason).Inc()
 }
 
-// RecordNodeReplacementDuration records the duration of a node replacement.
-func RecordNodeReplacementDuration(cluster, role string, duration float64) {
+// recordNodeReplacementDurationMetric records the duration of a node replacement.
+func recordNodeReplacementDurationMetric(cluster, role string, duration float64) {
 	nodeReplacementDuration.WithLabelValues(cluster, role).Observe(duration)
 }
 
-// RecordEtcdStatus records the etcd cluster status.
-func RecordEtcdStatus(cluster string, members int, healthy bool) {
+// recordEtcdStatusMetric records the etcd cluster status.
+func recordEtcdStatusMetric(cluster string, members int, healthy bool) {
 	etcdMembersTotal.WithLabelValues(cluster).Set(float64(members))
 	if healthy {
 		etcdHealthy.WithLabelValues(cluster).Set(1)
@@ -176,8 +176,8 @@ func RecordEtcdStatus(cluster string, members int, healthy bool) {
 	}
 }
 
-// RecordHCloudAPICall records a Hetzner Cloud API call.
-func RecordHCloudAPICall(operation, result string, latency float64) {
+// recordHCloudAPICallMetric records a Hetzner Cloud API call.
+func recordHCloudAPICallMetric(operation, result string, latency float64) {
 	hcloudAPICallsTotal.WithLabelValues(operation, result).Inc()
 	hcloudAPILatency.WithLabelValues(operation).Observe(latency)
 }
@@ -187,36 +187,36 @@ func RecordHCloudAPICall(operation, result string, latency float64) {
 
 func (r *ClusterReconciler) recordReconcile(cluster, result string, duration float64) {
 	if r.enableMetrics {
-		RecordReconcile(cluster, result, duration)
+		recordReconcileMetric(cluster, result, duration)
 	}
 }
 
 func (r *ClusterReconciler) recordNodeCounts(cluster, role string, total, healthy, desired int) {
 	if r.enableMetrics {
-		RecordNodeCounts(cluster, role, total, healthy, desired)
+		recordNodeCountsMetric(cluster, role, total, healthy, desired)
 	}
 }
 
 func (r *ClusterReconciler) recordNodeReplacement(cluster, role, reason string) {
 	if r.enableMetrics {
-		RecordNodeReplacement(cluster, role, reason)
+		recordNodeReplacementMetric(cluster, role, reason)
 	}
 }
 
 func (r *ClusterReconciler) recordNodeReplacementDuration(cluster, role string, duration float64) {
 	if r.enableMetrics {
-		RecordNodeReplacementDuration(cluster, role, duration)
+		recordNodeReplacementDurationMetric(cluster, role, duration)
 	}
 }
 
 func (r *ClusterReconciler) recordEtcdStatus(cluster string, members int, healthy bool) {
 	if r.enableMetrics {
-		RecordEtcdStatus(cluster, members, healthy)
+		recordEtcdStatusMetric(cluster, members, healthy)
 	}
 }
 
 func (r *ClusterReconciler) recordHCloudAPICall(operation, result string, latency float64) {
 	if r.enableMetrics {
-		RecordHCloudAPICall(operation, result, latency)
+		recordHCloudAPICallMetric(operation, result, latency)
 	}
 }

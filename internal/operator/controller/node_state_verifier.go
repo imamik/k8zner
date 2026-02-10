@@ -16,8 +16,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// NodeStateInfo contains the verified state of a node from external systems.
-type NodeStateInfo struct {
+// nodeStateInfo contains the verified state of a node from external systems.
+type nodeStateInfo struct {
 	// HCloud server state
 	ServerExists bool
 	ServerStatus string // "running", "off", "starting", etc.
@@ -37,11 +37,11 @@ type NodeStateInfo struct {
 	K8sNodeReady  bool
 }
 
-// VerifyNodeState checks the actual state of a node using HCloud, Talos, and K8s APIs.
+// verifyNodeState checks the actual state of a node using HCloud, Talos, and K8s APIs.
 // This provides ground truth about node state independent of what the operator thinks.
-func (r *ClusterReconciler) VerifyNodeState(ctx context.Context, nodeName string, nodeIP string) (*NodeStateInfo, error) {
+func (r *ClusterReconciler) verifyNodeState(ctx context.Context, nodeName string, nodeIP string) (*nodeStateInfo, error) {
 	logger := log.FromContext(ctx)
-	info := &NodeStateInfo{}
+	info := &nodeStateInfo{}
 
 	// Step 1: Check HCloud server status
 	server, err := r.hcloudClient.GetServerByName(ctx, nodeName)
@@ -86,8 +86,8 @@ func (r *ClusterReconciler) VerifyNodeState(ctx context.Context, nodeName string
 	return info, nil
 }
 
-// DetermineNodePhaseFromState determines the appropriate NodePhase based on verified state.
-func DetermineNodePhaseFromState(info *NodeStateInfo) (k8znerv1alpha1.NodePhase, string) {
+// determineNodePhaseFromState determines the appropriate NodePhase based on verified state.
+func determineNodePhaseFromState(info *nodeStateInfo) (k8znerv1alpha1.NodePhase, string) {
 	// If K8s node exists and is ready, it's Ready
 	if info.K8sNodeExists && info.K8sNodeReady {
 		return k8znerv1alpha1.NodePhaseReady, "Node is registered and ready in Kubernetes"

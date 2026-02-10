@@ -12,12 +12,12 @@ func TestDetermineNodePhaseFromState(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name          string
-		info          *NodeStateInfo
+		info          *nodeStateInfo
 		expectedPhase k8znerv1alpha1.NodePhase
 	}{
 		{
 			name: "K8s node exists and ready",
-			info: &NodeStateInfo{
+			info: &nodeStateInfo{
 				ServerExists:  true,
 				ServerStatus:  "running",
 				K8sNodeExists: true,
@@ -27,7 +27,7 @@ func TestDetermineNodePhaseFromState(t *testing.T) {
 		},
 		{
 			name: "K8s node exists, not ready, kubelet running",
-			info: &NodeStateInfo{
+			info: &nodeStateInfo{
 				ServerExists:        true,
 				ServerStatus:        "running",
 				K8sNodeExists:       true,
@@ -38,7 +38,7 @@ func TestDetermineNodePhaseFromState(t *testing.T) {
 		},
 		{
 			name: "K8s node exists, not ready, kubelet not running",
-			info: &NodeStateInfo{
+			info: &nodeStateInfo{
 				ServerExists:        true,
 				ServerStatus:        "running",
 				K8sNodeExists:       true,
@@ -49,7 +49,7 @@ func TestDetermineNodePhaseFromState(t *testing.T) {
 		},
 		{
 			name: "Talos configured, kubelet running, no K8s node",
-			info: &NodeStateInfo{
+			info: &nodeStateInfo{
 				ServerExists:        true,
 				ServerStatus:        "running",
 				TalosConfigured:     true,
@@ -59,7 +59,7 @@ func TestDetermineNodePhaseFromState(t *testing.T) {
 		},
 		{
 			name: "Talos configured, kubelet not running",
-			info: &NodeStateInfo{
+			info: &nodeStateInfo{
 				ServerExists:        true,
 				ServerStatus:        "running",
 				TalosConfigured:     true,
@@ -69,7 +69,7 @@ func TestDetermineNodePhaseFromState(t *testing.T) {
 		},
 		{
 			name: "Talos in maintenance mode",
-			info: &NodeStateInfo{
+			info: &nodeStateInfo{
 				ServerExists:           true,
 				ServerStatus:           "running",
 				TalosAPIReachable:      true,
@@ -79,7 +79,7 @@ func TestDetermineNodePhaseFromState(t *testing.T) {
 		},
 		{
 			name: "Talos API reachable but not in maintenance",
-			info: &NodeStateInfo{
+			info: &nodeStateInfo{
 				ServerExists:      true,
 				ServerStatus:      "running",
 				TalosAPIReachable: true,
@@ -88,7 +88,7 @@ func TestDetermineNodePhaseFromState(t *testing.T) {
 		},
 		{
 			name: "Server running, Talos not reachable",
-			info: &NodeStateInfo{
+			info: &nodeStateInfo{
 				ServerExists: true,
 				ServerStatus: "running",
 				ServerIP:     "10.0.0.1",
@@ -97,7 +97,7 @@ func TestDetermineNodePhaseFromState(t *testing.T) {
 		},
 		{
 			name: "Server starting",
-			info: &NodeStateInfo{
+			info: &nodeStateInfo{
 				ServerExists: true,
 				ServerStatus: "starting",
 			},
@@ -105,7 +105,7 @@ func TestDetermineNodePhaseFromState(t *testing.T) {
 		},
 		{
 			name: "Server exists in unknown state",
-			info: &NodeStateInfo{
+			info: &nodeStateInfo{
 				ServerExists: true,
 				ServerStatus: "initializing",
 			},
@@ -113,7 +113,7 @@ func TestDetermineNodePhaseFromState(t *testing.T) {
 		},
 		{
 			name: "Server does not exist",
-			info: &NodeStateInfo{
+			info: &nodeStateInfo{
 				ServerExists: false,
 			},
 			expectedPhase: k8znerv1alpha1.NodePhaseFailed,
@@ -123,7 +123,7 @@ func TestDetermineNodePhaseFromState(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			phase, reason := DetermineNodePhaseFromState(tt.info)
+			phase, reason := determineNodePhaseFromState(tt.info)
 			assert.Equal(t, tt.expectedPhase, phase)
 			assert.NotEmpty(t, reason, "reason should always be provided")
 		})
@@ -134,31 +134,31 @@ func TestDetermineNodePhaseFromState_ReasonContent(t *testing.T) {
 	t.Parallel()
 	t.Run("ready node has descriptive reason", func(t *testing.T) {
 		t.Parallel()
-		info := &NodeStateInfo{
+		info := &nodeStateInfo{
 			K8sNodeExists: true,
 			K8sNodeReady:  true,
 		}
-		_, reason := DetermineNodePhaseFromState(info)
+		_, reason := determineNodePhaseFromState(info)
 		assert.Contains(t, reason, "ready")
 	})
 
 	t.Run("failed node mentions HCloud", func(t *testing.T) {
 		t.Parallel()
-		info := &NodeStateInfo{
+		info := &nodeStateInfo{
 			ServerExists: false,
 		}
-		_, reason := DetermineNodePhaseFromState(info)
+		_, reason := determineNodePhaseFromState(info)
 		assert.Contains(t, reason, "HCloud")
 	})
 
 	t.Run("waiting for talos includes IP in reason", func(t *testing.T) {
 		t.Parallel()
-		info := &NodeStateInfo{
+		info := &nodeStateInfo{
 			ServerExists: true,
 			ServerStatus: "running",
 			ServerIP:     "10.0.0.42",
 		}
-		_, reason := DetermineNodePhaseFromState(info)
+		_, reason := determineNodePhaseFromState(info)
 		assert.Contains(t, reason, "10.0.0.42")
 	})
 }

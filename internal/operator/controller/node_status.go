@@ -245,14 +245,14 @@ func (r *ClusterReconciler) verifyAndUpdateNodeStates(ctx context.Context, clust
 			}
 
 			// Verify actual state
-			stateInfo, err := r.VerifyNodeState(ctx, node.Name, nodeIP)
+			stateInfo, err := r.verifyNodeState(ctx, node.Name, nodeIP)
 			if err != nil {
 				logger.V(1).Info("failed to verify node state", "node", node.Name, "error", err)
 				continue
 			}
 
 			// Determine what phase the node should be in based on actual state
-			actualPhase, reason := DetermineNodePhaseFromState(stateInfo)
+			actualPhase, reason := determineNodePhaseFromState(stateInfo)
 
 			// Only update if phase changed and it's a forward progression or error
 			if actualPhase != node.Phase && shouldUpdatePhase(node.Phase, actualPhase) {
