@@ -101,8 +101,11 @@ jobs:
             ./cmd/... \
             ./internal/addons/... \
             ./internal/config/... \
+            ./internal/operator/addons/... \
+            ./internal/operator/provisioning/... \
             ./internal/util/... \
             ./internal/platform/... \
+            ./internal/provisioning/ \
             ./internal/provisioning/compute/... \
             ./internal/provisioning/destroy/... \
             ./internal/provisioning/image/... \
