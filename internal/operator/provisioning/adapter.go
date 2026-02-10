@@ -458,7 +458,7 @@ func mergeNodePool(nodes *[]k8znerv1alpha1.NodeStatus, ips map[string]string, se
 			*nodes = append(*nodes, k8znerv1alpha1.NodeStatus{
 				Name:     name,
 				ServerID: serverID,
-				PublicIP:  ip,
+				PublicIP: ip,
 			})
 		}
 	}

@@ -209,12 +209,6 @@ func (r *ClusterReconciler) recordNodeReplacementDuration(cluster, role string, 
 	}
 }
 
-func (r *ClusterReconciler) recordEtcdStatus(cluster string, members int, healthy bool) {
-	if r.enableMetrics {
-		recordEtcdStatusMetric(cluster, members, healthy)
-	}
-}
-
 func (r *ClusterReconciler) recordHCloudAPICall(operation, result string, latency float64) {
 	if r.enableMetrics {
 		recordHCloudAPICallMetric(operation, result, latency)

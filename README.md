@@ -488,30 +488,38 @@ export TALOSCONFIG=./secrets/<cluster-name>/talosconfig
 <summary><strong>Project Structure</strong></summary>
 
 ```
-cmd/k8zner/
-├── commands/         # CLI commands (Cobra): init, apply, destroy, doctor
-└── handlers/         # Business logic for each command
+cmd/
+├── k8zner/
+│   ├── commands/         # CLI commands (Cobra): init, apply, destroy, doctor
+│   └── handlers/         # Business logic for each command
+├── operator/             # Kubernetes operator entrypoint
+└── cleanup/              # Standalone cleanup utility
 
 internal/
-├── config/           # Configuration loading
-│   └── v2/           # Simplified config schema
-├── provisioning/     # Infrastructure provisioning
+├── operator/             # Kubernetes operator
+│   ├── controller/       # CRD reconciliation (phases, scaling, healing)
+│   ├── provisioning/     # CRD spec → config adapter
+│   └── addons/           # Operator addon phase manager
+├── config/               # Configuration handling
+│   └── v2/               # Simplified config schema + version matrix
+├── provisioning/         # Infrastructure provisioning (shared by CLI + operator)
 │   ├── infrastructure/   # Network, firewall, LBs
-│   ├── compute/          # Servers
+│   ├── compute/          # Servers, node pools
+│   ├── image/            # Talos image building
 │   ├── cluster/          # K8s bootstrap
 │   ├── destroy/          # Resource teardown
-│   └── image/            # Talos images
-├── addons/           # K8s addon installation
-│   ├── helm/             # Chart rendering
-│   └── k8sclient/        # Embedded K8s client
-├── operator/         # Kubernetes operator
-│   ├── controller/       # Cluster reconciler
-│   └── provisioning/     # Operator provisioning adapter
+│   └── upgrade/          # Node upgrade provisioning
+├── addons/               # K8s addon installation (shared by CLI + operator)
+│   ├── helm/             # Chart rendering and value building
+│   └── k8sclient/        # Kubernetes API operations
 ├── platform/
-│   ├── hcloud/           # Hetzner API
-│   ├── talos/            # Talos config
-│   └── ssh/              # SSH client
-└── util/             # Shared utilities
+│   ├── hcloud/           # Hetzner API (generic Delete/Ensure operations)
+│   ├── talos/            # Talos config and patches
+│   ├── ssh/              # SSH client
+│   └── s3/               # S3/backup integration
+└── util/                 # Shared utilities (async, naming, labels, retry, rdns, keygen)
+
+api/v1alpha1/             # CRD types (K8znerCluster spec, status, phases)
 ```
 
 </details>
