@@ -255,14 +255,15 @@ type configureNodeFunc func(serverName string, result *serverProvisionResult) er
 
 // nodeProvisionParams describes the parameters for provisioning a new node.
 type nodeProvisionParams struct {
-	Name       string
-	Role       string // "control-plane" or "worker"
-	Pool       string // "control-plane" or "workers"
-	ServerType string
-	SnapshotID int64
-	SSHKeyName string
-	NetworkID  int64
-	Configure  configureNodeFunc
+	Name          string
+	Role          string // "control-plane" or "worker"
+	Pool          string // "control-plane" or "workers"
+	ServerType    string
+	SnapshotID    int64
+	SSHKeyName    string
+	NetworkID     int64
+	Configure     configureNodeFunc
+	MetricsReason string // e.g. "scale-up"; empty to skip metrics (caller records them)
 }
 
 // provisionAndConfigureNode provisions a server, applies Talos config via the Configure callback,
@@ -325,8 +326,10 @@ func (r *ClusterReconciler) provisionAndConfigureNode(ctx context.Context, clust
 	r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonScalingUp,
 		"Successfully created %s %s", params.Role, params.Name)
 
-	r.recordNodeReplacement(cluster.Name, params.Role, "scale-up")
-	r.recordNodeReplacementDuration(cluster.Name, params.Role, time.Since(startTime).Seconds())
+	if params.MetricsReason != "" {
+		r.recordNodeReplacement(cluster.Name, params.Role, params.MetricsReason)
+		r.recordNodeReplacementDuration(cluster.Name, params.Role, time.Since(startTime).Seconds())
+	}
 
 	return nil
 }

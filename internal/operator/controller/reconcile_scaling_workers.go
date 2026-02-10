@@ -161,13 +161,14 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 	created := 0
 	for i := 0; i < count && created < r.maxConcurrentHeals; i++ {
 		err := r.provisionAndConfigureNode(ctx, cluster, nodeProvisionParams{
-			Name:       naming.Worker(cluster.Name),
-			Role:       "worker",
-			Pool:       "workers",
-			ServerType: normalizeServerSize(cluster.Spec.Workers.Size),
-			SnapshotID: snapshot.ID,
-			SSHKeyName: sshKeyName,
-			NetworkID:  clusterState.NetworkID,
+			Name:          naming.Worker(cluster.Name),
+			Role:          "worker",
+			Pool:          "workers",
+			ServerType:    normalizeServerSize(cluster.Spec.Workers.Size),
+			SnapshotID:    snapshot.ID,
+			SSHKeyName:    sshKeyName,
+			NetworkID:     clusterState.NetworkID,
+			MetricsReason: "scale-up",
 			Configure: func(serverName string, result *serverProvisionResult) error {
 				return r.configureAndWaitForWorker(ctx, cluster, tc, serverName, result)
 			},

@@ -171,13 +171,14 @@ func (r *ClusterReconciler) scaleUpControlPlanes(ctx context.Context, cluster *k
 	created := 0
 	for i := 0; i < count; i++ {
 		err := r.provisionAndConfigureNode(ctx, cluster, nodeProvisionParams{
-			Name:       naming.ControlPlane(cluster.Name),
-			Role:       "control-plane",
-			Pool:       "control-plane",
-			ServerType: normalizeServerSize(cluster.Spec.ControlPlanes.Size),
-			SnapshotID: snapshot.ID,
-			SSHKeyName: sshKeyName,
-			NetworkID:  clusterState.NetworkID,
+			Name:          naming.ControlPlane(cluster.Name),
+			Role:          "control-plane",
+			Pool:          "control-plane",
+			ServerType:    normalizeServerSize(cluster.Spec.ControlPlanes.Size),
+			SnapshotID:    snapshot.ID,
+			SSHKeyName:    sshKeyName,
+			NetworkID:     clusterState.NetworkID,
+			MetricsReason: "scale-up",
 			Configure: func(serverName string, result *serverProvisionResult) error {
 				return r.configureAndWaitForCP(ctx, cluster, clusterState, tc, serverName, result)
 			},
