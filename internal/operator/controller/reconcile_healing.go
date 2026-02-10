@@ -87,15 +87,11 @@ func (r *ClusterReconciler) deleteNodeAndServer(ctx context.Context, cluster *k8
 		startTime := time.Now()
 		if err := r.hcloudClient.DeleteServer(ctx, node.Name); err != nil {
 			logger.Error(err, "failed to delete hetzner server", "name", node.Name)
-			if r.enableMetrics {
-				RecordHCloudAPICall("delete_server", "error", time.Since(startTime).Seconds())
-			}
+			r.recordHCloudAPICall("delete_server", "error", time.Since(startTime).Seconds())
 			// Continue anyway - server might already be gone
 		} else {
 			logger.Info("deleted hetzner server", "name", node.Name, "serverID", node.ServerID)
-			if r.enableMetrics {
-				RecordHCloudAPICall("delete_server", "success", time.Since(startTime).Seconds())
-			}
+			r.recordHCloudAPICall("delete_server", "success", time.Since(startTime).Seconds())
 		}
 	}
 

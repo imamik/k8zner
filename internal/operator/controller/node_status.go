@@ -349,6 +349,20 @@ func countWorkersInEarlyProvisioning(nodes []k8znerv1alpha1.NodeStatus) int {
 	return count
 }
 
+// findUnhealthyNodes returns nodes that have been unhealthy past the given threshold.
+func findUnhealthyNodes(nodes []k8znerv1alpha1.NodeStatus, threshold time.Duration) []*k8znerv1alpha1.NodeStatus {
+	var unhealthy []*k8znerv1alpha1.NodeStatus
+	for i := range nodes {
+		node := &nodes[i]
+		if !node.Healthy && node.UnhealthySince != nil {
+			if time.Since(node.UnhealthySince.Time) > threshold {
+				unhealthy = append(unhealthy, node)
+			}
+		}
+	}
+	return unhealthy
+}
+
 // getPrivateIPFromServer retrieves the private IP from HCloud for a server.
 func (r *ClusterReconciler) getPrivateIPFromServer(ctx context.Context, serverName string) (string, error) {
 	server, err := r.hcloudClient.GetServerByName(ctx, serverName)

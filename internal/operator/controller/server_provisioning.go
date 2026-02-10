@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+
 	hcloudgo "github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/util/keygen"
+	"github.com/imamik/k8zner/internal/util/labels"
 	"github.com/imamik/k8zner/internal/util/naming"
 )
 
@@ -188,9 +191,7 @@ func (r *ClusterReconciler) provisionServer(ctx context.Context, cluster *k8zner
 		EnablePublicIPv6: true,
 	})
 	if err != nil {
-		if r.enableMetrics {
-			RecordHCloudAPICall("create_server", "error", time.Since(startTime).Seconds())
-		}
+		r.recordHCloudAPICall("create_server", "error", time.Since(startTime).Seconds())
 		r.updateNodePhase(ctx, cluster, opts.Role, NodeStatusUpdate{
 			Name:   opts.Name,
 			Phase:  k8znerv1alpha1.NodePhaseFailed,
@@ -198,9 +199,7 @@ func (r *ClusterReconciler) provisionServer(ctx context.Context, cluster *k8zner
 		})
 		return nil, fmt.Errorf("failed to create server: %w", err)
 	}
-	if r.enableMetrics {
-		RecordHCloudAPICall("create_server", "success", time.Since(startTime).Seconds())
-	}
+	r.recordHCloudAPICall("create_server", "success", time.Since(startTime).Seconds())
 	logger.Info("created server", "name", opts.Name)
 
 	// Wait for server IP assignment
@@ -249,6 +248,87 @@ func (r *ClusterReconciler) provisionServer(ctx context.Context, cluster *k8zner
 		PrivateIP: privateIP,
 		TalosIP:   talosIP,
 	}, nil
+}
+
+// configureNodeFunc is called after server provisioning to apply Talos config and wait for readiness.
+type configureNodeFunc func(serverName string, result *serverProvisionResult) error
+
+// nodeProvisionParams describes the parameters for provisioning a new node.
+type nodeProvisionParams struct {
+	Name       string
+	Role       string // "control-plane" or "worker"
+	Pool       string // "control-plane" or "workers"
+	ServerType string
+	SnapshotID int64
+	SSHKeyName string
+	NetworkID  int64
+	Configure  configureNodeFunc
+}
+
+// provisionAndConfigureNode provisions a server, applies Talos config via the Configure callback,
+// persists status, and records metrics. This is the unified implementation for both CP and worker provisioning.
+func (r *ClusterReconciler) provisionAndConfigureNode(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, params nodeProvisionParams) error {
+	logger := log.FromContext(ctx)
+
+	serverLabels := labels.NewLabelBuilder(cluster.Name).
+		WithRole(params.Role).
+		WithPool(params.Pool).
+		WithManagedBy(labels.ManagedByOperator).
+		Build()
+
+	logger.Info("creating new server",
+		"name", params.Name, "role", params.Role, "snapshot", params.SnapshotID, "serverType", params.ServerType)
+
+	startTime := time.Now()
+
+	result, err := r.provisionServer(ctx, cluster, serverCreateOpts{
+		Name:       params.Name,
+		SnapshotID: params.SnapshotID,
+		ServerType: params.ServerType,
+		Region:     cluster.Spec.Region,
+		SSHKeyName: params.SSHKeyName,
+		Labels:     serverLabels,
+		NetworkID:  params.NetworkID,
+		Role:       params.Role,
+	})
+	if err != nil {
+		logger.Error(err, "failed to provision server", "name", params.Name, "role", params.Role)
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
+			"Failed to create %s server %s: %v", params.Role, params.Name, err)
+		return err
+	}
+
+	// Persist status to prevent duplicate server creation
+	if err := r.persistClusterStatus(ctx, cluster); err != nil {
+		logger.Error(err, "failed to persist status after server creation", "name", params.Name)
+	}
+
+	if err := r.updateNodePhaseAndPersist(ctx, cluster, params.Role, NodeStatusUpdate{
+		Name:      params.Name,
+		ServerID:  result.ServerID,
+		PublicIP:  result.PublicIP,
+		PrivateIP: result.PrivateIP,
+		Phase:     k8znerv1alpha1.NodePhaseWaitingForTalosAPI,
+		Reason:    fmt.Sprintf("Waiting for Talos API on %s:50000", result.TalosIP),
+	}); err != nil {
+		logger.Error(err, "failed to persist node status", "name", params.Name)
+	}
+
+	if err := params.Configure(params.Name, result); err != nil {
+		return err
+	}
+
+	if err := r.persistClusterStatus(ctx, cluster); err != nil {
+		logger.Error(err, "failed to persist cluster status", "name", params.Name)
+	}
+
+	r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonScalingUp,
+		"Successfully created %s %s", params.Role, params.Name)
+
+	r.recordNodeReplacement(cluster.Name, params.Role, "scale-up")
+	r.recordNodeReplacementDuration(cluster.Name, params.Role, time.Since(startTime).Seconds())
+
+	return nil
 }
 
 // handleProvisioningFailure marks a node as failed, deletes its orphaned server, and removes it from status.

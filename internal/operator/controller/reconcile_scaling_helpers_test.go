@@ -15,16 +15,16 @@ import (
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 )
 
-func TestFindUnhealthyWorkers(t *testing.T) {
+func TestFindUnhealthyNodes(t *testing.T) {
 	t.Parallel()
 	threshold := 5 * time.Minute
 
 	t.Run("returns nil for empty nodes", func(t *testing.T) {
 		t.Parallel()
-		result := findUnhealthyWorkers(nil, threshold)
+		result := findUnhealthyNodes(nil, threshold)
 		assert.Nil(t, result)
 
-		result = findUnhealthyWorkers([]k8znerv1alpha1.NodeStatus{}, threshold)
+		result = findUnhealthyNodes([]k8znerv1alpha1.NodeStatus{}, threshold)
 		assert.Nil(t, result)
 	})
 
@@ -34,7 +34,7 @@ func TestFindUnhealthyWorkers(t *testing.T) {
 			{Name: "worker-1", Healthy: true},
 			{Name: "worker-2", Healthy: true},
 		}
-		result := findUnhealthyWorkers(nodes, threshold)
+		result := findUnhealthyNodes(nodes, threshold)
 		assert.Nil(t, result)
 	})
 
@@ -43,7 +43,7 @@ func TestFindUnhealthyWorkers(t *testing.T) {
 		nodes := []k8znerv1alpha1.NodeStatus{
 			{Name: "worker-1", Healthy: false}, // No UnhealthySince
 		}
-		result := findUnhealthyWorkers(nodes, threshold)
+		result := findUnhealthyNodes(nodes, threshold)
 		assert.Nil(t, result)
 	})
 
@@ -53,7 +53,7 @@ func TestFindUnhealthyWorkers(t *testing.T) {
 		nodes := []k8znerv1alpha1.NodeStatus{
 			{Name: "worker-1", Healthy: false, UnhealthySince: &recentTime},
 		}
-		result := findUnhealthyWorkers(nodes, threshold)
+		result := findUnhealthyNodes(nodes, threshold)
 		assert.Nil(t, result)
 	})
 
@@ -67,7 +67,7 @@ func TestFindUnhealthyWorkers(t *testing.T) {
 			{Name: "worker-3", Healthy: false, UnhealthySince: &recentTime},
 			{Name: "worker-4", Healthy: false, UnhealthySince: &pastThreshold},
 		}
-		result := findUnhealthyWorkers(nodes, threshold)
+		result := findUnhealthyNodes(nodes, threshold)
 		require.Len(t, result, 2)
 		assert.Equal(t, "worker-2", result[0].Name)
 		assert.Equal(t, "worker-4", result[1].Name)
@@ -79,7 +79,7 @@ func TestFindUnhealthyWorkers(t *testing.T) {
 		nodes := []k8znerv1alpha1.NodeStatus{
 			{Name: "worker-1", Healthy: false, UnhealthySince: &recentTime},
 		}
-		result := findUnhealthyWorkers(nodes, 0)
+		result := findUnhealthyNodes(nodes, 0)
 		require.Len(t, result, 1)
 		assert.Equal(t, "worker-1", result[0].Name)
 	})

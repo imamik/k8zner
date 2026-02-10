@@ -55,12 +55,10 @@ func (r *ClusterReconciler) reconcileHealthCheck(ctx context.Context, cluster *k
 	cluster.Status.Workers = r.buildNodeGroupStatus(ctx, cluster, workerNodes, cluster.Spec.Workers.Count, "worker")
 
 	// Record metrics
-	if r.enableMetrics {
-		RecordNodeCounts(cluster.Name, "control-plane",
-			len(cpNodes), cluster.Status.ControlPlanes.Ready, cluster.Spec.ControlPlanes.Count)
-		RecordNodeCounts(cluster.Name, "worker",
-			len(workerNodes), cluster.Status.Workers.Ready, cluster.Spec.Workers.Count)
-	}
+	r.recordNodeCounts(cluster.Name, "control-plane",
+		len(cpNodes), cluster.Status.ControlPlanes.Ready, cluster.Spec.ControlPlanes.Count)
+	r.recordNodeCounts(cluster.Name, "worker",
+		len(workerNodes), cluster.Status.Workers.Ready, cluster.Spec.Workers.Count)
 
 	logger.Info("health check complete",
 		"controlPlanes", fmt.Sprintf("%d/%d", cluster.Status.ControlPlanes.Ready, cluster.Status.ControlPlanes.Desired),

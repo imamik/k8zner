@@ -239,10 +239,7 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	startTime := time.Now()
 	defer func() {
-		if r.enableMetrics {
-			duration := time.Since(startTime).Seconds()
-			RecordReconcile(req.Name, "completed", duration)
-		}
+		r.recordReconcile(req.Name, "completed", time.Since(startTime).Seconds())
 	}()
 
 	// Fetch the K8znerCluster
@@ -289,9 +286,7 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if err != nil {
 		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonReconcileFailed,
 			"Reconciliation failed: %v", err)
-		if r.enableMetrics {
-			RecordReconcile(req.Name, "error", time.Since(startTime).Seconds())
-		}
+		r.recordReconcile(req.Name, "error", time.Since(startTime).Seconds())
 	} else {
 		r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonReconcileSucceeded,
 			"Reconciliation completed successfully")

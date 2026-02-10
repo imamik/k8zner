@@ -12,7 +12,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
-	"github.com/imamik/k8zner/internal/util/labels"
 	"github.com/imamik/k8zner/internal/util/naming"
 )
 
@@ -20,7 +19,7 @@ import (
 func (r *ClusterReconciler) reconcileWorkers(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (ctrl.Result, error) {
 	// Replace unhealthy workers first
 	threshold := parseThreshold(cluster.Spec.HealthCheck, "node")
-	unhealthyWorkers := findUnhealthyWorkers(cluster.Status.Workers.Nodes, threshold)
+	unhealthyWorkers := findUnhealthyNodes(cluster.Status.Workers.Nodes, threshold)
 	replaced := r.replaceUnhealthyWorkers(ctx, cluster, unhealthyWorkers)
 
 	// Then handle scaling
@@ -34,20 +33,6 @@ func (r *ClusterReconciler) reconcileWorkers(ctx context.Context, cluster *k8zne
 	}
 
 	return ctrl.Result{}, nil
-}
-
-// findUnhealthyWorkers returns workers that have been unhealthy past the threshold.
-func findUnhealthyWorkers(nodes []k8znerv1alpha1.NodeStatus, threshold time.Duration) []*k8znerv1alpha1.NodeStatus {
-	var unhealthy []*k8znerv1alpha1.NodeStatus
-	for i := range nodes {
-		node := &nodes[i]
-		if !node.Healthy && node.UnhealthySince != nil {
-			if time.Since(node.UnhealthySince.Time) > threshold {
-				unhealthy = append(unhealthy, node)
-			}
-		}
-	}
-	return unhealthy
 }
 
 // replaceUnhealthyWorkers replaces unhealthy workers up to maxConcurrentHeals.
@@ -78,10 +63,8 @@ func (r *ClusterReconciler) replaceUnhealthyWorkers(ctx context.Context, cluster
 			continue
 		}
 
-		if r.enableMetrics {
-			RecordNodeReplacement(cluster.Name, "worker", worker.UnhealthyReason)
-			RecordNodeReplacementDuration(cluster.Name, "worker", time.Since(startTime).Seconds())
-		}
+		r.recordNodeReplacement(cluster.Name, "worker", worker.UnhealthyReason)
+		r.recordNodeReplacementDuration(cluster.Name, "worker", time.Since(startTime).Seconds())
 
 		r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonNodeReplaced,
 			"Successfully replaced worker %s", worker.Name)
@@ -177,7 +160,19 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 
 	created := 0
 	for i := 0; i < count && created < r.maxConcurrentHeals; i++ {
-		if err := r.provisionAndConfigureWorker(ctx, cluster, clusterState, tc, snapshot.ID, sshKeyName); err != nil {
+		err := r.provisionAndConfigureNode(ctx, cluster, nodeProvisionParams{
+			Name:       naming.Worker(cluster.Name),
+			Role:       "worker",
+			Pool:       "workers",
+			ServerType: normalizeServerSize(cluster.Spec.Workers.Size),
+			SnapshotID: snapshot.ID,
+			SSHKeyName: sshKeyName,
+			NetworkID:  clusterState.NetworkID,
+			Configure: func(serverName string, result *serverProvisionResult) error {
+				return r.configureAndWaitForWorker(ctx, cluster, tc, serverName, result)
+			},
+		})
+		if err != nil {
 			logger.Error(err, "failed to provision worker")
 			continue
 		}
@@ -186,74 +181,6 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 
 	if created < count {
 		return fmt.Errorf("only created %d of %d requested workers", created, count)
-	}
-
-	return nil
-}
-
-// provisionAndConfigureWorker provisions a single worker server, applies Talos config, and waits for readiness.
-func (r *ClusterReconciler) provisionAndConfigureWorker(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, clusterState *ClusterState, tc talosClients, snapshotID int64, sshKeyName string) error {
-	logger := log.FromContext(ctx)
-
-	newServerName := naming.Worker(cluster.Name)
-	serverLabels := labels.NewLabelBuilder(cluster.Name).
-		WithRole("worker").
-		WithPool("workers").
-		WithManagedBy(labels.ManagedByOperator).
-		Build()
-	serverType := normalizeServerSize(cluster.Spec.Workers.Size)
-
-	logger.Info("creating new worker server",
-		"name", newServerName, "snapshot", snapshotID, "serverType", serverType)
-
-	startTime := time.Now()
-
-	result, err := r.provisionServer(ctx, cluster, serverCreateOpts{
-		Name:       newServerName,
-		SnapshotID: snapshotID,
-		ServerType: serverType,
-		Region:     cluster.Spec.Region,
-		SSHKeyName: sshKeyName,
-		Labels:     serverLabels,
-		NetworkID:  clusterState.NetworkID,
-		Role:       "worker",
-	})
-	if err != nil {
-		logger.Error(err, "failed to provision worker server", "name", newServerName)
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
-			"Failed to create worker server %s: %v", newServerName, err)
-		return err
-	}
-
-	if err := r.persistClusterStatus(ctx, cluster); err != nil {
-		logger.Error(err, "failed to persist status after server creation", "name", newServerName)
-	}
-
-	if err := r.updateNodePhaseAndPersist(ctx, cluster, "worker", NodeStatusUpdate{
-		Name:      newServerName,
-		ServerID:  result.ServerID,
-		PublicIP:  result.PublicIP,
-		PrivateIP: result.PrivateIP,
-		Phase:     k8znerv1alpha1.NodePhaseWaitingForTalosAPI,
-		Reason:    fmt.Sprintf("Waiting for Talos API on %s:50000", result.TalosIP),
-	}); err != nil {
-		logger.Error(err, "failed to persist node status", "name", newServerName)
-	}
-
-	if err := r.configureAndWaitForWorker(ctx, cluster, tc, newServerName, result); err != nil {
-		return err
-	}
-
-	if err := r.persistClusterStatus(ctx, cluster); err != nil {
-		logger.Error(err, "failed to persist cluster status", "name", newServerName)
-	}
-
-	r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonScalingUp,
-		"Successfully created worker %s", newServerName)
-
-	if r.enableMetrics {
-		RecordNodeReplacement(cluster.Name, "worker", "scale-up")
-		RecordNodeReplacementDuration(cluster.Name, "worker", time.Since(startTime).Seconds())
 	}
 
 	return nil
@@ -404,24 +331,18 @@ func (r *ClusterReconciler) decommissionWorker(ctx context.Context, cluster *k8z
 	if worker.Name != "" {
 		if err := r.hcloudClient.DeleteServer(ctx, worker.Name); err != nil {
 			logger.Error(err, "failed to delete hetzner server", "name", worker.Name)
-			if r.enableMetrics {
-				RecordHCloudAPICall("delete_server", "error", time.Since(startTime).Seconds())
-			}
+			r.recordHCloudAPICall("delete_server", "error", time.Since(startTime).Seconds())
 			return fmt.Errorf("failed to delete hetzner server %s: %w", worker.Name, err)
 		}
 		logger.Info("deleted hetzner server", "name", worker.Name, "serverID", worker.ServerID)
-		if r.enableMetrics {
-			RecordHCloudAPICall("delete_server", "success", time.Since(startTime).Seconds())
-		}
+		r.recordHCloudAPICall("delete_server", "success", time.Since(startTime).Seconds())
 	}
 
 	r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonScalingDown,
 		"Successfully removed worker %s", worker.Name)
 
-	if r.enableMetrics {
-		RecordNodeReplacement(cluster.Name, "worker", "scale-down")
-		RecordNodeReplacementDuration(cluster.Name, "worker", time.Since(startTime).Seconds())
-	}
+	r.recordNodeReplacement(cluster.Name, "worker", "scale-down")
+	r.recordNodeReplacementDuration(cluster.Name, "worker", time.Since(startTime).Seconds())
 
 	return nil
 }

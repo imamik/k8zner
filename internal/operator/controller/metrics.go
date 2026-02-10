@@ -181,3 +181,42 @@ func RecordHCloudAPICall(operation, result string, latency float64) {
 	hcloudAPICallsTotal.WithLabelValues(operation, result).Inc()
 	hcloudAPILatency.WithLabelValues(operation).Observe(latency)
 }
+
+// Metrics helper methods that check enableMetrics before recording.
+// These eliminate the repeated `if r.enableMetrics` pattern at call sites.
+
+func (r *ClusterReconciler) recordReconcile(cluster, result string, duration float64) {
+	if r.enableMetrics {
+		RecordReconcile(cluster, result, duration)
+	}
+}
+
+func (r *ClusterReconciler) recordNodeCounts(cluster, role string, total, healthy, desired int) {
+	if r.enableMetrics {
+		RecordNodeCounts(cluster, role, total, healthy, desired)
+	}
+}
+
+func (r *ClusterReconciler) recordNodeReplacement(cluster, role, reason string) {
+	if r.enableMetrics {
+		RecordNodeReplacement(cluster, role, reason)
+	}
+}
+
+func (r *ClusterReconciler) recordNodeReplacementDuration(cluster, role string, duration float64) {
+	if r.enableMetrics {
+		RecordNodeReplacementDuration(cluster, role, duration)
+	}
+}
+
+func (r *ClusterReconciler) recordEtcdStatus(cluster string, members int, healthy bool) {
+	if r.enableMetrics {
+		RecordEtcdStatus(cluster, members, healthy)
+	}
+}
+
+func (r *ClusterReconciler) recordHCloudAPICall(operation, result string, latency float64) {
+	if r.enableMetrics {
+		RecordHCloudAPICall(operation, result, latency)
+	}
+}

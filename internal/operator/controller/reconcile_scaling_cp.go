@@ -12,7 +12,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
-	"github.com/imamik/k8zner/internal/util/labels"
 	"github.com/imamik/k8zner/internal/util/naming"
 )
 
@@ -111,16 +110,12 @@ func (r *ClusterReconciler) replaceUnhealthyCPIfNeeded(ctx context.Context, clus
 
 	startTime := time.Now()
 	if err := r.replaceControlPlane(ctx, cluster, unhealthyCP); err != nil {
-		if r.enableMetrics {
-			RecordNodeReplacement(cluster.Name, "control-plane", unhealthyCP.UnhealthyReason)
-		}
+		r.recordNodeReplacement(cluster.Name, "control-plane", unhealthyCP.UnhealthyReason)
 		return ctrl.Result{}, fmt.Errorf("failed to replace control plane: %w", err)
 	}
 
-	if r.enableMetrics {
-		RecordNodeReplacement(cluster.Name, "control-plane", unhealthyCP.UnhealthyReason)
-		RecordNodeReplacementDuration(cluster.Name, "control-plane", time.Since(startTime).Seconds())
-	}
+	r.recordNodeReplacement(cluster.Name, "control-plane", unhealthyCP.UnhealthyReason)
+	r.recordNodeReplacementDuration(cluster.Name, "control-plane", time.Since(startTime).Seconds())
 
 	r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonNodeReplaced,
 		"Successfully replaced control plane %s", unhealthyCP.Name)
@@ -130,13 +125,8 @@ func (r *ClusterReconciler) replaceUnhealthyCPIfNeeded(ctx context.Context, clus
 
 // findUnhealthyNode returns the first node that has been unhealthy past the given threshold.
 func findUnhealthyNode(nodes []k8znerv1alpha1.NodeStatus, threshold time.Duration) *k8znerv1alpha1.NodeStatus {
-	for i := range nodes {
-		node := &nodes[i]
-		if !node.Healthy && node.UnhealthySince != nil {
-			if time.Since(node.UnhealthySince.Time) > threshold {
-				return node
-			}
-		}
+	if unhealthy := findUnhealthyNodes(nodes, threshold); len(unhealthy) > 0 {
+		return unhealthy[0]
 	}
 	return nil
 }
@@ -180,9 +170,21 @@ func (r *ClusterReconciler) scaleUpControlPlanes(ctx context.Context, cluster *k
 
 	created := 0
 	for i := 0; i < count; i++ {
-		if err := r.provisionAndConfigureCP(ctx, cluster, clusterState, tc, snapshot.ID, sshKeyName); err != nil {
+		err := r.provisionAndConfigureNode(ctx, cluster, nodeProvisionParams{
+			Name:       naming.ControlPlane(cluster.Name),
+			Role:       "control-plane",
+			Pool:       "control-plane",
+			ServerType: normalizeServerSize(cluster.Spec.ControlPlanes.Size),
+			SnapshotID: snapshot.ID,
+			SSHKeyName: sshKeyName,
+			NetworkID:  clusterState.NetworkID,
+			Configure: func(serverName string, result *serverProvisionResult) error {
+				return r.configureAndWaitForCP(ctx, cluster, clusterState, tc, serverName, result)
+			},
+		})
+		if err != nil {
 			logger.Error(err, "failed to provision control plane")
-			// provisionAndConfigureCP returns a fatal error for etcd-safety reasons
+			// configureAndWaitForCP returns a fatal error for etcd-safety reasons
 			if created == 0 {
 				return err
 			}
@@ -193,75 +195,6 @@ func (r *ClusterReconciler) scaleUpControlPlanes(ctx context.Context, cluster *k
 
 	if created < count {
 		return fmt.Errorf("only created %d of %d requested control planes", created, count)
-	}
-
-	return nil
-}
-
-// provisionAndConfigureCP provisions a single control plane server, applies Talos config, and waits for readiness.
-func (r *ClusterReconciler) provisionAndConfigureCP(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, clusterState *ClusterState, tc talosClients, snapshotID int64, sshKeyName string) error {
-	logger := log.FromContext(ctx)
-
-	newServerName := naming.ControlPlane(cluster.Name)
-	serverLabels := labels.NewLabelBuilder(cluster.Name).
-		WithRole("control-plane").
-		WithPool("control-plane").
-		WithManagedBy(labels.ManagedByOperator).
-		Build()
-	serverType := normalizeServerSize(cluster.Spec.ControlPlanes.Size)
-
-	logger.Info("creating new control plane server",
-		"name", newServerName, "snapshot", snapshotID, "serverType", serverType)
-
-	startTime := time.Now()
-
-	result, err := r.provisionServer(ctx, cluster, serverCreateOpts{
-		Name:       newServerName,
-		SnapshotID: snapshotID,
-		ServerType: serverType,
-		Region:     cluster.Spec.Region,
-		SSHKeyName: sshKeyName,
-		Labels:     serverLabels,
-		NetworkID:  clusterState.NetworkID,
-		Role:       "control-plane",
-	})
-	if err != nil {
-		logger.Error(err, "failed to provision CP server", "name", newServerName)
-		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
-			"Failed to create CP server %s: %v", newServerName, err)
-		return err
-	}
-
-	// Persist status to prevent duplicate server creation
-	if err := r.persistClusterStatus(ctx, cluster); err != nil {
-		logger.Error(err, "failed to persist status after server creation", "name", newServerName)
-	}
-
-	if err := r.updateNodePhaseAndPersist(ctx, cluster, "control-plane", NodeStatusUpdate{
-		Name:      newServerName,
-		ServerID:  result.ServerID,
-		PublicIP:  result.PublicIP,
-		PrivateIP: result.PrivateIP,
-		Phase:     k8znerv1alpha1.NodePhaseWaitingForTalosAPI,
-		Reason:    fmt.Sprintf("Waiting for Talos API on %s:50000", result.TalosIP),
-	}); err != nil {
-		logger.Error(err, "failed to persist node status", "name", newServerName)
-	}
-
-	if err := r.configureAndWaitForCP(ctx, cluster, clusterState, tc, newServerName, result); err != nil {
-		return err
-	}
-
-	if err := r.persistClusterStatus(ctx, cluster); err != nil {
-		logger.Error(err, "failed to persist cluster status", "name", newServerName)
-	}
-
-	r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonScalingUp,
-		"Successfully created control plane %s", newServerName)
-
-	if r.enableMetrics {
-		RecordNodeReplacement(cluster.Name, "control-plane", "scale-up")
-		RecordNodeReplacementDuration(cluster.Name, "control-plane", time.Since(startTime).Seconds())
 	}
 
 	return nil
