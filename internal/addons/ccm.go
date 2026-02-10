@@ -18,14 +18,14 @@ func applyCCM(ctx context.Context, client k8sclient.Client, cfg *config.Config, 
 	}
 
 	// Build CCM values matching terraform configuration
-	values := buildCCMValues(cfg, networkID)
+	values := buildCCMValues(cfg)
 
 	return installHelmAddon(ctx, client, "hcloud-ccm", "kube-system", cfg.Addons.CCM.Helm, values)
 }
 
 // buildCCMValues creates helm values matching terraform configuration.
 // See: terraform/hcloud.tf lines 31-57
-func buildCCMValues(cfg *config.Config, _ int64) helm.Values {
+func buildCCMValues(cfg *config.Config) helm.Values {
 	ccm := &cfg.Addons.CCM
 	lb := &ccm.LoadBalancers
 

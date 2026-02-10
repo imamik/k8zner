@@ -153,7 +153,7 @@ func buildCiliumValues(cfg *config.Config) helm.Values {
 	values["prometheus"] = buildCiliumPrometheusConfig(ciliumCfg)
 
 	// Operator configuration
-	values["operator"] = buildCiliumOperatorConfig(ciliumCfg, controlPlaneCount)
+	values["operator"] = buildCiliumOperatorConfig(controlPlaneCount)
 
 	// Merge custom Helm values from config
 	return helm.MergeCustomValues(values, ciliumCfg.Helm.Values)
@@ -204,7 +204,7 @@ func buildCiliumPrometheusConfig(ciliumCfg config.CiliumConfig) helm.Values {
 
 // buildCiliumOperatorConfig creates operator configuration.
 // See: terraform/cilium.tf lines 139-177
-func buildCiliumOperatorConfig(_ config.CiliumConfig, controlPlaneCount int) helm.Values {
+func buildCiliumOperatorConfig(controlPlaneCount int) helm.Values {
 	replicas := 1
 	if controlPlaneCount > 1 {
 		replicas = 2

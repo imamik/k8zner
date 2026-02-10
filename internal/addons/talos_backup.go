@@ -193,13 +193,13 @@ func buildTalosBackupEnv(cfg *config.Config) []map[string]any {
 }
 
 // ensureS3Bucket creates the S3 bucket if it doesn't already exist.
-func ensureS3Bucket(_ context.Context, backup config.TalosBackupConfig) error {
+func ensureS3Bucket(ctx context.Context, backup config.TalosBackupConfig) error {
 	client, err := s3.NewClient(backup.S3Endpoint, backup.S3Region, backup.S3AccessKey, backup.S3SecretKey)
 	if err != nil {
 		return fmt.Errorf("failed to create S3 client: %w", err)
 	}
 
-	exists, err := client.BucketExists(context.Background(), backup.S3Bucket)
+	exists, err := client.BucketExists(ctx, backup.S3Bucket)
 	if err != nil {
 		return fmt.Errorf("failed to check bucket existence: %w", err)
 	}
@@ -209,7 +209,7 @@ func ensureS3Bucket(_ context.Context, backup config.TalosBackupConfig) error {
 		return nil
 	}
 
-	if err := client.CreateBucket(context.Background(), backup.S3Bucket); err != nil {
+	if err := client.CreateBucket(ctx, backup.S3Bucket); err != nil {
 		return fmt.Errorf("failed to create bucket %s: %w", backup.S3Bucket, err)
 	}
 

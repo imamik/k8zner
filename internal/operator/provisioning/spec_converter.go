@@ -10,6 +10,7 @@ import (
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	"github.com/imamik/k8zner/internal/config"
+	configv2 "github.com/imamik/k8zner/internal/config/v2"
 	"github.com/imamik/k8zner/internal/platform/talos"
 	"github.com/imamik/k8zner/internal/provisioning"
 )
@@ -164,16 +165,7 @@ func configureCloudflare(cfg *config.Config, spec *k8znerv1alpha1.K8znerClusterS
 
 // normalizeServerSize converts legacy server type names to current Hetzner names.
 func normalizeServerSize(size string) string {
-	legacyMap := map[string]string{
-		"cx22": "cx23",
-		"cx32": "cx33",
-		"cx42": "cx43",
-		"cx52": "cx53",
-	}
-	if newSize, ok := legacyMap[strings.ToLower(size)]; ok {
-		return newSize
-	}
-	return size
+	return string(configv2.ServerSize(strings.ToLower(size)).Normalize())
 }
 
 // expandFirewallFromSpec derives firewall config from the CRD spec.

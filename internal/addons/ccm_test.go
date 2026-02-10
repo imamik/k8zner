@@ -132,8 +132,7 @@ func TestBuildCCMValues(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			networkID := int64(12345)
-			values := buildCCMValues(tt.cfg, networkID)
+			values := buildCCMValues(tt.cfg)
 
 			// Check kind
 			assert.Equal(t, "DaemonSet", values["kind"])
@@ -274,7 +273,7 @@ func TestBuildCCMValues_Tolerations(t *testing.T) {
 		},
 	}
 
-	values := buildCCMValues(cfg, 12345)
+	values := buildCCMValues(cfg)
 
 	// Check tolerations are present (4 = BootstrapTolerations: control-plane, master, ccm-uninitialized, not-ready)
 	tolerations, ok := values["tolerations"].([]helm.Values)

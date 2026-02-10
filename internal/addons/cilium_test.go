@@ -203,8 +203,7 @@ func TestBuildCiliumOperatorConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			ciliumCfg := config.CiliumConfig{}
-			config := buildCiliumOperatorConfig(ciliumCfg, tt.controlPlaneCount)
+			config := buildCiliumOperatorConfig(tt.controlPlaneCount)
 
 			assert.Equal(t, tt.expectedReplicas, config["replicas"])
 
