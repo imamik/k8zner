@@ -14,6 +14,40 @@ import (
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 )
 
+func TestNewPhaseManager(t *testing.T) {
+	t.Parallel()
+
+	t.Run("creates with client", func(t *testing.T) {
+		t.Parallel()
+		scheme := runtime.NewScheme()
+		_ = corev1.AddToScheme(scheme)
+		k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+		pm := NewPhaseManager(k8sClient)
+		require.NotNil(t, pm)
+		assert.NotNil(t, pm.k8sClient)
+	})
+
+	t.Run("creates with nil client", func(t *testing.T) {
+		t.Parallel()
+		pm := NewPhaseManager(nil)
+		require.NotNil(t, pm)
+		assert.Nil(t, pm.k8sClient)
+	})
+}
+
+func TestClientConfigFromKubeconfig_InvalidBytes(t *testing.T) {
+	t.Parallel()
+	_, err := clientConfigFromKubeconfig([]byte("not-valid-kubeconfig"))
+	assert.Error(t, err)
+}
+
+func TestClientConfigFromKubeconfig_EmptyBytes(t *testing.T) {
+	t.Parallel()
+	_, err := clientConfigFromKubeconfig(nil)
+	assert.Error(t, err)
+}
+
 func TestIsAddonEnabled(t *testing.T) {
 	t.Parallel()
 
