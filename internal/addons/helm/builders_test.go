@@ -17,11 +17,12 @@ func TestCCMUninitializedToleration(t *testing.T) {
 func TestBootstrapTolerations(t *testing.T) {
 	t.Parallel()
 	tols := BootstrapTolerations()
-	require.Len(t, tols, 3)
+	require.Len(t, tols, 4)
 	assert.Equal(t, "node-role.kubernetes.io/control-plane", tols[0]["key"])
-	assert.Equal(t, "node.cloudprovider.kubernetes.io/uninitialized", tols[1]["key"])
-	assert.Equal(t, "true", tols[1]["value"])
-	assert.Equal(t, "node.kubernetes.io/not-ready", tols[2]["key"])
+	assert.Equal(t, "node-role.kubernetes.io/master", tols[1]["key"])
+	assert.Equal(t, "node.cloudprovider.kubernetes.io/uninitialized", tols[2]["key"])
+	assert.Equal(t, "true", tols[2]["value"])
+	assert.Equal(t, "node.kubernetes.io/not-ready", tols[3]["key"])
 }
 
 func TestControlPlaneNodeSelector(t *testing.T) {

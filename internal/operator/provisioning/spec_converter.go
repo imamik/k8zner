@@ -48,6 +48,7 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 		// Kubernetes configuration
 		Kubernetes: config.KubernetesConfig{
 			Version:                spec.Kubernetes.Version,
+			Domain:                 "cluster.local",
 			APILoadBalancerEnabled: true, // Always enable LB for operator-managed clusters
 		},
 
@@ -94,43 +95,23 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 func buildAddonsConfig(spec *k8znerv1alpha1.K8znerClusterSpec) config.AddonsConfig {
 	return config.AddonsConfig{
 		// CRDs - always enabled as dependencies for other addons
-		GatewayAPICRDs: config.GatewayAPICRDsConfig{
-			Enabled: true,
-		},
-		PrometheusOperatorCRDs: config.PrometheusOperatorCRDsConfig{
-			Enabled: true, // Required for kube-prometheus-stack
-		},
+		GatewayAPICRDs:     config.DefaultGatewayAPICRDs(),
+		PrometheusOperatorCRDs: config.DefaultPrometheusOperatorCRDs(),
 		// Core addons
 		TalosCCM: config.TalosCCMConfig{
 			Enabled: true,      // Node lifecycle management
 			Version: "v1.11.0", // Pinned Talos CCM version
 		},
-		Cilium: config.CiliumConfig{
-			Enabled:                     true,
-			KubeProxyReplacementEnabled: true,
-			RoutingMode:                 "tunnel",
-			HubbleEnabled:               true,
-			HubbleRelayEnabled:          true,
-			HubbleUIEnabled:             true,
-		},
-		CCM: config.CCMConfig{
-			Enabled: true,
-		},
-		CSI: config.CSIConfig{
-			Enabled: true,
-		},
+		Cilium:  config.DefaultCilium(),
+		CCM:     config.DefaultCCM(),
+		CSI:     config.DefaultCSI(),
 		MetricsServer: config.MetricsServerConfig{
 			Enabled: spec.Addons != nil && spec.Addons.MetricsServer,
 		},
 		CertManager: config.CertManagerConfig{
 			Enabled: spec.Addons != nil && spec.Addons.CertManager,
 		},
-		Traefik: config.TraefikConfig{
-			Enabled:               spec.Addons != nil && spec.Addons.Traefik,
-			Kind:                  "Deployment",
-			ExternalTrafficPolicy: "Cluster",
-			IngressClass:          "traefik",
-		},
+		Traefik:             config.DefaultTraefik(spec.Addons != nil && spec.Addons.Traefik),
 		ExternalDNS:         expandExternalDNSFromSpec(spec),
 		ArgoCD:              expandArgoCDFromSpec(spec),
 		KubePrometheusStack: expandMonitoringFromSpec(spec),

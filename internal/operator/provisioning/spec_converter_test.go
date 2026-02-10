@@ -45,6 +45,7 @@ func TestSpecToConfig_BasicFields(t *testing.T) {
 
 	// Kubernetes/Talos
 	assert.Equal(t, "1.32.2", cfg.Kubernetes.Version)
+	assert.Equal(t, "cluster.local", cfg.Kubernetes.Domain)
 	assert.True(t, cfg.Kubernetes.APILoadBalancerEnabled)
 	assert.Equal(t, "v1.10.2", cfg.Talos.Version)
 }
@@ -121,13 +122,14 @@ func TestBuildAddonsConfig_AlwaysEnabled(t *testing.T) {
 	spec := &k8znerv1alpha1.K8znerClusterSpec{Addons: nil}
 	addons := buildAddonsConfig(spec)
 
-	assert.True(t, addons.GatewayAPICRDs.Enabled, "GatewayAPICRDs always enabled")
-	assert.True(t, addons.PrometheusOperatorCRDs.Enabled, "PrometheusOperatorCRDs always enabled")
+	assert.Equal(t, config.DefaultGatewayAPICRDs(), addons.GatewayAPICRDs, "GatewayAPICRDs uses shared default")
+	assert.Equal(t, config.DefaultPrometheusOperatorCRDs(), addons.PrometheusOperatorCRDs, "PrometheusOperatorCRDs uses shared default")
 	assert.True(t, addons.TalosCCM.Enabled, "TalosCCM always enabled")
 	assert.Equal(t, "v1.11.0", addons.TalosCCM.Version, "TalosCCM version pinned")
-	assert.True(t, addons.Cilium.Enabled, "Cilium always enabled")
-	assert.True(t, addons.CCM.Enabled, "CCM always enabled")
-	assert.True(t, addons.CSI.Enabled, "CSI always enabled")
+	assert.Equal(t, config.DefaultCilium(), addons.Cilium, "Cilium uses shared default")
+	assert.Equal(t, config.DefaultCCM(), addons.CCM, "CCM uses shared default")
+	assert.Equal(t, config.DefaultCSI(), addons.CSI, "CSI uses shared default (includes DefaultStorageClass)")
+	assert.True(t, addons.CSI.DefaultStorageClass, "CSI.DefaultStorageClass must be true")
 }
 
 func TestBuildAddonsConfig_CiliumDefaults(t *testing.T) {
@@ -135,11 +137,8 @@ func TestBuildAddonsConfig_CiliumDefaults(t *testing.T) {
 	spec := &k8znerv1alpha1.K8znerClusterSpec{Addons: nil}
 	addons := buildAddonsConfig(spec)
 
-	assert.True(t, addons.Cilium.KubeProxyReplacementEnabled)
-	assert.Equal(t, "tunnel", addons.Cilium.RoutingMode)
-	assert.True(t, addons.Cilium.HubbleEnabled)
-	assert.True(t, addons.Cilium.HubbleRelayEnabled)
-	assert.True(t, addons.Cilium.HubbleUIEnabled)
+	// Must exactly equal shared default
+	assert.Equal(t, config.DefaultCilium(), addons.Cilium)
 }
 
 func TestBuildAddonsConfig_TraefikDefaults(t *testing.T) {
@@ -149,11 +148,8 @@ func TestBuildAddonsConfig_TraefikDefaults(t *testing.T) {
 	}
 	addons := buildAddonsConfig(spec)
 
-	assert.True(t, addons.Traefik.Enabled)
-	assert.Equal(t, "Deployment", addons.Traefik.Kind)
-	assert.Equal(t, "Cluster", addons.Traefik.ExternalTrafficPolicy)
-	assert.Equal(t, "traefik", addons.Traefik.IngressClass)
-	assert.Nil(t, addons.Traefik.HostNetwork, "hostNetwork must not be set")
+	// Must exactly equal shared default with enabled=true
+	assert.Equal(t, config.DefaultTraefik(true), addons.Traefik)
 }
 
 func TestBuildAddonsConfig_ConditionalAddons(t *testing.T) {

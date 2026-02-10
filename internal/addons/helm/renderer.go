@@ -53,7 +53,7 @@ func RenderFromSpec(ctx context.Context, spec ChartSpec, namespace string, value
 // This is useful for charts embedded in the application or during development.
 func RenderFromPath(chartPath, releaseName, namespace string, values Values) ([]byte, error) {
 	// Load the chart from the local path
-	loadedChart, err := LoadChartFromPath(chartPath)
+	loadedChart, err := loadChartFromPath(chartPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load chart: %w", err)
 	}

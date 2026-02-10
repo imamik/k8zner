@@ -78,14 +78,14 @@ func TestBuildCSIValues(t *testing.T) {
 			require.True(t, ok)
 			assert.Contains(t, nodeSelector, "node-role.kubernetes.io/control-plane")
 
-			// Check tolerations (control-plane, uninitialized, and not-ready)
-			// All three are required for CSI to schedule during bootstrap
+			// Check tolerations (BootstrapTolerations: control-plane, master, ccm-uninitialized, not-ready)
 			tolerations, ok := controller["tolerations"].([]helm.Values)
 			require.True(t, ok)
-			assert.Len(t, tolerations, 3)
+			assert.Len(t, tolerations, 4)
 			assert.Equal(t, "node-role.kubernetes.io/control-plane", tolerations[0]["key"])
-			assert.Equal(t, "node.cloudprovider.kubernetes.io/uninitialized", tolerations[1]["key"])
-			assert.Equal(t, "node.kubernetes.io/not-ready", tolerations[2]["key"])
+			assert.Equal(t, "node-role.kubernetes.io/master", tolerations[1]["key"])
+			assert.Equal(t, "node.cloudprovider.kubernetes.io/uninitialized", tolerations[2]["key"])
+			assert.Equal(t, "node.kubernetes.io/not-ready", tolerations[3]["key"])
 
 			// Check storage classes - we now have two: encrypted (default) and non-encrypted
 			storageClasses, ok := values["storageClasses"].([]helm.Values)
@@ -164,19 +164,21 @@ func TestBuildCSIValues_Tolerations(t *testing.T) {
 
 	tolerations, ok := controller["tolerations"].([]helm.Values)
 	require.True(t, ok)
-	require.Len(t, tolerations, 3, "CSI needs 3 tolerations for bootstrap")
+	require.Len(t, tolerations, 4, "CSI needs BootstrapTolerations (4 entries)")
 
-	// Verify the three required bootstrap tolerations
+	// Verify the bootstrap tolerations (control-plane, master, ccm-uninitialized, not-ready)
 	assert.Equal(t, "node-role.kubernetes.io/control-plane", tolerations[0]["key"])
 	assert.Equal(t, "NoSchedule", tolerations[0]["effect"])
 	assert.Equal(t, "Exists", tolerations[0]["operator"])
 
-	assert.Equal(t, "node.cloudprovider.kubernetes.io/uninitialized", tolerations[1]["key"])
-	assert.Equal(t, "true", tolerations[1]["value"])
-	assert.Equal(t, "NoSchedule", tolerations[1]["effect"])
+	assert.Equal(t, "node-role.kubernetes.io/master", tolerations[1]["key"])
 
-	assert.Equal(t, "node.kubernetes.io/not-ready", tolerations[2]["key"])
-	assert.Equal(t, "Exists", tolerations[2]["operator"])
+	assert.Equal(t, "node.cloudprovider.kubernetes.io/uninitialized", tolerations[2]["key"])
+	assert.Equal(t, "true", tolerations[2]["value"])
+	assert.Equal(t, "NoSchedule", tolerations[2]["effect"])
+
+	assert.Equal(t, "node.kubernetes.io/not-ready", tolerations[3]["key"])
+	assert.Equal(t, "Exists", tolerations[3]["operator"])
 }
 
 func TestGenerateEncryptionKey(t *testing.T) {

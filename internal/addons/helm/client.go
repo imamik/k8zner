@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sync"
 
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
@@ -22,48 +21,28 @@ type ChartSpec struct {
 	Version    string // e.g., "39.0.0"
 }
 
-var (
-	// chartCache stores downloaded charts to avoid re-downloading
-	chartCache   = make(map[string]*chart.Chart)
-	chartCacheMu sync.RWMutex
-)
-
 // DownloadChart downloads a chart from a repository and returns the loaded chart.
-// Charts are cached in memory to avoid repeated downloads within the same process.
+// Charts are cached on disk to avoid repeated downloads. Each call returns a
+// freshly loaded *chart.Chart from the cached archive, avoiding shared mutable state.
 func DownloadChart(ctx context.Context, spec ChartSpec) (*chart.Chart, error) {
-	cacheKey := fmt.Sprintf("%s/%s:%s", spec.Repository, spec.Name, spec.Version)
-
-	// Check memory cache first
-	chartCacheMu.RLock()
-	if cached, ok := chartCache[cacheKey]; ok {
-		chartCacheMu.RUnlock()
-		return cached, nil
-	}
-	chartCacheMu.RUnlock()
-
-	// Download the chart
+	// Download to disk cache (no-op if already cached)
 	chartPath, err := downloadChartToCache(ctx, spec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download chart %s/%s:%s: %w", spec.Repository, spec.Name, spec.Version, err)
 	}
 
-	// Load the chart from the downloaded archive
+	// Load a fresh chart from the cached archive
 	loadedChart, err := loader.Load(chartPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load chart from %s: %w", chartPath, err)
 	}
-
-	// Cache the loaded chart
-	chartCacheMu.Lock()
-	chartCache[cacheKey] = loadedChart
-	chartCacheMu.Unlock()
 
 	return loadedChart, nil
 }
 
 // downloadChartToCache downloads a chart archive to the cache directory.
 func downloadChartToCache(ctx context.Context, spec ChartSpec) (string, error) {
-	cachePath := GetCachePath()
+	cachePath := getCachePath()
 
 	// Create cache directory if it doesn't exist
 	// Using 0750 for directory permissions (owner rwx, group rx, others none)
@@ -112,9 +91,9 @@ func downloadChartToCache(ctx context.Context, spec ChartSpec) (string, error) {
 	return chartPath, nil
 }
 
-// GetCachePath returns the cache directory for downloaded charts.
+// getCachePath returns the cache directory for downloaded charts.
 // Uses XDG_CACHE_HOME if set, otherwise ~/.cache/k8zner/charts
-func GetCachePath() string {
+func getCachePath() string {
 	cacheDir := os.Getenv("XDG_CACHE_HOME")
 	if cacheDir == "" {
 		homeDir, err := os.UserHomeDir()
@@ -127,15 +106,9 @@ func GetCachePath() string {
 	return filepath.Join(cacheDir, "k8zner", "charts")
 }
 
-// ClearCache removes all cached charts from disk and memory.
-func ClearCache() error {
-	// Clear memory cache
-	chartCacheMu.Lock()
-	chartCache = make(map[string]*chart.Chart)
-	chartCacheMu.Unlock()
-
-	// Clear disk cache
-	cachePath := GetCachePath()
+// clearCache removes all cached charts from disk.
+func clearCache() error {
+	cachePath := getCachePath()
 	if err := os.RemoveAll(cachePath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to clear cache directory: %w", err)
 	}
@@ -143,17 +116,9 @@ func ClearCache() error {
 	return nil
 }
 
-// ClearMemoryCache clears only the in-memory chart cache.
-// Useful for testing or when you want to force re-parsing of cached chart files.
-func ClearMemoryCache() {
-	chartCacheMu.Lock()
-	chartCache = make(map[string]*chart.Chart)
-	chartCacheMu.Unlock()
-}
-
-// LoadChartFromPath loads a Helm chart from a local filesystem path.
+// loadChartFromPath loads a Helm chart from a local filesystem path.
 // This is useful for charts embedded in the application or during development.
-func LoadChartFromPath(chartPath string) (*chart.Chart, error) {
+func loadChartFromPath(chartPath string) (*chart.Chart, error) {
 	loadedChart, err := loader.Load(chartPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load chart from %s: %w", chartPath, err)

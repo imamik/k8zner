@@ -276,24 +276,27 @@ func TestBuildCCMValues_Tolerations(t *testing.T) {
 
 	values := buildCCMValues(cfg, 12345)
 
-	// Check tolerations are present
+	// Check tolerations are present (4 = BootstrapTolerations: control-plane, master, ccm-uninitialized, not-ready)
 	tolerations, ok := values["tolerations"].([]helm.Values)
 	require.True(t, ok, "tolerations must be present in CCM values")
-	require.Len(t, tolerations, 3, "CCM should have exactly 3 tolerations")
+	require.Len(t, tolerations, 4, "CCM should use BootstrapTolerations (4 entries)")
 
 	// Verify control-plane toleration
 	assert.Equal(t, "node-role.kubernetes.io/control-plane", tolerations[0]["key"])
 	assert.Equal(t, "NoSchedule", tolerations[0]["effect"])
 	assert.Equal(t, "Exists", tolerations[0]["operator"])
 
+	// Verify master toleration (legacy)
+	assert.Equal(t, "node-role.kubernetes.io/master", tolerations[1]["key"])
+
 	// Verify uninitialized toleration (critical for bootstrap)
-	assert.Equal(t, "node.cloudprovider.kubernetes.io/uninitialized", tolerations[1]["key"])
-	assert.Equal(t, "true", tolerations[1]["value"])
-	assert.Equal(t, "NoSchedule", tolerations[1]["effect"])
+	assert.Equal(t, "node.cloudprovider.kubernetes.io/uninitialized", tolerations[2]["key"])
+	assert.Equal(t, "true", tolerations[2]["value"])
+	assert.Equal(t, "NoSchedule", tolerations[2]["effect"])
 
 	// Verify not-ready toleration (helps during bootstrap)
-	assert.Equal(t, "node.kubernetes.io/not-ready", tolerations[2]["key"])
-	assert.Equal(t, "Exists", tolerations[2]["operator"])
+	assert.Equal(t, "node.kubernetes.io/not-ready", tolerations[3]["key"])
+	assert.Equal(t, "Exists", tolerations[3]["operator"])
 }
 
 func TestGetClusterCIDR(t *testing.T) {

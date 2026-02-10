@@ -154,15 +154,15 @@ func TestDefaultChartSpecsComplete(t *testing.T) {
 // TestGetCachePath verifies cache path is returned correctly.
 func TestGetCachePath(t *testing.T) {
 	t.Parallel()
-	cachePath := GetCachePath()
+	cachePath := getCachePath()
 
 	if cachePath == "" {
-		t.Error("GetCachePath returned empty string")
+		t.Error("getCachePath returned empty string")
 	}
 
 	// Path should contain k8zner/charts
 	if !strings.Contains(cachePath, "k8zner") || !strings.Contains(cachePath, "charts") {
-		t.Errorf("GetCachePath = %q, should contain 'k8zner' and 'charts'", cachePath)
+		t.Errorf("getCachePath = %q, should contain 'k8zner' and 'charts'", cachePath)
 	}
 }
 
@@ -170,16 +170,8 @@ func TestGetCachePath(t *testing.T) {
 func TestGetCachePath_WithXDGEnv(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", "/tmp/test-cache")
 
-	cachePath := GetCachePath()
+	cachePath := getCachePath()
 	assert.Equal(t, "/tmp/test-cache/k8zner/charts", cachePath)
-}
-
-// TestClearMemoryCache verifies memory cache can be cleared.
-func TestClearMemoryCache(t *testing.T) {
-	t.Parallel()
-	// This should not panic
-
-	ClearMemoryCache()
 }
 
 // Renderer tests

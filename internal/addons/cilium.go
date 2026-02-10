@@ -229,26 +229,7 @@ func buildCiliumOperatorConfig(_ config.CiliumConfig, controlPlaneCount int) hel
 		"nodeSelector": helm.Values{
 			"node-role.kubernetes.io/control-plane": "",
 		},
-		"tolerations": []helm.Values{
-			{
-				"key":      "node-role.kubernetes.io/control-plane",
-				"effect":   "NoSchedule",
-				"operator": "Exists",
-			},
-			{
-				"key":      "node-role.kubernetes.io/master",
-				"effect":   "NoSchedule",
-				"operator": "Exists",
-			},
-			{
-				"key":      "node.kubernetes.io/not-ready",
-				"operator": "Exists",
-			},
-			{
-				"key":      "node.cloudprovider.kubernetes.io/uninitialized",
-				"operator": "Exists",
-			},
-		},
+		"tolerations": helm.BootstrapTolerations(),
 	}
 
 	// Add PDB for HA setups
@@ -298,23 +279,8 @@ func buildCiliumHubbleConfig(cfg *config.Config) helm.Values {
 
 	if cfg.Addons.Cilium.HubbleRelayEnabled {
 		hubbleConfig["relay"] = helm.Values{
-			"enabled": true,
-			"tolerations": []helm.Values{
-				{
-					"key":      "node-role.kubernetes.io/control-plane",
-					"effect":   "NoSchedule",
-					"operator": "Exists",
-				},
-				{
-					"key":      "node.cloudprovider.kubernetes.io/uninitialized",
-					"operator": "Exists",
-				},
-				{
-					// Tolerate not-ready nodes to ensure Hubble relay can start during bootstrap
-					"key":      "node.kubernetes.io/not-ready",
-					"operator": "Exists",
-				},
-			},
+			"enabled":     true,
+			"tolerations": helm.BootstrapTolerations(),
 		}
 	}
 

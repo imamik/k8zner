@@ -11,11 +11,16 @@ func CCMUninitializedToleration() Values {
 }
 
 // BootstrapTolerations returns tolerations for addons that must run on control plane
-// nodes before CCM initializes them (control-plane + ccm-uninitialized + not-ready).
+// nodes before CCM initializes them (control-plane + master + ccm-uninitialized + not-ready).
 func BootstrapTolerations() []Values {
 	return []Values{
 		{
 			"key":      "node-role.kubernetes.io/control-plane",
+			"effect":   "NoSchedule",
+			"operator": "Exists",
+		},
+		{
+			"key":      "node-role.kubernetes.io/master",
 			"effect":   "NoSchedule",
 			"operator": "Exists",
 		},

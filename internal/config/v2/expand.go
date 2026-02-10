@@ -176,38 +176,16 @@ func expandAddons(cfg *Config, vm VersionMatrix) config.AddonsConfig {
 
 	return config.AddonsConfig{
 		// Hetzner Cloud Controller Manager - always enabled
-		CCM: config.CCMConfig{
-			Enabled: true,
-		},
+		CCM: config.DefaultCCM(),
 
 		// Hetzner CSI Driver - always enabled
-		CSI: config.CSIConfig{
-			Enabled:             true,
-			DefaultStorageClass: true,
-		},
+		CSI: config.DefaultCSI(),
 
 		// Cilium CNI - always enabled with kube-proxy replacement
-		// Tunnel mode avoids direct routing device detection issues on Hetzner Cloud
-		// where multiple interfaces (eth0=public, eth1=private) confuse Cilium's
-		// native routing. kube-proxy replacement still works in tunnel mode.
-		Cilium: config.CiliumConfig{
-			Enabled:                     true,
-			KubeProxyReplacementEnabled: true,
-			RoutingMode:                 "tunnel",
-			HubbleEnabled:               true,
-			HubbleRelayEnabled:          true,
-			HubbleUIEnabled:             true,
-		},
+		Cilium: config.DefaultCilium(),
 
 		// Traefik ingress - always enabled (replaces ingress-nginx)
-		// Uses Deployment with LoadBalancer service; CCM creates a Hetzner LB
-		// automatically via annotations. No hostNetwork needed.
-		Traefik: config.TraefikConfig{
-			Enabled:               true,
-			Kind:                  "Deployment",
-			ExternalTrafficPolicy: "Cluster",
-			IngressClass:          "traefik",
-		},
+		Traefik: config.DefaultTraefik(true),
 
 		// Ingress-nginx - disabled (we use Traefik)
 		IngressNginx: config.IngressNginxConfig{
@@ -233,14 +211,10 @@ func expandAddons(cfg *Config, vm VersionMatrix) config.AddonsConfig {
 		ArgoCD: expandArgoCD(cfg),
 
 		// Gateway API CRDs - always enabled
-		GatewayAPICRDs: config.GatewayAPICRDsConfig{
-			Enabled: true,
-		},
+		GatewayAPICRDs: config.DefaultGatewayAPICRDs(),
 
 		// Prometheus Operator CRDs - always enabled
-		PrometheusOperatorCRDs: config.PrometheusOperatorCRDsConfig{
-			Enabled: true,
-		},
+		PrometheusOperatorCRDs: config.DefaultPrometheusOperatorCRDs(),
 
 		// Kube Prometheus Stack - enabled only when monitoring is set
 		KubePrometheusStack: expandKubePrometheusStack(cfg),
