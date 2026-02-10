@@ -217,6 +217,35 @@ func TestHelperFunctions(t *testing.T) {
 			},
 		}
 		assert.Equal(t, "DiskPressure", getNodeUnhealthyReason(diskPressureNode))
+
+		pidPressureNode := &corev1.Node{
+			Status: corev1.NodeStatus{
+				Conditions: []corev1.NodeCondition{
+					{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+					{Type: corev1.NodePIDPressure, Status: corev1.ConditionTrue},
+				},
+			},
+		}
+		assert.Equal(t, "PIDPressure", getNodeUnhealthyReason(pidPressureNode))
+
+		noConditionsNode := &corev1.Node{
+			Status: corev1.NodeStatus{
+				Conditions: []corev1.NodeCondition{},
+			},
+		}
+		assert.Equal(t, "Unknown", getNodeUnhealthyReason(noConditionsNode))
+
+		allHealthyNode := &corev1.Node{
+			Status: corev1.NodeStatus{
+				Conditions: []corev1.NodeCondition{
+					{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+					{Type: corev1.NodeMemoryPressure, Status: corev1.ConditionFalse},
+					{Type: corev1.NodeDiskPressure, Status: corev1.ConditionFalse},
+					{Type: corev1.NodePIDPressure, Status: corev1.ConditionFalse},
+				},
+			},
+		}
+		assert.Equal(t, "Unknown", getNodeUnhealthyReason(allHealthyNode))
 	})
 
 	t.Run("parseThreshold", func(t *testing.T) {
@@ -239,6 +268,17 @@ func TestHelperFunctions(t *testing.T) {
 			NodeNotReadyThreshold: "invalid",
 		}
 		assert.Equal(t, defaultNodeNotReadyThreshold, parseThreshold(invalidHealthCheck, "node"))
+
+		// Invalid etcd threshold falls back to default
+		invalidEtcdHealthCheck := &k8znerv1alpha1.HealthCheckSpec{
+			EtcdUnhealthyThreshold: "not-a-duration",
+		}
+		assert.Equal(t, defaultEtcdUnhealthyThreshold, parseThreshold(invalidEtcdHealthCheck, "etcd"))
+
+		// Empty strings fall back to defaults
+		emptyHealthCheck := &k8znerv1alpha1.HealthCheckSpec{}
+		assert.Equal(t, defaultNodeNotReadyThreshold, parseThreshold(emptyHealthCheck, "node"))
+		assert.Equal(t, defaultEtcdUnhealthyThreshold, parseThreshold(emptyHealthCheck, "etcd"))
 	})
 
 	t.Run("conditionStatus", func(t *testing.T) {

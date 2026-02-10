@@ -418,6 +418,34 @@ func TestBuildArgoCDValuesCustomHelmValues(t *testing.T) {
 	assert.True(t, hasCRDs)
 }
 
+func TestBuildArgoCDRepoServerCustomReplicas(t *testing.T) {
+	t.Parallel()
+	t.Run("HA with custom replicas", func(t *testing.T) {
+		t.Parallel()
+		customReplicas := 4
+		cfg := config.ArgoCDConfig{
+			HA:                 true,
+			RepoServerReplicas: &customReplicas,
+		}
+		repoServer := buildArgoCDRepoServer(cfg)
+		assert.Equal(t, 4, repoServer["replicas"])
+	})
+
+	t.Run("non-HA defaults to 1", func(t *testing.T) {
+		t.Parallel()
+		cfg := config.ArgoCDConfig{}
+		repoServer := buildArgoCDRepoServer(cfg)
+		assert.Equal(t, 1, repoServer["replicas"])
+	})
+
+	t.Run("HA without custom replicas defaults to 2", func(t *testing.T) {
+		t.Parallel()
+		cfg := config.ArgoCDConfig{HA: true}
+		repoServer := buildArgoCDRepoServer(cfg)
+		assert.Equal(t, 2, repoServer["replicas"])
+	})
+}
+
 // intPtrArgoCD is a helper to create int pointers for tests
 func intPtrArgoCD(i int) *int {
 	return &i

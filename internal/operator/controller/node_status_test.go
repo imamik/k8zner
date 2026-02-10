@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -271,5 +273,154 @@ func TestRemoveNodeFromStatus(t *testing.T) {
 
 		r.removeNodeFromStatus(cluster, "control-plane", "cp-nonexistent")
 		assert.Len(t, cluster.Status.ControlPlanes.Nodes, 1)
+	})
+}
+
+func TestHandleStuckNode(t *testing.T) {
+	t.Parallel()
+	scheme := setupTestScheme(t)
+
+	t.Run("marks node as failed and deletes server", func(t *testing.T) {
+		t.Parallel()
+		cluster := &k8znerv1alpha1.K8znerCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-cluster",
+				Namespace: "default",
+			},
+			Status: k8znerv1alpha1.K8znerClusterStatus{
+				ControlPlanes: k8znerv1alpha1.NodeGroupStatus{
+					Nodes: []k8znerv1alpha1.NodeStatus{
+						{Name: "cp-1", Phase: k8znerv1alpha1.NodePhaseReady},
+						{Name: "cp-2", Phase: k8znerv1alpha1.NodePhaseCreatingServer},
+					},
+				},
+			},
+		}
+
+		client := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(cluster).
+			WithStatusSubresource(cluster).
+			Build()
+		recorder := record.NewFakeRecorder(10)
+		mockHCloud := &MockHCloudClient{}
+
+		r := NewClusterReconciler(client, scheme, recorder,
+			WithHCloudClient(mockHCloud),
+			WithMetrics(false),
+		)
+
+		stuck := stuckNode{
+			Name:    "cp-2",
+			Role:    "control-plane",
+			Phase:   k8znerv1alpha1.NodePhaseCreatingServer,
+			Elapsed: 15 * time.Minute,
+			Timeout: 10 * time.Minute,
+		}
+
+		err := r.handleStuckNode(context.Background(), cluster, stuck)
+		require.NoError(t, err)
+
+		// Server should be deleted
+		assert.Contains(t, mockHCloud.DeleteServerCalls, "cp-2")
+
+		// Node should be removed from status
+		assert.Len(t, cluster.Status.ControlPlanes.Nodes, 1)
+		assert.Equal(t, "cp-1", cluster.Status.ControlPlanes.Nodes[0].Name)
+	})
+
+	t.Run("handles worker node stuck", func(t *testing.T) {
+		t.Parallel()
+		cluster := &k8znerv1alpha1.K8znerCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-cluster",
+				Namespace: "default",
+			},
+			Status: k8znerv1alpha1.K8znerClusterStatus{
+				Workers: k8znerv1alpha1.NodeGroupStatus{
+					Nodes: []k8znerv1alpha1.NodeStatus{
+						{Name: "w-1", Phase: k8znerv1alpha1.NodePhaseReady},
+						{Name: "w-2", Phase: k8znerv1alpha1.NodePhaseWaitingForK8s},
+					},
+				},
+			},
+		}
+
+		client := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(cluster).
+			WithStatusSubresource(cluster).
+			Build()
+		recorder := record.NewFakeRecorder(10)
+		mockHCloud := &MockHCloudClient{}
+
+		r := NewClusterReconciler(client, scheme, recorder,
+			WithHCloudClient(mockHCloud),
+			WithMetrics(false),
+		)
+
+		stuck := stuckNode{
+			Name:    "w-2",
+			Role:    "worker",
+			Phase:   k8znerv1alpha1.NodePhaseWaitingForK8s,
+			Elapsed: 12 * time.Minute,
+			Timeout: 10 * time.Minute,
+		}
+
+		err := r.handleStuckNode(context.Background(), cluster, stuck)
+		require.NoError(t, err)
+
+		assert.Contains(t, mockHCloud.DeleteServerCalls, "w-2")
+		assert.Len(t, cluster.Status.Workers.Nodes, 1)
+		assert.Equal(t, "w-1", cluster.Status.Workers.Nodes[0].Name)
+	})
+
+	t.Run("continues even if server deletion fails", func(t *testing.T) {
+		t.Parallel()
+		cluster := &k8znerv1alpha1.K8znerCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-cluster",
+				Namespace: "default",
+			},
+			Status: k8znerv1alpha1.K8znerClusterStatus{
+				ControlPlanes: k8znerv1alpha1.NodeGroupStatus{
+					Nodes: []k8znerv1alpha1.NodeStatus{
+						{Name: "cp-1", Phase: k8znerv1alpha1.NodePhaseCreatingServer},
+					},
+				},
+			},
+		}
+
+		client := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(cluster).
+			WithStatusSubresource(cluster).
+			Build()
+		recorder := record.NewFakeRecorder(10)
+		mockHCloud := &MockHCloudClient{
+			DeleteServerFunc: func(_ context.Context, _ string) error {
+				return errors.New("hcloud API error")
+			},
+		}
+
+		r := NewClusterReconciler(client, scheme, recorder,
+			WithHCloudClient(mockHCloud),
+			WithMetrics(false),
+		)
+
+		stuck := stuckNode{
+			Name:    "cp-1",
+			Role:    "control-plane",
+			Phase:   k8znerv1alpha1.NodePhaseCreatingServer,
+			Elapsed: 15 * time.Minute,
+			Timeout: 10 * time.Minute,
+		}
+
+		// Should NOT return error even when delete fails
+		err := r.handleStuckNode(context.Background(), cluster, stuck)
+		require.NoError(t, err)
+
+		// Node should still be removed from status
+		assert.Empty(t, cluster.Status.ControlPlanes.Nodes)
 	})
 }

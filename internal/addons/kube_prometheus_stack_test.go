@@ -431,6 +431,121 @@ func TestCreateMonitoringNamespace(t *testing.T) {
 	assert.Contains(t, ns, "name: monitoring")
 }
 
+func TestBuildGrafanaValues_AdminPassword(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{
+		Addons: config.AddonsConfig{
+			KubePrometheusStack: config.KubePrometheusStackConfig{
+				Enabled: true,
+				Grafana: config.KubePrometheusGrafanaConfig{
+					AdminPassword: "secret-password",
+				},
+			},
+		},
+	}
+
+	values := buildGrafanaValues(cfg)
+	assert.Equal(t, "secret-password", values["adminPassword"])
+}
+
+func TestBuildGrafanaValues_Persistence(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{
+		Addons: config.AddonsConfig{
+			KubePrometheusStack: config.KubePrometheusStackConfig{
+				Enabled: true,
+				Grafana: config.KubePrometheusGrafanaConfig{
+					Persistence: config.KubePrometheusPersistenceConfig{
+						Enabled:      true,
+						Size:         "20Gi",
+						StorageClass: "hcloud-volumes",
+					},
+				},
+			},
+		},
+	}
+
+	values := buildGrafanaValues(cfg)
+	persistence := values["persistence"].(helm.Values)
+	assert.True(t, persistence["enabled"].(bool))
+	assert.Equal(t, "20Gi", persistence["size"])
+	assert.Equal(t, "hcloud-volumes", persistence["storageClassName"])
+}
+
+func TestBuildGrafanaValues_PersistenceDefaults(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{
+		Addons: config.AddonsConfig{
+			KubePrometheusStack: config.KubePrometheusStackConfig{
+				Enabled: true,
+				Grafana: config.KubePrometheusGrafanaConfig{
+					Persistence: config.KubePrometheusPersistenceConfig{
+						Enabled: true,
+					},
+				},
+			},
+		},
+	}
+
+	values := buildGrafanaValues(cfg)
+	persistence := values["persistence"].(helm.Values)
+	assert.Equal(t, "10Gi", persistence["size"])
+}
+
+func TestBuildGrafanaIngress_DefaultClassName(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{
+		Addons: config.AddonsConfig{
+			KubePrometheusStack: config.KubePrometheusStackConfig{
+				Enabled: true,
+				Grafana: config.KubePrometheusGrafanaConfig{
+					IngressEnabled:   true,
+					IngressHost:      "grafana.example.com",
+					IngressClassName: "", // empty should default to "traefik"
+				},
+			},
+		},
+	}
+
+	ingress := buildGrafanaIngress(cfg)
+	assert.Equal(t, "traefik", ingress["ingressClassName"])
+}
+
+func TestBuildPrometheusValues_Ingress(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{
+		Addons: config.AddonsConfig{
+			KubePrometheusStack: config.KubePrometheusStackConfig{
+				Enabled: true,
+				Prometheus: config.KubePrometheusPrometheusConfig{
+					IngressEnabled:   true,
+					IngressHost:      "prometheus.example.com",
+					IngressClassName: "traefik",
+					IngressTLS:       true,
+				},
+			},
+			CertManager: config.CertManagerConfig{
+				Cloudflare: config.CertManagerCloudflareConfig{
+					Enabled:    true,
+					Production: true,
+				},
+			},
+			Cloudflare: config.CloudflareConfig{
+				Enabled: true,
+			},
+		},
+	}
+
+	values := buildPrometheusValues(cfg)
+	ingress := values["ingress"].(helm.Values)
+	assert.True(t, ingress["enabled"].(bool))
+	assert.Equal(t, "traefik", ingress["ingressClassName"])
+
+	hosts := ingress["hosts"].([]string)
+	require.Len(t, hosts, 1)
+	assert.Equal(t, "prometheus.example.com", hosts[0])
+}
+
 func TestHelperFunctions(t *testing.T) {
 	t.Parallel()
 	t.Run("getBoolWithDefault", func(t *testing.T) {

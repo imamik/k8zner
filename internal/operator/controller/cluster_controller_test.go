@@ -2,10 +2,12 @@ package controller
 
 import (
 	"context"
+	"net"
 	"strings"
 	"testing"
 	"time"
 
+	hcloudgo "github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -13,8 +15,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 )
@@ -358,5 +363,155 @@ func TestGenerateReplacementServerName(t *testing.T) {
 		name1 := r.generateReplacementServerName(cluster, "worker", "old-name")
 		name2 := r.generateReplacementServerName(cluster, "worker", "old-name")
 		assert.NotEqual(t, name1, name2, "expected unique names on each call")
+	})
+}
+
+func TestNodeEventHandler(t *testing.T) {
+	t.Parallel()
+	h := &nodeEventHandler{}
+
+	t.Run("Create enqueues cluster", func(t *testing.T) {
+		t.Parallel()
+		q := workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]())
+		defer q.ShutDown()
+
+		h.Create(context.Background(), event.CreateEvent{}, q)
+		assert.Equal(t, 1, q.Len())
+
+		item, _ := q.Get()
+		assert.Equal(t, "k8zner-system", item.Namespace)
+		assert.Equal(t, "cluster", item.Name)
+		q.Done(item)
+	})
+
+	t.Run("Update enqueues cluster", func(t *testing.T) {
+		t.Parallel()
+		q := workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]())
+		defer q.ShutDown()
+
+		h.Update(context.Background(), event.UpdateEvent{}, q)
+		assert.Equal(t, 1, q.Len())
+
+		item, _ := q.Get()
+		assert.Equal(t, "k8zner-system", item.Namespace)
+		assert.Equal(t, "cluster", item.Name)
+		q.Done(item)
+	})
+
+	t.Run("Delete enqueues cluster", func(t *testing.T) {
+		t.Parallel()
+		q := workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]())
+		defer q.ShutDown()
+
+		h.Delete(context.Background(), event.DeleteEvent{}, q)
+		assert.Equal(t, 1, q.Len())
+
+		item, _ := q.Get()
+		assert.Equal(t, "k8zner-system", item.Namespace)
+		assert.Equal(t, "cluster", item.Name)
+		q.Done(item)
+	})
+
+	t.Run("Generic enqueues cluster", func(t *testing.T) {
+		t.Parallel()
+		q := workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]())
+		defer q.ShutDown()
+
+		h.Generic(context.Background(), event.GenericEvent{}, q)
+		assert.Equal(t, 1, q.Len())
+
+		item, _ := q.Get()
+		assert.Equal(t, "k8zner-system", item.Namespace)
+		assert.Equal(t, "cluster", item.Name)
+		q.Done(item)
+	})
+}
+
+func TestGetPrivateIPFromServer(t *testing.T) {
+	t.Parallel()
+	scheme := setupTestScheme(t)
+
+	t.Run("returns error when GetServerByName fails", func(t *testing.T) {
+		t.Parallel()
+		client := fake.NewClientBuilder().WithScheme(scheme).Build()
+		recorder := record.NewFakeRecorder(10)
+		mockHCloud := &MockHCloudClient{
+			GetServerByNameFunc: func(_ context.Context, _ string) (*hcloudgo.Server, error) {
+				return nil, assert.AnError
+			},
+		}
+
+		r := NewClusterReconciler(client, scheme, recorder,
+			WithHCloudClient(mockHCloud),
+		)
+
+		_, err := r.getPrivateIPFromServer(context.Background(), "test-server")
+		assert.Error(t, err)
+	})
+
+	t.Run("returns error when server not found", func(t *testing.T) {
+		t.Parallel()
+		client := fake.NewClientBuilder().WithScheme(scheme).Build()
+		recorder := record.NewFakeRecorder(10)
+		mockHCloud := &MockHCloudClient{
+			GetServerByNameFunc: func(_ context.Context, _ string) (*hcloudgo.Server, error) {
+				return nil, nil
+			},
+		}
+
+		r := NewClusterReconciler(client, scheme, recorder,
+			WithHCloudClient(mockHCloud),
+		)
+
+		_, err := r.getPrivateIPFromServer(context.Background(), "missing-server")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "not found")
+	})
+
+	t.Run("returns private IP from server", func(t *testing.T) {
+		t.Parallel()
+		client := fake.NewClientBuilder().WithScheme(scheme).Build()
+		recorder := record.NewFakeRecorder(10)
+		mockHCloud := &MockHCloudClient{
+			GetServerByNameFunc: func(_ context.Context, _ string) (*hcloudgo.Server, error) {
+				return &hcloudgo.Server{
+					ID:   123,
+					Name: "test-server",
+					PrivateNet: []hcloudgo.ServerPrivateNet{
+						{IP: net.ParseIP("10.0.0.5")},
+					},
+				}, nil
+			},
+		}
+
+		r := NewClusterReconciler(client, scheme, recorder,
+			WithHCloudClient(mockHCloud),
+		)
+
+		ip, err := r.getPrivateIPFromServer(context.Background(), "test-server")
+		require.NoError(t, err)
+		assert.Equal(t, "10.0.0.5", ip)
+	})
+
+	t.Run("returns empty string when no private networks", func(t *testing.T) {
+		t.Parallel()
+		client := fake.NewClientBuilder().WithScheme(scheme).Build()
+		recorder := record.NewFakeRecorder(10)
+		mockHCloud := &MockHCloudClient{
+			GetServerByNameFunc: func(_ context.Context, _ string) (*hcloudgo.Server, error) {
+				return &hcloudgo.Server{
+					ID:   123,
+					Name: "test-server",
+				}, nil
+			},
+		}
+
+		r := NewClusterReconciler(client, scheme, recorder,
+			WithHCloudClient(mockHCloud),
+		)
+
+		ip, err := r.getPrivateIPFromServer(context.Background(), "test-server")
+		require.NoError(t, err)
+		assert.Equal(t, "", ip)
 	})
 }

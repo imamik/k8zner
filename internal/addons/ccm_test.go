@@ -298,6 +298,29 @@ func TestBuildCCMValues_Tolerations(t *testing.T) {
 	assert.Equal(t, "Exists", tolerations[3]["operator"])
 }
 
+func TestGetLBSubnetIPRange(t *testing.T) {
+	t.Parallel()
+	t.Run("returns subnet when config is valid", func(t *testing.T) {
+		t.Parallel()
+		cfg := &config.Config{
+			Network: config.NetworkConfig{
+				IPv4CIDR: "10.0.0.0/16",
+			},
+		}
+		_ = cfg.CalculateSubnets()
+		result := getLBSubnetIPRange(cfg)
+		assert.NotEmpty(t, result)
+	})
+
+	t.Run("returns empty on error", func(t *testing.T) {
+		t.Parallel()
+		// Empty config with no IPv4CIDR should cause GetSubnetForRole to fail
+		cfg := &config.Config{}
+		result := getLBSubnetIPRange(cfg)
+		assert.Equal(t, "", result)
+	})
+}
+
 func TestGetClusterCIDR(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
