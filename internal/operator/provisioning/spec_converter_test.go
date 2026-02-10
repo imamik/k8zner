@@ -624,8 +624,8 @@ func TestBuildMachineConfigOptions_NetworkDefaults(t *testing.T) {
 	opts := buildMachineConfigOptions(cluster)
 
 	assert.Equal(t, "10.0.0.0/16", opts.NodeIPv4CIDR)
-	assert.Equal(t, "10.244.0.0/16", opts.PodIPv4CIDR)
-	assert.Equal(t, "10.96.0.0/16", opts.ServiceIPv4CIDR)
+	assert.Equal(t, "10.0.128.0/17", opts.PodIPv4CIDR)
+	assert.Equal(t, "10.96.0.0/12", opts.ServiceIPv4CIDR)
 	assert.Equal(t, "10.0.0.0/16", opts.EtcdSubnet)
 }
 

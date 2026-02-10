@@ -16,12 +16,15 @@ Both paths share: `internal/addons/`, `internal/provisioning/`, `internal/platfo
 - **api/v1alpha1/**: CRD types (`K8znerCluster` spec, status, phase constants)
 - **cmd/k8zner/**: CLI — split commands (Cobra definitions) from handlers (business logic)
 - **cmd/operator/**: Operator entrypoint — sets up controller-runtime
+- **cmd/cleanup/**: Standalone cleanup utility for destroying cluster resources
 - **internal/**: Organize by domain and responsibility:
   - **operator/controller/**: CRD reconciliation (phases, scaling, healing, health checks)
   - **operator/provisioning/**: CRD spec → internal Config adapter
   - **operator/addons/**: Operator-specific addon phase manager
   - **provisioning/**: All cluster provisioning (compute, infrastructure, images, bootstrap)
   - **addons/**: Addon installation (shared by CLI and operator)
+    - **addons/helm/**: Helm chart rendering, value building, and chart client
+    - **addons/k8sclient/**: Kubernetes API operations (apply manifests, manage secrets)
   - **config/**: Configuration management; **config/v2/** for YAML spec + defaults
   - **platform/**: External system integrations (hcloud, talos, ssh, s3)
   - **util/**: Reusable utilities (async, keygen, labels, naming, rdns, retry)
@@ -166,6 +169,8 @@ The provisioning domain is organized into focused subpackages, each with a clear
 - **`compute/`** — Servers, Control Plane, Workers, Node Pools
 - **`image/`** — Talos image building and snapshot management
 - **`cluster/`** — Bootstrap and Talos configuration application
+- **`destroy/`** — Resource cleanup and cluster teardown
+- **`upgrade/`** — Node upgrade provisioning
 
 Each subpackage interacts with the `internal/platform/hcloud` layer for cloud operations. The provisioning pipeline (`internal/provisioning/pipeline.go`) coordinates these provisioners in the correct order. Shared interfaces and state types live at the `internal/provisioning` root level.
 

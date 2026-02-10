@@ -32,11 +32,11 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 		// NodeIPv4CIDR is critical for CCM subnet configuration - it determines
 		// where load balancers are attached in the private network.
 		Network: config.NetworkConfig{
-			IPv4CIDR:           defaultString(spec.Network.IPv4CIDR, "10.0.0.0/16"),
-			NodeIPv4CIDR:       defaultString(spec.Network.NodeIPv4CIDR, "10.0.0.0/17"),
+			IPv4CIDR:           defaultString(spec.Network.IPv4CIDR, configv2.NetworkCIDR),
+			NodeIPv4CIDR:       defaultString(spec.Network.NodeIPv4CIDR, configv2.NodeCIDR),
 			NodeIPv4SubnetMask: 25, // /25 subnets for each role (126 IPs per subnet)
-			PodIPv4CIDR:        defaultString(spec.Network.PodCIDR, "10.0.128.0/17"),
-			ServiceIPv4CIDR:    defaultString(spec.Network.ServiceCIDR, "10.96.0.0/12"),
+			PodIPv4CIDR:        defaultString(spec.Network.PodCIDR, configv2.PodCIDR),
+			ServiceIPv4CIDR:    defaultString(spec.Network.ServiceCIDR, configv2.ServiceCIDR),
 		},
 
 		// Talos configuration
@@ -336,9 +336,9 @@ func buildMachineConfigOptions(k8sCluster *k8znerv1alpha1.K8znerCluster) *talos.
 		CoreDNSEnabled:          true,
 		DiscoveryServiceEnabled: true,
 		KubeProxyReplacement:    true, // Cilium replaces kube-proxy
-		NodeIPv4CIDR:            defaultString(k8sCluster.Spec.Network.IPv4CIDR, "10.0.0.0/16"),
-		PodIPv4CIDR:             defaultString(k8sCluster.Spec.Network.PodCIDR, "10.244.0.0/16"),
-		ServiceIPv4CIDR:         defaultString(k8sCluster.Spec.Network.ServiceCIDR, "10.96.0.0/16"),
-		EtcdSubnet:              defaultString(k8sCluster.Spec.Network.IPv4CIDR, "10.0.0.0/16"),
+		NodeIPv4CIDR:            defaultString(k8sCluster.Spec.Network.IPv4CIDR, configv2.NetworkCIDR),
+		PodIPv4CIDR:             defaultString(k8sCluster.Spec.Network.PodCIDR, configv2.PodCIDR),
+		ServiceIPv4CIDR:         defaultString(k8sCluster.Spec.Network.ServiceCIDR, configv2.ServiceCIDR),
+		EtcdSubnet:              defaultString(k8sCluster.Spec.Network.IPv4CIDR, configv2.NetworkCIDR),
 	}
 }

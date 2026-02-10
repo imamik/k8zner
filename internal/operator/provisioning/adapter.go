@@ -437,45 +437,29 @@ func calculateBootstrapNodeIP(k8sCluster *k8znerv1alpha1.K8znerCluster) (string,
 
 // updateNodeStatuses updates the cluster status with node information from provisioning state.
 func updateNodeStatuses(k8sCluster *k8znerv1alpha1.K8znerCluster, state *provisioning.State) {
-	for name, ip := range state.ControlPlaneIPs {
-		serverID := state.ControlPlaneServerIDs[name]
-		found := false
-		for i := range k8sCluster.Status.ControlPlanes.Nodes {
-			if k8sCluster.Status.ControlPlanes.Nodes[i].Name == name {
-				k8sCluster.Status.ControlPlanes.Nodes[i].PublicIP = ip
-				k8sCluster.Status.ControlPlanes.Nodes[i].ServerID = serverID
-				found = true
-				break
-			}
-		}
-		if !found {
-			k8sCluster.Status.ControlPlanes.Nodes = append(k8sCluster.Status.ControlPlanes.Nodes,
-				k8znerv1alpha1.NodeStatus{
-					Name:     name,
-					ServerID: serverID,
-					PublicIP: ip,
-				})
-		}
-	}
+	mergeNodePool(&k8sCluster.Status.ControlPlanes.Nodes, state.ControlPlaneIPs, state.ControlPlaneServerIDs)
+	mergeNodePool(&k8sCluster.Status.Workers.Nodes, state.WorkerIPs, state.WorkerServerIDs)
+}
 
-	for name, ip := range state.WorkerIPs {
-		serverID := state.WorkerServerIDs[name]
+// mergeNodePool updates or appends node statuses from IP and server ID maps.
+func mergeNodePool(nodes *[]k8znerv1alpha1.NodeStatus, ips map[string]string, serverIDs map[string]int64) {
+	for name, ip := range ips {
+		serverID := serverIDs[name]
 		found := false
-		for i := range k8sCluster.Status.Workers.Nodes {
-			if k8sCluster.Status.Workers.Nodes[i].Name == name {
-				k8sCluster.Status.Workers.Nodes[i].PublicIP = ip
-				k8sCluster.Status.Workers.Nodes[i].ServerID = serverID
+		for i := range *nodes {
+			if (*nodes)[i].Name == name {
+				(*nodes)[i].PublicIP = ip
+				(*nodes)[i].ServerID = serverID
 				found = true
 				break
 			}
 		}
 		if !found {
-			k8sCluster.Status.Workers.Nodes = append(k8sCluster.Status.Workers.Nodes,
-				k8znerv1alpha1.NodeStatus{
-					Name:     name,
-					ServerID: serverID,
-					PublicIP: ip,
-				})
+			*nodes = append(*nodes, k8znerv1alpha1.NodeStatus{
+				Name:     name,
+				ServerID: serverID,
+				PublicIP:  ip,
+			})
 		}
 	}
 }
