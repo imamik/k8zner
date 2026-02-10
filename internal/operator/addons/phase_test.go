@@ -2,6 +2,7 @@ package addons
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,7 +10,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 )
@@ -601,5 +604,24 @@ func TestIsCiliumReady(t *testing.T) {
 		ready, err := pm.isCiliumReady(context.Background(), k8sClient)
 		require.NoError(t, err)
 		assert.False(t, ready, "should return false when no cilium pods exist")
+	})
+
+	t.Run("returns error when List fails", func(t *testing.T) {
+		t.Parallel()
+
+		k8sClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithInterceptorFuncs(interceptor.Funcs{
+				List: func(_ context.Context, _ client.WithWatch, _ client.ObjectList, _ ...client.ListOption) error {
+					return fmt.Errorf("api server unavailable")
+				},
+			}).
+			Build()
+		pm := NewPhaseManager(nil)
+
+		ready, err := pm.isCiliumReady(context.Background(), k8sClient)
+		require.Error(t, err)
+		assert.False(t, ready)
+		assert.Contains(t, err.Error(), "api server unavailable")
 	})
 }
