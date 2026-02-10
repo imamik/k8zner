@@ -459,13 +459,19 @@ func TestRealClient_CreateServer_ValidationError(t *testing.T) {
 	ctx := context.Background()
 
 	// Test validation: networkID provided but privateIP empty
-	_, err := client.CreateServer(ctx, "test", "image", "type", "loc", nil, nil, "", nil, 123, "", true, true)
+	_, err := client.CreateServer(ctx, ServerCreateOpts{
+		Name: "test", ImageType: "image", ServerType: "type", Location: "loc",
+		NetworkID: 123, EnablePublicIPv4: true, EnablePublicIPv6: true,
+	})
 	if err == nil {
 		t.Error("expected validation error for mismatched networkID/privateIP")
 	}
 
 	// Test validation: privateIP provided but networkID is 0
-	_, err = client.CreateServer(ctx, "test", "image", "type", "loc", nil, nil, "", nil, 0, "10.0.0.1", true, true)
+	_, err = client.CreateServer(ctx, ServerCreateOpts{
+		Name: "test", ImageType: "image", ServerType: "type", Location: "loc",
+		PrivateIP: "10.0.0.1", EnablePublicIPv4: true, EnablePublicIPv6: true,
+	})
 	if err == nil {
 		t.Error("expected validation error for mismatched networkID/privateIP")
 	}
@@ -1766,7 +1772,11 @@ func TestRealClient_CreateServer_WithHTTPMock(t *testing.T) {
 		ctx := context.Background()
 
 		// No network attachment (simple case)
-		serverID, err := client.CreateServer(ctx, "test-server", "ubuntu-22.04", "cx21", "nbg1", []string{"my-key"}, map[string]string{"test": "true"}, "#!/bin/bash\necho hello", nil, 0, "", true, true)
+		serverID, err := client.CreateServer(ctx, ServerCreateOpts{
+			Name: "test-server", ImageType: "ubuntu-22.04", ServerType: "cx21", Location: "nbg1",
+			SSHKeys: []string{"my-key"}, Labels: map[string]string{"test": "true"},
+			UserData: "#!/bin/bash\necho hello", EnablePublicIPv4: true, EnablePublicIPv6: true,
+		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1813,7 +1823,10 @@ func TestRealClient_CreateServer_WithHTTPMock(t *testing.T) {
 		client := ts.realClient()
 		ctx := context.Background()
 
-		_, err := client.CreateServer(ctx, "test-server", "ubuntu-22.04", "cx21", "", []string{"nonexistent-key"}, nil, "", nil, 0, "", true, true)
+		_, err := client.CreateServer(ctx, ServerCreateOpts{
+			Name: "test-server", ImageType: "ubuntu-22.04", ServerType: "cx21",
+			SSHKeys: []string{"nonexistent-key"}, EnablePublicIPv4: true, EnablePublicIPv6: true,
+		})
 		if err == nil {
 			t.Fatal("expected error for nonexistent SSH key")
 		}
@@ -1857,7 +1870,10 @@ func TestRealClient_CreateServer_WithHTTPMock(t *testing.T) {
 		client := ts.realClient()
 		ctx := context.Background()
 
-		_, err := client.CreateServer(ctx, "test-server", "ubuntu-22.04", "cx21", "nonexistent-location", []string{}, nil, "", nil, 0, "", true, true)
+		_, err := client.CreateServer(ctx, ServerCreateOpts{
+			Name: "test-server", ImageType: "ubuntu-22.04", ServerType: "cx21", Location: "nonexistent-location",
+			SSHKeys: []string{}, EnablePublicIPv4: true, EnablePublicIPv6: true,
+		})
 		if err == nil {
 			t.Fatal("expected error for nonexistent location")
 		}
@@ -1921,7 +1937,10 @@ func TestRealClient_CreateServer_WithHTTPMock(t *testing.T) {
 		client := ts.realClient()
 		ctx := context.Background()
 
-		serverID, err := client.CreateServer(ctx, "talos-server", "talos", "cx21", "nbg1", []string{}, nil, "", nil, 0, "", true, true)
+		serverID, err := client.CreateServer(ctx, ServerCreateOpts{
+			Name: "talos-server", ImageType: "talos", ServerType: "cx21", Location: "nbg1",
+			SSHKeys: []string{}, EnablePublicIPv4: true, EnablePublicIPv6: true,
+		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

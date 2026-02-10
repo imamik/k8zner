@@ -270,117 +270,71 @@ func validateAddonConfig(cfg *config.Config) error {
 	return nil
 }
 
-// Talos CRD wait time constants
+// Wait time constants for resource polling.
 const (
-	// DefaultTalosCRDWaitTime is the default time to wait for Talos API CRD registration.
-	// Increased from 2 minutes to 5 minutes to handle slow cluster bootstraps.
-	DefaultTalosCRDWaitTime = 5 * time.Minute
+	// DefaultResourceWaitTime is the default time to wait for a resource to become available.
+	DefaultResourceWaitTime = 5 * time.Minute
 
-	// TalosCRDCheckInterval is how often to check for CRD availability.
-	TalosCRDCheckInterval = 5 * time.Second
+	// resourceCheckInterval is how often to check for resource availability.
+	resourceCheckInterval = 5 * time.Second
+
+	// resourceProgressInterval is how many checks between progress log messages (6 * 5s = 30s).
+	resourceProgressInterval = 6
 )
+
+// resourceChecker is a function that checks if a resource exists.
+type resourceChecker func(ctx context.Context) (exists bool, err error)
+
+// waitForResource polls until a resource becomes available or the timeout expires.
+func waitForResource(ctx context.Context, check resourceChecker, timeout time.Duration, resourceName string) error {
+	if timeout <= 0 {
+		timeout = DefaultResourceWaitTime
+	}
+
+	deadline := time.Now().Add(timeout)
+	attempt := 0
+	startTime := time.Now()
+
+	log.Printf("[addons] Waiting up to %v for %s to be available...", timeout, resourceName)
+
+	for time.Now().Before(deadline) {
+		attempt++
+
+		exists, err := check(ctx)
+		if err != nil {
+			log.Printf("[addons] Error checking for %s (attempt %d): %v", resourceName, attempt, err)
+		} else if exists {
+			elapsed := time.Since(startTime).Round(time.Second)
+			log.Printf("[addons] %s is available (after %v, %d attempts)", resourceName, elapsed, attempt)
+			return nil
+		}
+
+		if attempt%resourceProgressInterval == 0 {
+			elapsed := time.Since(startTime).Round(time.Second)
+			log.Printf("[addons] Still waiting for %s (elapsed: %v)...", resourceName, elapsed)
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(resourceCheckInterval):
+		}
+	}
+
+	elapsed := time.Since(startTime).Round(time.Second)
+	return fmt.Errorf("timeout after %v waiting for %s", elapsed, resourceName)
+}
 
 // waitForTalosCRD waits for the Talos API CRD (talos.dev/v1alpha1) to be available.
-// The CRD is registered asynchronously after bootstrap when kubernetesTalosAPIAccess is enabled.
 func waitForTalosCRD(ctx context.Context, client k8sclient.Client) error {
-	return waitForTalosCRDWithTimeout(ctx, client, DefaultTalosCRDWaitTime)
+	return waitForResource(ctx, func(ctx context.Context) (bool, error) {
+		return client.HasCRD(ctx, "talos.dev/v1alpha1/ServiceAccount")
+	}, DefaultResourceWaitTime, "Talos API CRD")
 }
-
-// waitForTalosCRDWithTimeout waits for the Talos API CRD with a custom timeout.
-func waitForTalosCRDWithTimeout(ctx context.Context, client k8sclient.Client, timeout time.Duration) error {
-	const talosCRD = "talos.dev/v1alpha1/ServiceAccount"
-
-	if timeout <= 0 {
-		timeout = DefaultTalosCRDWaitTime
-	}
-
-	deadline := time.Now().Add(timeout)
-	attempt := 0
-	startTime := time.Now()
-
-	log.Printf("[addons] Waiting up to %v for Talos API CRD to be registered...", timeout)
-
-	for time.Now().Before(deadline) {
-		attempt++
-
-		// Check if the CRD exists
-		exists, err := client.HasCRD(ctx, talosCRD)
-		if err != nil {
-			log.Printf("[addons] Error checking for Talos CRD (attempt %d): %v", attempt, err)
-		} else if exists {
-			elapsed := time.Since(startTime).Round(time.Second)
-			log.Printf("[addons] Talos API CRD is available (after %v, %d attempts)", elapsed, attempt)
-			return nil
-		}
-
-		// Log progress every 30 seconds
-		if attempt%6 == 0 {
-			elapsed := time.Since(startTime).Round(time.Second)
-			remaining := timeout - elapsed
-			log.Printf("[addons] Still waiting for Talos API CRD (elapsed: %v, remaining: %v)...", elapsed, remaining)
-		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(TalosCRDCheckInterval):
-			// Continue waiting
-		}
-	}
-
-	elapsed := time.Since(startTime).Round(time.Second)
-	return fmt.Errorf("timeout after %v waiting for Talos API CRD - ensure kubernetesTalosAPIAccess is enabled in machine config", elapsed)
-}
-
-// IngressClass wait time constants
-const (
-	// DefaultIngressClassWaitTime is the default time to wait for an IngressClass to be ready.
-	// Increased to 5 minutes to allow time for Traefik Deployment to fully deploy.
-	DefaultIngressClassWaitTime = 5 * time.Minute
-
-	// IngressClassCheckInterval is how often to check for IngressClass availability.
-	IngressClassCheckInterval = 5 * time.Second
-)
 
 // waitForIngressClass waits for an IngressClass to be available.
-// This is useful for addons that create Ingress resources and need Traefik/nginx to be ready.
 func waitForIngressClass(ctx context.Context, client k8sclient.Client, name string, timeout time.Duration) error {
-	if timeout <= 0 {
-		timeout = DefaultIngressClassWaitTime
-	}
-
-	deadline := time.Now().Add(timeout)
-	attempt := 0
-	startTime := time.Now()
-
-	log.Printf("[addons] Waiting up to %v for IngressClass %q to be available...", timeout, name)
-
-	for time.Now().Before(deadline) {
-		attempt++
-
-		exists, err := client.HasIngressClass(ctx, name)
-		if err != nil {
-			log.Printf("[addons] Error checking for IngressClass %q (attempt %d): %v", name, attempt, err)
-		} else if exists {
-			elapsed := time.Since(startTime).Round(time.Second)
-			log.Printf("[addons] IngressClass %q is available (after %v)", name, elapsed)
-			return nil
-		}
-
-		// Log progress every 30 seconds
-		if attempt%6 == 0 {
-			elapsed := time.Since(startTime).Round(time.Second)
-			log.Printf("[addons] Still waiting for IngressClass %q (elapsed: %v)...", name, elapsed)
-		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(IngressClassCheckInterval):
-			// Continue waiting
-		}
-	}
-
-	elapsed := time.Since(startTime).Round(time.Second)
-	return fmt.Errorf("timeout after %v waiting for IngressClass %q - ensure Traefik/ingress controller is installed", elapsed, name)
+	return waitForResource(ctx, func(ctx context.Context) (bool, error) {
+		return client.HasIngressClass(ctx, name)
+	}, timeout, fmt.Sprintf("IngressClass %q", name))
 }

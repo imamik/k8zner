@@ -80,8 +80,10 @@ func TestCreateServer_IPv6Only(t *testing.T) {
 		ctx := context.Background()
 
 		// Create server with IPv6-only (enablePublicIPv4=false, enablePublicIPv6=true)
-		serverID, err := client.CreateServer(ctx, "test-ipv6", "debian-13", "cx22", "fsn1",
-			[]string{}, nil, "", nil, 0, "", false, true)
+		serverID, err := client.CreateServer(ctx, ServerCreateOpts{
+			Name: "test-ipv6", ImageType: "debian-13", ServerType: "cx22", Location: "fsn1",
+			SSHKeys: []string{}, EnablePublicIPv4: false, EnablePublicIPv6: true,
+		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -164,8 +166,10 @@ func TestCreateServer_IPv6Only(t *testing.T) {
 		ctx := context.Background()
 
 		// Create server with both IPv4 and IPv6 (enablePublicIPv4=true, enablePublicIPv6=true)
-		_, err := client.CreateServer(ctx, "test-both", "debian-13", "cx22", "fsn1",
-			[]string{}, nil, "", nil, 0, "", true, true)
+		_, err := client.CreateServer(ctx, ServerCreateOpts{
+			Name: "test-both", ImageType: "debian-13", ServerType: "cx22", Location: "fsn1",
+			SSHKeys: []string{}, EnablePublicIPv4: true, EnablePublicIPv6: true,
+		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -323,14 +327,17 @@ func TestMockClient_IPv6Parameters(t *testing.T) {
 	m := &MockClient{}
 
 	var capturedIPv4, capturedIPv6 bool
-	m.CreateServerFunc = func(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string, enablePublicIPv4, enablePublicIPv6 bool) (string, error) {
-		capturedIPv4 = enablePublicIPv4
-		capturedIPv6 = enablePublicIPv6
+	m.CreateServerFunc = func(_ context.Context, opts ServerCreateOpts) (string, error) {
+		capturedIPv4 = opts.EnablePublicIPv4
+		capturedIPv6 = opts.EnablePublicIPv6
 		return "mock-id", nil
 	}
 
 	ctx := context.Background()
-	_, err := m.CreateServer(ctx, "test", "image", "type", "loc", nil, nil, "", nil, 0, "", false, true)
+	_, err := m.CreateServer(ctx, ServerCreateOpts{
+		Name: "test", ImageType: "image", ServerType: "type", Location: "loc",
+		EnablePublicIPv4: false, EnablePublicIPv6: true,
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

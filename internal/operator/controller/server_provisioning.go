@@ -176,21 +176,17 @@ func (r *ClusterReconciler) provisionServer(ctx context.Context, cluster *k8zner
 	})
 
 	startTime := time.Now()
-	_, err := r.hcloudClient.CreateServer(
-		ctx,
-		opts.Name,
-		fmt.Sprintf("%d", opts.SnapshotID),
-		opts.ServerType,
-		opts.Region,
-		[]string{opts.SSHKeyName},
-		opts.Labels,
-		"",  // userData
-		nil, // placementGroupID
-		opts.NetworkID,
-		"",   // privateIP - let HCloud assign
-		true, // enablePublicIPv4
-		true, // enablePublicIPv6
-	)
+	_, err := r.hcloudClient.CreateServer(ctx, hcloud.ServerCreateOpts{
+		Name:             opts.Name,
+		ImageType:        fmt.Sprintf("%d", opts.SnapshotID),
+		ServerType:       opts.ServerType,
+		Location:         opts.Region,
+		SSHKeys:          []string{opts.SSHKeyName},
+		Labels:           opts.Labels,
+		NetworkID:        opts.NetworkID,
+		EnablePublicIPv4: true,
+		EnablePublicIPv6: true,
+	})
 	if err != nil {
 		if r.enableMetrics {
 			RecordHCloudAPICall("create_server", "error", time.Since(startTime).Seconds())

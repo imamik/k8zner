@@ -12,30 +12,23 @@ import (
 )
 
 // CreateServer creates a new server with the given specifications.
-// The enablePublicIPv4 and enablePublicIPv6 parameters control public IP assignment.
-// If networkID is provided without privateIP, HCloud will automatically assign an IP from the network's subnet.
-func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string, enablePublicIPv4, enablePublicIPv6 bool) (string, error) {
-	// Note: networkID can be provided without privateIP - HCloud will auto-assign an IP
-
+// If NetworkID is provided without PrivateIP, HCloud will auto-assign an IP from the network's subnet.
+func (c *RealClient) CreateServer(ctx context.Context, opts ServerCreateOpts) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeouts.ServerCreate)
 	defer cancel()
 
-	// Resolve dependencies and build create options
-	opts, err := c.buildServerCreateOpts(ctx, name, imageType, serverType, location, sshKeys, labels, userData, placementGroupID, networkID, privateIP, enablePublicIPv4, enablePublicIPv6)
+	hcloudOpts, err := c.buildHCloudServerOpts(ctx, opts)
 	if err != nil {
 		return "", err
 	}
 
-	// Create server with retry
-	result, err := c.createServerWithRetry(ctx, opts)
+	result, err := c.createServerWithRetry(ctx, hcloudOpts)
 	if err != nil {
 		return "", err
 	}
 
-	// Attach to network if requested
-	// If privateIP is empty, HCloud will auto-assign an IP from the network's subnet
-	if networkID != 0 {
-		if err := c.attachServerToNetwork(ctx, result.Server, networkID, privateIP); err != nil {
+	if opts.NetworkID != 0 {
+		if err := c.attachServerToNetwork(ctx, result.Server, opts.NetworkID, opts.PrivateIP); err != nil {
 			return "", err
 		}
 	}
@@ -43,61 +36,55 @@ func (c *RealClient) CreateServer(ctx context.Context, name, imageType, serverTy
 	return fmt.Sprintf("%d", result.Server.ID), nil
 }
 
-// buildServerCreateOpts resolves all dependencies and builds server creation options.
-func (c *RealClient) buildServerCreateOpts(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string, enablePublicIPv4, enablePublicIPv6 bool) (hcloud.ServerCreateOpts, error) {
-	// Resolve server type
-	serverTypeObj, _, err := c.client.ServerType.Get(ctx, serverType)
+// buildHCloudServerOpts resolves all dependencies and builds hcloud-go server creation options.
+func (c *RealClient) buildHCloudServerOpts(ctx context.Context, opts ServerCreateOpts) (hcloud.ServerCreateOpts, error) {
+	serverTypeObj, _, err := c.client.ServerType.Get(ctx, opts.ServerType)
 	if err != nil {
 		return hcloud.ServerCreateOpts{}, fmt.Errorf("failed to get server type: %w", err)
 	}
 	if serverTypeObj == nil {
-		return hcloud.ServerCreateOpts{}, fmt.Errorf("server type not found: %s", serverType)
+		return hcloud.ServerCreateOpts{}, fmt.Errorf("server type not found: %s", opts.ServerType)
 	}
 
-	// Resolve image
-	imageObj, err := c.resolveImage(ctx, imageType, serverTypeObj)
+	imageObj, err := c.resolveImage(ctx, opts.ImageType, serverTypeObj)
 	if err != nil {
 		return hcloud.ServerCreateOpts{}, err
 	}
 
-	// Resolve SSH keys
-	sshKeyObjs, err := c.resolveSSHKeys(ctx, sshKeys)
+	sshKeyObjs, err := c.resolveSSHKeys(ctx, opts.SSHKeys)
 	if err != nil {
 		return hcloud.ServerCreateOpts{}, err
 	}
 
-	// Resolve location
-	locObj, err := c.resolveLocation(ctx, location)
+	locObj, err := c.resolveLocation(ctx, opts.Location)
 	if err != nil {
 		return hcloud.ServerCreateOpts{}, err
 	}
 
-	// Determine if server should start after creation
-	// If attaching to a network, don't start automatically - we'll power on after network attachment
+	// If attaching to a network, don't start automatically - power on after network attachment
 	var startAfterCreate *bool
-	if networkID != 0 {
+	if opts.NetworkID != 0 {
 		startAfterCreate = hcloud.Ptr(false)
 	}
 
-	// Configure public network (IPv4/IPv6)
-	// Only set PublicNet if we're not using the defaults (both enabled)
+	// Only set PublicNet if not using the defaults (both enabled)
 	var publicNet *hcloud.ServerCreatePublicNet
-	if !enablePublicIPv4 || !enablePublicIPv6 {
+	if !opts.EnablePublicIPv4 || !opts.EnablePublicIPv6 {
 		publicNet = &hcloud.ServerCreatePublicNet{
-			EnableIPv4: enablePublicIPv4,
-			EnableIPv6: enablePublicIPv6,
+			EnableIPv4: opts.EnablePublicIPv4,
+			EnableIPv6: opts.EnablePublicIPv6,
 		}
 	}
 
 	return hcloud.ServerCreateOpts{
-		Name:             name,
+		Name:             opts.Name,
 		ServerType:       serverTypeObj,
 		Image:            imageObj,
 		SSHKeys:          sshKeyObjs,
-		Labels:           labels,
-		UserData:         userData,
+		Labels:           opts.Labels,
+		UserData:         opts.UserData,
 		Location:         locObj,
-		PlacementGroup:   resolvePlacementGroup(placementGroupID),
+		PlacementGroup:   resolvePlacementGroup(opts.PlacementGroupID),
 		StartAfterCreate: startAfterCreate,
 		PublicNet:        publicNet,
 	}, nil

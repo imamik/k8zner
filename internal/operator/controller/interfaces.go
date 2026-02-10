@@ -5,16 +5,15 @@ import (
 	"context"
 
 	hcloudgo "github.com/hetznercloud/hcloud-go/v2/hcloud"
+
+	"github.com/imamik/k8zner/internal/platform/hcloud"
 )
 
 // HCloudClient defines the interface for Hetzner Cloud operations.
 // This interface enables testing with mocks.
 type HCloudClient interface {
 	// Server operations
-	CreateServer(ctx context.Context, name, imageType, serverType, location string,
-		sshKeys []string, labels map[string]string, userData string,
-		placementGroupID *int64, networkID int64, privateIP string,
-		enablePublicIPv4, enablePublicIPv6 bool) (string, error)
+	CreateServer(ctx context.Context, opts hcloud.ServerCreateOpts) (string, error)
 	DeleteServer(ctx context.Context, name string) error
 	GetServerIP(ctx context.Context, name string) (string, error)
 	GetServerID(ctx context.Context, name string) (string, error)

@@ -5,6 +5,8 @@ import (
 	"sync"
 
 	hcloudgo "github.com/hetznercloud/hcloud-go/v2/hcloud"
+
+	"github.com/imamik/k8zner/internal/platform/hcloud"
 )
 
 // MockHCloudClient is a mock implementation of HCloudClient for testing.
@@ -12,7 +14,7 @@ type MockHCloudClient struct {
 	mu sync.Mutex
 
 	// Configurable responses
-	CreateServerFunc        func(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string, enablePublicIPv4, enablePublicIPv6 bool) (string, error)
+	CreateServerFunc        func(ctx context.Context, opts hcloud.ServerCreateOpts) (string, error)
 	DeleteServerFunc        func(ctx context.Context, name string) error
 	GetServerIPFunc         func(ctx context.Context, name string) (string, error)
 	GetServerIDFunc         func(ctx context.Context, name string) (string, error)
@@ -24,7 +26,7 @@ type MockHCloudClient struct {
 	GetSnapshotByLabelsFunc func(ctx context.Context, labels map[string]string) (*hcloudgo.Image, error)
 
 	// Call tracking
-	CreateServerCalls        []CreateServerCall
+	CreateServerCalls        []hcloud.ServerCreateOpts
 	DeleteServerCalls        []string
 	GetServerIPCalls         []string
 	GetServerIDCalls         []string
@@ -42,42 +44,13 @@ type CreateSSHKeyCall struct {
 	Labels    map[string]string
 }
 
-// CreateServerCall tracks arguments to CreateServer.
-type CreateServerCall struct {
-	Name             string
-	ImageType        string
-	ServerType       string
-	Location         string
-	SSHKeys          []string
-	Labels           map[string]string
-	UserData         string
-	PlacementGroupID *int64
-	NetworkID        int64
-	PrivateIP        string
-	EnablePublicIPv4 bool
-	EnablePublicIPv6 bool
-}
-
-func (m *MockHCloudClient) CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string, enablePublicIPv4, enablePublicIPv6 bool) (string, error) {
+func (m *MockHCloudClient) CreateServer(ctx context.Context, opts hcloud.ServerCreateOpts) (string, error) {
 	m.mu.Lock()
-	m.CreateServerCalls = append(m.CreateServerCalls, CreateServerCall{
-		Name:             name,
-		ImageType:        imageType,
-		ServerType:       serverType,
-		Location:         location,
-		SSHKeys:          sshKeys,
-		Labels:           labels,
-		UserData:         userData,
-		PlacementGroupID: placementGroupID,
-		NetworkID:        networkID,
-		PrivateIP:        privateIP,
-		EnablePublicIPv4: enablePublicIPv4,
-		EnablePublicIPv6: enablePublicIPv6,
-	})
+	m.CreateServerCalls = append(m.CreateServerCalls, opts)
 	m.mu.Unlock()
 
 	if m.CreateServerFunc != nil {
-		return m.CreateServerFunc(ctx, name, imageType, serverType, location, sshKeys, labels, userData, placementGroupID, networkID, privateIP, enablePublicIPv4, enablePublicIPv6)
+		return m.CreateServerFunc(ctx, opts)
 	}
 	return "12345", nil
 }

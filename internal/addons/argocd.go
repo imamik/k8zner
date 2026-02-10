@@ -22,7 +22,7 @@ func applyArgoCD(ctx context.Context, client k8sclient.Client, cfg *config.Confi
 			ingressClass = "traefik" // Default to Traefik
 		}
 
-		if err := waitForIngressClass(ctx, client, ingressClass, DefaultIngressClassWaitTime); err != nil {
+		if err := waitForIngressClass(ctx, client, ingressClass, DefaultResourceWaitTime); err != nil {
 			log.Printf("[ArgoCD] WARNING: IngressClass %q not ready, ingress may not work: %v", ingressClass, err)
 			log.Printf("[ArgoCD] Continuing installation - Ingress will become functional when IngressClass is available")
 			// Continue anyway - Ingress resource will be created and become functional once the controller is ready

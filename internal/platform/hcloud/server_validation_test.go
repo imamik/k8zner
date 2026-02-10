@@ -44,7 +44,11 @@ func TestCreateServer_NetworkParameterValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
-			_, err := client.CreateServer(ctx, "test", "image", "type", "nbg1", nil, nil, "", nil, tc.networkID, tc.privateIP, true, true)
+			_, err := client.CreateServer(ctx, ServerCreateOpts{
+				Name: "test", ImageType: "image", ServerType: "type", Location: "nbg1",
+				NetworkID: tc.networkID, PrivateIP: tc.privateIP,
+				EnablePublicIPv4: true, EnablePublicIPv6: true,
+			})
 
 			// All parameter combinations are now valid at the validation level.
 			// Errors will occur downstream (missing server type, API errors, etc.)

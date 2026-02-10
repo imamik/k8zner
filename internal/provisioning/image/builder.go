@@ -79,7 +79,16 @@ func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architect
 	}()
 
 	// Image builder needs public IPv4 for SSH access (SSH over IPv6 from CI/CD may not work)
-	serverID, err := b.infra.CreateServer(ctx, serverName, "debian-13", serverType, location, sshKeys, labels, "", nil, 0, "", true, true)
+	serverID, err := b.infra.CreateServer(ctx, hcloud.ServerCreateOpts{
+		Name:             serverName,
+		ImageType:        "debian-13",
+		ServerType:       serverType,
+		Location:         location,
+		SSHKeys:          sshKeys,
+		Labels:           labels,
+		EnablePublicIPv4: true,
+		EnablePublicIPv6: true,
+	})
 	if err != nil {
 		return "", fmt.Errorf("failed to create server: %w", err)
 	}

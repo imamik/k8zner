@@ -183,18 +183,18 @@ func TestProvisionControlPlane_SingleNode(t *testing.T) {
 	}
 
 	serverCreated := false
-	mockInfra.CreateServerFunc = func(_ context.Context, name, _, serverType, location string, _ []string, labels map[string]string, _ string, pgID *int64, _ int64, privateIP string, _, _ bool) (string, error) {
+	mockInfra.CreateServerFunc = func(_ context.Context, opts hcloud_internal.ServerCreateOpts) (string, error) {
 		serverCreated = true
-		assert.Contains(t, name, "test-cluster")
-		assert.Contains(t, name, "-cp-") // New naming: cluster-cp-1
-		assert.Equal(t, "cx21", serverType)
-		assert.Equal(t, "nbg1", location)
-		assert.NotNil(t, pgID)
-		assert.NotEmpty(t, privateIP)
-		assert.Equal(t, "control-plane", labels["role"])
+		assert.Contains(t, opts.Name, "test-cluster")
+		assert.Contains(t, opts.Name, "-cp-") // New naming: cluster-cp-1
+		assert.Equal(t, "cx21", opts.ServerType)
+		assert.Equal(t, "nbg1", opts.Location)
+		assert.NotNil(t, opts.PlacementGroupID)
+		assert.NotEmpty(t, opts.PrivateIP)
+		assert.Equal(t, "control-plane", opts.Labels["role"])
 		// Store the server ID for later lookup
 		serverMu.Lock()
-		createdServerIDs[name] = "12345"
+		createdServerIDs[opts.Name] = "12345"
 		serverMu.Unlock()
 		return "12345", nil
 	}
@@ -253,15 +253,15 @@ func TestProvisionWorkers_MultipleNodes(t *testing.T) {
 	}
 
 	createdServers := make(map[string]bool)
-	mockInfra.CreateServerFunc = func(_ context.Context, name, _, serverType, _ string, _ []string, labels map[string]string, _ string, _ *int64, _ int64, _ string, _, _ bool) (string, error) {
+	mockInfra.CreateServerFunc = func(_ context.Context, opts hcloud_internal.ServerCreateOpts) (string, error) {
 		mu.Lock()
 		serverCounter++
 		idStr := fmt.Sprintf("%d", serverCounter)
-		createdServerIDs[name] = idStr
-		createdServers[name] = true
+		createdServerIDs[opts.Name] = idStr
+		createdServers[opts.Name] = true
 		mu.Unlock()
-		assert.Equal(t, "cx31", serverType)
-		assert.Equal(t, "worker", labels["role"])
+		assert.Equal(t, "cx31", opts.ServerType)
+		assert.Equal(t, "worker", opts.Labels["role"])
 		return idStr, nil
 	}
 
@@ -323,7 +323,7 @@ func TestProvisionControlPlane_ExistingServer(t *testing.T) {
 	}
 
 	// CreateServer should NOT be called since server exists
-	mockInfra.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string, _, _ bool) (string, error) {
+	mockInfra.CreateServerFunc = func(_ context.Context, _ hcloud_internal.ServerCreateOpts) (string, error) {
 		t.Fatal("CreateServer should not be called for existing server")
 		return "", nil
 	}

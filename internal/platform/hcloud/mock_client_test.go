@@ -18,7 +18,7 @@ func TestMockClient_CreateServer_Default(t *testing.T) {
 	m := &MockClient{}
 	ctx := context.Background()
 
-	id, err := m.CreateServer(ctx, "test", "image", "type", "loc", nil, nil, "", nil, 1, "", true, true)
+	id, err := m.CreateServer(ctx, ServerCreateOpts{Name: "test", ImageType: "image", ServerType: "type", Location: "loc", NetworkID: 1, EnablePublicIPv4: true, EnablePublicIPv6: true})
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -30,16 +30,16 @@ func TestMockClient_CreateServer_Default(t *testing.T) {
 func TestMockClient_CreateServer_CustomFunc(t *testing.T) {
 	expectedErr := errors.New("custom error")
 	m := &MockClient{
-		CreateServerFunc: func(_ context.Context, name, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string, _, _ bool) (string, error) {
-			if name != "test-server" {
-				t.Errorf("expected name 'test-server', got %q", name)
+		CreateServerFunc: func(_ context.Context, opts ServerCreateOpts) (string, error) {
+			if opts.Name != "test-server" {
+				t.Errorf("expected name 'test-server', got %q", opts.Name)
 			}
 			return "", expectedErr
 		},
 	}
 	ctx := context.Background()
 
-	_, err := m.CreateServer(ctx, "test-server", "image", "type", "loc", nil, nil, "", nil, 1, "", true, true)
+	_, err := m.CreateServer(ctx, ServerCreateOpts{Name: "test-server", ImageType: "image", ServerType: "type", Location: "loc", NetworkID: 1, EnablePublicIPv4: true, EnablePublicIPv6: true})
 	if !errors.Is(err, expectedErr) {
 		t.Errorf("expected error %v, got %v", expectedErr, err)
 	}

@@ -9,7 +9,7 @@ import (
 
 // MockClient is a mock implementation of InfrastructureManager.
 type MockClient struct {
-	CreateServerFunc          func(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string, enablePublicIPv4, enablePublicIPv6 bool) (string, error)
+	CreateServerFunc          func(ctx context.Context, opts ServerCreateOpts) (string, error)
 	DeleteServerFunc          func(ctx context.Context, name string) error
 	GetServerIPFunc           func(ctx context.Context, name string) (string, error)
 	GetServerIDFunc           func(ctx context.Context, name string) (string, error)
@@ -71,9 +71,9 @@ type MockClient struct {
 var _ InfrastructureManager = (*MockClient)(nil)
 
 // CreateServer mocks server creation.
-func (m *MockClient) CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string, enablePublicIPv4, enablePublicIPv6 bool) (string, error) {
+func (m *MockClient) CreateServer(ctx context.Context, opts ServerCreateOpts) (string, error) {
 	if m.CreateServerFunc != nil {
-		return m.CreateServerFunc(ctx, name, imageType, serverType, location, sshKeys, labels, userData, placementGroupID, networkID, privateIP, enablePublicIPv4, enablePublicIPv6)
+		return m.CreateServerFunc(ctx, opts)
 	}
 	return "mock-id", nil
 }

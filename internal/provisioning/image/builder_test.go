@@ -60,7 +60,7 @@ func TestBuild_CreateServerError(t *testing.T) {
 		CreateSSHKeyFunc: func(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
 			return "key-123", nil
 		},
-		CreateServerFunc: func(_ context.Context, _ string, _ string, _ string, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string, _, _ bool) (string, error) {
+		CreateServerFunc: func(_ context.Context, _ hcloud.ServerCreateOpts) (string, error) {
 			return "", expectedErr
 		},
 	}
@@ -78,7 +78,7 @@ func TestBuild_GetServerIPError(t *testing.T) {
 		CreateSSHKeyFunc: func(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
 			return "key-123", nil
 		},
-		CreateServerFunc: func(_ context.Context, _ string, _ string, _ string, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string, _, _ bool) (string, error) {
+		CreateServerFunc: func(_ context.Context, _ hcloud.ServerCreateOpts) (string, error) {
 			return "server-123", nil
 		},
 		GetServerIPFunc: func(_ context.Context, _ string) (string, error) {
@@ -99,7 +99,7 @@ func TestBuild_EnableRescueError(t *testing.T) {
 		CreateSSHKeyFunc: func(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
 			return "key-123", nil
 		},
-		CreateServerFunc: func(_ context.Context, _ string, _ string, _ string, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string, _, _ bool) (string, error) {
+		CreateServerFunc: func(_ context.Context, _ hcloud.ServerCreateOpts) (string, error) {
 			return "server-123", nil
 		},
 		GetServerIPFunc: func(_ context.Context, _ string) (string, error) {
@@ -123,7 +123,7 @@ func TestBuild_ResetServerError(t *testing.T) {
 		CreateSSHKeyFunc: func(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
 			return "key-123", nil
 		},
-		CreateServerFunc: func(_ context.Context, _ string, _ string, _ string, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string, _, _ bool) (string, error) {
+		CreateServerFunc: func(_ context.Context, _ hcloud.ServerCreateOpts) (string, error) {
 			return "server-123", nil
 		},
 		GetServerIPFunc: func(_ context.Context, _ string) (string, error) {
@@ -152,8 +152,8 @@ func TestBuild_DefaultLocation(t *testing.T) {
 		CreateSSHKeyFunc: func(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
 			return "key-123", nil
 		},
-		CreateServerFunc: func(_ context.Context, _, _, _, location string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string, _, _ bool) (string, error) {
-			capturedLocation = location
+		CreateServerFunc: func(_ context.Context, opts hcloud.ServerCreateOpts) (string, error) {
+			capturedLocation = opts.Location
 			return "", errors.New("stop here") // Stop after capturing location
 		},
 	}
@@ -183,8 +183,8 @@ func TestBuild_DefaultServerType(t *testing.T) {
 				CreateSSHKeyFunc: func(_ context.Context, _ string, _ string, _ map[string]string) (string, error) {
 					return "key-123", nil
 				},
-				CreateServerFunc: func(_ context.Context, _, _, serverType, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string, _, _ bool) (string, error) {
-					capturedServerType = serverType
+				CreateServerFunc: func(_ context.Context, opts hcloud.ServerCreateOpts) (string, error) {
+					capturedServerType = opts.ServerType
 					return "", errors.New("stop here")
 				},
 			}
@@ -300,7 +300,7 @@ func TestBuild(t *testing.T) {
 	t.Skip("This test requires mocking SSH which conflicts with the new SSH client design. Use e2e tests for full validation.")
 
 	mockClient := &hcloud.MockClient{
-		CreateServerFunc: func(_ context.Context, _ string, _ string, _ string, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string, _, _ bool) (string, error) {
+		CreateServerFunc: func(_ context.Context, _ hcloud.ServerCreateOpts) (string, error) {
 			return "123", nil
 		},
 		GetServerIPFunc: func(_ context.Context, _ string) (string, error) {

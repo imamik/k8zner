@@ -10,6 +10,7 @@ import (
 	"time"
 
 	v2 "github.com/imamik/k8zner/internal/config/v2"
+	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning/image"
 	"github.com/imamik/k8zner/internal/util/keygen"
 )
@@ -140,7 +141,15 @@ func verifySnapshot(ctx context.Context, t *testing.T, state *E2EState, arch, sn
 
 	t.Logf("Creating verification server %s from snapshot...", serverName)
 	// Enable public IPv4 so we can access the Talos API for verification
-	_, err := state.Client.CreateServer(ctx, serverName, snapshotID, serverType, "", []string{sshKeyName}, labels, "", nil, 0, "", true, true)
+	_, err := state.Client.CreateServer(ctx, hcloud.ServerCreateOpts{
+		Name:             serverName,
+		ImageType:        snapshotID,
+		ServerType:       serverType,
+		SSHKeys:          []string{sshKeyName},
+		Labels:           labels,
+		EnablePublicIPv4: true,
+		EnablePublicIPv6: true,
+	})
 	if err != nil {
 		t.Fatalf("Failed to create verification server: %v", err)
 	}

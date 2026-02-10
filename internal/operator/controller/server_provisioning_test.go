@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	"github.com/imamik/k8zner/internal/platform/hcloud"
 )
 
 func TestLoadTalosClients(t *testing.T) {
@@ -272,7 +273,7 @@ func TestProvisionServer(t *testing.T) {
 			Build()
 
 		mockHCloud := &MockHCloudClient{
-			CreateServerFunc: func(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string, enablePublicIPv4, enablePublicIPv6 bool) (string, error) {
+			CreateServerFunc: func(ctx context.Context, opts hcloud.ServerCreateOpts) (string, error) {
 				return "", fmt.Errorf("resource limit exceeded")
 			},
 		}
