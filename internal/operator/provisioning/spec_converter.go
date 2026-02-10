@@ -95,16 +95,16 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 func buildAddonsConfig(spec *k8znerv1alpha1.K8znerClusterSpec) config.AddonsConfig {
 	return config.AddonsConfig{
 		// CRDs - always enabled as dependencies for other addons
-		GatewayAPICRDs:     config.DefaultGatewayAPICRDs(),
+		GatewayAPICRDs:         config.DefaultGatewayAPICRDs(),
 		PrometheusOperatorCRDs: config.DefaultPrometheusOperatorCRDs(),
 		// Core addons
 		TalosCCM: config.TalosCCMConfig{
 			Enabled: true,      // Node lifecycle management
 			Version: "v1.11.0", // Pinned Talos CCM version
 		},
-		Cilium:  config.DefaultCilium(),
-		CCM:     config.DefaultCCM(),
-		CSI:     config.DefaultCSI(),
+		Cilium: config.DefaultCilium(),
+		CCM:    config.DefaultCCM(),
+		CSI:    config.DefaultCSI(),
 		MetricsServer: config.MetricsServerConfig{
 			Enabled: spec.Addons != nil && spec.Addons.MetricsServer,
 		},

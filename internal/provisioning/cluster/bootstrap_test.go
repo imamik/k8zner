@@ -389,8 +389,8 @@ type mockTalosConfigProducer struct {
 	generateWorkerConfigFn       func(hostname string, serverID int64) ([]byte, error)
 }
 
-func (m *mockTalosConfigProducer) SetMachineConfigOptions(_ any)     {}
-func (m *mockTalosConfigProducer) SetEndpoint(_ string)              {}
+func (m *mockTalosConfigProducer) SetMachineConfigOptions(_ any) {}
+func (m *mockTalosConfigProducer) SetEndpoint(_ string)          {}
 func (m *mockTalosConfigProducer) GetNodeVersion(_ context.Context, _ string) (string, error) {
 	return "", nil
 }
