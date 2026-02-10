@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	"github.com/imamik/k8zner/internal/config"
 )
 
 func TestPhaseIndicator(t *testing.T) {
@@ -287,5 +288,80 @@ func TestPrintDoctorPreCluster(t *testing.T) {
 
 		assert.Contains(t, output, "k8zner cluster: test")
 		assert.NotContains(t, output, "()")
+	})
+}
+
+// --- doctorPreCluster tests ---
+
+func TestDoctorPreCluster(t *testing.T) {
+	t.Run("formatted output shows config details", func(t *testing.T) {
+		cfg := &config.Config{
+			ClusterName: "dev-cluster",
+			Location:    "fsn1",
+			ControlPlane: config.ControlPlaneConfig{
+				NodePools: []config.ControlPlaneNodePool{
+					{Count: 3, ServerType: "cx32"},
+				},
+			},
+			Workers: []config.WorkerNodePool{
+				{Count: 2, ServerType: "cx22"},
+			},
+			Kubernetes: config.KubernetesConfig{Version: "1.31.0"},
+			Talos:      config.TalosConfig{Version: "1.8.3"},
+		}
+
+		output := captureOutput(func() {
+			err := doctorPreCluster(cfg, false)
+			require.NoError(t, err)
+		})
+
+		assert.Contains(t, output, "dev-cluster")
+		assert.Contains(t, output, "fsn1")
+		assert.Contains(t, output, "Not created")
+		assert.Contains(t, output, "3 x cx32")
+		assert.Contains(t, output, "2 x cx22")
+		assert.Contains(t, output, "1.31.0")
+		assert.Contains(t, output, "1.8.3")
+		assert.Contains(t, output, "k8zner apply")
+	})
+
+	t.Run("json output", func(t *testing.T) {
+		cfg := &config.Config{
+			ClusterName: "json-test",
+			Location:    "nbg1",
+		}
+
+		output := captureOutput(func() {
+			err := doctorPreCluster(cfg, true)
+			require.NoError(t, err)
+		})
+
+		var status DoctorStatus
+		err := json.Unmarshal([]byte(output), &status)
+		require.NoError(t, err)
+		assert.Equal(t, "json-test", status.ClusterName)
+		assert.Equal(t, "nbg1", status.Region)
+		assert.Equal(t, "Not Created", status.Phase)
+	})
+
+	t.Run("no workers shows only control planes", func(t *testing.T) {
+		cfg := &config.Config{
+			ClusterName: "minimal",
+			ControlPlane: config.ControlPlaneConfig{
+				NodePools: []config.ControlPlaneNodePool{
+					{Count: 1, ServerType: "cx22"},
+				},
+			},
+			Kubernetes: config.KubernetesConfig{Version: "1.31.0"},
+			Talos:      config.TalosConfig{Version: "1.8.3"},
+		}
+
+		output := captureOutput(func() {
+			err := doctorPreCluster(cfg, false)
+			require.NoError(t, err)
+		})
+
+		assert.Contains(t, output, "1 x cx22")
+		assert.NotContains(t, output, "Workers")
 	})
 }

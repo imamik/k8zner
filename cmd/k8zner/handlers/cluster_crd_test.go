@@ -1,16 +1,19 @@
 package handlers
 
 import (
+	"context"
+	"errors"
 	"testing"
 
+	hcloudgo "github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	"github.com/imamik/k8zner/internal/config"
 	v2config "github.com/imamik/k8zner/internal/config/v2"
+	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning"
-
-	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 )
 
 func TestBuildK8znerCluster(t *testing.T) {
@@ -396,4 +399,159 @@ func TestBackupS3SecretName(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, "prod-backup-s3", backupS3SecretName("prod"))
 	assert.Equal(t, "test-backup-s3", backupS3SecretName("test"))
+}
+
+// --- buildClusterStatus tests ---
+
+func TestBuildClusterStatus(t *testing.T) {
+	t.Parallel()
+
+	t.Run("maps all fields", func(t *testing.T) {
+		t.Parallel()
+		cfg := &config.Config{
+			ControlPlane: config.ControlPlaneConfig{
+				NodePools: []config.ControlPlaneNodePool{
+					{Count: 3, ServerType: "cx32"},
+				},
+			},
+			Workers: []config.WorkerNodePool{
+				{Count: 2, ServerType: "cx22"},
+			},
+		}
+
+		infraInfo := &InfrastructureInfo{
+			NetworkID:             100,
+			FirewallID:            200,
+			LoadBalancerID:        300,
+			LoadBalancerIP:        "1.2.3.4",
+			LoadBalancerPrivateIP: "10.0.0.254",
+			SSHKeyID:              400,
+		}
+
+		status := buildClusterStatus(cfg, infraInfo, "cp-1", 12345, "5.6.7.8")
+
+		assert.Equal(t, k8znerv1alpha1.ClusterPhaseProvisioning, status.Phase)
+		assert.Equal(t, k8znerv1alpha1.PhaseCNI, status.ProvisioningPhase)
+		assert.Equal(t, 3, status.ControlPlanes.Desired)
+		assert.Equal(t, 1, status.ControlPlanes.Ready)
+		require.Len(t, status.ControlPlanes.Nodes, 1)
+		assert.Equal(t, "cp-1", status.ControlPlanes.Nodes[0].Name)
+		assert.Equal(t, int64(12345), status.ControlPlanes.Nodes[0].ServerID)
+		assert.Equal(t, "5.6.7.8", status.ControlPlanes.Nodes[0].PublicIP)
+		assert.True(t, status.ControlPlanes.Nodes[0].Healthy)
+		assert.Equal(t, 2, status.Workers.Desired)
+		assert.Equal(t, int64(100), status.Infrastructure.NetworkID)
+		assert.Equal(t, int64(200), status.Infrastructure.FirewallID)
+		assert.Equal(t, int64(300), status.Infrastructure.LoadBalancerID)
+		assert.Equal(t, "1.2.3.4", status.Infrastructure.LoadBalancerIP)
+		assert.Equal(t, "10.0.0.254", status.Infrastructure.LoadBalancerPrivateIP)
+		assert.Equal(t, int64(400), status.Infrastructure.SSHKeyID)
+		assert.Equal(t, "1.2.3.4", status.ControlPlaneEndpoint)
+	})
+
+	t.Run("no workers", func(t *testing.T) {
+		t.Parallel()
+		cfg := &config.Config{
+			ControlPlane: config.ControlPlaneConfig{
+				NodePools: []config.ControlPlaneNodePool{
+					{Count: 1},
+				},
+			},
+		}
+		infraInfo := &InfrastructureInfo{}
+		status := buildClusterStatus(cfg, infraInfo, "cp-0", 1, "1.1.1.1")
+		assert.Equal(t, 0, status.Workers.Desired)
+	})
+}
+
+// --- buildInfraInfo tests ---
+
+func TestBuildInfraInfo(t *testing.T) {
+	t.Parallel()
+
+	t.Run("from state with LB", func(t *testing.T) {
+		t.Parallel()
+		lb := &hcloudgo.LoadBalancer{
+			ID:   300,
+			Name: "test-lb",
+		}
+
+		pCtx := &provisioning.Context{
+			State: &provisioning.State{
+				Network:      &hcloudgo.Network{ID: 100, Name: "test-net"},
+				Firewall:     &hcloudgo.Firewall{ID: 200, Name: "test-fw"},
+				SSHKeyID:     400,
+				LoadBalancer: lb,
+			},
+		}
+		cfg := &config.Config{ClusterName: "test"}
+		mockClient := &hcloud.MockClient{}
+
+		info := buildInfraInfo(context.Background(), pCtx, mockClient, cfg)
+
+		assert.Equal(t, int64(100), info.NetworkID)
+		assert.Equal(t, "test-net", info.NetworkName)
+		assert.Equal(t, int64(200), info.FirewallID)
+		assert.Equal(t, "test-fw", info.FirewallName)
+		assert.Equal(t, int64(300), info.LoadBalancerID)
+		assert.Equal(t, "test-lb", info.LoadBalancerName)
+		assert.Equal(t, int64(400), info.SSHKeyID)
+	})
+
+	t.Run("nil firewall", func(t *testing.T) {
+		t.Parallel()
+		pCtx := &provisioning.Context{
+			State: &provisioning.State{
+				Network: &hcloudgo.Network{ID: 100},
+			},
+		}
+		cfg := &config.Config{ClusterName: "test"}
+		mockClient := &hcloud.MockClient{}
+
+		info := buildInfraInfo(context.Background(), pCtx, mockClient, cfg)
+
+		assert.Equal(t, int64(100), info.NetworkID)
+		assert.Equal(t, int64(0), info.FirewallID)
+		assert.Equal(t, int64(0), info.LoadBalancerID)
+	})
+
+	t.Run("fetches LB from API when not in state", func(t *testing.T) {
+		t.Parallel()
+		pCtx := &provisioning.Context{
+			State: &provisioning.State{
+				Network: &hcloudgo.Network{ID: 100},
+			},
+		}
+		cfg := &config.Config{ClusterName: "test"}
+		mockClient := &hcloud.MockClient{
+			GetLoadBalancerFunc: func(_ context.Context, _ string) (*hcloudgo.LoadBalancer, error) {
+				return &hcloudgo.LoadBalancer{ID: 500, Name: "api-lb"}, nil
+			},
+		}
+
+		info := buildInfraInfo(context.Background(), pCtx, mockClient, cfg)
+
+		assert.Equal(t, int64(500), info.LoadBalancerID)
+		assert.Equal(t, "api-lb", info.LoadBalancerName)
+	})
+
+	t.Run("LB API error - graceful degradation", func(t *testing.T) {
+		t.Parallel()
+		pCtx := &provisioning.Context{
+			State: &provisioning.State{
+				Network: &hcloudgo.Network{ID: 100},
+			},
+		}
+		cfg := &config.Config{ClusterName: "test"}
+		mockClient := &hcloud.MockClient{
+			GetLoadBalancerFunc: func(_ context.Context, _ string) (*hcloudgo.LoadBalancer, error) {
+				return nil, errors.New("API unavailable")
+			},
+		}
+
+		info := buildInfraInfo(context.Background(), pCtx, mockClient, cfg)
+
+		assert.Equal(t, int64(100), info.NetworkID)
+		assert.Equal(t, int64(0), info.LoadBalancerID) // Graceful - no LB info
+	})
 }
