@@ -171,7 +171,7 @@ func TestBuildIngressAnnotations(t *testing.T) {
 			},
 		}
 
-		annotations := buildIngressAnnotations(cfg, "test.example.com")
+		annotations := helm.IngressAnnotations(cfg, "test.example.com")
 
 		assert.Equal(t, "letsencrypt-cloudflare-staging", annotations["cert-manager.io/cluster-issuer"])
 		assert.Equal(t, "test.example.com", annotations["external-dns.alpha.kubernetes.io/hostname"])
@@ -189,7 +189,7 @@ func TestBuildIngressAnnotations(t *testing.T) {
 			},
 		}
 
-		annotations := buildIngressAnnotations(cfg, "test.example.com")
+		annotations := helm.IngressAnnotations(cfg, "test.example.com")
 
 		// Should use default fallback issuer
 		assert.Equal(t, "letsencrypt-prod", annotations["cert-manager.io/cluster-issuer"])

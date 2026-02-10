@@ -7,6 +7,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/imamik/k8zner/internal/addons/helm"
 	"github.com/imamik/k8zner/internal/addons/k8sclient"
 	"github.com/imamik/k8zner/internal/config"
 )
@@ -193,6 +194,20 @@ func applyAddons(ctx context.Context, cfg *config.Config, kubeconfig []byte, net
 		}
 	}
 
+	return nil
+}
+
+// installHelmAddon renders a Helm chart and applies the manifests to the cluster.
+// This is the standard installation path for Helm-based addons.
+func installHelmAddon(ctx context.Context, client k8sclient.Client, chartName, namespace string, helmCfg config.HelmChartConfig, values helm.Values) error {
+	spec := helm.GetChartSpec(chartName, helmCfg)
+	manifestBytes, err := helm.RenderFromSpec(ctx, spec, namespace, values)
+	if err != nil {
+		return fmt.Errorf("failed to render %s chart: %w", chartName, err)
+	}
+	if err := applyManifests(ctx, client, chartName, manifestBytes); err != nil {
+		return fmt.Errorf("failed to apply %s manifests: %w", chartName, err)
+	}
 	return nil
 }
 

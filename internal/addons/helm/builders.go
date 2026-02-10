@@ -1,6 +1,10 @@
 package helm
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/imamik/k8zner/internal/config"
+)
 
 // CCMUninitializedToleration returns a toleration for the CCM uninitialized taint.
 func CCMUninitializedToleration() Values {
@@ -68,6 +72,31 @@ func TopologySpread(instance, name, hostnamePolicy string) []Values {
 			"matchLabelKeys":    []string{"pod-template-hash"},
 		},
 	}
+}
+
+// IngressAnnotations builds common ingress annotations for TLS and DNS.
+// external-dns auto-discovers the target IP from the Ingress status
+// (set by Traefik's LoadBalancer service).
+func IngressAnnotations(cfg *config.Config, host string) Values {
+	annotations := Values{}
+
+	// Determine which ClusterIssuer to use based on cert-manager Cloudflare config
+	clusterIssuer := "letsencrypt-prod" // Default fallback
+	if cfg.Addons.CertManager.Cloudflare.Enabled {
+		if cfg.Addons.CertManager.Cloudflare.Production {
+			clusterIssuer = "letsencrypt-cloudflare-production"
+		} else {
+			clusterIssuer = "letsencrypt-cloudflare-staging"
+		}
+	}
+	annotations["cert-manager.io/cluster-issuer"] = clusterIssuer
+
+	// Add external-dns hostname annotation if Cloudflare/external-dns is enabled
+	if cfg.Addons.Cloudflare.Enabled && cfg.Addons.ExternalDNS.Enabled {
+		annotations["external-dns.alpha.kubernetes.io/hostname"] = host
+	}
+
+	return annotations
 }
 
 // NamespaceManifest generates a Namespace YAML manifest string.

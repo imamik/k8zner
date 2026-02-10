@@ -2,7 +2,6 @@ package addons
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/imamik/k8zner/internal/addons/helm"
 	"github.com/imamik/k8zner/internal/addons/k8sclient"
@@ -16,21 +15,7 @@ func applyExternalDNS(ctx context.Context, client k8sclient.Client, cfg *config.
 	// Build values for external-dns
 	values := buildExternalDNSValues(cfg)
 
-	// Get chart spec with any config overrides
-	spec := helm.GetChartSpec("external-dns", cfg.Addons.ExternalDNS.Helm)
-
-	// Render helm chart
-	manifestBytes, err := helm.RenderFromSpec(ctx, spec, "external-dns", values)
-	if err != nil {
-		return fmt.Errorf("failed to render external-dns chart: %w", err)
-	}
-
-	// Apply manifests
-	if err := applyManifests(ctx, client, "external-dns", manifestBytes); err != nil {
-		return fmt.Errorf("failed to apply external-dns manifests: %w", err)
-	}
-
-	return nil
+	return installHelmAddon(ctx, client, "external-dns", "external-dns", cfg.Addons.ExternalDNS.Helm, values)
 }
 
 // buildExternalDNSValues creates helm values for external-dns configuration.

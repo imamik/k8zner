@@ -49,21 +49,7 @@ metadata:
 	// Build Cilium helm values
 	values := buildCiliumValues(cfg)
 
-	// Get chart spec with any config overrides
-	spec := helm.GetChartSpec("cilium", cfg.Addons.Cilium.Helm)
-
-	// Render helm chart
-	manifestBytes, err := helm.RenderFromSpec(ctx, spec, "kube-system", values)
-	if err != nil {
-		return fmt.Errorf("failed to render Cilium chart: %w", err)
-	}
-
-	// Apply manifests
-	if err := applyManifests(ctx, client, "cilium", manifestBytes); err != nil {
-		return fmt.Errorf("failed to apply Cilium manifests: %w", err)
-	}
-
-	return nil
+	return installHelmAddon(ctx, client, "cilium", "kube-system", cfg.Addons.Cilium.Helm, values)
 }
 
 // buildCiliumValues creates helm values matching terraform configuration.

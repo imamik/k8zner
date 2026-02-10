@@ -20,21 +20,7 @@ func applyCCM(ctx context.Context, client k8sclient.Client, cfg *config.Config, 
 	// Build CCM values matching terraform configuration
 	values := buildCCMValues(cfg, networkID)
 
-	// Get chart spec with any config overrides
-	spec := helm.GetChartSpec("hcloud-ccm", cfg.Addons.CCM.Helm)
-
-	// Render helm chart with values
-	manifestBytes, err := helm.RenderFromSpec(ctx, spec, "kube-system", values)
-	if err != nil {
-		return fmt.Errorf("failed to render CCM chart: %w", err)
-	}
-
-	// Apply manifests to cluster
-	if err := applyManifests(ctx, client, "hcloud-ccm", manifestBytes); err != nil {
-		return fmt.Errorf("failed to apply CCM manifests: %w", err)
-	}
-
-	return nil
+	return installHelmAddon(ctx, client, "hcloud-ccm", "kube-system", cfg.Addons.CCM.Helm, values)
 }
 
 // buildCCMValues creates helm values matching terraform configuration.

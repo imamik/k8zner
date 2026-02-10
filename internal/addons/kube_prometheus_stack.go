@@ -21,18 +21,8 @@ func applyKubePrometheusStack(ctx context.Context, client k8sclient.Client, cfg 
 	// Build values based on configuration
 	values := buildKubePrometheusStackValues(cfg)
 
-	// Get chart spec with any config overrides
-	spec := helm.GetChartSpec("kube-prometheus-stack", cfg.Addons.KubePrometheusStack.Helm)
-
-	// Render helm chart
-	manifestBytes, err := helm.RenderFromSpec(ctx, spec, "monitoring", values)
-	if err != nil {
-		return fmt.Errorf("failed to render kube-prometheus-stack chart: %w", err)
-	}
-
-	// Apply all manifests
-	if err := applyManifests(ctx, client, "kube-prometheus-stack", manifestBytes); err != nil {
-		return fmt.Errorf("failed to apply kube-prometheus-stack manifests: %w", err)
+	if err := installHelmAddon(ctx, client, "kube-prometheus-stack", "monitoring", cfg.Addons.KubePrometheusStack.Helm, values); err != nil {
+		return err
 	}
 
 	log.Printf("[KubePrometheusStack] Monitoring stack installed successfully")
@@ -142,7 +132,7 @@ func buildPrometheusIngress(cfg *config.Config) helm.Values {
 		}
 
 		// Build annotations for TLS and DNS
-		annotations := buildIngressAnnotations(cfg, promCfg.IngressHost)
+		annotations := helm.IngressAnnotations(cfg, promCfg.IngressHost)
 		ingress["annotations"] = annotations
 	}
 
@@ -238,7 +228,7 @@ func buildGrafanaIngress(cfg *config.Config) helm.Values {
 		}
 
 		// Build annotations for TLS and DNS
-		annotations := buildIngressAnnotations(cfg, grafanaCfg.IngressHost)
+		annotations := helm.IngressAnnotations(cfg, grafanaCfg.IngressHost)
 		ingress["annotations"] = annotations
 	}
 
@@ -303,7 +293,7 @@ func buildAlertmanagerIngress(cfg *config.Config) helm.Values {
 		}
 
 		// Build annotations for TLS and DNS
-		annotations := buildIngressAnnotations(cfg, alertCfg.IngressHost)
+		annotations := helm.IngressAnnotations(cfg, alertCfg.IngressHost)
 		ingress["annotations"] = annotations
 	}
 
@@ -324,31 +314,6 @@ func buildPrometheusOperatorValues() helm.Values {
 			},
 		},
 	}
-}
-
-// buildIngressAnnotations builds common ingress annotations for TLS and DNS.
-// external-dns auto-discovers the target IP from the Ingress status
-// (set by Traefik's LoadBalancer service).
-func buildIngressAnnotations(cfg *config.Config, host string) helm.Values {
-	annotations := helm.Values{}
-
-	// Determine which ClusterIssuer to use based on cert-manager Cloudflare config
-	clusterIssuer := "letsencrypt-prod" // Default fallback
-	if cfg.Addons.CertManager.Cloudflare.Enabled {
-		if cfg.Addons.CertManager.Cloudflare.Production {
-			clusterIssuer = "letsencrypt-cloudflare-production"
-		} else {
-			clusterIssuer = "letsencrypt-cloudflare-staging"
-		}
-	}
-	annotations["cert-manager.io/cluster-issuer"] = clusterIssuer
-
-	// Add external-dns hostname annotation if Cloudflare/external-dns is enabled
-	if cfg.Addons.Cloudflare.Enabled && cfg.Addons.ExternalDNS.Enabled {
-		annotations["external-dns.alpha.kubernetes.io/hostname"] = host
-	}
-
-	return annotations
 }
 
 // buildResourceValues creates resource specifications with defaults.

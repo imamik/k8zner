@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/imamik/k8zner/internal/config"
 )
 
 func TestCCMUninitializedToleration(t *testing.T) {
@@ -64,5 +66,53 @@ func TestNamespaceManifest(t *testing.T) {
 		ns := NamespaceManifest("cert-manager", nil)
 		assert.Contains(t, ns, "name: cert-manager")
 		assert.NotContains(t, ns, "labels:")
+	})
+}
+
+func TestIngressAnnotations(t *testing.T) {
+	t.Parallel()
+
+	t.Run("cloudflare production issuer", func(t *testing.T) {
+		t.Parallel()
+		cfg := &config.Config{
+			Addons: config.AddonsConfig{
+				CertManager: config.CertManagerConfig{
+					Cloudflare: config.CertManagerCloudflareConfig{
+						Enabled:    true,
+						Production: true,
+					},
+				},
+				Cloudflare:  config.CloudflareConfig{Enabled: true},
+				ExternalDNS: config.ExternalDNSConfig{Enabled: true},
+			},
+		}
+		ann := IngressAnnotations(cfg, "app.example.com")
+		assert.Equal(t, "letsencrypt-cloudflare-production", ann["cert-manager.io/cluster-issuer"])
+		assert.Equal(t, "app.example.com", ann["external-dns.alpha.kubernetes.io/hostname"])
+	})
+
+	t.Run("cloudflare staging issuer", func(t *testing.T) {
+		t.Parallel()
+		cfg := &config.Config{
+			Addons: config.AddonsConfig{
+				CertManager: config.CertManagerConfig{
+					Cloudflare: config.CertManagerCloudflareConfig{
+						Enabled:    true,
+						Production: false,
+					},
+				},
+			},
+		}
+		ann := IngressAnnotations(cfg, "app.example.com")
+		assert.Equal(t, "letsencrypt-cloudflare-staging", ann["cert-manager.io/cluster-issuer"])
+		_, hasExtDNS := ann["external-dns.alpha.kubernetes.io/hostname"]
+		assert.False(t, hasExtDNS, "should not have external-dns annotation when disabled")
+	})
+
+	t.Run("default issuer without cloudflare", func(t *testing.T) {
+		t.Parallel()
+		cfg := &config.Config{}
+		ann := IngressAnnotations(cfg, "app.example.com")
+		assert.Equal(t, "letsencrypt-prod", ann["cert-manager.io/cluster-issuer"])
 	})
 }

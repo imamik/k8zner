@@ -38,21 +38,7 @@ func applyArgoCD(ctx context.Context, client k8sclient.Client, cfg *config.Confi
 	// Build values based on configuration
 	values := buildArgoCDValues(cfg)
 
-	// Get chart spec with any config overrides
-	spec := helm.GetChartSpec("argo-cd", cfg.Addons.ArgoCD.Helm)
-
-	// Render helm chart
-	manifestBytes, err := helm.RenderFromSpec(ctx, spec, "argocd", values)
-	if err != nil {
-		return fmt.Errorf("failed to render argocd chart: %w", err)
-	}
-
-	// Apply all manifests
-	if err := applyManifests(ctx, client, "argocd", manifestBytes); err != nil {
-		return fmt.Errorf("failed to apply argocd manifests: %w", err)
-	}
-
-	return nil
+	return installHelmAddon(ctx, client, "argo-cd", "argocd", cfg.Addons.ArgoCD.Helm, values)
 }
 
 // buildArgoCDValues creates helm values for ArgoCD configuration.
@@ -251,7 +237,7 @@ func buildArgoCDIngress(cfg *config.Config) helm.Values {
 	// from the hostname automatically (argocd-server-tls)
 	if argoCDCfg.IngressTLS {
 		ingress["tls"] = true
-		ingress["annotations"] = buildIngressAnnotations(cfg, argoCDCfg.IngressHost)
+		ingress["annotations"] = helm.IngressAnnotations(cfg, argoCDCfg.IngressHost)
 	}
 
 	return ingress

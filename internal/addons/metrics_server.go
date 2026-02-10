@@ -2,7 +2,6 @@ package addons
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/imamik/k8zner/internal/addons/helm"
 	"github.com/imamik/k8zner/internal/addons/k8sclient"
@@ -13,19 +12,7 @@ import (
 func applyMetricsServer(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	values := buildMetricsServerValues(cfg)
 
-	// Get chart spec with any config overrides
-	spec := helm.GetChartSpec("metrics-server", cfg.Addons.MetricsServer.Helm)
-
-	manifestBytes, err := helm.RenderFromSpec(ctx, spec, "kube-system", values)
-	if err != nil {
-		return fmt.Errorf("failed to render metrics-server chart: %w", err)
-	}
-
-	if err := applyManifests(ctx, client, "metrics-server", manifestBytes); err != nil {
-		return fmt.Errorf("failed to apply metrics-server manifests: %w", err)
-	}
-
-	return nil
+	return installHelmAddon(ctx, client, "metrics-server", "kube-system", cfg.Addons.MetricsServer.Helm, values)
 }
 
 // buildMetricsServerValues creates helm values matching terraform configuration.
