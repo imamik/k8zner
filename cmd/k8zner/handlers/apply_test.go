@@ -268,3 +268,24 @@ func TestFactoryVariables(t *testing.T) {
 	client := newInfraClient("test")
 	assert.NotNil(t, client)
 }
+
+func TestIsCIMode(t *testing.T) {
+	t.Run("explicit ci flag", func(t *testing.T) {
+		assert.True(t, IsCIMode(true))
+	})
+
+	t.Run("CI env var", func(t *testing.T) {
+		t.Setenv("CI", "true")
+		assert.True(t, IsCIMode(false))
+	})
+
+	t.Run("K8ZNER_NO_TUI env var", func(t *testing.T) {
+		t.Setenv("K8ZNER_NO_TUI", "1")
+		assert.True(t, IsCIMode(false))
+	})
+
+	t.Run("non-TTY stdout returns true", func(t *testing.T) {
+		// In test context, stdout is not a TTY
+		assert.True(t, IsCIMode(false))
+	})
+}
