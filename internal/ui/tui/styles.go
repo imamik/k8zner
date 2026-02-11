@@ -49,9 +49,9 @@ var (
 )
 
 const (
-	checkMark  = "[OK]"
-	crossMark  = "[!!]"
-	spinner    = "[..]"
-	pending    = "[  ]"
-	warnMark   = "[??]"
+	checkMark = "[OK]"
+	crossMark = "[!!]"
+	spinner   = "[..]"
+	pending   = "[  ]"
+	warnMark  = "[??]"
 )

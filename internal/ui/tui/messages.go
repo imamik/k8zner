@@ -12,16 +12,16 @@ type BootstrapPhaseMsg struct {
 
 // CRDStatusMsg carries the latest cluster status from the CRD.
 type CRDStatusMsg struct {
-	ClusterPhase    k8znerv1alpha1.ClusterPhase
-	ProvPhase       k8znerv1alpha1.ProvisioningPhase
-	Infrastructure  k8znerv1alpha1.InfrastructureStatus
-	ControlPlanes   k8znerv1alpha1.NodeGroupStatus
-	Workers         k8znerv1alpha1.NodeGroupStatus
-	Addons          map[string]k8znerv1alpha1.AddonStatus
-	PhaseHistory    []k8znerv1alpha1.PhaseRecord
-	LastErrors      []k8znerv1alpha1.ErrorRecord
-	LastReconcile   string
-	PhaseStartedAt  string
+	ClusterPhase   k8znerv1alpha1.ClusterPhase
+	ProvPhase      k8znerv1alpha1.ProvisioningPhase
+	Infrastructure k8znerv1alpha1.InfrastructureStatus
+	ControlPlanes  k8znerv1alpha1.NodeGroupStatus
+	Workers        k8znerv1alpha1.NodeGroupStatus
+	Addons         map[string]k8znerv1alpha1.AddonStatus
+	PhaseHistory   []k8znerv1alpha1.PhaseRecord
+	LastErrors     []k8znerv1alpha1.ErrorRecord
+	LastReconcile  string
+	PhaseStartedAt string
 }
 
 // TickMsg is sent periodically to refresh the display.
