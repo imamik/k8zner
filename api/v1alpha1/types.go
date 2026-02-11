@@ -332,6 +332,52 @@ type K8znerClusterStatus struct {
 	// Used for timeout detection in long-running phases like addon installation.
 	// +optional
 	PhaseStartedAt *metav1.Time `json:"phaseStartedAt,omitempty"`
+
+	// PhaseHistory records timing information for each provisioning phase.
+	// +optional
+	PhaseHistory []PhaseRecord `json:"phaseHistory,omitempty"`
+
+	// LastErrors is a ring buffer of recent errors (max 10).
+	// +optional
+	LastErrors []ErrorRecord `json:"lastErrors,omitempty"`
+}
+
+// PhaseRecord records timing information for a provisioning phase.
+type PhaseRecord struct {
+	// Phase is the provisioning phase
+	Phase ProvisioningPhase `json:"phase"`
+
+	// StartedAt is when this phase started
+	StartedAt metav1.Time `json:"startedAt"`
+
+	// EndedAt is when this phase completed
+	// +optional
+	EndedAt *metav1.Time `json:"endedAt,omitempty"`
+
+	// Duration is a human-readable duration string
+	// +optional
+	Duration string `json:"duration,omitempty"`
+
+	// Error is set if the phase encountered an error
+	// +optional
+	Error string `json:"error,omitempty"`
+}
+
+// ErrorRecord records a recent error for observability.
+type ErrorRecord struct {
+	// Time is when the error occurred
+	Time metav1.Time `json:"time"`
+
+	// Phase is the provisioning phase when the error occurred
+	// +optional
+	Phase string `json:"phase,omitempty"`
+
+	// Component is the component that produced the error
+	// +optional
+	Component string `json:"component,omitempty"`
+
+	// Message is the error message
+	Message string `json:"message"`
 }
 
 // ProvisioningPhase represents the current stage of cluster provisioning.
@@ -576,6 +622,18 @@ type AddonStatus struct {
 	// InstallOrder is the order in which this addon should be installed
 	// +optional
 	InstallOrder int `json:"installOrder,omitempty"`
+
+	// StartedAt is when the addon installation started
+	// +optional
+	StartedAt *metav1.Time `json:"startedAt,omitempty"`
+
+	// Duration is a human-readable duration of the installation
+	// +optional
+	Duration string `json:"duration,omitempty"`
+
+	// RetryCount tracks the number of installation retries
+	// +optional
+	RetryCount int `json:"retryCount,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -647,6 +705,9 @@ const (
 	AddonNameMonitoring    = "monitoring"
 	AddonNameTalosBackup   = "talos-backup"
 )
+
+// MaxLastErrors is the maximum number of error records to keep in the ring buffer.
+const MaxLastErrors = 10
 
 // Addon install order (lower = earlier)
 const (
