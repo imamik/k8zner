@@ -23,6 +23,7 @@ import (
 func Apply() *cobra.Command {
 	var configPath string
 	var wait bool
+	var ci bool
 
 	cmd := &cobra.Command{
 		Use:   "apply",
@@ -51,12 +52,13 @@ Examples:
   # Update cluster using specific config file
   k8zner apply -c production.yaml`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return handlers.Apply(cmd.Context(), configPath, wait)
+			return handlers.Apply(cmd.Context(), configPath, wait, ci)
 		},
 	}
 
 	cmd.Flags().StringVarP(&configPath, "config", "c", "", "Path to configuration file (default: k8zner.yaml)")
 	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for operator to complete provisioning")
+	cmd.Flags().BoolVar(&ci, "ci", false, "Disable TUI, use plain log output")
 
 	return cmd
 }

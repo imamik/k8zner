@@ -241,7 +241,7 @@ func CreateClusterViaOperator(ctx context.Context, t *testing.T, configPath stri
 
 	// Create cluster with operator management
 	t.Logf("Creating cluster %s via operator...", clusterName)
-	if err := handlers.Apply(ctx, configPath, false); err != nil {
+	if err := handlers.Apply(ctx, configPath, false, true); err != nil {
 		return state, fmt.Errorf("k8zner apply failed: %w", err)
 	}
 

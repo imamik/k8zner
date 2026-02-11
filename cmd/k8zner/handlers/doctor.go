@@ -8,11 +8,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mattn/go-isatty"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	"github.com/imamik/k8zner/internal/config"
+	"github.com/imamik/k8zner/internal/ui/tui"
 )
 
 // DoctorStatus represents the cluster diagnostic status.
@@ -77,7 +79,16 @@ func Doctor(ctx context.Context, configPath string, watch, jsonOutput bool) erro
 	}
 
 	if watch {
+		// Use TUI for interactive terminals (unless JSON output requested)
+		if !jsonOutput && isInteractiveTTY() {
+			return tui.RunDoctorTUI(ctx, k8sClient, cfg.ClusterName)
+		}
 		return doctorWatch(ctx, k8sClient, cfg.ClusterName, jsonOutput)
+	}
+
+	// Single render: use styled output for TTY, plain for non-TTY
+	if !jsonOutput && isInteractiveTTY() {
+		return doctorShowStyled(ctx, k8sClient, cfg)
 	}
 
 	return doctorShow(ctx, k8sClient, cfg.ClusterName, jsonOutput)
@@ -329,6 +340,43 @@ func printRow(name string, ready bool, extra string) {
 	} else {
 		fmt.Printf("  %s  %s\n", indicator, name)
 	}
+}
+
+func isInteractiveTTY() bool {
+	return isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
+}
+
+// doctorShowStyled renders doctor output once using TUI styles.
+func doctorShowStyled(ctx context.Context, k8sClient client.Client, cfg *config.Config) error {
+	cluster := &k8znerv1alpha1.K8znerCluster{}
+	key := client.ObjectKey{
+		Namespace: k8znerNamespace,
+		Name:      cfg.ClusterName,
+	}
+
+	if err := k8sClient.Get(ctx, key, cluster); err != nil {
+		return fmt.Errorf("failed to get cluster: %w", err)
+	}
+
+	lastReconcile := ""
+	if cluster.Status.LastReconcileTime != nil {
+		lastReconcile = time.Since(cluster.Status.LastReconcileTime.Time).Round(time.Second).String() + " ago"
+	}
+
+	msg := tui.CRDStatusMsg{
+		ClusterPhase:   cluster.Status.Phase,
+		ProvPhase:      cluster.Status.ProvisioningPhase,
+		Infrastructure: cluster.Status.Infrastructure,
+		ControlPlanes:  cluster.Status.ControlPlanes,
+		Workers:        cluster.Status.Workers,
+		Addons:         cluster.Status.Addons,
+		PhaseHistory:   cluster.Status.PhaseHistory,
+		LastErrors:     cluster.Status.LastErrors,
+		LastReconcile:  lastReconcile,
+	}
+
+	fmt.Println(tui.RenderDoctorOnce(msg, cfg.ClusterName, cfg.Location))
+	return nil
 }
 
 func addonExtra(addon AddonHealth) string {
