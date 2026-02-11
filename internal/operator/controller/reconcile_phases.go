@@ -365,8 +365,8 @@ func (r *ClusterReconciler) discoverInfrastructure(ctx context.Context, cluster 
 	}
 
 	if cluster.Status.Infrastructure.FirewallID == 0 {
-		fwName := naming.Firewall(cluster.Name)
-		fw, err := infraManager.GetFirewall(ctx, fwName)
+		// CLI creates firewall with cluster name directly (no suffix)
+		fw, err := infraManager.GetFirewall(ctx, cluster.Name)
 		if err == nil && fw != nil {
 			cluster.Status.Infrastructure.FirewallID = fw.ID
 		}
