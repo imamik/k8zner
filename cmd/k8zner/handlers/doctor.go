@@ -185,13 +185,12 @@ func doctorPreCluster(cfg *config.Config, jsonOutput bool) error {
 func probeInfraHealth(ctx context.Context, infraClient hcloudInternal.InfrastructureManager, clusterName string) InfrastructureHealth {
 	health := InfrastructureHealth{}
 
-	networkName := naming.Network(clusterName)
-	if nw, err := infraClient.GetNetwork(ctx, networkName); err == nil && nw != nil {
+	// CLI creates network and firewall with cluster name directly (no suffix)
+	if nw, err := infraClient.GetNetwork(ctx, clusterName); err == nil && nw != nil {
 		health.Network = true
 	}
 
-	fwName := naming.Firewall(clusterName)
-	if fw, err := infraClient.GetFirewall(ctx, fwName); err == nil && fw != nil {
+	if fw, err := infraClient.GetFirewall(ctx, clusterName); err == nil && fw != nil {
 		health.Firewall = true
 	}
 

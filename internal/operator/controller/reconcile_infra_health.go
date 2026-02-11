@@ -18,9 +18,8 @@ func (r *ClusterReconciler) reconcileInfraHealth(ctx context.Context, cluster *k
 
 	infra := &cluster.Status.Infrastructure
 
-	// Network
-	networkName := naming.Network(cluster.Name)
-	network, err := r.hcloudClient.GetNetwork(ctx, networkName)
+	// Network (CLI creates with cluster name directly, not naming.Network suffix)
+	network, err := r.hcloudClient.GetNetwork(ctx, cluster.Name)
 	if err != nil {
 		logger.V(1).Info("failed to check network", "error", err)
 		infra.NetworkReady = false
@@ -28,9 +27,8 @@ func (r *ClusterReconciler) reconcileInfraHealth(ctx context.Context, cluster *k
 		infra.NetworkReady = network != nil
 	}
 
-	// Firewall
-	firewallName := naming.Firewall(cluster.Name)
-	firewall, err := r.hcloudClient.GetFirewall(ctx, firewallName)
+	// Firewall (CLI creates with cluster name directly, not naming.Firewall suffix)
+	firewall, err := r.hcloudClient.GetFirewall(ctx, cluster.Name)
 	if err != nil {
 		logger.V(1).Info("failed to check firewall", "error", err)
 		infra.FirewallReady = false
