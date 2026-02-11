@@ -300,6 +300,11 @@ func (r *ClusterReconciler) reconcileRunningPhase(ctx context.Context, cluster *
 		return ctrl.Result{}, fmt.Errorf("health check failed: %w", err)
 	}
 
+	// Non-fatal health probes: infra, addons, connectivity
+	r.reconcileInfraHealth(ctx, cluster)
+	r.reconcileAddonHealth(ctx, cluster)
+	r.reconcileConnectivityHealth(ctx, cluster)
+
 	if result, err := r.reconcileControlPlanes(ctx, cluster); err != nil || result.Requeue || result.RequeueAfter > 0 {
 		return result, err
 	}

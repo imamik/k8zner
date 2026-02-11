@@ -14,20 +14,27 @@ import (
 	"github.com/stretchr/testify/require"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	"github.com/imamik/k8zner/cmd/k8zner/handlers"
+	"github.com/imamik/k8zner/internal/platform/s3"
 	"github.com/imamik/k8zner/internal/util/naming"
 )
 
-// TestE2EHAOperations is Test 2: HA scaling & failure recovery.
+// TestE2EHAOperations is Test 2: HA scaling & failure recovery with full addon validation.
 //
-// This test validates HA cluster operations:
-// - Config: 3 CP + 2 workers initially, mode=ha, minimal addons (Cilium + CCM only)
-// - Timeout: 90 minutes
+// This test validates HA cluster operations with ALL addons installed:
+// - Config: 3 CP + 2 workers, mode=ha, ALL addons enabled
+// - Timeout: 120 minutes
+// - Verifies addons survive scale-up, scale-down, and CP replacement
 //
 // IMPORTANT: This test will ONLY run if TestE2EFullStackDev passes first.
 // There is NO override - if FullStack fails, HA test is skipped. Period.
 //
 // Required environment variables:
 //   - HCLOUD_TOKEN - Hetzner Cloud API token
+//   - CF_API_TOKEN - Cloudflare API token (for DNS/TLS)
+//   - CF_DOMAIN - Domain managed by Cloudflare
+//   - HETZNER_S3_ACCESS_KEY - Hetzner Object Storage access key
+//   - HETZNER_S3_SECRET_KEY - Hetzner Object Storage secret key
 //
 // Example:
 //
@@ -44,28 +51,74 @@ func TestE2EHAOperations(t *testing.T) {
 		t.Skip("HCLOUD_TOKEN not set, skipping E2E test")
 	}
 
+	cfAPIToken := os.Getenv("CF_API_TOKEN")
+	cfDomain := os.Getenv("CF_DOMAIN")
+	if cfAPIToken == "" || cfDomain == "" {
+		t.Skip("CF_API_TOKEN and CF_DOMAIN required for HA test with full addons")
+	}
+
+	s3AccessKey := os.Getenv("HETZNER_S3_ACCESS_KEY")
+	s3SecretKey := os.Getenv("HETZNER_S3_SECRET_KEY")
+	if s3AccessKey == "" || s3SecretKey == "" {
+		t.Skip("HETZNER_S3_ACCESS_KEY and HETZNER_S3_SECRET_KEY required for backup addon")
+	}
+
 	// Generate unique cluster name (short for Hetzner resource limits)
 	clusterName := naming.E2ECluster(naming.E2EHA) // e.g., e2e-ha-abc12
+	clusterID := clusterName[len(naming.E2EHA)+1:]
+	argoSubdomain := "argo-ha-" + clusterID
+	grafanaSubdomain := "grafana-ha-" + clusterID
+	argoHost := fmt.Sprintf("%s.%s", argoSubdomain, cfDomain)
+	grafanaHost := fmt.Sprintf("%s.%s", grafanaSubdomain, cfDomain)
 
 	t.Logf("=== Starting HA Operations E2E Test: %s ===", clusterName)
-	t.Log("=== Config: 3 CP + 2 workers, minimal addons ===")
+	t.Logf("=== Config: 3 CP + 2 workers, ALL addons ===")
+	t.Logf("=== ArgoCD: https://%s ===", argoHost)
+	t.Logf("=== Grafana: https://%s ===", grafanaHost)
 
-	// Create HA configuration with minimal addons
+	// Create S3 client for backup cleanup
+	region := "fsn1"
+	bucketName := clusterName + "-etcd-backups"
+	endpoint := fmt.Sprintf("https://%s.your-objectstorage.com", region)
+	s3Client, err := s3.NewClient(endpoint, region, s3AccessKey, s3SecretKey)
+	if err != nil {
+		t.Fatalf("Failed to create S3 client: %v", err)
+	}
+
+	// Create HA configuration with ALL addons
 	configPath := CreateTestConfig(t, clusterName, ModeHA,
 		WithWorkers(2),
 		WithCPCount(3),
-		WithMinimalAddons(true),
+		WithRegion(region),
+		WithDomain(cfDomain),
+		WithArgoSubdomain(argoSubdomain),
+		WithGrafanaSubdomain(grafanaSubdomain),
+		WithBackup(true),
+		WithMonitoring(true),
 	)
 	defer os.Remove(configPath)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Minute)
 	defer cancel()
 
 	// Create cluster via operator
 	var state *OperatorTestContext
 
+	// Addon verification context (shared across subtests)
+	vctx := &AddonVerificationContext{
+		Domain:      cfDomain,
+		ArgoHost:    argoHost,
+		GrafanaHost: grafanaHost,
+	}
+
 	// Cleanup handler
 	defer func() {
+		// Clean S3 bucket
+		t.Log("Cleaning up S3 bucket...")
+		if cleanupErr := cleanupS3Bucket(context.Background(), s3Client, bucketName); cleanupErr != nil {
+			t.Logf("Warning: failed to cleanup bucket: %v", cleanupErr)
+		}
+
 		if state != nil {
 			DestroyCluster(context.Background(), t, state)
 		}
@@ -78,36 +131,40 @@ func TestE2EHAOperations(t *testing.T) {
 		var createErr error
 		state, createErr = CreateClusterViaOperator(ctx, t, configPath)
 		require.NoError(t, createErr, "HA cluster creation should succeed")
+		vctx.KubeconfigPath = state.KubeconfigPath
 	})
 
 	// =========================================================================
-	// SUBTEST 02: Verify Initial Health
+	// SUBTEST 02: Verify Initial Health (doctor-based)
 	// =========================================================================
 	t.Run("02_VerifyInitialHealth", func(t *testing.T) {
 		// Wait for cluster to be ready
 		err := WaitForClusterReady(ctx, t, state, 35*time.Minute)
 		require.NoError(t, err, "HA cluster should become ready")
 
-		// Verify all nodes ready
-		cluster := GetClusterStatus(ctx, state)
-		require.NotNil(t, cluster)
-		require.GreaterOrEqual(t, cluster.Status.ControlPlanes.Ready, 3, "should have 3 ready CPs")
-		require.GreaterOrEqual(t, cluster.Status.Workers.Ready, 2, "should have 2 ready workers")
+		// Verify via doctor
+		WaitForDoctorHealthy(t, configPath, 5*time.Minute, func(s *handlers.DoctorStatus) error {
+			if s.Phase != "Running" {
+				return fmt.Errorf("phase is %s", s.Phase)
+			}
+			if s.ControlPlanes.Ready < 3 {
+				return fmt.Errorf("CPs not ready: %d/3", s.ControlPlanes.Ready)
+			}
+			if s.Workers.Ready < 2 {
+				return fmt.Errorf("workers not ready: %d/2", s.Workers.Ready)
+			}
+			return nil
+		})
 
 		// Verify etcd healthy via kubectl
 		verifyEtcdHealth(t, state.KubeconfigPath)
 	})
 
 	// =========================================================================
-	// SUBTEST 03: Verify CCM
+	// SUBTEST 03: Verify All Addons (deep validation)
 	// =========================================================================
-	t.Run("03_Verify_CCM", func(t *testing.T) {
-		err := WaitForAddonInstalled(ctx, t, state, k8znerv1alpha1.AddonNameCCM, 2*time.Minute)
-		require.NoError(t, err, "CCM should be installed")
-
-		// LoadBalancer test
-		legacyState := state.ToE2EState()
-		testCCMLoadBalancer(t, legacyState)
+	t.Run("03_VerifyAllAddons", func(t *testing.T) {
+		VerifyAllAddonsDeep(t, ctx, vctx, state)
 	})
 
 	// =========================================================================
@@ -133,18 +190,29 @@ func TestE2EHAOperations(t *testing.T) {
 	})
 
 	// =========================================================================
-	// SUBTEST 06: Scale Workers Down
+	// SUBTEST 06: Verify Addons After Scale Up (doctor-based)
 	// =========================================================================
-	t.Run("06_ScaleWorkersDown", func(t *testing.T) {
+	t.Run("06_VerifyAddonsAfterScaleUp", func(t *testing.T) {
+		VerifyAllAddonsHealthy(t, vctx)
+
+		status := RunDoctorCheck(t, configPath)
+		AssertClusterRunning(t, status, 3, 3)
+		AssertAllAddonsHealthy(t, status, expectedHAAddons())
+	})
+
+	// =========================================================================
+	// SUBTEST 07: Scale Workers Down
+	// =========================================================================
+	t.Run("07_ScaleWorkersDown", func(t *testing.T) {
 		t.Log("Scaling workers from 3 to 2...")
 		err := ScaleCluster(ctx, t, state, 2)
 		require.NoError(t, err, "Scale down should succeed")
 	})
 
 	// =========================================================================
-	// SUBTEST 07: Verify Scale Down
+	// SUBTEST 08: Verify Scale Down
 	// =========================================================================
-	t.Run("07_VerifyScaleDown", func(t *testing.T) {
+	t.Run("08_VerifyScaleDown", func(t *testing.T) {
 		err := WaitForNodeCount(ctx, t, state, "workers", 2, 15*time.Minute)
 		require.NoError(t, err, "Workers should scale to 2")
 
@@ -154,10 +222,21 @@ func TestE2EHAOperations(t *testing.T) {
 	})
 
 	// =========================================================================
-	// SUBTEST 08: Simulate CP Failure
+	// SUBTEST 09: Verify Addons After Scale Down (doctor-based)
+	// =========================================================================
+	t.Run("09_VerifyAddonsAfterScaleDown", func(t *testing.T) {
+		VerifyAllAddonsHealthy(t, vctx)
+
+		status := RunDoctorCheck(t, configPath)
+		AssertClusterRunning(t, status, 3, 2)
+		AssertAllAddonsHealthy(t, status, expectedHAAddons())
+	})
+
+	// =========================================================================
+	// SUBTEST 10: Simulate CP Failure
 	// =========================================================================
 	var targetCP string
-	t.Run("08_SimulateCPFailure", func(t *testing.T) {
+	t.Run("10_SimulateCPFailure", func(t *testing.T) {
 		// Find the last CP node from cluster status (not cp-1 which is the bootstrap node)
 		cluster := GetClusterStatus(ctx, state)
 		require.NotNil(t, cluster, "Should be able to get cluster status")
@@ -170,9 +249,9 @@ func TestE2EHAOperations(t *testing.T) {
 	})
 
 	// =========================================================================
-	// SUBTEST 09: Verify CP Replacement
+	// SUBTEST 11: Verify CP Replacement
 	// =========================================================================
-	t.Run("09_VerifyCPReplacement", func(t *testing.T) {
+	t.Run("11_VerifyCPReplacement", func(t *testing.T) {
 		// Wait for Kubernetes to detect node as NotReady
 		err := WaitForNodeNotReadyK8s(ctx, t, state.KubeconfigPath, targetCP, 8*time.Minute)
 		require.NoError(t, err, "Node should become NotReady")
@@ -202,11 +281,28 @@ func TestE2EHAOperations(t *testing.T) {
 	})
 
 	// =========================================================================
-	// SUBTEST 10: Verify Cluster Recovery
+	// SUBTEST 12: Verify Addons After CP Replacement (doctor-based)
 	// =========================================================================
-	t.Run("10_VerifyClusterRecovery", func(t *testing.T) {
+	t.Run("12_VerifyAddonsAfterCPReplacement", func(t *testing.T) {
+		VerifyAllAddonsHealthy(t, vctx)
+
+		status := RunDoctorCheck(t, configPath)
+		AssertClusterRunning(t, status, 3, 2)
+		AssertAllAddonsHealthy(t, status, expectedHAAddons())
+	})
+
+	// =========================================================================
+	// SUBTEST 13: Verify Cluster Recovery (doctor-based)
+	// =========================================================================
+	t.Run("13_VerifyClusterRecovery", func(t *testing.T) {
 		// Verify full cluster health
 		VerifyClusterHealth(t, state)
+
+		// Verify via doctor
+		status := RunDoctorCheck(t, configPath)
+		AssertClusterRunning(t, status, 3, 2)
+		AssertInfraHealthy(t, status)
+		AssertConnectivityHealthy(t, status)
 
 		// Deploy test workload
 		err := deployTestWorkloadHA(ctx, t, state.KubeconfigPath)
@@ -327,6 +423,22 @@ func showClusterStatusHA(t *testing.T, state *OperatorTestContext) {
 		"get", "k8znercluster", "-n", "k8zner-system", state.ClusterName, "-o", "yaml")
 	output, _ := cmd.CombinedOutput()
 	t.Logf("K8znerCluster status:\n%s", string(output))
+}
+
+// expectedHAAddons returns the addon names expected in an HA cluster with full addons.
+func expectedHAAddons() []string {
+	return []string{
+		k8znerv1alpha1.AddonNameCilium,
+		k8znerv1alpha1.AddonNameCCM,
+		k8znerv1alpha1.AddonNameCSI,
+		k8znerv1alpha1.AddonNameMetricsServer,
+		k8znerv1alpha1.AddonNameTraefik,
+		k8znerv1alpha1.AddonNameCertManager,
+		k8znerv1alpha1.AddonNameExternalDNS,
+		k8znerv1alpha1.AddonNameArgoCD,
+		k8znerv1alpha1.AddonNameMonitoring,
+		k8znerv1alpha1.AddonNameTalosBackup,
+	}
 }
 
 // deployTestWorkloadHA deploys a simple workload to verify cluster functionality.

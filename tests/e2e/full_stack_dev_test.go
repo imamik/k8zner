@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	"github.com/imamik/k8zner/cmd/k8zner/handlers"
 	"github.com/imamik/k8zner/internal/platform/s3"
 	"github.com/imamik/k8zner/internal/util/naming"
 )
@@ -142,17 +143,31 @@ func TestE2EFullStackDev(t *testing.T) {
 	})
 
 	// =========================================================================
-	// SUBTEST 02: Wait for Cluster Ready
+	// SUBTEST 02: Wait for Cluster Ready (doctor-based)
 	// =========================================================================
 	runSubtest("02_WaitForClusterReady", func(t *testing.T) {
+		// First wait via CRD status (operator must finish provisioning)
 		err := WaitForClusterReady(ctx, t, state, 30*time.Minute)
 		require.NoError(t, err, "Cluster should become ready")
+
+		// Then verify via doctor JSON
+		WaitForDoctorHealthy(t, configPath, 5*time.Minute, func(s *handlers.DoctorStatus) error {
+			if s.Phase != "Running" {
+				return fmt.Errorf("phase is %s", s.Phase)
+			}
+			if s.ControlPlanes.Ready < 1 {
+				return fmt.Errorf("CPs not ready: %d", s.ControlPlanes.Ready)
+			}
+			if s.Workers.Ready < 1 {
+				return fmt.Errorf("workers not ready: %d", s.Workers.Ready)
+			}
+			return nil
+		})
 	})
 
 	// Verify cluster is in good state before proceeding
-	var cluster *k8znerv1alpha1.K8znerCluster
 	if allSubtestsPassed && state != nil {
-		cluster = GetClusterStatus(ctx, state)
+		cluster := GetClusterStatus(ctx, state)
 		if cluster == nil {
 			allSubtestsPassed = false
 			t.Error("Cluster CRD should exist")
@@ -160,156 +175,40 @@ func TestE2EFullStackDev(t *testing.T) {
 	}
 
 	// =========================================================================
-	// SUBTEST 03: Verify Cilium
+	// SUBTEST 03: Verify All Addons (deep validation + doctor)
 	// =========================================================================
-	runSubtest("03_Verify_Cilium", func(t *testing.T) {
-		// Check addon status
-		cilium, ok := cluster.Status.Addons[k8znerv1alpha1.AddonNameCilium]
-		require.True(t, ok && cilium.Installed, "Cilium should be installed")
+	runSubtest("03_VerifyAllAddons", func(t *testing.T) {
+		vctx := &AddonVerificationContext{
+			KubeconfigPath: state.KubeconfigPath,
+			Domain:         cfDomain,
+			ArgoHost:       argoHost,
+			GrafanaHost:    grafanaHost,
+		}
+		VerifyAllAddonsDeep(t, ctx, vctx, state)
 
-		// Pod-to-pod connectivity test
-		legacyState := state.ToE2EState()
-		testCiliumNetworkConnectivity(t, legacyState)
+		// Validate via doctor JSON
+		status := RunDoctorCheck(t, configPath)
+		AssertClusterRunning(t, status, 1, 1)
+		AssertInfraHealthy(t, status)
+		AssertAllAddonsHealthy(t, status, []string{
+			k8znerv1alpha1.AddonNameCilium,
+			k8znerv1alpha1.AddonNameCCM,
+			k8znerv1alpha1.AddonNameCSI,
+			k8znerv1alpha1.AddonNameMetricsServer,
+			k8znerv1alpha1.AddonNameTraefik,
+			k8znerv1alpha1.AddonNameCertManager,
+			k8znerv1alpha1.AddonNameExternalDNS,
+			k8znerv1alpha1.AddonNameArgoCD,
+			k8znerv1alpha1.AddonNameMonitoring,
+			k8znerv1alpha1.AddonNameTalosBackup,
+		})
+		AssertConnectivityHealthy(t, status)
 	})
 
 	// =========================================================================
-	// SUBTEST 04: Verify CCM
+	// SUBTEST 04: Verify Backup (trigger + S3 verification)
 	// =========================================================================
-	runSubtest("04_Verify_CCM", func(t *testing.T) {
-		// Wait for addon status (appears after the addon's reconcile cycle)
-		err := WaitForAddonInstalled(ctx, t, state, k8znerv1alpha1.AddonNameCCM, 2*time.Minute)
-		require.NoError(t, err, "CCM should be installed")
-
-		// LoadBalancer provisioning test
-		legacyState := state.ToE2EState()
-		testCCMLoadBalancer(t, legacyState)
-	})
-
-	// =========================================================================
-	// SUBTEST 05: Verify CSI
-	// =========================================================================
-	runSubtest("05_Verify_CSI", func(t *testing.T) {
-		// Wait for addon status (appears after the addon's reconcile cycle)
-		err := WaitForAddonInstalled(ctx, t, state, k8znerv1alpha1.AddonNameCSI, 2*time.Minute)
-		require.NoError(t, err, "CSI should be installed")
-
-		// Volume provisioning + mount test
-		legacyState := state.ToE2EState()
-		testCSIVolume(t, legacyState)
-	})
-
-	// =========================================================================
-	// SUBTEST 06: Verify Metrics Server
-	// =========================================================================
-	runSubtest("06_Verify_MetricsServer", func(t *testing.T) {
-		testMetricsAPI(t, state.KubeconfigPath)
-	})
-
-	// =========================================================================
-	// SUBTEST 07: Verify Traefik
-	// =========================================================================
-	runSubtest("07_Verify_Traefik", func(t *testing.T) {
-		// IngressClass exists
-		verifyIngressClassExists(t, state.KubeconfigPath, "traefik")
-
-		// Traefik pods running
-		waitForPod(t, state.KubeconfigPath, "traefik", "app.kubernetes.io/name=traefik", 5*time.Minute)
-
-		// Verify Traefik is using Deployment + LoadBalancer service
-		verifyTraefikLoadBalancer(t, state.KubeconfigPath)
-	})
-
-	// =========================================================================
-	// SUBTEST 08: Verify CertManager
-	// =========================================================================
-	runSubtest("08_Verify_CertManager", func(t *testing.T) {
-		// ClusterIssuers exist
-		verifyClusterIssuerExists(t, state.KubeconfigPath, "letsencrypt-cloudflare-staging")
-
-		// cert-manager pods running
-		waitForPod(t, state.KubeconfigPath, "cert-manager", "app.kubernetes.io/name=cert-manager", 5*time.Minute)
-	})
-
-	// =========================================================================
-	// SUBTEST 09: Verify ExternalDNS
-	// =========================================================================
-	runSubtest("09_Verify_ExternalDNS", func(t *testing.T) {
-		// Pod running
-		waitForPod(t, state.KubeconfigPath, "external-dns", "app.kubernetes.io/name=external-dns", 5*time.Minute)
-		t.Log("  ExternalDNS pod running (DNS verified via dashboards)")
-	})
-
-	// =========================================================================
-	// SUBTEST 10: Verify ArgoCD
-	// =========================================================================
-	runSubtest("10_Verify_ArgoCD", func(t *testing.T) {
-		// ArgoCD server pods running
-		waitForPod(t, state.KubeconfigPath, "argocd", "app.kubernetes.io/name=argocd-server", 5*time.Minute)
-
-		// Verify ingress configured
-		verifyArgoCDIngressConfigured(t, state.KubeconfigPath, argoHost)
-
-		// Wait for DNS record (LB IP auto-discovered by external-dns from Ingress status)
-		waitForDNSRecord(t, argoHost, 8*time.Minute)
-
-		// Wait for TLS certificate (cert-manager DNS-01 challenge can take a while)
-		waitForArgoCDTLSCertificate(t, state.KubeconfigPath, 8*time.Minute)
-
-		// Test HTTPS access (allow extra time for Traefik to pick up the new TLS secret)
-		testArgoCDHTTPSAccess(t, argoHost, 5*time.Minute)
-		t.Logf("  ArgoCD Dashboard accessible at https://%s", argoHost)
-	})
-
-	// =========================================================================
-	// SUBTEST 11: Verify Grafana
-	// =========================================================================
-	runSubtest("11_Verify_Grafana", func(t *testing.T) {
-		// Grafana pods running
-		waitForPod(t, state.KubeconfigPath, "monitoring", "app.kubernetes.io/name=grafana", 5*time.Minute)
-
-		// Verify ingress configured
-		verifyGrafanaIngressExists(t, state.KubeconfigPath, grafanaHost)
-
-		// Wait for DNS record
-		verifyGrafanaDNSRecord(t, state.ToE2EState(), grafanaHost, 8*time.Minute)
-
-		// Wait for TLS certificate
-		verifyGrafanaCertificate(t, state.KubeconfigPath, 8*time.Minute)
-
-		// Test HTTPS access (allow extra time for Traefik to pick up the new TLS secret)
-		testGrafanaHTTPSConnectivity(t, grafanaHost, 5*time.Minute)
-		t.Logf("  Grafana Dashboard accessible at https://%s", grafanaHost)
-	})
-
-	// =========================================================================
-	// SUBTEST 12: Verify Prometheus
-	// =========================================================================
-	runSubtest("12_Verify_Prometheus", func(t *testing.T) {
-		// Prometheus pods running
-		waitForPrometheusReady(t, state.KubeconfigPath, 8*time.Minute)
-
-		// Targets API
-		verifyPrometheusTargets(t, state.KubeconfigPath)
-
-		// ServiceMonitors
-		verifyServiceMonitors(t, state.KubeconfigPath)
-	})
-
-	// =========================================================================
-	// SUBTEST 13: Verify Alertmanager
-	// =========================================================================
-	runSubtest("13_Verify_Alertmanager", func(t *testing.T) {
-		// Pod running
-		waitForAlertmanagerReady(t, state.KubeconfigPath, 5*time.Minute)
-	})
-
-	// =========================================================================
-	// SUBTEST 14: Verify Backup
-	// =========================================================================
-	runSubtest("14_Verify_Backup", func(t *testing.T) {
-		// CronJob exists
-		verifyBackupCronJob(t, state.KubeconfigPath, "0 * * * *")
-
+	runSubtest("04_VerifyBackup", func(t *testing.T) {
 		// Trigger manual backup
 		triggerBackupJob(t, state.KubeconfigPath, 5*time.Minute)
 
