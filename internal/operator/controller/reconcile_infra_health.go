@@ -16,6 +16,11 @@ func (r *ClusterReconciler) reconcileInfraHealth(ctx context.Context, cluster *k
 	logger := log.FromContext(ctx)
 	logger.V(1).Info("checking infrastructure health")
 
+	if err := r.ensureHCloudClient(); err != nil {
+		logger.V(1).Info("skipping infra health check: no hcloud client", "error", err)
+		return
+	}
+
 	infra := &cluster.Status.Infrastructure
 
 	// Network (CLI creates with cluster name directly, not naming.Network suffix)
