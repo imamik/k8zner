@@ -107,7 +107,7 @@ func renderProgressBar(b *strings.Builder, m Model) {
 		eta = fmt.Sprintf(" ETA %s", formatDuration(m.EstimatedRemaining))
 	}
 
-	b.WriteString(fmt.Sprintf("  %s %d%%%s\n", bar, pct, eta))
+	fmt.Fprintf(b, "  %s %d%%%s\n", bar, pct, eta)
 }
 
 func renderBootstrapPhases(b *strings.Builder, m Model) {
@@ -131,7 +131,7 @@ func renderBootstrapPhases(b *strings.Builder, m Model) {
 			icon = pending
 			style = sf(dimStyle)
 		}
-		b.WriteString(fmt.Sprintf("    %s %s\n", style(icon), style(phase.Name)))
+		fmt.Fprintf(b, "    %s %s\n", style(icon), style(phase.Name))
 	}
 }
 
@@ -151,7 +151,7 @@ func renderInfrastructure(b *strings.Builder, m Model) {
 
 	for _, item := range items {
 		icon, style := statusIcon(item.ready)
-		b.WriteString(fmt.Sprintf("    %s %-20s\n", style(icon), style(item.name)))
+		fmt.Fprintf(b, "    %s %-20s\n", style(icon), style(item.name))
 	}
 }
 
@@ -162,8 +162,8 @@ func renderNodes(b *strings.Builder, m Model) {
 	// Control planes
 	cpReady := m.ControlPlanes.Ready == m.ControlPlanes.Desired && m.ControlPlanes.Desired > 0
 	cpIcon, cpStyle := statusIcon(cpReady)
-	b.WriteString(fmt.Sprintf("    %s %-20s %d/%d\n",
-		cpStyle(cpIcon), cpStyle("Control Planes"), m.ControlPlanes.Ready, m.ControlPlanes.Desired))
+	fmt.Fprintf(b, "    %s %-20s %d/%d\n",
+		cpStyle(cpIcon), cpStyle("Control Planes"), m.ControlPlanes.Ready, m.ControlPlanes.Desired)
 
 	// Individual control plane nodes
 	for _, node := range m.ControlPlanes.Nodes {
@@ -172,15 +172,15 @@ func renderNodes(b *strings.Builder, m Model) {
 		if node.PhaseTransitionTime != nil {
 			dur = formatDuration(time.Since(node.PhaseTransitionTime.Time))
 		}
-		b.WriteString(fmt.Sprintf("      %s %-18s %-20s %s\n",
-			nodeStyle(nodeIcon), node.Name, nodeStyle(string(node.Phase)), dimStyle.Render(dur)))
+		fmt.Fprintf(b, "      %s %-18s %-20s %s\n",
+			nodeStyle(nodeIcon), node.Name, nodeStyle(string(node.Phase)), dimStyle.Render(dur))
 	}
 
 	// Workers
 	wReady := m.Workers.Ready == m.Workers.Desired && m.Workers.Desired > 0
 	wIcon, wStyle := statusIcon(wReady)
-	b.WriteString(fmt.Sprintf("    %s %-20s %d/%d\n",
-		wStyle(wIcon), wStyle("Workers"), m.Workers.Ready, m.Workers.Desired))
+	fmt.Fprintf(b, "    %s %-20s %d/%d\n",
+		wStyle(wIcon), wStyle("Workers"), m.Workers.Ready, m.Workers.Desired)
 
 	for _, node := range m.Workers.Nodes {
 		nodeIcon, nodeStyle := nodePhaseIcon(node.Phase)
@@ -188,8 +188,8 @@ func renderNodes(b *strings.Builder, m Model) {
 		if node.PhaseTransitionTime != nil {
 			dur = formatDuration(time.Since(node.PhaseTransitionTime.Time))
 		}
-		b.WriteString(fmt.Sprintf("      %s %-18s %-20s %s\n",
-			nodeStyle(nodeIcon), node.Name, nodeStyle(string(node.Phase)), dimStyle.Render(dur)))
+		fmt.Fprintf(b, "      %s %-18s %-20s %s\n",
+			nodeStyle(nodeIcon), node.Name, nodeStyle(string(node.Phase)), dimStyle.Render(dur))
 	}
 }
 
@@ -247,14 +247,15 @@ func renderAddonRow(b *strings.Builder, name string, addon k8znerv1alpha1.AddonS
 	}
 
 	extra := ""
-	if addon.Duration != "" {
+	switch {
+	case addon.Duration != "":
 		extra = sf(dimStyle)(addon.Duration)
-	} else if addon.Phase == k8znerv1alpha1.AddonPhaseInstalling {
+	case addon.Phase == k8znerv1alpha1.AddonPhaseInstalling:
 		extra = sf(activeStyle)("installing")
 		if addon.RetryCount > 0 {
 			extra += sf(warningStyle)(fmt.Sprintf(" (retry %d)", addon.RetryCount))
 		}
-	} else if addon.Phase == k8znerv1alpha1.AddonPhaseFailed && addon.RetryCount > 0 {
+	case addon.Phase == k8znerv1alpha1.AddonPhaseFailed && addon.RetryCount > 0:
 		extra = sf(warningStyle)(fmt.Sprintf("retry %d", addon.RetryCount))
 	}
 
