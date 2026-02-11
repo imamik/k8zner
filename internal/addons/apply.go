@@ -4,10 +4,19 @@ package addons
 import (
 	"context"
 	"fmt"
+	"log"
+	"time"
 
+	"github.com/imamik/k8zner/internal/addons/helm"
 	"github.com/imamik/k8zner/internal/addons/k8sclient"
 	"github.com/imamik/k8zner/internal/config"
 )
+
+// applyOpts controls which addons are included in the installation.
+type applyOpts struct {
+	includeCilium   bool
+	includeOperator bool
+}
 
 // Apply installs configured addons to the Kubernetes cluster.
 func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID int64) error {
@@ -15,17 +24,56 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		return fmt.Errorf("kubeconfig is required for addon installation")
 	}
 
-	// Check if any addons are enabled
 	if !hasEnabledAddons(cfg) {
 		return nil
 	}
 
-	// Pre-flight validation: check addon configuration requirements
+	return applyAddons(ctx, cfg, kubeconfig, networkID, applyOpts{
+		includeCilium:   true,
+		includeOperator: true,
+	})
+}
+
+// ApplyCilium installs only the Cilium CNI addon.
+// This is used by the operator-centric flow to install CNI before other addons.
+func ApplyCilium(ctx context.Context, cfg *config.Config, kubeconfig []byte) error {
+	if len(kubeconfig) == 0 {
+		return fmt.Errorf("kubeconfig is required for Cilium installation")
+	}
+
+	client, err := k8sclient.NewFromKubeconfig(kubeconfig)
+	if err != nil {
+		return fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+
+	if cfg.Addons.Cilium.Enabled {
+		if err := applyCilium(ctx, client, cfg); err != nil {
+			return fmt.Errorf("failed to install Cilium: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// ApplyWithoutCilium installs all configured addons except Cilium and Operator.
+// This is used by the operator-centric flow after CNI is ready.
+func ApplyWithoutCilium(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID int64) error {
+	if len(kubeconfig) == 0 {
+		return fmt.Errorf("kubeconfig is required for addon installation")
+	}
+
+	return applyAddons(ctx, cfg, kubeconfig, networkID, applyOpts{
+		includeCilium:   false,
+		includeOperator: false,
+	})
+}
+
+// applyAddons is the shared implementation for Apply and ApplyWithoutCilium.
+func applyAddons(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID int64, opts applyOpts) error {
 	if err := validateAddonConfig(cfg); err != nil {
 		return fmt.Errorf("addon configuration validation failed: %w", err)
 	}
 
-	// Create k8s client from kubeconfig bytes
 	client, err := k8sclient.NewFromKubeconfig(kubeconfig)
 	if err != nil {
 		return fmt.Errorf("failed to create kubernetes client: %w", err)
@@ -51,8 +99,8 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		}
 	}
 
-	// Install Cilium CNI first (network foundation)
-	if cfg.Addons.Cilium.Enabled {
+	// Install Cilium CNI (network foundation)
+	if opts.includeCilium && cfg.Addons.Cilium.Enabled {
 		if err := applyCilium(ctx, client, cfg); err != nil {
 			return fmt.Errorf("failed to install Cilium: %w", err)
 		}
@@ -111,7 +159,6 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 	}
 
 	// External-DNS (requires Cloudflare secrets AND ingress controllers)
-	// Must be installed after ingress controllers so Ingress status has external IP
 	if cfg.Addons.ExternalDNS.Enabled {
 		if err := applyExternalDNS(ctx, client, cfg); err != nil {
 			return fmt.Errorf("failed to install External DNS: %w", err)
@@ -124,13 +171,43 @@ func Apply(ctx context.Context, cfg *config.Config, kubeconfig []byte, networkID
 		}
 	}
 
-	// Install Talos Backup (etcd backup to S3)
-	if cfg.Addons.TalosBackup.Enabled {
-		if err := applyTalosBackup(ctx, client, cfg); err != nil {
-			return fmt.Errorf("failed to install Talos Backup: %w", err)
+	if cfg.Addons.KubePrometheusStack.Enabled {
+		if err := applyKubePrometheusStack(ctx, client, cfg); err != nil {
+			return fmt.Errorf("failed to install kube-prometheus-stack: %w", err)
 		}
 	}
 
+	if cfg.Addons.TalosBackup.Enabled {
+		if err := waitForTalosCRD(ctx, client); err != nil {
+			log.Printf("[addons] WARNING: Talos Backup SKIPPED - %v", err)
+		} else {
+			if err := applyTalosBackup(ctx, client, cfg); err != nil {
+				return fmt.Errorf("failed to install Talos Backup: %w", err)
+			}
+		}
+	}
+
+	// Install k8zner-operator (self-healing)
+	if opts.includeOperator && cfg.Addons.Operator.Enabled {
+		if err := applyOperator(ctx, client, cfg); err != nil {
+			return fmt.Errorf("failed to install k8zner-operator: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// installHelmAddon renders a Helm chart and applies the manifests to the cluster.
+// This is the standard installation path for Helm-based addons.
+func installHelmAddon(ctx context.Context, client k8sclient.Client, chartName, namespace string, helmCfg config.HelmChartConfig, values helm.Values) error {
+	spec := helm.GetChartSpec(chartName, helmCfg)
+	manifestBytes, err := helm.RenderFromSpec(ctx, spec, namespace, values)
+	if err != nil {
+		return fmt.Errorf("failed to render %s chart: %w", chartName, err)
+	}
+	if err := applyManifests(ctx, client, chartName, manifestBytes); err != nil {
+		return fmt.Errorf("failed to apply %s manifests: %w", chartName, err)
+	}
 	return nil
 }
 
@@ -149,21 +226,17 @@ func hasEnabledAddons(cfg *config.Config) bool {
 		a.TalosCCM.Enabled || a.Cilium.Enabled || a.CCM.Enabled || a.CSI.Enabled ||
 		a.MetricsServer.Enabled || a.CertManager.Enabled || a.Traefik.Enabled ||
 		a.ArgoCD.Enabled || a.Cloudflare.Enabled || a.ExternalDNS.Enabled ||
-		a.TalosBackup.Enabled
+		a.TalosBackup.Enabled || a.KubePrometheusStack.Enabled || a.Operator.Enabled
 }
 
-// validateAddonConfig performs pre-flight validation of addon configuration.
-// Returns an error if required configuration is missing for enabled addons.
-//
-// Note: Some validations (e.g., S3 credentials) are intentionally duplicated
-// from v2/types.go for defense-in-depth. The v2 layer validates at config load
-// time (fail fast), while this validates at addon install time (runtime check).
+// validateAddonConfig checks that required configuration is set for enabled addons.
+// Duplicates some v2 validations for defense-in-depth (fail at install time, not just load time).
 func validateAddonConfig(cfg *config.Config) error {
 	a := &cfg.Addons
 
-	// CCM/CSI require HCloud token
-	if (a.CCM.Enabled || a.CSI.Enabled) && cfg.HCloudToken == "" {
-		return fmt.Errorf("ccm/csi addons require hcloud_token to be set")
+	// CCM/CSI/Operator require HCloud token
+	if (a.CCM.Enabled || a.CSI.Enabled || a.Operator.Enabled) && cfg.HCloudToken == "" {
+		return fmt.Errorf("ccm/csi/operator addons require hcloud_token to be set")
 	}
 
 	// Cloudflare addons require API token
@@ -195,4 +268,73 @@ func validateAddonConfig(cfg *config.Config) error {
 	}
 
 	return nil
+}
+
+// Wait time constants for resource polling.
+const (
+	// DefaultResourceWaitTime is the default time to wait for a resource to become available.
+	DefaultResourceWaitTime = 5 * time.Minute
+
+	// resourceCheckInterval is how often to check for resource availability.
+	resourceCheckInterval = 5 * time.Second
+
+	// resourceProgressInterval is how many checks between progress log messages (6 * 5s = 30s).
+	resourceProgressInterval = 6
+)
+
+// resourceChecker is a function that checks if a resource exists.
+type resourceChecker func(ctx context.Context) (exists bool, err error)
+
+// waitForResource polls until a resource becomes available or the timeout expires.
+func waitForResource(ctx context.Context, check resourceChecker, timeout time.Duration, resourceName string) error {
+	if timeout <= 0 {
+		timeout = DefaultResourceWaitTime
+	}
+
+	deadline := time.Now().Add(timeout)
+	attempt := 0
+	startTime := time.Now()
+
+	log.Printf("[addons] Waiting up to %v for %s to be available...", timeout, resourceName)
+
+	for time.Now().Before(deadline) {
+		attempt++
+
+		exists, err := check(ctx)
+		if err != nil {
+			log.Printf("[addons] Error checking for %s (attempt %d): %v", resourceName, attempt, err)
+		} else if exists {
+			elapsed := time.Since(startTime).Round(time.Second)
+			log.Printf("[addons] %s is available (after %v, %d attempts)", resourceName, elapsed, attempt)
+			return nil
+		}
+
+		if attempt%resourceProgressInterval == 0 {
+			elapsed := time.Since(startTime).Round(time.Second)
+			log.Printf("[addons] Still waiting for %s (elapsed: %v)...", resourceName, elapsed)
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(resourceCheckInterval):
+		}
+	}
+
+	elapsed := time.Since(startTime).Round(time.Second)
+	return fmt.Errorf("timeout after %v waiting for %s", elapsed, resourceName)
+}
+
+// waitForTalosCRD waits for the Talos API CRD (talos.dev/v1alpha1) to be available.
+func waitForTalosCRD(ctx context.Context, client k8sclient.Client) error {
+	return waitForResource(ctx, func(ctx context.Context) (bool, error) {
+		return client.HasCRD(ctx, "talos.dev/v1alpha1/ServiceAccount")
+	}, DefaultResourceWaitTime, "Talos API CRD")
+}
+
+// waitForIngressClass waits for an IngressClass to be available.
+func waitForIngressClass(ctx context.Context, client k8sclient.Client, name string, timeout time.Duration) error {
+	return waitForResource(ctx, func(ctx context.Context) (bool, error) {
+		return client.HasIngressClass(ctx, name)
+	}, timeout, fmt.Sprintf("IngressClass %q", name))
 }

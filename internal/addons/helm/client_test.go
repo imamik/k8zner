@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -12,6 +13,7 @@ import (
 // This test requires network access and downloads real charts.
 // Skip in CI environments without network or for fast unit tests.
 func TestDownloadChartIntegration(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
@@ -25,9 +27,6 @@ func TestDownloadChartIntegration(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-
-	// Clear any existing cache
-	ClearMemoryCache()
 
 	// Download the chart
 	chart, err := DownloadChart(ctx, spec)
@@ -52,13 +51,13 @@ func TestDownloadChartIntegration(t *testing.T) {
 	}
 
 	// Verify chart was cached on disk
-	cachePath := GetCachePath()
+	cachePath := getCachePath()
 	chartPath := filepath.Join(cachePath, "metrics-server-3.12.2.tgz")
 	if _, err := os.Stat(chartPath); os.IsNotExist(err) {
 		t.Errorf("Chart was not cached to disk at %s", chartPath)
 	}
 
-	// Test that second download uses cache (should be fast)
+	// Test that second download uses disk cache (should be fast)
 	start := time.Now()
 	chart2, err := DownloadChart(ctx, spec)
 	if err != nil {
@@ -78,6 +77,7 @@ func TestDownloadChartIntegration(t *testing.T) {
 
 // TestDownloadChartInvalidRepo tests error handling for invalid repos.
 func TestDownloadChartInvalidRepo(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
@@ -99,8 +99,10 @@ func TestDownloadChartInvalidRepo(t *testing.T) {
 
 // TestClearCache tests cache clearing functionality.
 func TestClearCache(t *testing.T) {
+	t.Parallel()
 	// Create a test file in cache directory
-	cachePath := GetCachePath()
+
+	cachePath := getCachePath()
 	if err := os.MkdirAll(cachePath, 0755); err != nil {
 		t.Fatalf("Failed to create cache directory: %v", err)
 	}
@@ -111,18 +113,19 @@ func TestClearCache(t *testing.T) {
 	}
 
 	// Clear cache
-	if err := ClearCache(); err != nil {
-		t.Fatalf("ClearCache failed: %v", err)
+	if err := clearCache(); err != nil {
+		t.Fatalf("clearCache failed: %v", err)
 	}
 
 	// Verify file is gone
 	if _, err := os.Stat(testFile); !os.IsNotExist(err) {
-		t.Error("ClearCache did not remove cached files")
+		t.Error("clearCache did not remove cached files")
 	}
 }
 
 // TestChartSpecString tests ChartSpec string representation.
 func TestChartSpec(t *testing.T) {
+	t.Parallel()
 	spec := ChartSpec{
 		Repository: "https://example.com/charts",
 		Name:       "my-chart",
@@ -134,36 +137,58 @@ func TestChartSpec(t *testing.T) {
 	}
 }
 
-// TestClearCache_NonexistentDir tests ClearCache when cache doesn't exist.
+// TestClearCache_NonexistentDir tests clearCache when cache doesn't exist.
 func TestClearCache_NonexistentDir(t *testing.T) {
 	// Set a non-existent cache path
 	t.Setenv("XDG_CACHE_HOME", "/nonexistent/path/that/does/not/exist")
 
-	// Clear memory cache first
-	ClearMemoryCache()
-
-	// ClearCache should succeed even if directory doesn't exist
-	err := ClearCache()
+	// clearCache should succeed even if directory doesn't exist
+	err := clearCache()
 	if err != nil {
-		t.Errorf("ClearCache should succeed for nonexistent directory: %v", err)
+		t.Errorf("clearCache should succeed for nonexistent directory: %v", err)
 	}
 }
 
-// TestClearCache_ClearsMemoryCache verifies memory cache is cleared.
-func TestClearCache_ClearsMemoryCache(t *testing.T) {
+// TestGetCachePath_WithXDGCacheHome verifies XDG_CACHE_HOME is used when set.
+func TestGetCachePath_WithXDGCacheHome(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", "/custom/cache")
+
+	path := getCachePath()
+	expected := filepath.Join("/custom/cache", "k8zner", "charts")
+	if path != expected {
+		t.Errorf("getCachePath() = %q, want %q", path, expected)
+	}
+}
+
+// TestGetCachePath_WithoutXDGCacheHome verifies the fallback to ~/.cache.
+func TestGetCachePath_WithoutXDGCacheHome(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", "")
+
+	path := getCachePath()
+	// Should end with .cache/k8zner/charts (the home dir prefix varies)
+	if !filepath.IsAbs(path) && path != filepath.Join(".", ".cache", "k8zner", "charts") {
+		// If it resolved to an absolute path, it used homeDir
+		if !strings.HasSuffix(path, filepath.Join(".cache", "k8zner", "charts")) {
+			t.Errorf("getCachePath() = %q, expected to end with .cache/k8zner/charts", path)
+		}
+	}
+}
+
+// TestClearCache_Idempotent verifies cache clearing is idempotent.
+func TestClearCache_Idempotent(t *testing.T) {
 	// Use temp directory for cache
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", tmpDir)
 
-	// Clear cache should not panic and should clear memory
-	err := ClearCache()
+	// clearCache should not panic and should succeed
+	err := clearCache()
 	if err != nil {
-		t.Errorf("ClearCache failed: %v", err)
+		t.Errorf("clearCache failed: %v", err)
 	}
 
 	// Verify we can call it multiple times without error
-	err = ClearCache()
+	err = clearCache()
 	if err != nil {
-		t.Errorf("Second ClearCache failed: %v", err)
+		t.Errorf("Second clearCache failed: %v", err)
 	}
 }

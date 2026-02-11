@@ -8,6 +8,7 @@ import (
 )
 
 func TestMerge(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    []Values
@@ -39,6 +40,7 @@ func TestMerge(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := Merge(tt.input...)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -46,6 +48,7 @@ func TestMerge(t *testing.T) {
 }
 
 func TestToYAML(t *testing.T) {
+	t.Parallel()
 	values := Values{
 		"replicas": 2,
 		"image": Values{
@@ -62,6 +65,7 @@ func TestToYAML(t *testing.T) {
 }
 
 func TestFromYAML(t *testing.T) {
+	t.Parallel()
 	yamlData := []byte(`
 replicas: 2
 nodeSelector:
@@ -75,7 +79,9 @@ nodeSelector:
 }
 
 func TestDeepMerge(t *testing.T) {
+	t.Parallel()
 	t.Run("shallow merge - same as Merge", func(t *testing.T) {
+		t.Parallel()
 		result := DeepMerge(
 			Values{"key1": "value1", "key2": "value2"},
 			Values{"key2": "override", "key3": "value3"},
@@ -86,6 +92,7 @@ func TestDeepMerge(t *testing.T) {
 	})
 
 	t.Run("deep merge - nested maps", func(t *testing.T) {
+		t.Parallel()
 		result := DeepMerge(
 			Values{
 				"controller": map[string]any{
@@ -121,6 +128,7 @@ func TestDeepMerge(t *testing.T) {
 	})
 
 	t.Run("deep merge - three levels deep", func(t *testing.T) {
+		t.Parallel()
 		result := DeepMerge(
 			Values{
 				"controller": map[string]any{
@@ -156,6 +164,7 @@ func TestDeepMerge(t *testing.T) {
 	})
 
 	t.Run("arrays are replaced not merged", func(t *testing.T) {
+		t.Parallel()
 		result := DeepMerge(
 			Values{"args": []string{"--flag1", "--flag2"}},
 			Values{"args": []string{"--flag3"}},
@@ -164,6 +173,7 @@ func TestDeepMerge(t *testing.T) {
 	})
 
 	t.Run("non-map values override maps", func(t *testing.T) {
+		t.Parallel()
 		result := DeepMerge(
 			Values{"config": map[string]any{"key": "value"}},
 			Values{"config": "simple string"},
@@ -172,6 +182,7 @@ func TestDeepMerge(t *testing.T) {
 	})
 
 	t.Run("multiple merges", func(t *testing.T) {
+		t.Parallel()
 		result := DeepMerge(
 			Values{"a": map[string]any{"x": 1}},
 			Values{"a": map[string]any{"y": 2}},
@@ -186,12 +197,14 @@ func TestDeepMerge(t *testing.T) {
 	})
 
 	t.Run("empty maps", func(t *testing.T) {
+		t.Parallel()
 		result := DeepMerge(Values{}, Values{}, Values{})
 		assert.Empty(t, result)
 	})
 }
 
 func TestDeepMerge_RealWorldCSICase(t *testing.T) {
+	t.Parallel()
 	// This simulates the actual CSI addon scenario where chart defaults
 	// contain podSecurityContext but our custom values don't
 
@@ -250,7 +263,9 @@ func TestDeepMerge_RealWorldCSICase(t *testing.T) {
 }
 
 func TestToMap(t *testing.T) {
+	t.Parallel()
 	t.Run("simple values", func(t *testing.T) {
+		t.Parallel()
 		v := Values{
 			"string": "value",
 			"int":    42,
@@ -263,6 +278,7 @@ func TestToMap(t *testing.T) {
 	})
 
 	t.Run("nested Values", func(t *testing.T) {
+		t.Parallel()
 		v := Values{
 			"outer": Values{
 				"inner": Values{
@@ -282,6 +298,7 @@ func TestToMap(t *testing.T) {
 	})
 
 	t.Run("nested map[string]any", func(t *testing.T) {
+		t.Parallel()
 		v := Values{
 			"outer": map[string]any{
 				"inner": map[string]any{
@@ -301,6 +318,7 @@ func TestToMap(t *testing.T) {
 	})
 
 	t.Run("arrays with nested maps", func(t *testing.T) {
+		t.Parallel()
 		v := Values{
 			"items": []any{
 				Values{"name": "item1"},
@@ -326,6 +344,7 @@ func TestToMap(t *testing.T) {
 	})
 
 	t.Run("empty values", func(t *testing.T) {
+		t.Parallel()
 		v := Values{}
 		result := v.ToMap()
 		assert.Empty(t, result)
@@ -333,19 +352,23 @@ func TestToMap(t *testing.T) {
 }
 
 func TestToValuesMap(t *testing.T) {
+	t.Parallel()
 	t.Run("Values type", func(t *testing.T) {
+		t.Parallel()
 		v := Values{"key": "value"}
 		result := toValuesMap(v)
 		assert.Equal(t, Values{"key": "value"}, result)
 	})
 
 	t.Run("map[string]any type", func(t *testing.T) {
+		t.Parallel()
 		m := map[string]any{"key": "value"}
 		result := toValuesMap(m)
 		assert.Equal(t, Values{"key": "value"}, result)
 	})
 
 	t.Run("non-map type returns nil", func(t *testing.T) {
+		t.Parallel()
 		assert.Nil(t, toValuesMap("string"))
 		assert.Nil(t, toValuesMap(42))
 		assert.Nil(t, toValuesMap([]string{"a", "b"}))
@@ -354,8 +377,11 @@ func TestToValuesMap(t *testing.T) {
 }
 
 func TestFromYAML_Errors(t *testing.T) {
+	t.Parallel()
 	t.Run("invalid yaml - tabs in content", func(t *testing.T) {
+		t.Parallel()
 		// YAML doesn't allow tabs for indentation - this should fail
+
 		invalidYAML := []byte("key:\n\t- invalid")
 		_, err := FromYAML(invalidYAML)
 		assert.Error(t, err)
@@ -363,6 +389,7 @@ func TestFromYAML_Errors(t *testing.T) {
 	})
 
 	t.Run("invalid yaml - unclosed bracket", func(t *testing.T) {
+		t.Parallel()
 		invalidYAML := []byte("key: [unclosed")
 		_, err := FromYAML(invalidYAML)
 		assert.Error(t, err)
@@ -371,7 +398,9 @@ func TestFromYAML_Errors(t *testing.T) {
 }
 
 func TestConvertToInterface_SliceTypes(t *testing.T) {
+	t.Parallel()
 	t.Run("[]Values slice", func(t *testing.T) {
+		t.Parallel()
 		input := []Values{
 			{"name": "item1", "value": 1},
 			{"name": "item2", "value": 2},
@@ -389,6 +418,7 @@ func TestConvertToInterface_SliceTypes(t *testing.T) {
 	})
 
 	t.Run("[]map[string]any slice", func(t *testing.T) {
+		t.Parallel()
 		input := []map[string]any{
 			{"name": "item1", "value": 1},
 			{"name": "item2", "value": 2},
@@ -405,6 +435,7 @@ func TestConvertToInterface_SliceTypes(t *testing.T) {
 	})
 
 	t.Run("[]string slice", func(t *testing.T) {
+		t.Parallel()
 		input := []string{"a", "b", "c"}
 		result := convertToInterface(input)
 
@@ -417,6 +448,7 @@ func TestConvertToInterface_SliceTypes(t *testing.T) {
 	})
 
 	t.Run("[]int slice", func(t *testing.T) {
+		t.Parallel()
 		input := []int{1, 2, 3}
 		result := convertToInterface(input)
 
@@ -429,6 +461,7 @@ func TestConvertToInterface_SliceTypes(t *testing.T) {
 	})
 
 	t.Run("default case - primitives pass through", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, "string", convertToInterface("string"))
 		assert.Equal(t, 42, convertToInterface(42))
 		assert.Equal(t, true, convertToInterface(true))
@@ -437,20 +470,157 @@ func TestConvertToInterface_SliceTypes(t *testing.T) {
 	})
 }
 
+func TestConvertToInterface_SliceOfMapStringAny(t *testing.T) {
+	t.Parallel()
+	// Tests the []map[string]any branch with nested values to ensure
+	// deep conversion happens within each map element.
+	input := []map[string]any{
+		{
+			"name": "container1",
+			"ports": Values{
+				"http":  80,
+				"https": 443,
+			},
+		},
+		{
+			"name": "container2",
+			"env": map[string]any{
+				"KEY": "value",
+			},
+		},
+	}
+	result := convertToInterface(input)
+
+	arr, ok := result.([]any)
+	require.True(t, ok, "result should be []any")
+	require.Len(t, arr, 2)
+
+	container1, ok := arr[0].(map[string]interface{})
+	require.True(t, ok, "container1 should be map[string]interface{}")
+	assert.Equal(t, "container1", container1["name"])
+
+	// Verify nested Values within the map were also converted
+	ports, ok := container1["ports"].(map[string]interface{})
+	require.True(t, ok, "ports should be map[string]interface{}")
+	assert.Equal(t, 80, ports["http"])
+	assert.Equal(t, 443, ports["https"])
+
+	container2, ok := arr[1].(map[string]interface{})
+	require.True(t, ok, "container2 should be map[string]interface{}")
+	assert.Equal(t, "container2", container2["name"])
+
+	env, ok := container2["env"].(map[string]interface{})
+	require.True(t, ok, "env should be map[string]interface{}")
+	assert.Equal(t, "value", env["KEY"])
+}
+
+func TestConvertToInterface_StringSlice(t *testing.T) {
+	t.Parallel()
+	input := []string{"a", "b", "c"}
+	result := convertToInterface(input)
+
+	arr, ok := result.([]any)
+	require.True(t, ok, "result should be []any")
+	require.Len(t, arr, 3)
+	assert.Equal(t, "a", arr[0])
+	assert.Equal(t, "b", arr[1])
+	assert.Equal(t, "c", arr[2])
+}
+
+func TestConvertToInterface_IntSlice(t *testing.T) {
+	t.Parallel()
+	input := []int{1, 2, 3}
+	result := convertToInterface(input)
+
+	arr, ok := result.([]any)
+	require.True(t, ok, "result should be []any")
+	require.Len(t, arr, 3)
+	assert.Equal(t, 1, arr[0])
+	assert.Equal(t, 2, arr[1])
+	assert.Equal(t, 3, arr[2])
+}
+
+func TestMergeCustomValues_EmptyCustom(t *testing.T) {
+	t.Parallel()
+	base := Values{
+		"replicas": 2,
+		"image":    "nginx",
+		"nested": Values{
+			"key": "value",
+		},
+	}
+
+	// nil custom values
+	result := MergeCustomValues(base, nil)
+	assert.Equal(t, base, result)
+
+	// empty custom values
+	result = MergeCustomValues(base, map[string]any{})
+	assert.Equal(t, base, result)
+}
+
+func TestMergeCustomValues_WithValues(t *testing.T) {
+	t.Parallel()
+	base := Values{
+		"replicas": 2,
+		"image":    "nginx",
+		"config": Values{
+			"setting1": "value1",
+			"setting2": "value2",
+		},
+	}
+	custom := map[string]any{
+		"replicas": 5,
+		"config": map[string]any{
+			"setting2": "overridden",
+			"setting3": "new-value",
+		},
+		"newKey": "added",
+	}
+
+	result := MergeCustomValues(base, custom)
+
+	assert.Equal(t, 5, result["replicas"])
+	assert.Equal(t, "nginx", result["image"])
+	assert.Equal(t, "added", result["newKey"])
+
+	config := toValuesMap(result["config"])
+	require.NotNil(t, config)
+	assert.Equal(t, "value1", config["setting1"], "setting1 should be preserved from base")
+	assert.Equal(t, "overridden", config["setting2"], "setting2 should be overridden")
+	assert.Equal(t, "new-value", config["setting3"], "setting3 should be added from custom")
+}
+
+func TestToYAML_Error(t *testing.T) {
+	t.Parallel()
+	// The yaml.v3 encoder panics (rather than returning an error) for
+	// unmarshallable types like functions, channels, and complex numbers.
+	// We verify this panic behavior to document that the error branch in
+	// ToYAML is only reachable if the YAML library changes behavior.
+	v := Values{"fn": func() {}}
+	assert.Panics(t, func() {
+		_, _ = v.ToYAML()
+	})
+}
+
 func TestMergeCustomValues(t *testing.T) {
+	t.Parallel()
 	t.Run("nil custom values returns base unchanged", func(t *testing.T) {
+		t.Parallel()
 		base := Values{"replicas": 2, "image": "nginx"}
 		result := MergeCustomValues(base, nil)
 		assert.Equal(t, base, result)
 	})
 
 	t.Run("empty custom values returns base unchanged", func(t *testing.T) {
+		t.Parallel()
 		base := Values{"replicas": 2, "image": "nginx"}
 		result := MergeCustomValues(base, map[string]any{})
 		assert.Equal(t, base, result)
 	})
 
 	t.Run("custom values override base values", func(t *testing.T) {
+		t.Parallel()
 		base := Values{"replicas": 2, "image": "nginx"}
 		custom := map[string]any{"replicas": 5}
 		result := MergeCustomValues(base, custom)
@@ -459,6 +629,7 @@ func TestMergeCustomValues(t *testing.T) {
 	})
 
 	t.Run("deep merge with nested custom values", func(t *testing.T) {
+		t.Parallel()
 		base := Values{
 			"controller": Values{
 				"replicas": 2,
@@ -490,7 +661,9 @@ func TestMergeCustomValues(t *testing.T) {
 	})
 
 	t.Run("real-world helm override scenario", func(t *testing.T) {
+		t.Parallel()
 		// Simulates user overriding Cilium helm values
+
 		base := Values{
 			"ipam": Values{"mode": "kubernetes"},
 			"operator": Values{

@@ -1,0 +1,342 @@
+package handlers
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+
+	"k8s.io/client-go/tools/clientcmd"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	"github.com/imamik/k8zner/internal/config"
+)
+
+// DoctorStatus represents the cluster diagnostic status.
+type DoctorStatus struct {
+	ClusterName    string                 `json:"clusterName"`
+	Region         string                 `json:"region"`
+	Phase          string                 `json:"phase"`
+	Provisioning   string                 `json:"provisioning,omitempty"`
+	Infrastructure InfrastructureHealth   `json:"infrastructure"`
+	ControlPlanes  NodeGroupHealth        `json:"controlPlanes"`
+	Workers        NodeGroupHealth        `json:"workers"`
+	Addons         map[string]AddonHealth `json:"addons"`
+}
+
+// InfrastructureHealth represents infrastructure component status.
+type InfrastructureHealth struct {
+	Network      bool `json:"network"`
+	Firewall     bool `json:"firewall"`
+	LoadBalancer bool `json:"loadBalancer"`
+}
+
+// NodeGroupHealth represents control plane or worker status.
+type NodeGroupHealth struct {
+	Desired   int `json:"desired"`
+	Ready     int `json:"ready"`
+	Unhealthy int `json:"unhealthy"`
+}
+
+// AddonHealth represents addon status.
+type AddonHealth struct {
+	Installed bool   `json:"installed"`
+	Healthy   bool   `json:"healthy"`
+	Phase     string `json:"phase,omitempty"`
+	Message   string `json:"message,omitempty"`
+}
+
+// Doctor handles the doctor command.
+//
+// Pre-cluster mode: validates config and checks Hetzner API connectivity.
+// Cluster mode: shows live status from K8znerCluster CRD.
+func Doctor(ctx context.Context, configPath string, watch, jsonOutput bool) error {
+	cfg, err := loadConfig(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Pre-cluster mode: no kubeconfig
+	if _, err := os.Stat(kubeconfigPath); os.IsNotExist(err) {
+		return doctorPreCluster(cfg, jsonOutput)
+	}
+
+	// Cluster mode: kubeconfig exists
+	kubecfg, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to load kubeconfig: %w", err)
+	}
+
+	scheme := k8znerv1alpha1.Scheme
+	k8sClient, err := client.New(kubecfg, client.Options{Scheme: scheme})
+	if err != nil {
+		return fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+
+	if watch {
+		return doctorWatch(ctx, k8sClient, cfg.ClusterName, jsonOutput)
+	}
+
+	return doctorShow(ctx, k8sClient, cfg.ClusterName, jsonOutput)
+}
+
+// doctorPreCluster shows diagnostic info when no cluster exists.
+func doctorPreCluster(cfg *config.Config, jsonOutput bool) error {
+	status := &DoctorStatus{
+		ClusterName: cfg.ClusterName,
+		Region:      cfg.Location,
+		Phase:       "Not Created",
+	}
+
+	if jsonOutput {
+		return printDoctorJSON(status)
+	}
+
+	fmt.Println()
+	printHeader(cfg.ClusterName, cfg.Location)
+
+	fmt.Println("  Status: Not created")
+	fmt.Println()
+
+	fmt.Println("  Configuration:")
+	if len(cfg.ControlPlane.NodePools) > 0 {
+		pool := cfg.ControlPlane.NodePools[0]
+		fmt.Printf("    Control Planes: %d x %s\n", pool.Count, pool.ServerType)
+	}
+	if len(cfg.Workers) > 0 {
+		pool := cfg.Workers[0]
+		fmt.Printf("    Workers:        %d x %s\n", pool.Count, pool.ServerType)
+	}
+	fmt.Printf("    Kubernetes:     %s\n", cfg.Kubernetes.Version)
+	fmt.Printf("    Talos:          %s\n", cfg.Talos.Version)
+
+	fmt.Println()
+	fmt.Println("  Run 'k8zner apply' to create the cluster.")
+	fmt.Println()
+
+	return nil
+}
+
+// doctorShow displays the current cluster status once.
+func doctorShow(ctx context.Context, k8sClient client.Client, clusterName string, jsonOutput bool) error {
+	status, err := getClusterStatus(ctx, k8sClient, clusterName)
+	if err != nil {
+		return err
+	}
+
+	if jsonOutput {
+		return printDoctorJSON(status)
+	}
+
+	return printDoctorFormatted(status)
+}
+
+// doctorWatch continuously displays cluster status.
+func doctorWatch(ctx context.Context, k8sClient client.Client, clusterName string, jsonOutput bool) error {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	if err := doctorShow(ctx, k8sClient, clusterName, jsonOutput); err != nil {
+		return err
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			if !jsonOutput {
+				fmt.Print("\033[H\033[2J")
+			}
+			if err := doctorShow(ctx, k8sClient, clusterName, jsonOutput); err != nil {
+				fmt.Printf("Error: %v\n", err)
+			}
+		}
+	}
+}
+
+// getClusterStatus retrieves the cluster status from the K8znerCluster CRD.
+func getClusterStatus(ctx context.Context, k8sClient client.Client, clusterName string) (*DoctorStatus, error) {
+	k8zCluster := &k8znerv1alpha1.K8znerCluster{}
+	key := client.ObjectKey{
+		Namespace: k8znerNamespace,
+		Name:      clusterName,
+	}
+
+	if err := k8sClient.Get(ctx, key, k8zCluster); err != nil {
+		return &DoctorStatus{
+			ClusterName: clusterName,
+			Phase:       "Unknown",
+		}, nil
+	}
+
+	return &DoctorStatus{
+		ClusterName:  clusterName,
+		Region:       k8zCluster.Spec.Region,
+		Phase:        string(k8zCluster.Status.Phase),
+		Provisioning: string(k8zCluster.Status.ProvisioningPhase),
+		Infrastructure: InfrastructureHealth{
+			Network:      k8zCluster.Status.Infrastructure.NetworkID != 0,
+			Firewall:     k8zCluster.Status.Infrastructure.FirewallID != 0,
+			LoadBalancer: k8zCluster.Status.Infrastructure.LoadBalancerID != 0,
+		},
+		ControlPlanes: NodeGroupHealth{
+			Desired:   k8zCluster.Status.ControlPlanes.Desired,
+			Ready:     k8zCluster.Status.ControlPlanes.Ready,
+			Unhealthy: k8zCluster.Status.ControlPlanes.Unhealthy,
+		},
+		Workers: NodeGroupHealth{
+			Desired:   k8zCluster.Status.Workers.Desired,
+			Ready:     k8zCluster.Status.Workers.Ready,
+			Unhealthy: k8zCluster.Status.Workers.Unhealthy,
+		},
+		Addons: buildAddonHealth(k8zCluster.Status.Addons),
+	}, nil
+}
+
+// buildAddonHealth converts CRD addon status to health format.
+func buildAddonHealth(addons map[string]k8znerv1alpha1.AddonStatus) map[string]AddonHealth {
+	result := make(map[string]AddonHealth)
+	for name, status := range addons {
+		result[name] = AddonHealth{
+			Installed: status.Installed,
+			Healthy:   status.Healthy,
+			Phase:     string(status.Phase),
+			Message:   status.Message,
+		}
+	}
+	return result
+}
+
+// printDoctorJSON outputs status as JSON.
+func printDoctorJSON(status *DoctorStatus) error {
+	data, err := json.MarshalIndent(status, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal status: %w", err)
+	}
+	fmt.Println(string(data))
+	return nil
+}
+
+// printDoctorFormatted outputs status as a formatted ASCII table with emoji.
+func printDoctorFormatted(status *DoctorStatus) error {
+	fmt.Println()
+	printHeader(status.ClusterName, status.Region)
+
+	// Phase
+	phaseEmoji := phaseIndicator(status.Phase)
+	fmt.Printf("  %s Status: %s", phaseEmoji, status.Phase)
+	if status.Provisioning != "" && status.Phase != "Running" {
+		fmt.Printf(" (%s)", status.Provisioning)
+	}
+	fmt.Println()
+	fmt.Println()
+
+	// Infrastructure
+	fmt.Println("  Infrastructure")
+	fmt.Println("  " + strings.Repeat("─", 35))
+	printRow("Network", status.Infrastructure.Network, "")
+	printRow("Firewall", status.Infrastructure.Firewall, "")
+	printRow("Load Balancer", status.Infrastructure.LoadBalancer, "")
+	fmt.Println()
+
+	// Control Planes
+	cpReady := status.ControlPlanes.Ready == status.ControlPlanes.Desired && status.ControlPlanes.Desired > 0
+	cpExtra := fmt.Sprintf("%d/%d", status.ControlPlanes.Ready, status.ControlPlanes.Desired)
+	fmt.Println("  Nodes")
+	fmt.Println("  " + strings.Repeat("─", 35))
+	printRow("Control Planes", cpReady, cpExtra)
+
+	wReady := status.Workers.Ready == status.Workers.Desired && status.Workers.Desired > 0
+	wExtra := fmt.Sprintf("%d/%d", status.Workers.Ready, status.Workers.Desired)
+	printRow("Workers", wReady, wExtra)
+	fmt.Println()
+
+	// Addons
+	if len(status.Addons) > 0 {
+		fmt.Println("  Addons")
+		fmt.Println("  " + strings.Repeat("─", 35))
+
+		addonOrder := []string{
+			k8znerv1alpha1.AddonNameCilium,
+			k8znerv1alpha1.AddonNameCCM,
+			k8znerv1alpha1.AddonNameCSI,
+			k8znerv1alpha1.AddonNameMetricsServer,
+			k8znerv1alpha1.AddonNameCertManager,
+			k8znerv1alpha1.AddonNameTraefik,
+			k8znerv1alpha1.AddonNameExternalDNS,
+			k8znerv1alpha1.AddonNameArgoCD,
+			k8znerv1alpha1.AddonNameMonitoring,
+			k8znerv1alpha1.AddonNameTalosBackup,
+		}
+
+		printed := make(map[string]bool)
+		for _, name := range addonOrder {
+			if addon, ok := status.Addons[name]; ok {
+				extra := addonExtra(addon)
+				printRow(name, addon.Healthy, extra)
+				printed[name] = true
+			}
+		}
+
+		for name, addon := range status.Addons {
+			if printed[name] {
+				continue
+			}
+			extra := addonExtra(addon)
+			printRow(name, addon.Healthy, extra)
+		}
+	}
+
+	fmt.Println()
+	return nil
+}
+
+func printHeader(clusterName, region string) {
+	title := fmt.Sprintf("k8zner cluster: %s", clusterName)
+	if region != "" {
+		title += fmt.Sprintf(" (%s)", region)
+	}
+	fmt.Printf("  %s\n", title)
+	fmt.Println("  " + strings.Repeat("═", len(title)))
+	fmt.Println()
+}
+
+func phaseIndicator(phase string) string {
+	switch phase {
+	case "Running":
+		return "\u2705" // green check
+	case "Provisioning":
+		return "\u23f3" // hourglass
+	case "Failed", "Error":
+		return "\u274c" // red X
+	default:
+		return "\u2753" // question mark
+	}
+}
+
+func printRow(name string, ready bool, extra string) {
+	indicator := "\u2705" // green check
+	if !ready {
+		indicator = "\u274c" // red X
+	}
+
+	if extra != "" {
+		fmt.Printf("  %s  %-20s %s\n", indicator, name, extra)
+	} else {
+		fmt.Printf("  %s  %s\n", indicator, name)
+	}
+}
+
+func addonExtra(addon AddonHealth) string {
+	if !addon.Installed && addon.Phase == "" {
+		return ""
+	}
+	if addon.Phase != "" && addon.Phase != string(k8znerv1alpha1.AddonPhaseInstalled) {
+		return addon.Phase
+	}
+	return ""
+}

@@ -49,21 +49,7 @@ metadata:
 	// Build Cilium helm values
 	values := buildCiliumValues(cfg)
 
-	// Get chart spec with any config overrides
-	spec := helm.GetChartSpec("cilium", cfg.Addons.Cilium.Helm)
-
-	// Render helm chart
-	manifestBytes, err := helm.RenderFromSpec(ctx, spec, "kube-system", values)
-	if err != nil {
-		return fmt.Errorf("failed to render Cilium chart: %w", err)
-	}
-
-	// Apply manifests
-	if err := applyManifests(ctx, client, "cilium", manifestBytes); err != nil {
-		return fmt.Errorf("failed to apply Cilium manifests: %w", err)
-	}
-
-	return nil
+	return installHelmAddon(ctx, client, "cilium", "kube-system", cfg.Addons.Cilium.Helm, values)
 }
 
 // buildCiliumValues creates helm values matching terraform configuration.
@@ -96,7 +82,11 @@ func buildCiliumValues(cfg *config.Config) helm.Values {
 		"ipam": helm.Values{
 			"mode": "kubernetes",
 		},
+		// Match all PCI ethernet interfaces (enp1s0=public, enp7s0=private on Hetzner+Talos).
+		// Without this, LB health checks on private network bypass kube-proxy replacement.
+		"devices":               "enp+",
 		"routingMode":           ciliumCfg.RoutingMode,
+		"autoDirectNodeRoutes":  ciliumCfg.RoutingMode == "native",
 		"ipv4NativeRoutingCIDR": nativeRoutingCIDR,
 		"policyCIDRMatchMode":   policyCIDRMatchMode,
 		"bpf": helm.Values{
@@ -135,7 +125,12 @@ func buildCiliumValues(cfg *config.Config) helm.Values {
 			"enabled": ciliumCfg.EgressGatewayEnabled,
 		},
 		"loadBalancer": helm.Values{
-			"acceleration": "native",
+			"acceleration": "disabled",
+		},
+		// Required for kube-proxy replacement with multiple interfaces, even in tunnel mode.
+		// Without this, Cilium fails: "unable to determine direct routing device".
+		"nodePort": helm.Values{
+			"directRoutingDevice": "enp1s0",
 		},
 	}
 
@@ -158,7 +153,7 @@ func buildCiliumValues(cfg *config.Config) helm.Values {
 	values["prometheus"] = buildCiliumPrometheusConfig(ciliumCfg)
 
 	// Operator configuration
-	values["operator"] = buildCiliumOperatorConfig(ciliumCfg, controlPlaneCount)
+	values["operator"] = buildCiliumOperatorConfig(controlPlaneCount)
 
 	// Merge custom Helm values from config
 	return helm.MergeCustomValues(values, ciliumCfg.Helm.Values)
@@ -209,7 +204,7 @@ func buildCiliumPrometheusConfig(ciliumCfg config.CiliumConfig) helm.Values {
 
 // buildCiliumOperatorConfig creates operator configuration.
 // See: terraform/cilium.tf lines 139-177
-func buildCiliumOperatorConfig(_ config.CiliumConfig, controlPlaneCount int) helm.Values {
+func buildCiliumOperatorConfig(controlPlaneCount int) helm.Values {
 	replicas := 1
 	if controlPlaneCount > 1 {
 		replicas = 2
@@ -220,26 +215,7 @@ func buildCiliumOperatorConfig(_ config.CiliumConfig, controlPlaneCount int) hel
 		"nodeSelector": helm.Values{
 			"node-role.kubernetes.io/control-plane": "",
 		},
-		"tolerations": []helm.Values{
-			{
-				"key":      "node-role.kubernetes.io/control-plane",
-				"effect":   "NoSchedule",
-				"operator": "Exists",
-			},
-			{
-				"key":      "node-role.kubernetes.io/master",
-				"effect":   "NoSchedule",
-				"operator": "Exists",
-			},
-			{
-				"key":      "node.kubernetes.io/not-ready",
-				"operator": "Exists",
-			},
-			{
-				"key":      "node.cloudprovider.kubernetes.io/uninitialized",
-				"operator": "Exists",
-			},
-		},
+		"tolerations": helm.BootstrapTolerations(),
 	}
 
 	// Add PDB for HA setups
@@ -289,18 +265,8 @@ func buildCiliumHubbleConfig(cfg *config.Config) helm.Values {
 
 	if cfg.Addons.Cilium.HubbleRelayEnabled {
 		hubbleConfig["relay"] = helm.Values{
-			"enabled": true,
-			"tolerations": []helm.Values{
-				{
-					"key":      "node-role.kubernetes.io/control-plane",
-					"effect":   "NoSchedule",
-					"operator": "Exists",
-				},
-				{
-					"key":      "node.cloudprovider.kubernetes.io/uninitialized",
-					"operator": "Exists",
-				},
-			},
+			"enabled":     true,
+			"tolerations": helm.BootstrapTolerations(),
 		}
 	}
 

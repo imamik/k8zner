@@ -5,8 +5,6 @@ package e2e
 import (
 	"os"
 	"strings"
-
-	v2 "github.com/imamik/k8zner/internal/config/v2"
 )
 
 // E2EConfig controls which phases of E2E tests to run.
@@ -16,8 +14,10 @@ type E2EConfig struct {
 	SkipCluster        bool
 	SkipAddons         bool
 	SkipAddonsAdvanced bool
+	SkipMonitoring     bool
 	SkipScale          bool
-	SkipUpgrade        bool
+	SkipOperatorScale  bool // Operator-centric scaling via CRD
+	SkipSelfHealing    bool
 
 	// Cluster reuse
 	ReuseCluster   bool   // Use existing cluster instead of creating new one
@@ -26,27 +26,20 @@ type E2EConfig struct {
 
 	// Snapshot management
 	KeepSnapshots bool
-
-	// Version control for upgrade tests
-	InitialTalosVersion string
-	TargetTalosVersion  string
-	InitialK8sVersion   string
-	TargetK8sVersion    string
 }
 
 // LoadE2EConfig loads configuration from environment variables.
 func LoadE2EConfig() *E2EConfig {
-	// Use version matrix for defaults to ensure consistency
-	vm := v2.DefaultVersionMatrix()
-
 	return &E2EConfig{
 		// Phase control
 		SkipSnapshots:      getEnvBool("E2E_SKIP_SNAPSHOTS"),
 		SkipCluster:        getEnvBool("E2E_SKIP_CLUSTER"),
 		SkipAddons:         getEnvBool("E2E_SKIP_ADDONS"),
 		SkipAddonsAdvanced: getEnvBool("E2E_SKIP_ADDONS_ADVANCED"),
+		SkipMonitoring:     getEnvBool("E2E_SKIP_MONITORING"),
 		SkipScale:          getEnvBool("E2E_SKIP_SCALE"),
-		SkipUpgrade:        getEnvBool("E2E_SKIP_UPGRADE"),
+		SkipOperatorScale:  getEnvBool("E2E_SKIP_OPERATOR_SCALE"),
+		SkipSelfHealing:    getEnvBool("E2E_SKIP_SELF_HEALING"),
 
 		// Cluster reuse
 		ReuseCluster:   getEnvBool("E2E_REUSE_CLUSTER"),
@@ -55,12 +48,6 @@ func LoadE2EConfig() *E2EConfig {
 
 		// Snapshot management
 		KeepSnapshots: getEnvBool("E2E_KEEP_SNAPSHOTS"),
-
-		// Version control (defaults from version matrix for consistency)
-		InitialTalosVersion: getEnvOrDefault("E2E_INITIAL_TALOS_VERSION", vm.Talos),
-		TargetTalosVersion:  getEnvOrDefault("E2E_TARGET_TALOS_VERSION", vm.Talos),
-		InitialK8sVersion:   getEnvOrDefault("E2E_INITIAL_K8S_VERSION", "v"+vm.Kubernetes),
-		TargetK8sVersion:    getEnvOrDefault("E2E_TARGET_K8S_VERSION", "v"+vm.Kubernetes),
 	}
 }
 
@@ -68,14 +55,6 @@ func LoadE2EConfig() *E2EConfig {
 func getEnvBool(key string) bool {
 	val := strings.ToLower(os.Getenv(key))
 	return val == "true" || val == "1" || val == "yes"
-}
-
-// getEnvOrDefault returns the environment variable value or a default if not set.
-func getEnvOrDefault(key, defaultVal string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
-	}
-	return defaultVal
 }
 
 // RunPhases returns which phases should be run based on config.
@@ -93,11 +72,17 @@ func (c *E2EConfig) RunPhases() []string {
 	if !c.SkipAddonsAdvanced {
 		phases = append(phases, "addons-advanced")
 	}
+	if !c.SkipMonitoring {
+		phases = append(phases, "monitoring")
+	}
 	if !c.SkipScale {
 		phases = append(phases, "scale")
 	}
-	if !c.SkipUpgrade {
-		phases = append(phases, "upgrade")
+	if !c.SkipOperatorScale {
+		phases = append(phases, "operator-scale")
+	}
+	if !c.SkipSelfHealing {
+		phases = append(phases, "self-healing")
 	}
 	return phases
 }

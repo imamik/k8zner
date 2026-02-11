@@ -8,6 +8,7 @@ import (
 )
 
 func TestVersion(t *testing.T) {
+	t.Parallel()
 	cmd := Version()
 
 	require.NotNil(t, cmd)
@@ -16,12 +17,15 @@ func TestVersion(t *testing.T) {
 }
 
 func TestVersion_Run(t *testing.T) {
+	t.Parallel()
 	cmd := Version()
 	assert.NotNil(t, cmd.Run, "Version command should have Run function")
 }
 
 func TestSetVersionInfo(t *testing.T) {
+	t.Parallel()
 	// Save original values
+
 	origVersion := version
 	origCommit := commit
 	origDate := date
@@ -42,7 +46,9 @@ func TestSetVersionInfo(t *testing.T) {
 }
 
 func TestVersion_Output(t *testing.T) {
+	t.Parallel()
 	// Save original values
+
 	origVersion := version
 	origCommit := commit
 	origDate := date
@@ -70,7 +76,9 @@ func TestVersion_Output(t *testing.T) {
 }
 
 func TestVersion_DefaultValues(t *testing.T) {
+	t.Parallel()
 	// Test that default values are set
+
 	cmd := Version()
 
 	// Just verify the command exists and has default values

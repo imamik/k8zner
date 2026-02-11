@@ -1,0 +1,13 @@
+# Development cluster - minimal resources for testing.
+# Cost: ~18 EUR/month (1 CP + 1 worker + 1 shared LB)
+#
+# Usage:
+#   export HCLOUD_TOKEN="your-token"
+#   k8zner apply -c examples/dev.yaml
+
+name: dev
+region: fsn1
+mode: dev
+workers:
+  count: 1
+  size: cx23

@@ -8,15 +8,30 @@ import (
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
+// ServerCreateOpts holds all parameters for creating an HCloud server.
+type ServerCreateOpts struct {
+	Name             string
+	ImageType        string
+	ServerType       string
+	Location         string
+	SSHKeys          []string
+	Labels           map[string]string
+	UserData         string
+	PlacementGroupID *int64
+	NetworkID        int64
+	PrivateIP        string
+	EnablePublicIPv4 bool
+	EnablePublicIPv6 bool
+}
+
 // ServerProvisioner defines the interface for provisioning servers.
 type ServerProvisioner interface {
 	// CreateServer creates a new server with the given specifications.
-	// The enablePublicIPv4 and enablePublicIPv6 parameters control public IP assignment:
-	// - enablePublicIPv4=true, enablePublicIPv6=true: dual-stack (default)
-	// - enablePublicIPv4=false, enablePublicIPv6=true: IPv6-only (cost-saving, reduced attack surface)
-	// - enablePublicIPv4=true, enablePublicIPv6=false: IPv4-only
-	// - enablePublicIPv4=false, enablePublicIPv6=false: private network only
-	CreateServer(ctx context.Context, name, imageType, serverType, location string, sshKeys []string, labels map[string]string, userData string, placementGroupID *int64, networkID int64, privateIP string, enablePublicIPv4, enablePublicIPv6 bool) (string, error)
+	// PublicIPv4/IPv6 control public IP assignment:
+	// - both true: dual-stack (default)
+	// - IPv4=false, IPv6=true: IPv6-only
+	// - both false: private network only
+	CreateServer(ctx context.Context, opts ServerCreateOpts) (string, error)
 	DeleteServer(ctx context.Context, name string) error
 	// GetServerIP returns the public IP of the server.
 	// Prefers IPv4 for backwards compatibility, falls back to IPv6 if no IPv4.
@@ -26,6 +41,11 @@ type ServerProvisioner interface {
 	ResetServer(ctx context.Context, serverID string) error
 	PoweroffServer(ctx context.Context, serverID string) error
 	GetServerID(ctx context.Context, name string) (string, error)
+	// GetServerByName returns the full server object by name, or nil if not found.
+	GetServerByName(ctx context.Context, name string) (*hcloud.Server, error)
+	// AttachServerToNetwork attaches an existing server to a network.
+	// The server must exist and not already be attached to the network.
+	AttachServerToNetwork(ctx context.Context, serverName string, networkID int64, privateIP string) error
 }
 
 // SnapshotManager defines the interface for managing snapshots.
@@ -76,13 +96,6 @@ type PlacementGroupManager interface {
 	GetPlacementGroup(ctx context.Context, name string) (*hcloud.PlacementGroup, error)
 }
 
-// FloatingIPManager defines the interface for managing floating IPs.
-type FloatingIPManager interface {
-	EnsureFloatingIP(ctx context.Context, name, homeLocation, ipType string, labels map[string]string) (*hcloud.FloatingIP, error)
-	DeleteFloatingIP(ctx context.Context, name string) error
-	GetFloatingIP(ctx context.Context, name string) (*hcloud.FloatingIP, error)
-}
-
 // CertificateManager defines the interface for managing certificates.
 type CertificateManager interface {
 	EnsureCertificate(ctx context.Context, name, certificate, privateKey string, labels map[string]string) (*hcloud.Certificate, error)
@@ -105,7 +118,6 @@ type InfrastructureManager interface {
 	FirewallManager
 	LoadBalancerManager
 	PlacementGroupManager
-	FloatingIPManager
 	CertificateManager
 	RDNSManager
 	GetPublicIP(ctx context.Context) (string, error)

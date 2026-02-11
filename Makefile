@@ -1,8 +1,13 @@
-.PHONY: fmt lint test test-coverage build install check e2e e2e-fast e2e-snapshot-only clean help \
-       setup-hooks scan-secrets
+.PHONY: fmt lint test test-coverage test-unit test-integration test-kind build install check e2e e2e-fast e2e-snapshot-only clean help \
+       setup-hooks scan-secrets setup-envtest setup-kind
 
 # Default target
 .DEFAULT_GOAL := help
+
+# Envtest configuration
+ENVTEST_K8S_VERSION ?= 1.35.0
+ENVTEST_ASSETS_DIR ?= $(shell pwd)/bin/envtest
+ENVTEST := $(shell pwd)/bin/setup-envtest
 
 fmt:
 	go fmt ./...
@@ -10,8 +15,55 @@ fmt:
 lint:
 	golangci-lint run ./...
 
-test:
+test: test-unit
+	@echo "All unit tests passed!"
+
+test-unit:
 	go test -v -race ./...
+
+test-integration: setup-envtest
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(ENVTEST_ASSETS_DIR) -p path)" \
+		go test -v -race -tags=integration ./internal/operator/controller/...
+
+test-all: test-unit test-integration
+	@echo "All tests (unit + integration) passed!"
+
+# Kind-based integration tests (tests addons against a local k8s cluster)
+# Faster than full E2E but tests real k8s interactions
+test-kind: setup-kind
+	go test -v -tags=kind -timeout=30m ./tests/kind/...
+
+# Run specific test layer (e.g., make test-kind-layer LAYER=01_CRDs)
+# Available layers: 01_CRDs, 02_Core, 03_Ingress, 04_GitOps, 05_Monitoring, 06_Integration
+test-kind-layer: setup-kind
+	go test -v -tags=kind -timeout=15m -run "TestKindAddons/$(LAYER)" ./tests/kind/...
+
+# Quick smoke test - just CRDs (fast, ~2 min)
+test-kind-smoke: setup-kind
+	go test -v -tags=kind -timeout=5m -run "TestKindAddons/01_CRDs" ./tests/kind/...
+
+# Core infrastructure test (cert-manager, metrics-server, ~5 min)
+test-kind-core: setup-kind
+	go test -v -tags=kind -timeout=10m -run "TestKindAddons/0[12]_" ./tests/kind/...
+
+# Keep kind cluster after test (for debugging)
+test-kind-keep: setup-kind
+	KEEP_KIND_CLUSTER=1 go test -v -tags=kind -timeout=30m ./tests/kind/...
+
+# Delete kind test cluster manually
+test-kind-cleanup:
+	kind delete cluster --name k8zner-test 2>/dev/null || true
+
+# Setup kind if not already installed
+setup-kind:
+	@if ! command -v kind >/dev/null 2>&1; then \
+		echo "Installing kind..."; \
+		go install sigs.k8s.io/kind@latest; \
+	fi
+	@if ! command -v kubectl >/dev/null 2>&1; then \
+		echo "kubectl not found. Please install kubectl."; \
+		exit 1; \
+	fi
 
 test-coverage:
 	go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
@@ -62,6 +114,14 @@ setup-hooks:
 	@chmod +x .git/hooks/pre-commit
 	@echo "Pre-commit hook installed successfully!"
 
+# Setup envtest - download controller-runtime envtest binaries
+setup-envtest: $(ENVTEST)
+	$(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(ENVTEST_ASSETS_DIR)
+
+$(ENVTEST):
+	@mkdir -p $(shell pwd)/bin
+	GOBIN=$(shell pwd)/bin go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+
 # Scan for secrets in git history
 scan-secrets:
 	@echo "Scanning git history for secrets..."
@@ -75,19 +135,41 @@ scan-secrets:
 help:
 	@echo "k8zner development commands:"
 	@echo ""
+	@echo "Build & Install:"
 	@echo "  make build          Build the binary"
 	@echo "  make install        Build and install to GOPATH/bin or /usr/local/bin"
-	@echo "  make test           Run unit tests with race detection"
-	@echo "  make test-coverage  Run tests with coverage report"
-	@echo "  make lint           Run golangci-lint"
-	@echo "  make fmt            Format code with go fmt"
-	@echo "  make check          Run all checks (fmt, lint, test, build)"
 	@echo "  make clean          Remove build artifacts"
 	@echo ""
-	@echo "  make e2e            Run full e2e test suite"
-	@echo "  make e2e-fast       Run e2e tests (skip snapshot build)"
+	@echo "Testing (fastest to slowest):"
+	@echo "  make test           Run unit tests (~1s)"
+	@echo "  make test-integration  Controller tests with envtest (~15s)"
+	@echo "  make test-kind      Full kind addon tests (~20m)"
+	@echo "  make e2e            Full E2E on Hetzner Cloud (~30m+)"
+	@echo ""
+	@echo "Kind Test Options:"
+	@echo "  make test-kind-smoke   Quick CRD-only test (~2m)"
+	@echo "  make test-kind-core    CRDs + cert-manager + metrics (~5m)"
+	@echo "  make test-kind-layer LAYER=03_Ingress  Test specific layer"
+	@echo "  make test-kind-keep    Keep cluster after tests (for debugging)"
+	@echo "  make test-kind-cleanup Delete test cluster"
+	@echo ""
+	@echo "  Available layers: 01_CRDs, 02_Core, 03_Ingress, 04_GitOps, 05_Monitoring, 06_Integration"
+	@echo ""
+	@echo "E2E Test Options:"
+	@echo "  make e2e            Full suite (requires HCLOUD_TOKEN)"
+	@echo "  make e2e-fast       Skip snapshot build"
 	@echo "  make e2e-snapshot-only  Test snapshot creation only"
 	@echo ""
+	@echo "Code Quality:"
+	@echo "  make lint           Run golangci-lint"
+	@echo "  make fmt            Format code with go fmt"
+	@echo "  make test-coverage  Generate coverage report"
+	@echo "  make check          Run all checks (fmt, lint, test, build)"
+	@echo ""
+	@echo "Setup:"
+	@echo "  make setup-envtest  Download envtest binaries"
+	@echo "  make setup-kind     Install kind"
+	@echo "  make setup-hooks    Install pre-commit secret detection"
+	@echo ""
 	@echo "Security:"
-	@echo "  make setup-hooks    Install git pre-commit hook for secret detection"
 	@echo "  make scan-secrets   Scan git history for leaked secrets"

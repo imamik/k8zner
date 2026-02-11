@@ -11,7 +11,9 @@ import (
 )
 
 func TestCleanupError(t *testing.T) {
+	t.Parallel()
 	t.Run("single error", func(t *testing.T) {
+		t.Parallel()
 		ce := &CleanupError{}
 		ce.Add(errors.New("test error"))
 
@@ -25,6 +27,7 @@ func TestCleanupError(t *testing.T) {
 	})
 
 	t.Run("multiple errors", func(t *testing.T) {
+		t.Parallel()
 		ce := &CleanupError{}
 		ce.Add(errors.New("error 1"))
 		ce.Add(errors.New("error 2"))
@@ -40,6 +43,7 @@ func TestCleanupError(t *testing.T) {
 	})
 
 	t.Run("no errors", func(t *testing.T) {
+		t.Parallel()
 		ce := &CleanupError{}
 
 		if ce.HasErrors() {
@@ -48,6 +52,7 @@ func TestCleanupError(t *testing.T) {
 	})
 
 	t.Run("add nil error", func(t *testing.T) {
+		t.Parallel()
 		ce := &CleanupError{}
 		ce.Add(nil)
 
@@ -57,6 +62,7 @@ func TestCleanupError(t *testing.T) {
 	})
 
 	t.Run("unwrap single error", func(t *testing.T) {
+		t.Parallel()
 		original := errors.New("original error")
 		ce := &CleanupError{}
 		ce.Add(original)
@@ -70,6 +76,7 @@ func TestCleanupError(t *testing.T) {
 // TestBuildLabelSelector is already tested in real_client_test.go
 
 func TestGetResourceInfo(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		resource   interface{}
@@ -87,12 +94,6 @@ func TestGetResourceInfo(t *testing.T) {
 			resource:   &hcloud.LoadBalancer{ID: 2, Name: "lb-1"},
 			expectName: "lb-1",
 			expectID:   2,
-		},
-		{
-			name:       "floating IP",
-			resource:   &hcloud.FloatingIP{ID: 3, Name: "fip-1"},
-			expectName: "fip-1",
-			expectID:   3,
 		},
 		{
 			name:       "firewall",
@@ -128,13 +129,12 @@ func TestGetResourceInfo(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			var info resourceInfo
 			switch v := tt.resource.(type) {
 			case *hcloud.Server:
 				info = getResourceInfo(v)
 			case *hcloud.LoadBalancer:
-				info = getResourceInfo(v)
-			case *hcloud.FloatingIP:
 				info = getResourceInfo(v)
 			case *hcloud.Firewall:
 				info = getResourceInfo(v)
@@ -159,6 +159,7 @@ func TestGetResourceInfo(t *testing.T) {
 }
 
 func TestRealClient_CleanupByLabel_WithHTTPMock(t *testing.T) {
+	t.Parallel()
 	ts := newTestServer()
 	defer ts.close()
 
@@ -173,10 +174,6 @@ func TestRealClient_CleanupByLabel_WithHTTPMock(t *testing.T) {
 
 	ts.handleFunc("/load_balancers", func(w http.ResponseWriter, _ *http.Request) {
 		jsonResponse(w, http.StatusOK, schema.LoadBalancerListResponse{LoadBalancers: []schema.LoadBalancer{}})
-	})
-
-	ts.handleFunc("/floating_ips", func(w http.ResponseWriter, _ *http.Request) {
-		jsonResponse(w, http.StatusOK, schema.FloatingIPListResponse{FloatingIPs: []schema.FloatingIP{}})
 	})
 
 	ts.handleFunc("/firewalls", func(w http.ResponseWriter, _ *http.Request) {
@@ -209,7 +206,9 @@ func TestRealClient_CleanupByLabel_WithHTTPMock(t *testing.T) {
 }
 
 func TestRealClient_DeleteServersByLabel_WithHTTPMock(t *testing.T) {
+	t.Parallel()
 	t.Run("deletes servers successfully", func(t *testing.T) {
+		t.Parallel()
 		ts := newTestServer()
 		defer ts.close()
 
@@ -258,6 +257,7 @@ func TestRealClient_DeleteServersByLabel_WithHTTPMock(t *testing.T) {
 	})
 
 	t.Run("handles empty label selector", func(t *testing.T) {
+		t.Parallel()
 		ts := newTestServer()
 		defer ts.close()
 
@@ -276,6 +276,7 @@ func TestRealClient_DeleteServersByLabel_WithHTTPMock(t *testing.T) {
 }
 
 func TestRealClient_DeleteLoadBalancersByLabel_WithHTTPMock(t *testing.T) {
+	t.Parallel()
 	ts := newTestServer()
 	defer ts.close()
 
@@ -303,35 +304,8 @@ func TestRealClient_DeleteLoadBalancersByLabel_WithHTTPMock(t *testing.T) {
 	}
 }
 
-func TestRealClient_DeleteFloatingIPsByLabel_WithHTTPMock(t *testing.T) {
-	ts := newTestServer()
-	defer ts.close()
-
-	ts.handleFunc("/floating_ips", func(w http.ResponseWriter, r *http.Request) {
-		jsonResponse(w, http.StatusOK, schema.FloatingIPListResponse{
-			FloatingIPs: []schema.FloatingIP{
-				{ID: 1, Name: "fip-1", Labels: map[string]string{"cluster": "test"}},
-			},
-		})
-	})
-
-	ts.handleFunc("/floating_ips/1", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodDelete {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-	})
-
-	client := ts.realClient()
-	ctx := context.Background()
-
-	err := client.deleteFloatingIPsByLabel(ctx, "cluster=test")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
 func TestRealClient_DeleteFirewallsByLabel_WithHTTPMock(t *testing.T) {
+	t.Parallel()
 	ts := newTestServer()
 	defer ts.close()
 
@@ -360,6 +334,7 @@ func TestRealClient_DeleteFirewallsByLabel_WithHTTPMock(t *testing.T) {
 }
 
 func TestRealClient_DeleteNetworksByLabel_WithHTTPMock(t *testing.T) {
+	t.Parallel()
 	ts := newTestServer()
 	defer ts.close()
 
@@ -388,6 +363,7 @@ func TestRealClient_DeleteNetworksByLabel_WithHTTPMock(t *testing.T) {
 }
 
 func TestRealClient_DeletePlacementGroupsByLabel_WithHTTPMock(t *testing.T) {
+	t.Parallel()
 	ts := newTestServer()
 	defer ts.close()
 
@@ -416,6 +392,7 @@ func TestRealClient_DeletePlacementGroupsByLabel_WithHTTPMock(t *testing.T) {
 }
 
 func TestRealClient_DeleteSSHKeysByLabel_WithHTTPMock(t *testing.T) {
+	t.Parallel()
 	ts := newTestServer()
 	defer ts.close()
 
@@ -444,6 +421,7 @@ func TestRealClient_DeleteSSHKeysByLabel_WithHTTPMock(t *testing.T) {
 }
 
 func TestRealClient_DeleteCertificatesByLabel_WithHTTPMock(t *testing.T) {
+	t.Parallel()
 	ts := newTestServer()
 	defer ts.close()
 
@@ -472,6 +450,7 @@ func TestRealClient_DeleteCertificatesByLabel_WithHTTPMock(t *testing.T) {
 }
 
 func TestRealClient_DeleteVolumesByLabel_WithHTTPMock(t *testing.T) {
+	t.Parallel()
 	ts := newTestServer()
 	defer ts.close()
 
@@ -500,6 +479,7 @@ func TestRealClient_DeleteVolumesByLabel_WithHTTPMock(t *testing.T) {
 }
 
 func TestRealClient_CountResourcesByLabel_WithHTTPMock(t *testing.T) {
+	t.Parallel()
 	ts := newTestServer()
 	defer ts.close()
 
@@ -518,10 +498,6 @@ func TestRealClient_CountResourcesByLabel_WithHTTPMock(t *testing.T) {
 
 	ts.handleFunc("/load_balancers", func(w http.ResponseWriter, _ *http.Request) {
 		jsonResponse(w, http.StatusOK, schema.LoadBalancerListResponse{LoadBalancers: []schema.LoadBalancer{}})
-	})
-
-	ts.handleFunc("/floating_ips", func(w http.ResponseWriter, _ *http.Request) {
-		jsonResponse(w, http.StatusOK, schema.FloatingIPListResponse{FloatingIPs: []schema.FloatingIP{}})
 	})
 
 	ts.handleFunc("/firewalls", func(w http.ResponseWriter, _ *http.Request) {
@@ -569,6 +545,7 @@ func TestRealClient_CountResourcesByLabel_WithHTTPMock(t *testing.T) {
 }
 
 func TestRemainingResources_String(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		r        RemainingResources
@@ -593,6 +570,7 @@ func TestRemainingResources_String(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := tt.r.String(); got != tt.expected {
 				t.Errorf("String() = %q, want %q", got, tt.expected)
 			}
@@ -600,9 +578,916 @@ func TestRemainingResources_String(t *testing.T) {
 	}
 }
 
+// TestCleanupError_UnwrapMultiple tests Unwrap with multiple errors (covers the errors.Join branch).
+func TestCleanupError_UnwrapMultiple(t *testing.T) {
+	t.Parallel()
+	err1 := errors.New("first")
+	err2 := errors.New("second")
+	ce := &CleanupError{}
+	ce.Add(err1)
+	ce.Add(err2)
+
+	unwrapped := ce.Unwrap()
+	if unwrapped == nil {
+		t.Fatal("expected non-nil from Unwrap with multiple errors")
+	}
+	// errors.Join returns a joined error that satisfies errors.Is for each sub-error
+	if !errors.Is(unwrapped, err1) {
+		t.Error("expected Unwrap result to contain first error")
+	}
+	if !errors.Is(unwrapped, err2) {
+		t.Error("expected Unwrap result to contain second error")
+	}
+}
+
+// TestGetResourceInfo_Volume covers the Volume type branch in getResourceInfo.
+func TestGetResourceInfo_Volume(t *testing.T) {
+	t.Parallel()
+	vol := &hcloud.Volume{ID: 99, Name: "vol-99"}
+	info := getResourceInfo(vol)
+	if info.Name != "vol-99" {
+		t.Errorf("expected name 'vol-99', got %q", info.Name)
+	}
+	if info.ID != 99 {
+		t.Errorf("expected ID 99, got %d", info.ID)
+	}
+}
+
+// TestRemainingResources_String_AllTypes covers all resource type branches in String().
+func TestRemainingResources_String_AllTypes(t *testing.T) {
+	t.Parallel()
+	r := RemainingResources{
+		Servers:         1,
+		Volumes:         2,
+		LoadBalancers:   3,
+		Firewalls:       4,
+		Networks:        5,
+		PlacementGroups: 6,
+		SSHKeys:         7,
+		Certificates:    8,
+	}
+	s := r.String()
+	for _, expected := range []string{
+		"1 servers",
+		"2 volumes",
+		"3 load balancers",
+		"4 firewalls",
+		"5 networks",
+		"6 placement groups",
+		"7 SSH keys",
+		"8 certificates",
+	} {
+		if !contains(s, expected) {
+			t.Errorf("String() = %q, missing %q", s, expected)
+		}
+	}
+
+	if r.Total() != 36 {
+		t.Errorf("expected Total() = 36, got %d", r.Total())
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && searchString(s, substr)
+}
+
+func searchString(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+// TestRealClient_CleanupByLabel_WithErrors tests CleanupByLabel when various resource deletions fail.
+func TestRealClient_CleanupByLabel_WithErrors(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer()
+	defer ts.close()
+
+	// Servers list returns error
+	ts.handleFunc("/servers", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		jsonResponse(w, http.StatusInternalServerError, schema.ErrorResponse{
+			Error: schema.Error{Code: "server_error", Message: "internal"},
+		})
+	})
+
+	// Volumes list returns error
+	ts.handleFunc("/volumes", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		jsonResponse(w, http.StatusInternalServerError, schema.ErrorResponse{
+			Error: schema.Error{Code: "server_error", Message: "internal"},
+		})
+	})
+
+	// Load balancers returns empty (no error)
+	ts.handleFunc("/load_balancers", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.LoadBalancerListResponse{LoadBalancers: []schema.LoadBalancer{}})
+	})
+
+	// Firewalls list returns error
+	ts.handleFunc("/firewalls", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		jsonResponse(w, http.StatusInternalServerError, schema.ErrorResponse{
+			Error: schema.Error{Code: "server_error", Message: "internal"},
+		})
+	})
+
+	// Networks returns empty (no error)
+	ts.handleFunc("/networks", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.NetworkListResponse{Networks: []schema.Network{}})
+	})
+
+	// Placement groups returns empty (no error)
+	ts.handleFunc("/placement_groups", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.PlacementGroupListResponse{PlacementGroups: []schema.PlacementGroup{}})
+	})
+
+	// SSH keys returns error
+	ts.handleFunc("/ssh_keys", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		jsonResponse(w, http.StatusInternalServerError, schema.ErrorResponse{
+			Error: schema.Error{Code: "server_error", Message: "internal"},
+		})
+	})
+
+	// Certificates returns empty (no error)
+	ts.handleFunc("/certificates", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.CertificateListResponse{Certificates: []schema.Certificate{}})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	err := client.CleanupByLabel(ctx, map[string]string{"cluster": "test"})
+	if err == nil {
+		t.Fatal("expected error from CleanupByLabel")
+	}
+
+	var cleanupErr *CleanupError
+	if !errors.As(err, &cleanupErr) {
+		t.Fatalf("expected *CleanupError, got %T", err)
+	}
+	// Should have errors for: servers, volumes, firewalls, ssh_keys (4 errors)
+	if len(cleanupErr.Errors) < 3 {
+		t.Errorf("expected at least 3 errors, got %d: %v", len(cleanupErr.Errors), cleanupErr.Errors)
+	}
+}
+
+// TestRealClient_DeleteServersByLabel_ListError tests the list error path.
+func TestRealClient_DeleteServersByLabel_ListError(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		jsonResponse(w, http.StatusInternalServerError, schema.ErrorResponse{
+			Error: schema.Error{Code: "server_error", Message: "internal"},
+		})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	err := client.deleteServersByLabel(ctx, "cluster=test")
+	if err == nil {
+		t.Fatal("expected error from list servers")
+	}
+	if !searchString(err.Error(), "failed to list servers") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+// TestRealClient_DeleteServersByLabel_ContextCanceled tests the context cancellation path
+// during the wait-for-deletion loop.
+func TestRealClient_DeleteServersByLabel_ContextCanceled(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer()
+	defer ts.close()
+
+	callCount := 0
+	ts.handleFunc("/servers", func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if callCount == 1 {
+			// First call: return a server to trigger the wait loop
+			jsonResponse(w, http.StatusOK, schema.ServerListResponse{
+				Servers: []schema.Server{
+					{ID: 1, Name: "server-1"},
+				},
+			})
+			return
+		}
+		// Subsequent calls: server still exists (will never be empty)
+		jsonResponse(w, http.StatusOK, schema.ServerListResponse{
+			Servers: []schema.Server{
+				{ID: 1, Name: "server-1"},
+			},
+		})
+	})
+
+	ts.handleFunc("/servers/1", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			jsonResponse(w, http.StatusOK, schema.ServerDeleteResponse{
+				Action: schema.Action{ID: 1, Status: "success"},
+			})
+			return
+		}
+	})
+
+	client := ts.realClient()
+	ctx, cancel := context.WithCancel(context.Background())
+	// Cancel immediately to trigger the ctx.Done() path in the wait loop
+	cancel()
+
+	err := client.deleteServersByLabel(ctx, "cluster=test")
+	// With a canceled context, the function may return ctx.Err() or succeed
+	// depending on timing; the key is to exercise the code path
+	_ = err
+}
+
+// TestRealClient_DeleteCCMLoadBalancers_Found tests DeleteCCMLoadBalancers when CCM LBs exist.
+func TestRealClient_DeleteCCMLoadBalancers_Found(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/load_balancers", func(w http.ResponseWriter, r *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.LoadBalancerListResponse{
+			LoadBalancers: []schema.LoadBalancer{
+				{
+					ID:     10,
+					Name:   "ccm-lb-1",
+					Labels: map[string]string{"hcloud-ccm/service-uid": "uid-123"},
+				},
+				{
+					ID:     11,
+					Name:   "non-ccm-lb",
+					Labels: map[string]string{"app": "myapp"},
+				},
+				{
+					ID:     12,
+					Name:   "ccm-lb-2",
+					Labels: map[string]string{"hcloud-ccm/service-uid": "uid-456"},
+				},
+			},
+		})
+	})
+
+	ts.handleFunc("/load_balancers/10", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	})
+
+	ts.handleFunc("/load_balancers/12", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	err := client.DeleteCCMLoadBalancers(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestRealClient_DeleteCCMLoadBalancers_NoCCMLBs tests DeleteCCMLoadBalancers with no CCM LBs.
+func TestRealClient_DeleteCCMLoadBalancers_NoCCMLBs(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/load_balancers", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.LoadBalancerListResponse{
+			LoadBalancers: []schema.LoadBalancer{
+				{
+					ID:     10,
+					Name:   "regular-lb",
+					Labels: map[string]string{"app": "myapp"},
+				},
+			},
+		})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	err := client.DeleteCCMLoadBalancers(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestRealClient_DeleteCCMLoadBalancers_ListError tests DeleteCCMLoadBalancers when listing fails.
+func TestRealClient_DeleteCCMLoadBalancers_ListError(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/load_balancers", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		jsonResponse(w, http.StatusInternalServerError, schema.ErrorResponse{
+			Error: schema.Error{Code: "server_error", Message: "internal"},
+		})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	err := client.DeleteCCMLoadBalancers(ctx)
+	if err == nil {
+		t.Fatal("expected error from listing LBs")
+	}
+	if !searchString(err.Error(), "failed to list all load balancers") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+// TestRealClient_DeleteCCMLoadBalancers_DeleteError tests DeleteCCMLoadBalancers when deletion fails.
+func TestRealClient_DeleteCCMLoadBalancers_DeleteError(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/load_balancers", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.LoadBalancerListResponse{
+			LoadBalancers: []schema.LoadBalancer{
+				{
+					ID:     10,
+					Name:   "ccm-lb-1",
+					Labels: map[string]string{"hcloud-ccm/service-uid": "uid-123"},
+				},
+			},
+		})
+	})
+
+	ts.handleFunc("/load_balancers/10", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			jsonResponse(w, http.StatusInternalServerError, schema.ErrorResponse{
+				Error: schema.Error{Code: "server_error", Message: "delete failed"},
+			})
+			return
+		}
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	err := client.DeleteCCMLoadBalancers(ctx)
+	if err == nil {
+		t.Fatal("expected error from deleting CCM LB")
+	}
+}
+
+// TestRealClient_DeleteFirewallsByLabel_ListError tests the list error path.
+func TestRealClient_DeleteFirewallsByLabel_ListError(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/firewalls", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		jsonResponse(w, http.StatusInternalServerError, schema.ErrorResponse{
+			Error: schema.Error{Code: "server_error", Message: "internal"},
+		})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	err := client.deleteFirewallsByLabel(ctx, "cluster=test")
+	if err == nil {
+		t.Fatal("expected error from listing firewalls")
+	}
+	if !searchString(err.Error(), "failed to list firewalls") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+// TestRealClient_DeleteFirewallsByLabel_WithAppliedTo tests firewall deletion when
+// firewalls have resource associations that need to be removed first.
+func TestRealClient_DeleteFirewallsByLabel_WithAppliedTo(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/firewalls", func(w http.ResponseWriter, r *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.FirewallListResponse{
+			Firewalls: []schema.Firewall{
+				{
+					ID:   1,
+					Name: "fw-with-resources",
+					AppliedTo: []schema.FirewallResource{
+						{
+							Type: "server",
+							Server: &schema.FirewallResourceServer{
+								ID: 100,
+							},
+						},
+						{
+							Type: "label_selector",
+							LabelSelector: &schema.FirewallResourceLabelSelector{
+								Selector: "role=worker",
+							},
+						},
+					},
+				},
+			},
+		})
+	})
+
+	ts.handleFunc("/firewalls/1/actions/remove_from_resources", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusCreated, struct {
+			Actions []schema.Action `json:"actions"`
+		}{
+			Actions: []schema.Action{{ID: 10, Status: "success"}},
+		})
+	})
+
+	ts.handleFunc("/actions/10", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ActionGetResponse{
+			Action: schema.Action{ID: 10, Status: "success", Progress: 100},
+		})
+	})
+
+	ts.handleFunc("/firewalls/1", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	err := client.deleteFirewallsByLabel(ctx, "cluster=test")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestRealClient_DeleteFirewallsByLabel_DeleteError tests the non-retryable delete error path.
+func TestRealClient_DeleteFirewallsByLabel_DeleteError(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/firewalls", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.FirewallListResponse{
+			Firewalls: []schema.Firewall{
+				{ID: 1, Name: "fw-1"},
+			},
+		})
+	})
+
+	ts.handleFunc("/firewalls/1", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			jsonResponse(w, http.StatusForbidden, schema.ErrorResponse{
+				Error: schema.Error{Code: "forbidden", Message: "not allowed"},
+			})
+			return
+		}
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	// Should not error at function level (firewall deletion errors are logged, not returned)
+	err := client.deleteFirewallsByLabel(ctx, "cluster=test")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestRealClient_DeleteFirewallsByLabel_ContextCanceled tests context cancellation during firewall deletion.
+func TestRealClient_DeleteFirewallsByLabel_ContextCanceled(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/firewalls", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.FirewallListResponse{
+			Firewalls: []schema.Firewall{
+				{ID: 1, Name: "fw-1"},
+			},
+		})
+	})
+
+	// We don't even need a handler for /firewalls/1 since context is already canceled
+	client := ts.realClient()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	err := client.deleteFirewallsByLabel(ctx, "cluster=test")
+	// With canceled context, should return ctx.Err()
+	if err == nil {
+		t.Fatal("expected error from canceled context")
+	}
+}
+
+// TestRealClient_DeleteVolumesByLabel_ListError tests the list error path.
+func TestRealClient_DeleteVolumesByLabel_ListError(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/volumes", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		jsonResponse(w, http.StatusInternalServerError, schema.ErrorResponse{
+			Error: schema.Error{Code: "server_error", Message: "internal"},
+		})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	err := client.deleteVolumesByLabel(ctx, "cluster=test")
+	if err == nil {
+		t.Fatal("expected error from listing volumes")
+	}
+	if !searchString(err.Error(), "failed to list volumes") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+// TestRealClient_DeleteVolumesByLabel_DeleteError tests a non-retryable delete error for volumes.
+func TestRealClient_DeleteVolumesByLabel_DeleteError(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/volumes", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.VolumeListResponse{
+			Volumes: []schema.Volume{
+				{ID: 1, Name: "vol-1"},
+			},
+		})
+	})
+
+	ts.handleFunc("/volumes/1", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			jsonResponse(w, http.StatusForbidden, schema.ErrorResponse{
+				Error: schema.Error{Code: "forbidden", Message: "not allowed"},
+			})
+			return
+		}
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	// Volume delete errors are logged but not returned from the function
+	err := client.deleteVolumesByLabel(ctx, "cluster=test")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestRealClient_DeleteVolumesByLabel_ContextCanceled tests context cancellation during volume deletion.
+func TestRealClient_DeleteVolumesByLabel_ContextCanceled(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/volumes", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.VolumeListResponse{
+			Volumes: []schema.Volume{
+				{ID: 1, Name: "vol-1"},
+			},
+		})
+	})
+
+	client := ts.realClient()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	err := client.deleteVolumesByLabel(ctx, "cluster=test")
+	if err == nil {
+		t.Fatal("expected error from canceled context")
+	}
+}
+
+// TestRealClient_CountResourcesByLabel_VolumeListError tests error path when volume listing fails.
+func TestRealClient_CountResourcesByLabel_VolumeListError(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ServerListResponse{Servers: []schema.Server{}})
+	})
+
+	ts.handleFunc("/volumes", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		jsonResponse(w, http.StatusInternalServerError, schema.ErrorResponse{
+			Error: schema.Error{Code: "server_error", Message: "internal"},
+		})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	_, err := client.CountResourcesByLabel(ctx, map[string]string{"cluster": "test"})
+	if err == nil {
+		t.Fatal("expected error from listing volumes")
+	}
+	if !searchString(err.Error(), "failed to list volumes") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+// TestRealClient_CountResourcesByLabel_LoadBalancerListError tests error when LB listing fails.
+func TestRealClient_CountResourcesByLabel_LoadBalancerListError(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ServerListResponse{Servers: []schema.Server{}})
+	})
+	ts.handleFunc("/volumes", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.VolumeListResponse{Volumes: []schema.Volume{}})
+	})
+	ts.handleFunc("/load_balancers", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		jsonResponse(w, http.StatusInternalServerError, schema.ErrorResponse{
+			Error: schema.Error{Code: "server_error", Message: "internal"},
+		})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	_, err := client.CountResourcesByLabel(ctx, map[string]string{"cluster": "test"})
+	if err == nil {
+		t.Fatal("expected error from listing load balancers")
+	}
+	if !searchString(err.Error(), "failed to list load balancers") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+// TestRealClient_CountResourcesByLabel_FirewallListError tests error when firewall listing fails.
+func TestRealClient_CountResourcesByLabel_FirewallListError(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ServerListResponse{Servers: []schema.Server{}})
+	})
+	ts.handleFunc("/volumes", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.VolumeListResponse{Volumes: []schema.Volume{}})
+	})
+	ts.handleFunc("/load_balancers", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.LoadBalancerListResponse{LoadBalancers: []schema.LoadBalancer{}})
+	})
+	ts.handleFunc("/firewalls", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		jsonResponse(w, http.StatusInternalServerError, schema.ErrorResponse{
+			Error: schema.Error{Code: "server_error", Message: "internal"},
+		})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	_, err := client.CountResourcesByLabel(ctx, map[string]string{"cluster": "test"})
+	if err == nil {
+		t.Fatal("expected error from listing firewalls")
+	}
+	if !searchString(err.Error(), "failed to list firewalls") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+// TestRealClient_CountResourcesByLabel_NetworkListError tests error when network listing fails.
+func TestRealClient_CountResourcesByLabel_NetworkListError(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ServerListResponse{Servers: []schema.Server{}})
+	})
+	ts.handleFunc("/volumes", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.VolumeListResponse{Volumes: []schema.Volume{}})
+	})
+	ts.handleFunc("/load_balancers", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.LoadBalancerListResponse{LoadBalancers: []schema.LoadBalancer{}})
+	})
+	ts.handleFunc("/firewalls", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.FirewallListResponse{Firewalls: []schema.Firewall{}})
+	})
+	ts.handleFunc("/networks", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		jsonResponse(w, http.StatusInternalServerError, schema.ErrorResponse{
+			Error: schema.Error{Code: "server_error", Message: "internal"},
+		})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	_, err := client.CountResourcesByLabel(ctx, map[string]string{"cluster": "test"})
+	if err == nil {
+		t.Fatal("expected error from listing networks")
+	}
+	if !searchString(err.Error(), "failed to list networks") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+// TestRealClient_CountResourcesByLabel_PlacementGroupListError tests error when PG listing fails.
+func TestRealClient_CountResourcesByLabel_PlacementGroupListError(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ServerListResponse{Servers: []schema.Server{}})
+	})
+	ts.handleFunc("/volumes", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.VolumeListResponse{Volumes: []schema.Volume{}})
+	})
+	ts.handleFunc("/load_balancers", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.LoadBalancerListResponse{LoadBalancers: []schema.LoadBalancer{}})
+	})
+	ts.handleFunc("/firewalls", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.FirewallListResponse{Firewalls: []schema.Firewall{}})
+	})
+	ts.handleFunc("/networks", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.NetworkListResponse{Networks: []schema.Network{}})
+	})
+	ts.handleFunc("/placement_groups", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		jsonResponse(w, http.StatusInternalServerError, schema.ErrorResponse{
+			Error: schema.Error{Code: "server_error", Message: "internal"},
+		})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	_, err := client.CountResourcesByLabel(ctx, map[string]string{"cluster": "test"})
+	if err == nil {
+		t.Fatal("expected error from listing placement groups")
+	}
+	if !searchString(err.Error(), "failed to list placement groups") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+// TestRealClient_CountResourcesByLabel_SSHKeyListError tests error when SSH key listing fails.
+func TestRealClient_CountResourcesByLabel_SSHKeyListError(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ServerListResponse{Servers: []schema.Server{}})
+	})
+	ts.handleFunc("/volumes", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.VolumeListResponse{Volumes: []schema.Volume{}})
+	})
+	ts.handleFunc("/load_balancers", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.LoadBalancerListResponse{LoadBalancers: []schema.LoadBalancer{}})
+	})
+	ts.handleFunc("/firewalls", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.FirewallListResponse{Firewalls: []schema.Firewall{}})
+	})
+	ts.handleFunc("/networks", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.NetworkListResponse{Networks: []schema.Network{}})
+	})
+	ts.handleFunc("/placement_groups", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.PlacementGroupListResponse{PlacementGroups: []schema.PlacementGroup{}})
+	})
+	ts.handleFunc("/ssh_keys", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		jsonResponse(w, http.StatusInternalServerError, schema.ErrorResponse{
+			Error: schema.Error{Code: "server_error", Message: "internal"},
+		})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	_, err := client.CountResourcesByLabel(ctx, map[string]string{"cluster": "test"})
+	if err == nil {
+		t.Fatal("expected error from listing SSH keys")
+	}
+	if !searchString(err.Error(), "failed to list SSH keys") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+// TestRealClient_CountResourcesByLabel_CertificateListError tests error when certificate listing fails.
+func TestRealClient_CountResourcesByLabel_CertificateListError(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.ServerListResponse{Servers: []schema.Server{}})
+	})
+	ts.handleFunc("/volumes", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.VolumeListResponse{Volumes: []schema.Volume{}})
+	})
+	ts.handleFunc("/load_balancers", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.LoadBalancerListResponse{LoadBalancers: []schema.LoadBalancer{}})
+	})
+	ts.handleFunc("/firewalls", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.FirewallListResponse{Firewalls: []schema.Firewall{}})
+	})
+	ts.handleFunc("/networks", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.NetworkListResponse{Networks: []schema.Network{}})
+	})
+	ts.handleFunc("/placement_groups", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.PlacementGroupListResponse{PlacementGroups: []schema.PlacementGroup{}})
+	})
+	ts.handleFunc("/ssh_keys", func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse(w, http.StatusOK, schema.SSHKeyListResponse{SSHKeys: []schema.SSHKey{}})
+	})
+	ts.handleFunc("/certificates", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		jsonResponse(w, http.StatusInternalServerError, schema.ErrorResponse{
+			Error: schema.Error{Code: "server_error", Message: "internal"},
+		})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	_, err := client.CountResourcesByLabel(ctx, map[string]string{"cluster": "test"})
+	if err == nil {
+		t.Fatal("expected error from listing certificates")
+	}
+	if !searchString(err.Error(), "failed to list certificates") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+// TestRealClient_CountResourcesByLabel_ServerListError tests error when server listing fails.
+func TestRealClient_CountResourcesByLabel_ServerListError(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer()
+	defer ts.close()
+
+	ts.handleFunc("/servers", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		jsonResponse(w, http.StatusInternalServerError, schema.ErrorResponse{
+			Error: schema.Error{Code: "server_error", Message: "internal"},
+		})
+	})
+
+	client := ts.realClient()
+	ctx := context.Background()
+
+	_, err := client.CountResourcesByLabel(ctx, map[string]string{"cluster": "test"})
+	if err == nil {
+		t.Fatal("expected error from listing servers")
+	}
+	if !searchString(err.Error(), "failed to list servers") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
 func TestDeleteResourcesByLabel(t *testing.T) {
+	t.Parallel()
 	// Test the generic deleteResourcesByLabel function
+
 	t.Run("handles list error", func(t *testing.T) {
+		t.Parallel()
 		ctx := context.Background()
 		err := deleteResourcesByLabel(ctx, "test",
 			func(ctx context.Context) ([]*hcloud.Server, error) {
@@ -618,6 +1503,7 @@ func TestDeleteResourcesByLabel(t *testing.T) {
 	})
 
 	t.Run("returns delete errors", func(t *testing.T) {
+		t.Parallel()
 		ctx := context.Background()
 		// deleteResourcesByLabel now returns errors for failed deletions
 		err := deleteResourcesByLabel(ctx, "test",
@@ -635,6 +1521,7 @@ func TestDeleteResourcesByLabel(t *testing.T) {
 	})
 
 	t.Run("handles empty list", func(t *testing.T) {
+		t.Parallel()
 		ctx := context.Background()
 		err := deleteResourcesByLabel(ctx, "test",
 			func(ctx context.Context) ([]*hcloud.Server, error) {

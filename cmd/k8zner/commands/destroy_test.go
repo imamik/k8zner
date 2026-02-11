@@ -8,6 +8,7 @@ import (
 )
 
 func TestDestroy(t *testing.T) {
+	t.Parallel()
 	cmd := Destroy()
 
 	require.NotNil(t, cmd)
@@ -17,16 +18,18 @@ func TestDestroy(t *testing.T) {
 }
 
 func TestDestroy_ConfigFlag(t *testing.T) {
+	t.Parallel()
 	cmd := Destroy()
 
 	flag := cmd.Flags().Lookup("config")
 	require.NotNil(t, flag, "config flag should exist")
 	assert.Equal(t, "c", flag.Shorthand)
 	assert.Equal(t, "", flag.DefValue)
-	assert.Equal(t, "Path to cluster configuration file (required)", flag.Usage)
+	assert.Equal(t, "Path to cluster configuration file (default: k8zner.yaml)", flag.Usage)
 }
 
 func TestDestroy_ConfigFlagRequired(t *testing.T) {
+	t.Parallel()
 	cmd := Destroy()
 
 	flag := cmd.Flags().Lookup("config")
@@ -39,11 +42,13 @@ func TestDestroy_ConfigFlagRequired(t *testing.T) {
 }
 
 func TestDestroy_RunE(t *testing.T) {
+	t.Parallel()
 	cmd := Destroy()
 	assert.NotNil(t, cmd.RunE, "Destroy command should have RunE function")
 }
 
 func TestDestroy_LongDescription(t *testing.T) {
+	t.Parallel()
 	cmd := Destroy()
 
 	// Verify the long description mentions key resources

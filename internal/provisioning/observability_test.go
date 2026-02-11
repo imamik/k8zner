@@ -88,6 +88,7 @@ func TestConsoleObserver_Progress(_ *testing.T) {
 }
 
 func TestConsoleObserver_WithFields(t *testing.T) {
+	t.Parallel()
 	observer := NewConsoleObserver()
 
 	contextualObserver := observer.WithFields(map[string]string{
@@ -99,6 +100,7 @@ func TestConsoleObserver_WithFields(t *testing.T) {
 }
 
 func TestMockObserver_Events(t *testing.T) {
+	t.Parallel()
 	observer := NewMockObserver()
 
 	// Log some events
@@ -123,7 +125,9 @@ func TestMockObserver_Events(t *testing.T) {
 }
 
 func TestEventTypes(t *testing.T) {
+	t.Parallel()
 	// Verify all event types are defined
+
 	eventTypes := []EventType{
 		EventPhaseStarted,
 		EventPhaseCompleted,
@@ -143,6 +147,7 @@ func TestEventTypes(t *testing.T) {
 }
 
 func TestObserver_ImplementsLogger(t *testing.T) {
+	t.Parallel()
 	var logger Logger
 	var observer Observer = NewConsoleObserver()
 
@@ -152,6 +157,7 @@ func TestObserver_ImplementsLogger(t *testing.T) {
 }
 
 func TestLogHelpers(t *testing.T) {
+	t.Parallel()
 	observer := NewMockObserver()
 
 	// Test all log helpers

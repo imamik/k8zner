@@ -15,7 +15,9 @@ import (
 )
 
 func TestCreateSecret_Success(t *testing.T) {
+	t.Parallel()
 	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
+
 	clientset := fake.NewSimpleClientset()
 
 	c := &client{clientset: clientset}
@@ -41,7 +43,9 @@ func TestCreateSecret_Success(t *testing.T) {
 }
 
 func TestCreateSecret_MissingNamespace(t *testing.T) {
+	t.Parallel()
 	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
+
 	clientset := fake.NewSimpleClientset()
 
 	c := &client{clientset: clientset}
@@ -59,7 +63,9 @@ func TestCreateSecret_MissingNamespace(t *testing.T) {
 }
 
 func TestCreateSecret_MissingName(t *testing.T) {
+	t.Parallel()
 	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
+
 	clientset := fake.NewSimpleClientset()
 
 	c := &client{clientset: clientset}
@@ -77,7 +83,9 @@ func TestCreateSecret_MissingName(t *testing.T) {
 }
 
 func TestCreateSecret_ReplacesExisting(t *testing.T) {
+	t.Parallel()
 	// Create existing secret
+
 	existingSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-secret",
@@ -116,7 +124,9 @@ func TestCreateSecret_ReplacesExisting(t *testing.T) {
 }
 
 func TestCreateSecret_DeleteError(t *testing.T) {
+	t.Parallel()
 	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
+
 	clientset := fake.NewSimpleClientset()
 
 	// Add reactor to fail delete operations
@@ -139,7 +149,9 @@ func TestCreateSecret_DeleteError(t *testing.T) {
 }
 
 func TestCreateSecret_CreateError(t *testing.T) {
+	t.Parallel()
 	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
+
 	clientset := fake.NewSimpleClientset()
 
 	// Add reactor to fail create operations
@@ -162,7 +174,9 @@ func TestCreateSecret_CreateError(t *testing.T) {
 }
 
 func TestDeleteSecret_Success(t *testing.T) {
+	t.Parallel()
 	// Create existing secret
+
 	existingSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-secret",
@@ -184,7 +198,9 @@ func TestDeleteSecret_Success(t *testing.T) {
 }
 
 func TestDeleteSecret_NotFound(t *testing.T) {
+	t.Parallel()
 	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
+
 	clientset := fake.NewSimpleClientset()
 
 	c := &client{clientset: clientset}
@@ -195,7 +211,9 @@ func TestDeleteSecret_NotFound(t *testing.T) {
 }
 
 func TestDeleteSecret_MissingNamespace(t *testing.T) {
+	t.Parallel()
 	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
+
 	clientset := fake.NewSimpleClientset()
 
 	c := &client{clientset: clientset}
@@ -206,7 +224,9 @@ func TestDeleteSecret_MissingNamespace(t *testing.T) {
 }
 
 func TestDeleteSecret_MissingName(t *testing.T) {
+	t.Parallel()
 	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
+
 	clientset := fake.NewSimpleClientset()
 
 	c := &client{clientset: clientset}
@@ -217,7 +237,9 @@ func TestDeleteSecret_MissingName(t *testing.T) {
 }
 
 func TestDeleteSecret_Error(t *testing.T) {
+	t.Parallel()
 	//nolint:staticcheck // SA1019: NewSimpleClientset is sufficient for our testing needs
+
 	clientset := fake.NewSimpleClientset()
 
 	// Add reactor to fail delete operations

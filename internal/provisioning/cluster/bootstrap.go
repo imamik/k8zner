@@ -4,19 +4,13 @@
 package cluster
 
 import (
-	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
 	"fmt"
-	"math/big"
 	"strings"
 	"time"
 
+	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning"
+	"github.com/imamik/k8zner/internal/util/naming"
 
 	"github.com/siderolabs/talos/pkg/machinery/api/machine"
 	"github.com/siderolabs/talos/pkg/machinery/client"
@@ -24,6 +18,27 @@ import (
 )
 
 const phase = "cluster"
+
+// getLBEndpoint returns the Load Balancer endpoint for Talos API communication.
+// In private-first mode, ALL external communication goes through the LB.
+// Returns empty string if LB is not available.
+func (p *Provisioner) getLBEndpoint(ctx *provisioning.Context) string {
+	// Check state first
+	if ctx.State.LoadBalancer != nil {
+		if lbIP := hcloud.LoadBalancerIPv4(ctx.State.LoadBalancer); lbIP != "" {
+			return lbIP
+		}
+	}
+	// Fetch from API
+	lb, err := ctx.Infra.GetLoadBalancer(ctx, naming.KubeAPILoadBalancer(ctx.Config.ClusterName))
+	if err == nil && lb != nil {
+		ctx.State.LoadBalancer = lb
+		if lbIP := hcloud.LoadBalancerIPv4(lb); lbIP != "" {
+			return lbIP
+		}
+	}
+	return ""
+}
 
 // BootstrapCluster performs the bootstrap process for a new cluster.
 // The main function orchestrates the steps - each helper does ONE thing.
@@ -93,7 +108,6 @@ func (p *Provisioner) isAlreadyBootstrapped(ctx *provisioning.Context) bool {
 // tryRetrieveExistingKubeconfig attempts to retrieve kubeconfig from an existing cluster.
 // It also handles scaling by configuring any new nodes that are still in maintenance mode.
 func (p *Provisioner) tryRetrieveExistingKubeconfig(ctx *provisioning.Context) error {
-	// Handle scaling: configure any new nodes that are in maintenance mode
 	if err := p.configureNewNodes(ctx); err != nil {
 		return fmt.Errorf("failed to configure new nodes during scale: %w", err)
 	}
@@ -107,182 +121,16 @@ func (p *Provisioner) tryRetrieveExistingKubeconfig(ctx *provisioning.Context) e
 	return nil
 }
 
-// configureNewNodes detects and configures any new nodes that are still in maintenance mode.
-// This is called during scaling operations when the cluster is already bootstrapped.
-func (p *Provisioner) configureNewNodes(ctx *provisioning.Context) error {
-	ctx.Logger.Printf("[%s] Checking %d control plane IPs and %d worker IPs for new nodes...",
-		phase, len(ctx.State.ControlPlaneIPs), len(ctx.State.WorkerIPs))
-
-	// Find new control plane nodes in maintenance mode
-	newCPNodes := make(map[string]string)
-	for nodeName, nodeIP := range ctx.State.ControlPlaneIPs {
-		ctx.Logger.Printf("[%s] Checking control plane node %s (%s)...", phase, nodeName, nodeIP)
-		if p.isNodeInMaintenanceMode(ctx, nodeIP) {
-			ctx.Logger.Printf("[%s] Node %s is in maintenance mode (new node)", phase, nodeName)
-			newCPNodes[nodeName] = nodeIP
-		} else {
-			ctx.Logger.Printf("[%s] Node %s is already configured", phase, nodeName)
-		}
-	}
-
-	// Find new worker nodes in maintenance mode
-	newWorkerNodes := make(map[string]string)
-	for nodeName, nodeIP := range ctx.State.WorkerIPs {
-		ctx.Logger.Printf("[%s] Checking worker node %s (%s)...", phase, nodeName, nodeIP)
-		if p.isNodeInMaintenanceMode(ctx, nodeIP) {
-			ctx.Logger.Printf("[%s] Node %s is in maintenance mode (new node)", phase, nodeName)
-			newWorkerNodes[nodeName] = nodeIP
-		} else {
-			ctx.Logger.Printf("[%s] Node %s is already configured", phase, nodeName)
-		}
-	}
-
-	if len(newCPNodes) == 0 && len(newWorkerNodes) == 0 {
-		ctx.Logger.Printf("[%s] No new nodes detected, cluster is up to date", phase)
-		return nil
-	}
-
-	// Configure new control plane nodes
-	if len(newCPNodes) > 0 {
-		ctx.Logger.Printf("[%s] Found %d new control plane nodes to configure", phase, len(newCPNodes))
-		for nodeName, nodeIP := range newCPNodes {
-			serverID := ctx.State.ControlPlaneServerIDs[nodeName]
-			machineConfig, err := ctx.Talos.GenerateControlPlaneConfig(ctx.State.SANs, nodeName, serverID)
-			if err != nil {
-				return fmt.Errorf("failed to generate machine config for new CP node %s: %w", nodeName, err)
-			}
-			ctx.Logger.Printf("[%s] Applying config to new control plane node %s (%s)...", phase, nodeName, nodeIP)
-			if err := p.applyMachineConfig(ctx, nodeIP, machineConfig); err != nil {
-				return fmt.Errorf("failed to apply config to new CP node %s: %w", nodeName, err)
-			}
-		}
-		// Wait for new control plane nodes to become ready
-		for nodeName, nodeIP := range newCPNodes {
-			ctx.Logger.Printf("[%s] Waiting for new control plane node %s (%s) to be ready...", phase, nodeName, nodeIP)
-			if err := p.waitForNodeReady(ctx, nodeIP, ctx.State.TalosConfig, ctx.Logger); err != nil {
-				return fmt.Errorf("new control plane node %s failed to become ready: %w", nodeName, err)
-			}
-			ctx.Logger.Printf("[%s] New control plane node %s is ready", phase, nodeName)
-		}
-	}
-
-	// Configure new worker nodes
-	if len(newWorkerNodes) > 0 {
-		ctx.Logger.Printf("[%s] Found %d new worker nodes to configure", phase, len(newWorkerNodes))
-		for nodeName, nodeIP := range newWorkerNodes {
-			serverID := ctx.State.WorkerServerIDs[nodeName]
-			nodeConfig, err := ctx.Talos.GenerateWorkerConfig(nodeName, serverID)
-			if err != nil {
-				return fmt.Errorf("failed to generate worker config for new node %s: %w", nodeName, err)
-			}
-			ctx.Logger.Printf("[%s] Applying config to new worker node %s (%s)...", phase, nodeName, nodeIP)
-			if err := p.applyMachineConfig(ctx, nodeIP, nodeConfig); err != nil {
-				return fmt.Errorf("failed to apply config to new worker node %s: %w", nodeName, err)
-			}
-		}
-		// Wait for new worker nodes to become ready
-		for nodeName, nodeIP := range newWorkerNodes {
-			ctx.Logger.Printf("[%s] Waiting for new worker node %s (%s) to be ready...", phase, nodeName, nodeIP)
-			if err := p.waitForNodeReady(ctx, nodeIP, ctx.State.TalosConfig, ctx.Logger); err != nil {
-				return fmt.Errorf("new worker node %s failed to become ready: %w", nodeName, err)
-			}
-			ctx.Logger.Printf("[%s] New worker node %s is ready", phase, nodeName)
-		}
-	}
-
-	ctx.Logger.Printf("[%s] Successfully configured %d new control plane nodes and %d new worker nodes",
-		phase, len(newCPNodes), len(newWorkerNodes))
-	return nil
-}
-
-// isNodeInMaintenanceMode checks if a node is in maintenance mode (unconfigured).
-// A node in maintenance mode will accept an insecure connection but won't respond
-// to authenticated requests with the cluster's Talos config.
-func (p *Provisioner) isNodeInMaintenanceMode(ctx *provisioning.Context, nodeIP string) bool {
-	// First check if the port is reachable - wait for new nodes to boot
-	// Talos boot from snapshot typically takes 30-60 seconds
-	portWaitTimeout := ctx.Timeouts.PortWait
-	ctx.Logger.Printf("[%s] Waiting for Talos API on %s:50000...", phase, nodeIP)
-	portCtx, cancel := context.WithTimeout(ctx, portWaitTimeout)
-	defer cancel()
-	if err := waitForPort(portCtx, nodeIP, 50000, portWaitTimeout, ctx.Timeouts.PortPoll, ctx.Timeouts.DialTimeout); err != nil {
-		// Port not reachable - node might be offline or failed
-		ctx.Logger.Printf("[%s] Node %s port 50000 not reachable, skipping", phase, nodeIP)
-		return false
-	}
-	ctx.Logger.Printf("[%s] Node %s port 50000 is reachable", phase, nodeIP)
-
-	// Try authenticated connection first
-	if len(ctx.State.TalosConfig) == 0 {
-		ctx.Logger.Printf("[%s] Warning: TalosConfig is empty, cannot check auth", phase)
-		return false
-	}
-
-	cfg, err := config.FromString(string(ctx.State.TalosConfig))
-	if err != nil {
-		ctx.Logger.Printf("[%s] Warning: Failed to parse TalosConfig: %v", phase, err)
-		return false
-	}
-
-	checkCtx, checkCancel := context.WithTimeout(ctx, 10*time.Second)
-	defer checkCancel()
-
-	authClient, err := client.New(checkCtx, client.WithConfig(cfg), client.WithEndpoints(nodeIP))
-	if err != nil {
-		ctx.Logger.Printf("[%s] Cannot create auth client for %s: %v - assuming maintenance mode", phase, nodeIP, err)
-		return true // Can't create auth client, assume maintenance mode
-	}
-	defer func() { _ = authClient.Close() }()
-
-	// Try to get version with authenticated client
-	_, err = authClient.Version(checkCtx)
-	if err == nil {
-		// Authenticated connection works, node is already configured
-		ctx.Logger.Printf("[%s] Node %s: authenticated connection succeeded - already configured", phase, nodeIP)
-		return false
-	}
-	ctx.Logger.Printf("[%s] Node %s: authenticated connection failed: %v - trying insecure", phase, nodeIP, err)
-
-	// Authenticated connection failed - could be maintenance mode or other issue
-	// Try insecure connection to confirm it's maintenance mode
-	insecureCtx, insecureCancel := context.WithTimeout(ctx, 10*time.Second)
-	defer insecureCancel()
-
-	insecureClient, err := client.New(insecureCtx,
-		client.WithEndpoints(nodeIP),
-		//nolint:gosec // InsecureSkipVerify is required to detect Talos maintenance mode
-		client.WithTLSConfig(&tls.Config{InsecureSkipVerify: true}),
-	)
-	if err != nil {
-		ctx.Logger.Printf("[%s] Cannot create insecure client for %s: %v", phase, nodeIP, err)
-		return false
-	}
-	defer func() { _ = insecureClient.Close() }()
-
-	_, err = insecureClient.Version(insecureCtx)
-	if err == nil {
-		// Insecure connection works but authenticated doesn't = maintenance mode
-		ctx.Logger.Printf("[%s] Node %s is in maintenance mode (insecure works, auth fails)", phase, nodeIP)
-		return true
-	}
-
-	// Check if the error indicates maintenance mode
-	// In Talos maintenance mode, the Version API returns "API is not implemented in maintenance mode"
-	// This actually confirms the node IS in maintenance mode!
-	errStr := err.Error()
-	if strings.Contains(errStr, "not implemented in maintenance mode") ||
-		strings.Contains(errStr, "maintenance mode") {
-		ctx.Logger.Printf("[%s] Node %s is in maintenance mode (detected via error message)", phase, nodeIP)
-		return true
-	}
-
-	ctx.Logger.Printf("[%s] Node %s: both auth and insecure failed: %v", phase, nodeIP, err)
-	return false
-}
-
 // applyControlPlaneConfigs applies machine configs to all control plane nodes.
+// In private-first mode, configs are applied sequentially via the Load Balancer.
 func (p *Provisioner) applyControlPlaneConfigs(ctx *provisioning.Context) error {
 	ctx.Logger.Printf("[%s] Applying machine configurations to control plane nodes...", phase)
+
+	if ctx.Config.IsPrivateFirst() {
+		ctx.Logger.Printf("[%s] Private-first mode: applying configs via Load Balancer", phase)
+		return p.applyControlPlaneConfigsViaLB(ctx)
+	}
+
 	for nodeName, nodeIP := range ctx.State.ControlPlaneIPs {
 		serverID := ctx.State.ControlPlaneServerIDs[nodeName]
 		machineConfig, err := ctx.Talos.GenerateControlPlaneConfig(ctx.State.SANs, nodeName, serverID)
@@ -297,9 +145,84 @@ func (p *Provisioner) applyControlPlaneConfigs(ctx *provisioning.Context) error 
 	return nil
 }
 
+// applyControlPlaneConfigsViaLB applies machine configs via the Load Balancer.
+// Each configured node reboots and exits maintenance mode, so the LB routes
+// subsequent requests to remaining maintenance-mode nodes.
+func (p *Provisioner) applyControlPlaneConfigsViaLB(ctx *provisioning.Context) error {
+	lbEndpoint := p.getLBEndpoint(ctx)
+	if lbEndpoint == "" {
+		return fmt.Errorf("private-first mode requires Load Balancer but none available")
+	}
+
+	ctx.Logger.Printf("[%s] Private-first mode: all Talos API communication via LB %s:50000", phase, lbEndpoint)
+
+	ctx.Logger.Printf("[%s] Waiting for LB to have healthy control plane targets...", phase)
+	if err := waitForPort(ctx, lbEndpoint, 50000, ctx.Timeouts.TalosAPI, ctx.Timeouts.PortPoll, ctx.Timeouts.DialTimeout); err != nil {
+		return fmt.Errorf("LB port 50000 not reachable: %w", err)
+	}
+
+	nodeCount := len(ctx.State.ControlPlaneIPs)
+	ctx.Logger.Printf("[%s] Applying configs to %d control plane nodes via LB...", phase, nodeCount)
+
+	configNum := 0
+	for nodeName := range ctx.State.ControlPlaneIPs {
+		configNum++
+		if err := p.applyOneConfigViaLB(ctx, lbEndpoint, nodeName, configNum, nodeCount); err != nil {
+			return err
+		}
+
+		// Wait for node to start rebooting before applying next config
+		if configNum < nodeCount {
+			ctx.Logger.Printf("[%s] Waiting for node to reboot before next config...", phase)
+			time.Sleep(10 * time.Second)
+		}
+	}
+
+	ctx.Logger.Printf("[%s] All %d control plane configs applied via LB", phase, nodeCount)
+	return nil
+}
+
+// applyOneConfigViaLB applies a single control plane config via the LB with retry logic.
+func (p *Provisioner) applyOneConfigViaLB(ctx *provisioning.Context, lbEndpoint, nodeName string, configNum, nodeCount int) error {
+	serverID := ctx.State.ControlPlaneServerIDs[nodeName]
+	machineConfig, err := ctx.Talos.GenerateControlPlaneConfig(ctx.State.SANs, nodeName, serverID)
+	if err != nil {
+		return fmt.Errorf("failed to generate config for %s: %w", nodeName, err)
+	}
+
+	ctx.Logger.Printf("[%s] Applying config %d/%d (for %s) via LB...", phase, configNum, nodeCount, nodeName)
+
+	maxRetries := 10
+	var applyErr error
+	for retry := 0; retry < maxRetries; retry++ {
+		applyErr = p.applyMachineConfig(ctx, lbEndpoint, machineConfig)
+		if applyErr == nil {
+			ctx.Logger.Printf("[%s] Config %d/%d applied successfully", phase, configNum, nodeCount)
+			return nil
+		}
+		// TLS errors indicate the node is already configured (requires mTLS)
+		errStr := applyErr.Error()
+		if strings.Contains(errStr, "certificate") ||
+			strings.Contains(errStr, "handshake") ||
+			strings.Contains(errStr, "tls") ||
+			strings.Contains(errStr, "authentication") {
+			ctx.Logger.Printf("[%s] LB hit configured node, retrying (%d/%d)...", phase, retry+1, maxRetries)
+			time.Sleep(3 * time.Second)
+			continue
+		}
+		break // Other errors fail immediately
+	}
+	return fmt.Errorf("failed to apply config for %s after %d retries: %w", nodeName, maxRetries, applyErr)
+}
+
 // waitForControlPlaneReady waits for all control plane nodes to reboot and become ready.
 func (p *Provisioner) waitForControlPlaneReady(ctx *provisioning.Context) error {
 	ctx.Logger.Printf("[%s] Waiting for nodes to reboot and become ready...", phase)
+
+	if ctx.Config.IsPrivateFirst() {
+		return p.waitForControlPlaneReadyViaLB(ctx)
+	}
+
 	for nodeName, nodeIP := range ctx.State.ControlPlaneIPs {
 		ctx.Logger.Printf("[%s] Waiting for node %s (%s) to be ready...", phase, nodeName, nodeIP)
 		if err := p.waitForNodeReady(ctx, nodeIP, ctx.State.TalosConfig, ctx.Logger); err != nil {
@@ -310,23 +233,78 @@ func (p *Provisioner) waitForControlPlaneReady(ctx *provisioning.Context) error 
 	return nil
 }
 
-// bootstrapEtcd initializes etcd on the first control plane node.
-func (p *Provisioner) bootstrapEtcd(ctx *provisioning.Context) error {
-	firstCPIP := p.getFirstControlPlaneIP(ctx)
+// waitForControlPlaneReadyViaLB waits for control plane nodes via the Load Balancer.
+func (p *Provisioner) waitForControlPlaneReadyViaLB(ctx *provisioning.Context) error {
+	lbEndpoint := p.getLBEndpoint(ctx)
+	if lbEndpoint == "" {
+		return fmt.Errorf("private-first mode requires Load Balancer but none available")
+	}
+
+	expectedNodes := len(ctx.State.ControlPlaneIPs)
+	ctx.Logger.Printf("[%s] Waiting for control plane to be ready via LB %s...", phase, lbEndpoint)
 
 	cfg, err := config.FromString(string(ctx.State.TalosConfig))
 	if err != nil {
 		return fmt.Errorf("failed to parse talos config: %w", err)
 	}
-	clientCtx, err := client.New(ctx, client.WithConfig(cfg), client.WithEndpoints(firstCPIP))
+
+	ctx.Logger.Printf("[%s] Waiting for LB port 50000 to be available...", phase)
+	if err := waitForPort(ctx, lbEndpoint, 50000, ctx.Timeouts.TalosAPI, ctx.Timeouts.PortPoll, ctx.Timeouts.DialTimeout); err != nil {
+		return fmt.Errorf("LB port 50000 not reachable after reboot: %w", err)
+	}
+
+	ticker := time.NewTicker(ctx.Timeouts.NodeReadyPoll)
+	defer ticker.Stop()
+	timeout := time.After(ctx.Timeouts.NodeReady * time.Duration(expectedNodes))
+
+	for {
+		select {
+		case <-timeout:
+			return fmt.Errorf("timeout waiting for control plane to be ready via LB")
+		case <-ticker.C:
+			clientCtx, err := client.New(ctx, client.WithConfig(cfg), client.WithEndpoints(lbEndpoint))
+			if err != nil {
+				ctx.Logger.Printf("[%s] Cannot create Talos client: %v", phase, err)
+				continue
+			}
+
+			_, err = clientCtx.Version(ctx)
+			_ = clientCtx.Close()
+
+			if err == nil {
+				ctx.Logger.Printf("[%s] Control plane ready via LB (authenticated connection succeeded)", phase)
+				return nil
+			}
+			ctx.Logger.Printf("[%s] Control plane not yet ready: %v", phase, err)
+		}
+	}
+}
+
+// bootstrapEtcd initializes etcd on a control plane node.
+func (p *Provisioner) bootstrapEtcd(ctx *provisioning.Context) error {
+	var endpoint string
+	if ctx.Config.IsPrivateFirst() {
+		endpoint = p.getLBEndpoint(ctx)
+		if endpoint == "" {
+			return fmt.Errorf("private-first mode requires Load Balancer but none available")
+		}
+	} else {
+		endpoint = p.getFirstControlPlaneIP(ctx)
+	}
+
+	cfg, err := config.FromString(string(ctx.State.TalosConfig))
+	if err != nil {
+		return fmt.Errorf("failed to parse talos config: %w", err)
+	}
+	clientCtx, err := client.New(ctx, client.WithConfig(cfg), client.WithEndpoints(endpoint))
 	if err != nil {
 		return fmt.Errorf("failed to create talos client: %w", err)
 	}
 	defer func() { _ = clientCtx.Close() }()
 
-	ctx.Logger.Printf("[%s] Bootstrapping etcd on first control plane node %s...", phase, firstCPIP)
+	ctx.Logger.Printf("[%s] Bootstrapping etcd via %s...", phase, endpoint)
 	if err := clientCtx.Bootstrap(ctx, &machine.BootstrapRequest{}); err != nil {
-		return fmt.Errorf("failed to bootstrap: %w", err)
+		return fmt.Errorf("failed to bootstrap etcd: %w", err)
 	}
 	return nil
 }
@@ -357,7 +335,18 @@ func (p *Provisioner) createStateMarker(ctx *provisioning.Context) error {
 // retrieveAndStoreKubeconfig retrieves the kubeconfig and stores it in state.
 func (p *Provisioner) retrieveAndStoreKubeconfig(ctx *provisioning.Context) error {
 	ctx.Logger.Printf("[%s] Retrieving kubeconfig...", phase)
-	kubeconfig, err := p.retrieveKubeconfig(ctx, ctx.State.ControlPlaneIPs, ctx.State.TalosConfig, ctx.Logger)
+
+	var endpoint string
+	if ctx.Config.IsPrivateFirst() {
+		endpoint = p.getLBEndpoint(ctx)
+		if endpoint == "" {
+			return fmt.Errorf("private-first mode requires Load Balancer but none available")
+		}
+	} else {
+		endpoint = p.getFirstControlPlaneIP(ctx)
+	}
+
+	kubeconfig, err := p.retrieveKubeconfigFromEndpoint(ctx, endpoint, ctx.State.TalosConfig, ctx.Logger)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve kubeconfig: %w", err)
 	}
@@ -371,172 +360,6 @@ func (p *Provisioner) getFirstControlPlaneIP(ctx *provisioning.Context) string {
 		return ip
 	}
 	return ""
-}
-
-// applyMachineConfig applies a machine configuration to a Talos node.
-func (p *Provisioner) applyMachineConfig(ctx *provisioning.Context, nodeIP string, machineConfig []byte) error {
-	// Wait for Talos API to be available
-	if err := waitForPort(ctx, nodeIP, 50000, ctx.Timeouts.TalosAPI, ctx.Timeouts.PortPoll, ctx.Timeouts.DialTimeout); err != nil {
-		return fmt.Errorf("failed to wait for Talos API: %w", err)
-	}
-
-	// Create insecure client for maintenance mode
-	// Fresh Talos nodes from snapshots boot into maintenance mode and don't have
-	// credentials yet, so we must use an insecure connection to apply the initial config.
-	clientCtx, err := client.New(ctx,
-		client.WithEndpoints(nodeIP),
-		//nolint:gosec // InsecureSkipVerify is required for Talos maintenance mode
-		client.WithTLSConfig(&tls.Config{InsecureSkipVerify: true}),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create talos client: %w", err)
-	}
-	defer func() { _ = clientCtx.Close() }()
-
-	// Apply the configuration
-	// Use REBOOT mode for pre-installed Talos (from Packer snapshots)
-	// This matches Terraform's behavior and avoids confusion with AUTO mode
-	// which might trigger installation logic on pre-installed systems
-	applyReq := &machine.ApplyConfigurationRequest{
-		Data: machineConfig,
-		Mode: machine.ApplyConfigurationRequest_REBOOT,
-	}
-
-	_, err = clientCtx.ApplyConfiguration(ctx, applyReq)
-	if err != nil {
-		return fmt.Errorf("failed to apply configuration: %w", err)
-	}
-
-	return nil
-}
-
-// waitForNodeReady waits for a node to reboot and become ready after applying configuration.
-func (p *Provisioner) waitForNodeReady(ctx *provisioning.Context, nodeIP string, clientConfigBytes []byte, logger provisioning.Logger) error {
-	// Parse client config
-	cfg, err := config.FromString(string(clientConfigBytes))
-	if err != nil {
-		return fmt.Errorf("failed to parse client config: %w", err)
-	}
-
-	// Wait for port to become unavailable (node rebooting)
-	logger.Printf("[%s] Waiting for node %s to begin reboot...", phase, nodeIP)
-	time.Sleep(defaultRebootInitialWait)
-
-	// Wait for port to come back up
-	logger.Printf("[%s] Waiting for node %s to come back online...", phase, nodeIP)
-	if err := waitForPort(ctx, nodeIP, 50000, ctx.Timeouts.TalosAPI, ctx.Timeouts.PortPoll, ctx.Timeouts.DialTimeout); err != nil {
-		return fmt.Errorf("failed to wait for node to come back: %w", err)
-	}
-
-	// Create authenticated client
-	// Use config from talosconfig which includes client certificates for mTLS
-	clientCtx, err := client.New(ctx,
-		client.WithConfig(cfg),
-		client.WithEndpoints(nodeIP),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create talos client: %w", err)
-	}
-	defer func() { _ = clientCtx.Close() }()
-
-	// Wait for node to report ready status
-	ticker := time.NewTicker(ctx.Timeouts.NodeReadyPoll)
-	defer ticker.Stop()
-
-	timeout := time.After(ctx.Timeouts.NodeReady)
-
-	for {
-		select {
-		case <-timeout:
-			return fmt.Errorf("timeout waiting for node to be ready")
-		case <-ticker.C:
-			// Try to get version - if this succeeds, node is ready
-			_, err := clientCtx.Version(ctx)
-			if err == nil {
-				return nil
-			}
-			logger.Printf("[%s] Node %s not yet ready, waiting... (error: %v)", phase, nodeIP, err)
-		}
-	}
-}
-
-// retrieveKubeconfig retrieves the kubeconfig from the cluster after bootstrap.
-func (p *Provisioner) retrieveKubeconfig(ctx *provisioning.Context, controlPlaneNodes map[string]string, clientConfigBytes []byte, logger provisioning.Logger) ([]byte, error) {
-	// Parse client config
-	cfg, err := config.FromString(string(clientConfigBytes))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse client config: %w", err)
-	}
-
-	// Get first control plane IP
-	var firstCPIP string
-	for _, ip := range controlPlaneNodes {
-		firstCPIP = ip
-		break
-	}
-
-	// Create Talos Client
-	clientCtx, err := client.New(ctx, client.WithConfig(cfg), client.WithEndpoints(firstCPIP))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create talos client: %w", err)
-	}
-	defer func() { _ = clientCtx.Close() }()
-
-	// Wait for Kubernetes API to be ready
-	logger.Printf("[%s] Waiting for Kubernetes API to become ready...", phase)
-	ticker := time.NewTicker(ctx.Timeouts.NodeReadyPoll)
-	defer ticker.Stop()
-
-	timeout := time.After(ctx.Timeouts.Kubeconfig)
-
-	for {
-		select {
-		case <-timeout:
-			return nil, fmt.Errorf("timeout waiting for Kubernetes API to be ready")
-		case <-ticker.C:
-			// Try to retrieve kubeconfig - if this succeeds, API is ready
-			kubeconfigBytes, err := clientCtx.Kubeconfig(ctx)
-			if err == nil && len(kubeconfigBytes) > 0 {
-				logger.Printf("[%s] Kubernetes API is ready!", phase)
-				return kubeconfigBytes, nil
-			}
-			logger.Printf("[%s] Kubernetes API not yet ready, waiting... (error: %v)", phase, err)
-		}
-	}
-}
-
-// generateDummyCert generates a dummy self-signed certificate for the state marker.
-func generateDummyCert() (string, string, error) {
-	priv, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return "", "", err
-	}
-
-	template := x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject: pkix.Name{
-			Organization: []string{"HCloud K8s State Marker"},
-		},
-		NotBefore: time.Now(),
-		NotAfter:  time.Now().Add(365 * 24 * time.Hour * 10), // 10 years
-		KeyUsage:  x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage: []x509.ExtKeyUsage{
-			x509.ExtKeyUsageServerAuth,
-		},
-		BasicConstraintsValid: true,
-	}
-
-	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
-	if err != nil {
-		return "", "", err
-	}
-
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
-
-	privBytes := x509.MarshalPKCS1PrivateKey(priv)
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: privBytes})
-
-	return string(certPEM), string(keyPEM), nil
 }
 
 // ApplyWorkerConfigs applies Talos machine configurations to worker nodes.
@@ -561,7 +384,6 @@ func (p *Provisioner) ApplyWorkerConfigs(ctx *provisioning.Context) error {
 		}
 	}
 
-	// Wait for all worker nodes to reboot and become ready
 	ctx.Logger.Printf("[%s] Waiting for worker nodes to reboot and become ready...", phase)
 	for nodeName, nodeIP := range workerNodes {
 		ctx.Logger.Printf("[%s] Waiting for worker node %s (%s) to be ready...", phase, nodeName, nodeIP)

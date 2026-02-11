@@ -13,6 +13,7 @@ import (
 
 // TestGetChartSpec verifies GetChartSpec returns correct defaults.
 func TestGetChartSpec(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		addon    string
@@ -99,6 +100,7 @@ func TestGetChartSpec(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			spec := GetChartSpec(tt.addon, tt.helmCfg)
 
 			if spec.Repository != tt.wantRepo {
@@ -116,6 +118,7 @@ func TestGetChartSpec(t *testing.T) {
 
 // TestDefaultChartSpecsComplete verifies all expected addons have specs defined.
 func TestDefaultChartSpecsComplete(t *testing.T) {
+	t.Parallel()
 	expectedAddons := []string{
 		"hcloud-ccm",
 		"hcloud-csi",
@@ -130,6 +133,7 @@ func TestDefaultChartSpecsComplete(t *testing.T) {
 
 	for _, addon := range expectedAddons {
 		t.Run(addon, func(t *testing.T) {
+			t.Parallel()
 			spec, ok := DefaultChartSpecs[addon]
 			if !ok {
 				t.Fatalf("DefaultChartSpecs missing entry for %s", addon)
@@ -149,15 +153,16 @@ func TestDefaultChartSpecsComplete(t *testing.T) {
 
 // TestGetCachePath verifies cache path is returned correctly.
 func TestGetCachePath(t *testing.T) {
-	cachePath := GetCachePath()
+	t.Parallel()
+	cachePath := getCachePath()
 
 	if cachePath == "" {
-		t.Error("GetCachePath returned empty string")
+		t.Error("getCachePath returned empty string")
 	}
 
 	// Path should contain k8zner/charts
 	if !strings.Contains(cachePath, "k8zner") || !strings.Contains(cachePath, "charts") {
-		t.Errorf("GetCachePath = %q, should contain 'k8zner' and 'charts'", cachePath)
+		t.Errorf("getCachePath = %q, should contain 'k8zner' and 'charts'", cachePath)
 	}
 }
 
@@ -165,19 +170,14 @@ func TestGetCachePath(t *testing.T) {
 func TestGetCachePath_WithXDGEnv(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", "/tmp/test-cache")
 
-	cachePath := GetCachePath()
+	cachePath := getCachePath()
 	assert.Equal(t, "/tmp/test-cache/k8zner/charts", cachePath)
-}
-
-// TestClearMemoryCache verifies memory cache can be cleared.
-func TestClearMemoryCache(t *testing.T) {
-	// This should not panic
-	ClearMemoryCache()
 }
 
 // Renderer tests
 
 func TestNewRenderer(t *testing.T) {
+	t.Parallel()
 	r := NewRenderer("my-chart", "my-namespace")
 
 	require.NotNil(t, r)
@@ -186,6 +186,7 @@ func TestNewRenderer(t *testing.T) {
 }
 
 func TestNewRenderer_EmptyValues(t *testing.T) {
+	t.Parallel()
 	r := NewRenderer("", "")
 
 	require.NotNil(t, r)
@@ -194,6 +195,7 @@ func TestNewRenderer_EmptyValues(t *testing.T) {
 }
 
 func TestRenderChart_MinimalChart(t *testing.T) {
+	t.Parallel()
 	r := NewRenderer("test-chart", "test-namespace")
 
 	ch := &chart.Chart{
@@ -229,6 +231,7 @@ data:
 }
 
 func TestRenderChart_WithChartDefaults(t *testing.T) {
+	t.Parallel()
 	r := NewRenderer("test-chart", "default")
 
 	ch := &chart.Chart{
@@ -262,6 +265,7 @@ imagePullPolicy: {{ .Values.imagePullPolicy }}
 }
 
 func TestRenderChart_SkipsNotesFile(t *testing.T) {
+	t.Parallel()
 	r := NewRenderer("test-chart", "default")
 
 	ch := &chart.Chart{
@@ -294,6 +298,7 @@ metadata:
 }
 
 func TestRenderChart_SkipsEmptyTemplates(t *testing.T) {
+	t.Parallel()
 	r := NewRenderer("test-chart", "default")
 
 	ch := &chart.Chart{
@@ -332,6 +337,7 @@ kind: Secret
 }
 
 func TestRenderChart_MultipleDocuments(t *testing.T) {
+	t.Parallel()
 	r := NewRenderer("test-chart", "default")
 
 	ch := &chart.Chart{
@@ -368,7 +374,132 @@ metadata:
 	assert.Contains(t, output, "---")
 }
 
+func TestRenderChart_InvalidTemplate(t *testing.T) {
+	t.Parallel()
+	ch := &chart.Chart{
+		Metadata: &chart.Metadata{
+			Name:    "test-chart",
+			Version: "1.0.0",
+		},
+		Templates: []*chart.File{
+			{
+				Name: "templates/bad.yaml",
+				Data: []byte("{{ .Values.nonexistent.deep.path }}"),
+			},
+		},
+	}
+
+	r := &Renderer{chartName: "test", namespace: "default"}
+	_, err := r.renderChart(ch, Values{})
+	// With Strict=false, this might not error but produce empty output
+	// So we just verify it doesn't panic
+	_ = err
+}
+
+func TestRenderChart_SchemaValidationError(t *testing.T) {
+	t.Parallel()
+	// A chart with a JSON schema that rejects the provided values
+	// triggers the ToRenderValues error branch
+	ch := &chart.Chart{
+		Metadata: &chart.Metadata{
+			Name:    "test-chart",
+			Version: "1.0.0",
+		},
+		Schema: []byte(`{
+			"$schema": "http://json-schema.org/draft-07/schema#",
+			"type": "object",
+			"required": ["requiredField"],
+			"properties": {
+				"requiredField": {
+					"type": "string"
+				}
+			}
+		}`),
+		Templates: []*chart.File{
+			{
+				Name: "templates/configmap.yaml",
+				Data: []byte(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test
+`),
+			},
+		},
+	}
+
+	r := &Renderer{chartName: "test", namespace: "default"}
+	// Provide values that don't include the required field
+	_, err := r.renderChart(ch, Values{"other": "value"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to prepare values")
+}
+
+func TestRenderChart_StrictModeRenderError(t *testing.T) {
+	t.Parallel()
+	// Use engine.Render with a template that calls a non-existent function
+	// to trigger the render error branch
+	ch := &chart.Chart{
+		Metadata: &chart.Metadata{
+			Name:    "test-chart",
+			Version: "1.0.0",
+		},
+		Templates: []*chart.File{
+			{
+				Name: "templates/bad.yaml",
+				Data: []byte("{{ .Values.name | nonExistentFunction }}"),
+			},
+		},
+	}
+
+	r := &Renderer{chartName: "test", namespace: "default"}
+	_, err := r.renderChart(ch, Values{"name": "test"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to render templates")
+}
+
+func TestRenderChart_EmptyChart(t *testing.T) {
+	t.Parallel()
+	ch := &chart.Chart{
+		Metadata: &chart.Metadata{
+			Name:    "test-chart",
+			Version: "1.0.0",
+		},
+		Templates: []*chart.File{},
+	}
+
+	r := &Renderer{chartName: "test", namespace: "default"}
+	result, err := r.renderChart(ch, Values{})
+	require.NoError(t, err)
+	assert.Empty(t, result)
+}
+
+func TestRenderChart_NilValues(t *testing.T) {
+	t.Parallel()
+	ch := &chart.Chart{
+		Metadata: &chart.Metadata{
+			Name:    "test-chart",
+			Version: "1.0.0",
+		},
+		Templates: []*chart.File{
+			{
+				Name: "templates/configmap.yaml",
+				Data: []byte(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}
+`),
+			},
+		},
+	}
+
+	r := &Renderer{chartName: "test", namespace: "default"}
+	result, err := r.renderChart(ch, nil)
+	require.NoError(t, err)
+	assert.Contains(t, string(result), "name: test")
+}
+
 func TestRenderChart_DeepMergesValues(t *testing.T) {
+	t.Parallel()
 	r := NewRenderer("test-chart", "default")
 
 	ch := &chart.Chart{

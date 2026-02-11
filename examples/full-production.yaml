@@ -1,0 +1,33 @@
+# Full production cluster with all features enabled.
+# Cost: ~180 EUR/month (3 CP + 5 workers + 2 LBs)
+#
+# Features:
+#   - HA control plane (3 nodes) with larger server size
+#   - 5 workers with dedicated vCPU for heavy workloads
+#   - Automatic TLS via Cloudflare DNS-01
+#   - kube-prometheus-stack (Prometheus, Grafana, Alertmanager)
+#   - Hourly etcd backups to Hetzner Object Storage
+#   - ArgoCD at argocd.example.com
+#   - Grafana at metrics.example.com
+#
+# Usage:
+#   export HCLOUD_TOKEN="your-token"
+#   export CF_API_TOKEN="your-cloudflare-token"
+#   export HETZNER_S3_ACCESS_KEY="your-s3-access-key"
+#   export HETZNER_S3_SECRET_KEY="your-s3-secret-key"
+#   k8zner apply -c examples/full-production.yaml
+
+name: large-prod
+region: fsn1
+mode: ha
+workers:
+  count: 5
+  size: cx53
+control_plane:
+  size: cx43
+domain: example.com
+cert_email: ops@example.com
+argo_subdomain: argocd
+monitoring: true
+grafana_subdomain: metrics
+backup: true

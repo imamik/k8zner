@@ -21,21 +21,7 @@ func applyCertManager(ctx context.Context, client k8sclient.Client, cfg *config.
 	// Build values matching terraform configuration
 	values := buildCertManagerValues(cfg)
 
-	// Get chart spec with any config overrides
-	spec := helm.GetChartSpec("cert-manager", cfg.Addons.CertManager.Helm)
-
-	// Render helm chart
-	manifestBytes, err := helm.RenderFromSpec(ctx, spec, "cert-manager", values)
-	if err != nil {
-		return fmt.Errorf("failed to render cert-manager chart: %w", err)
-	}
-
-	// Apply manifests
-	if err := applyManifests(ctx, client, "cert-manager", manifestBytes); err != nil {
-		return fmt.Errorf("failed to apply cert-manager manifests: %w", err)
-	}
-
-	return nil
+	return installHelmAddon(ctx, client, "cert-manager", "cert-manager", cfg.Addons.CertManager.Helm, values)
 }
 
 // buildCertManagerValues creates helm values matching terraform configuration.
@@ -95,19 +81,14 @@ func buildCertManagerBaseConfig(replicas int) helm.Values {
 			"minAvailable":   nil,
 			"maxUnavailable": 1,
 		},
-		"nodeSelector": helm.Values{
-			"node-role.kubernetes.io/control-plane": "",
-		},
+		"nodeSelector": helm.ControlPlaneNodeSelector(),
 		"tolerations": []helm.Values{
 			{
 				"key":      "node-role.kubernetes.io/control-plane",
 				"effect":   "NoSchedule",
 				"operator": "Exists",
 			},
-			{
-				"key":      "node.cloudprovider.kubernetes.io/uninitialized",
-				"operator": "Exists",
-			},
+			helm.CCMUninitializedToleration(),
 		},
 	}
 }
@@ -142,9 +123,5 @@ func buildCertManagerConfig(cfg *config.Config) helm.Values {
 
 // createCertManagerNamespace returns the cert-manager namespace manifest.
 func createCertManagerNamespace() string {
-	return `apiVersion: v1
-kind: Namespace
-metadata:
-  name: cert-manager
-`
+	return helm.NamespaceManifest("cert-manager", nil)
 }

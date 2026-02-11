@@ -60,18 +60,20 @@
 //	client := hcloud.NewClient(token)
 //
 //	// Create a server with automatic retry
-//	serverID, err := client.CreateServer(ctx,
-//	    "my-server",           // name
-//	    "talos",              // image
-//	    "cpx31",              // server type
-//	    "nbg1",               // location
-//	    []string{"my-key"},   // SSH keys
-//	    map[string]string{"role": "control-plane"}, // labels
-//	    "#!/bin/bash\necho hello", // user data
-//	    &placementGroupID,    // placement group
-//	    networkID,            // network
-//	    "10.0.0.2",          // private IP
-//	)
+//	serverID, err := client.CreateServer(ctx, ServerCreateOpts{
+//	    Name:             "my-server",
+//	    ImageType:        "talos",
+//	    ServerType:       "cpx31",
+//	    Location:         "nbg1",
+//	    SSHKeys:          []string{"my-key"},
+//	    Labels:           map[string]string{"role": "control-plane"},
+//	    UserData:         "#!/bin/bash\necho hello",
+//	    PlacementGroupID: &placementGroupID,
+//	    NetworkID:        networkID,
+//	    PrivateIP:        "10.0.0.2",
+//	    EnablePublicIPv4: true,
+//	    EnablePublicIPv6: true,
+//	})
 //
 //	// Operations automatically handle retries for transient failures
 //	// and return fatal errors immediately for permanent failures

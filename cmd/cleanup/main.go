@@ -31,10 +31,12 @@ import (
 
 type labelFlags []string
 
+// String returns the comma-separated label flags.
 func (lf *labelFlags) String() string {
 	return strings.Join(*lf, ",")
 }
 
+// Set appends a label flag value.
 func (lf *labelFlags) Set(value string) error {
 	*lf = append(*lf, value)
 	return nil

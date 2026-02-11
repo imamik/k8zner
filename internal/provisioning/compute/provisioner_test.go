@@ -94,11 +94,13 @@ func createTestContext(t *testing.T, mockInfra *hcloud_internal.MockClient, cfg 
 }
 
 func TestProvisioner_Name(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner()
 	assert.Equal(t, "compute", p.Name())
 }
 
 func TestProvisioner_Provision_EmptyConfig(t *testing.T) {
+	t.Parallel()
 	mockInfra := &hcloud_internal.MockClient{}
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
@@ -126,6 +128,7 @@ func TestProvisioner_Provision_EmptyConfig(t *testing.T) {
 }
 
 func TestProvisionControlPlane_SingleNode(t *testing.T) {
+	t.Parallel()
 	mockInfra := &hcloud_internal.MockClient{}
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
@@ -180,18 +183,18 @@ func TestProvisionControlPlane_SingleNode(t *testing.T) {
 	}
 
 	serverCreated := false
-	mockInfra.CreateServerFunc = func(_ context.Context, name, _, serverType, location string, _ []string, labels map[string]string, _ string, pgID *int64, _ int64, privateIP string, _, _ bool) (string, error) {
+	mockInfra.CreateServerFunc = func(_ context.Context, opts hcloud_internal.ServerCreateOpts) (string, error) {
 		serverCreated = true
-		assert.Contains(t, name, "test-cluster")
-		assert.Contains(t, name, "control-plane")
-		assert.Equal(t, "cx21", serverType)
-		assert.Equal(t, "nbg1", location)
-		assert.NotNil(t, pgID)
-		assert.NotEmpty(t, privateIP)
-		assert.Equal(t, "control-plane", labels["role"])
+		assert.Contains(t, opts.Name, "test-cluster")
+		assert.Contains(t, opts.Name, "-cp-") // New naming: cluster-cp-1
+		assert.Equal(t, "cx21", opts.ServerType)
+		assert.Equal(t, "nbg1", opts.Location)
+		assert.NotNil(t, opts.PlacementGroupID)
+		assert.NotEmpty(t, opts.PrivateIP)
+		assert.Equal(t, "control-plane", opts.Labels["role"])
 		// Store the server ID for later lookup
 		serverMu.Lock()
-		createdServerIDs[name] = "12345"
+		createdServerIDs[opts.Name] = "12345"
 		serverMu.Unlock()
 		return "12345", nil
 	}
@@ -214,6 +217,7 @@ func TestProvisionControlPlane_SingleNode(t *testing.T) {
 }
 
 func TestProvisionWorkers_MultipleNodes(t *testing.T) {
+	t.Parallel()
 	mockInfra := &hcloud_internal.MockClient{}
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
@@ -249,15 +253,15 @@ func TestProvisionWorkers_MultipleNodes(t *testing.T) {
 	}
 
 	createdServers := make(map[string]bool)
-	mockInfra.CreateServerFunc = func(_ context.Context, name, _, serverType, _ string, _ []string, labels map[string]string, _ string, _ *int64, _ int64, _ string, _, _ bool) (string, error) {
+	mockInfra.CreateServerFunc = func(_ context.Context, opts hcloud_internal.ServerCreateOpts) (string, error) {
 		mu.Lock()
 		serverCounter++
 		idStr := fmt.Sprintf("%d", serverCounter)
-		createdServerIDs[name] = idStr
-		createdServers[name] = true
+		createdServerIDs[opts.Name] = idStr
+		createdServers[opts.Name] = true
 		mu.Unlock()
-		assert.Equal(t, "cx31", serverType)
-		assert.Equal(t, "worker", labels["role"])
+		assert.Equal(t, "cx31", opts.ServerType)
+		assert.Equal(t, "worker", opts.Labels["role"])
 		return idStr, nil
 	}
 
@@ -277,7 +281,365 @@ func TestProvisionWorkers_MultipleNodes(t *testing.T) {
 	assert.Len(t, createdServers, 2, "two worker servers should have been created")
 }
 
+// TestProvision_WithBothCPAndWorkers exercises provisionAllServers via Provision()
+// which creates both CP and worker servers in parallel. This covers the 11.8% provisionAllServers path.
+func TestProvision_WithBothCPAndWorkers(t *testing.T) {
+	t.Parallel()
+	mockInfra := &hcloud_internal.MockClient{}
+	cfg := &config.Config{
+		ClusterName: "test-cluster",
+		Location:    "nbg1",
+		Network: config.NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+			Zone:     "eu-central",
+		},
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{
+				{
+					Name:       "control-plane",
+					ServerType: "cx21",
+					Count:      1,
+					Location:   "nbg1",
+				},
+			},
+		},
+		Workers: []config.WorkerNodePool{
+			{
+				Name:       "worker-pool",
+				ServerType: "cx31",
+				Count:      2,
+				Location:   "nbg1",
+			},
+		},
+	}
+	require.NoError(t, cfg.CalculateSubnets())
+
+	// Mock GetLoadBalancer for prepareControlPlaneEndpoint
+	mockInfra.GetLoadBalancerFunc = func(_ context.Context, _ string) (*hcloud.LoadBalancer, error) {
+		return &hcloud.LoadBalancer{
+			ID: 1,
+			PublicNet: hcloud.LoadBalancerPublicNet{
+				IPv4: hcloud.LoadBalancerPublicNetIPv4{
+					IP: net.ParseIP("5.6.7.8"),
+				},
+			},
+		}, nil
+	}
+
+	// Mock EnsurePlacementGroup for CP pools
+	mockInfra.EnsurePlacementGroupFunc = func(_ context.Context, _, _ string, _ map[string]string) (*hcloud.PlacementGroup, error) {
+		return &hcloud.PlacementGroup{ID: 1}, nil
+	}
+
+	// Track servers
+	createdServerIDs := make(map[string]string)
+	var mu sync.Mutex
+	serverCounter := int64(1000)
+
+	mockInfra.GetServerIDFunc = func(_ context.Context, name string) (string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		return createdServerIDs[name], nil
+	}
+
+	mockInfra.CreateServerFunc = func(_ context.Context, opts hcloud_internal.ServerCreateOpts) (string, error) {
+		mu.Lock()
+		serverCounter++
+		idStr := fmt.Sprintf("%d", serverCounter)
+		createdServerIDs[opts.Name] = idStr
+		mu.Unlock()
+		return idStr, nil
+	}
+
+	mockInfra.GetServerIPFunc = func(_ context.Context, _ string) (string, error) {
+		return "10.0.1.1", nil
+	}
+
+	mockInfra.GetSnapshotByLabelsFunc = func(_ context.Context, _ map[string]string) (*hcloud.Image, error) {
+		return &hcloud.Image{ID: 456}, nil
+	}
+
+	// CreateSSHKey and DeleteSSHKey for ephemeral key
+	sshKeyCreated := false
+	sshKeyDeleted := false
+	mockInfra.CreateSSHKeyFunc = func(_ context.Context, _, _ string, _ map[string]string) (string, error) {
+		sshKeyCreated = true
+		return "ssh-key-1", nil
+	}
+	mockInfra.DeleteSSHKeyFunc = func(_ context.Context, _ string) error {
+		sshKeyDeleted = true
+		return nil
+	}
+
+	ctx := createTestContext(t, mockInfra, cfg)
+	p := NewProvisioner()
+
+	err := p.Provision(ctx)
+	assert.NoError(t, err)
+	assert.True(t, sshKeyCreated, "SSH key should have been created")
+	assert.True(t, sshKeyDeleted, "SSH key should have been deleted")
+	assert.NotEmpty(t, ctx.State.ControlPlaneIPs, "control plane IPs should be populated")
+	assert.NotEmpty(t, ctx.State.WorkerIPs, "worker IPs should be populated")
+	// 1 CP + 2 workers = 3 total servers
+	assert.Len(t, ctx.State.ControlPlaneIPs, 1, "should have 1 control plane IP")
+	assert.Len(t, ctx.State.WorkerIPs, 2, "should have 2 worker IPs")
+}
+
+// TestProvision_CreateSSHKeyFailure tests Provision() when CreateSSHKey fails.
+func TestProvision_CreateSSHKeyFailure(t *testing.T) {
+	t.Parallel()
+	mockInfra := &hcloud_internal.MockClient{}
+	cfg := &config.Config{
+		ClusterName: "test-cluster",
+		Location:    "nbg1",
+		Network: config.NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+			Zone:     "eu-central",
+		},
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{
+				{Name: "cp", ServerType: "cx21", Count: 1, Location: "nbg1"},
+			},
+		},
+	}
+	require.NoError(t, cfg.CalculateSubnets())
+
+	mockInfra.CreateSSHKeyFunc = func(_ context.Context, _, _ string, _ map[string]string) (string, error) {
+		return "", fmt.Errorf("SSH key quota exceeded")
+	}
+
+	ctx := createTestContext(t, mockInfra, cfg)
+	p := NewProvisioner()
+
+	err := p.Provision(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create ephemeral SSH key")
+}
+
+// TestProvision_GetLoadBalancerFailure tests Provision() when GetLoadBalancer fails.
+func TestProvision_GetLoadBalancerFailure(t *testing.T) {
+	t.Parallel()
+	mockInfra := &hcloud_internal.MockClient{}
+	cfg := &config.Config{
+		ClusterName: "test-cluster",
+		Location:    "nbg1",
+		Network: config.NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+			Zone:     "eu-central",
+		},
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{
+				{Name: "cp", ServerType: "cx21", Count: 1, Location: "nbg1"},
+			},
+		},
+	}
+	require.NoError(t, cfg.CalculateSubnets())
+
+	sshKeyDeleted := false
+	mockInfra.CreateSSHKeyFunc = func(_ context.Context, _, _ string, _ map[string]string) (string, error) {
+		return "key-1", nil
+	}
+	mockInfra.DeleteSSHKeyFunc = func(_ context.Context, _ string) error {
+		sshKeyDeleted = true
+		return nil
+	}
+	mockInfra.GetLoadBalancerFunc = func(_ context.Context, _ string) (*hcloud.LoadBalancer, error) {
+		return nil, fmt.Errorf("API connection timeout")
+	}
+
+	ctx := createTestContext(t, mockInfra, cfg)
+	p := NewProvisioner()
+
+	err := p.Provision(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get load balancer")
+	// SSH key should still be cleaned up even on error
+	assert.True(t, sshKeyDeleted, "SSH key should be cleaned up on error")
+}
+
+// TestProvision_EnsurePlacementGroupFailure tests Provision() when EnsurePlacementGroup fails.
+func TestProvision_EnsurePlacementGroupFailure(t *testing.T) {
+	t.Parallel()
+	mockInfra := &hcloud_internal.MockClient{}
+	cfg := &config.Config{
+		ClusterName: "test-cluster",
+		Location:    "nbg1",
+		Network: config.NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+			Zone:     "eu-central",
+		},
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{
+				{Name: "cp", ServerType: "cx21", Count: 1, Location: "nbg1"},
+			},
+		},
+	}
+	require.NoError(t, cfg.CalculateSubnets())
+
+	mockInfra.CreateSSHKeyFunc = func(_ context.Context, _, _ string, _ map[string]string) (string, error) {
+		return "key-1", nil
+	}
+	mockInfra.DeleteSSHKeyFunc = func(_ context.Context, _ string) error {
+		return nil
+	}
+	mockInfra.GetLoadBalancerFunc = func(_ context.Context, _ string) (*hcloud.LoadBalancer, error) {
+		return nil, nil // No LB
+	}
+	mockInfra.EnsurePlacementGroupFunc = func(_ context.Context, _, _ string, _ map[string]string) (*hcloud.PlacementGroup, error) {
+		return nil, fmt.Errorf("placement group API unavailable")
+	}
+
+	ctx := createTestContext(t, mockInfra, cfg)
+	p := NewProvisioner()
+
+	err := p.Provision(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to provision servers")
+}
+
+// TestProvision_DeleteSSHKeyFailure tests that SSH key cleanup failure is logged but doesn't block.
+func TestProvision_DeleteSSHKeyFailure(t *testing.T) {
+	t.Parallel()
+	mockInfra := &hcloud_internal.MockClient{}
+	cfg := &config.Config{
+		ClusterName: "test-cluster",
+		Location:    "nbg1",
+		Network: config.NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+			Zone:     "eu-central",
+		},
+		ControlPlane: config.ControlPlaneConfig{
+			NodePools: []config.ControlPlaneNodePool{},
+		},
+		Workers: []config.WorkerNodePool{},
+	}
+
+	mockInfra.CreateSSHKeyFunc = func(_ context.Context, _, _ string, _ map[string]string) (string, error) {
+		return "key-1", nil
+	}
+	mockInfra.DeleteSSHKeyFunc = func(_ context.Context, _ string) error {
+		return fmt.Errorf("delete SSH key failed")
+	}
+	mockInfra.GetLoadBalancerFunc = func(_ context.Context, _ string) (*hcloud.LoadBalancer, error) {
+		return nil, nil
+	}
+
+	ctx := createTestContext(t, mockInfra, cfg)
+	p := NewProvisioner()
+
+	// Provision with empty config should succeed even if SSH key delete fails
+	// (delete failure is only logged)
+	err := p.Provision(ctx)
+	assert.NoError(t, err)
+}
+
+// TestApplyServerRDNSSimple_InvalidTemplate tests RDNS with an invalid template
+func TestApplyServerRDNSSimple_InvalidTemplate(t *testing.T) {
+	t.Parallel()
+	mockInfra := &hcloud_internal.MockClient{}
+	cfg := testConfigWithSubnets(t)
+
+	ctx := createTestContext(t, mockInfra, cfg)
+	p := NewProvisioner()
+
+	// Use a template with an unresolved variable
+	err := p.applyServerRDNSSimple(ctx, 42, "my-server", "10.0.0.1",
+		"{{ unknown-var }}.example.com", "", "control-plane", "cp-pool")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to render IPv4 RDNS template")
+}
+
+// TestApplyServerRDNSSimple_SetServerRDNSFailure tests RDNS when SetServerRDNS fails (triggers retry).
+func TestApplyServerRDNSSimple_SetServerRDNSFailure(t *testing.T) {
+	t.Parallel()
+	mockInfra := &hcloud_internal.MockClient{}
+	cfg := testConfigWithSubnets(t)
+
+	callCount := 0
+	mockInfra.SetServerRDNSFunc = func(_ context.Context, _ int64, _, _ string) error {
+		callCount++
+		return fmt.Errorf("RDNS API error")
+	}
+
+	ctx := createTestContext(t, mockInfra, cfg)
+	p := NewProvisioner()
+
+	// Use a valid template
+	err := p.applyServerRDNSSimple(ctx, 42, "my-server", "10.0.0.1",
+		"{{ hostname }}.example.com", "", "control-plane", "cp-pool")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to set IPv4 RDNS")
+	// retryRDNS retries 3 times
+	assert.Equal(t, 3, callCount, "should have retried 3 times")
+}
+
+// TestApplyServerRDNSSimple_EmptyIPv4 tests that RDNS is skipped when IPv4 is empty.
+func TestApplyServerRDNSSimple_EmptyIPv4(t *testing.T) {
+	t.Parallel()
+	mockInfra := &hcloud_internal.MockClient{}
+	cfg := testConfigWithSubnets(t)
+
+	mockInfra.SetServerRDNSFunc = func(_ context.Context, _ int64, _, _ string) error {
+		t.Fatal("SetServerRDNS should not be called when IP is empty")
+		return nil
+	}
+
+	ctx := createTestContext(t, mockInfra, cfg)
+	p := NewProvisioner()
+
+	// RDNS template set but IP is empty - should be skipped
+	err := p.applyServerRDNSSimple(ctx, 42, "my-server", "",
+		"{{ hostname }}.example.com", "", "control-plane", "cp-pool")
+
+	require.NoError(t, err)
+}
+
+// TestApplyServerRDNSSimple_IPv6OnlyConfig tests that IPv6 RDNS is logged but not applied.
+func TestApplyServerRDNSSimple_IPv6OnlyConfig(t *testing.T) {
+	t.Parallel()
+	mockInfra := &hcloud_internal.MockClient{}
+	cfg := testConfigWithSubnets(t)
+
+	ctx := createTestContext(t, mockInfra, cfg)
+	p := NewProvisioner()
+
+	// Only IPv6 template, no IPv4 template
+	err := p.applyServerRDNSSimple(ctx, 42, "my-server", "10.0.0.1",
+		"", "{{ hostname }}.v6.example.com", "control-plane", "cp-pool")
+
+	// Should succeed - IPv6 is logged but not applied
+	require.NoError(t, err)
+}
+
+// TestApplyServerRDNSSimple_SuccessfulApply tests successful RDNS application.
+func TestApplyServerRDNSSimple_SuccessfulApply(t *testing.T) {
+	t.Parallel()
+	mockInfra := &hcloud_internal.MockClient{}
+	cfg := testConfigWithSubnets(t)
+
+	var capturedDNSPtr string
+	var capturedIP string
+	mockInfra.SetServerRDNSFunc = func(_ context.Context, _ int64, ipAddress, dnsPtr string) error {
+		capturedIP = ipAddress
+		capturedDNSPtr = dnsPtr
+		return nil
+	}
+
+	ctx := createTestContext(t, mockInfra, cfg)
+	p := NewProvisioner()
+
+	err := p.applyServerRDNSSimple(ctx, 42, "my-server", "10.0.0.1",
+		"{{ hostname }}.example.com", "", "control-plane", "cp-pool")
+
+	require.NoError(t, err)
+	assert.Equal(t, "10.0.0.1", capturedIP)
+	assert.Equal(t, "my-server.example.com", capturedDNSPtr)
+}
+
 func TestProvisionControlPlane_ExistingServer(t *testing.T) {
+	t.Parallel()
 	mockInfra := &hcloud_internal.MockClient{}
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
@@ -318,7 +680,7 @@ func TestProvisionControlPlane_ExistingServer(t *testing.T) {
 	}
 
 	// CreateServer should NOT be called since server exists
-	mockInfra.CreateServerFunc = func(_ context.Context, _, _, _, _ string, _ []string, _ map[string]string, _ string, _ *int64, _ int64, _ string, _, _ bool) (string, error) {
+	mockInfra.CreateServerFunc = func(_ context.Context, _ hcloud_internal.ServerCreateOpts) (string, error) {
 		t.Fatal("CreateServer should not be called for existing server")
 		return "", nil
 	}

@@ -10,6 +10,7 @@ import (
 )
 
 func TestRunParallel_Success(t *testing.T) {
+	t.Parallel()
 	var count atomic.Int32
 
 	tasks := []Task{
@@ -38,6 +39,7 @@ func TestRunParallel_Success(t *testing.T) {
 }
 
 func TestRunParallel_EmptyTasks(t *testing.T) {
+	t.Parallel()
 	err := RunParallel(context.Background(), nil, false)
 	if err != nil {
 		t.Errorf("expected no error for empty tasks, got: %v", err)
@@ -50,6 +52,7 @@ func TestRunParallel_EmptyTasks(t *testing.T) {
 }
 
 func TestRunParallel_SingleError(t *testing.T) {
+	t.Parallel()
 	expectedErr := errors.New("task failed")
 
 	tasks := []Task{
@@ -72,6 +75,7 @@ func TestRunParallel_SingleError(t *testing.T) {
 }
 
 func TestRunParallel_MultipleErrors(t *testing.T) {
+	t.Parallel()
 	err1 := errors.New("error 1")
 	err2 := errors.New("error 2")
 
@@ -99,6 +103,7 @@ func TestRunParallel_MultipleErrors(t *testing.T) {
 }
 
 func TestRunParallel_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
@@ -128,6 +133,7 @@ func TestRunParallel_ContextCancellation(t *testing.T) {
 }
 
 func TestRunParallel_AllTasksComplete(t *testing.T) {
+	t.Parallel()
 	var completed atomic.Int32
 	started := make(chan struct{}, 3)
 
@@ -171,6 +177,7 @@ func TestRunParallel_AllTasksComplete(t *testing.T) {
 }
 
 func TestRunParallel_Concurrent(t *testing.T) {
+	t.Parallel()
 	var maxConcurrent atomic.Int32
 	var current atomic.Int32
 
@@ -206,6 +213,7 @@ func TestRunParallel_Concurrent(t *testing.T) {
 }
 
 func TestRunParallel_TaskNameInError(t *testing.T) {
+	t.Parallel()
 	tasks := []Task{
 		{Name: "specific-task-name", Func: func(_ context.Context) error {
 			return errors.New("task error")
@@ -221,4 +229,67 @@ func TestRunParallel_TaskNameInError(t *testing.T) {
 	if !strings.Contains(errStr, "specific-task-name") {
 		t.Errorf("error message should contain task name, got: %s", errStr)
 	}
+}
+
+func TestRunParallel_WithLogging(t *testing.T) {
+	t.Parallel()
+
+	t.Run("success with logging", func(t *testing.T) {
+		t.Parallel()
+		var count atomic.Int32
+
+		tasks := []Task{
+			{Name: "logged-task-1", Func: func(_ context.Context) error {
+				count.Add(1)
+				return nil
+			}},
+			{Name: "logged-task-2", Func: func(_ context.Context) error {
+				count.Add(1)
+				return nil
+			}},
+		}
+
+		err := RunParallel(context.Background(), tasks, true)
+		if err != nil {
+			t.Errorf("expected no error, got: %v", err)
+		}
+
+		if count.Load() != 2 {
+			t.Errorf("expected 2 tasks to run, got %d", count.Load())
+		}
+	})
+
+	t.Run("error with logging", func(t *testing.T) {
+		t.Parallel()
+		expectedErr := errors.New("logged failure")
+
+		tasks := []Task{
+			{Name: "logged-failing-task", Func: func(_ context.Context) error {
+				return expectedErr
+			}},
+		}
+
+		err := RunParallel(context.Background(), tasks, true)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+
+		if !errors.Is(err, expectedErr) {
+			t.Errorf("expected error to wrap %v, got: %v", expectedErr, err)
+		}
+	})
+
+	t.Run("single task with logging", func(t *testing.T) {
+		t.Parallel()
+		tasks := []Task{
+			{Name: "single-logged", Func: func(_ context.Context) error {
+				return nil
+			}},
+		}
+
+		err := RunParallel(context.Background(), tasks, true)
+		if err != nil {
+			t.Errorf("expected no error, got: %v", err)
+		}
+	})
 }

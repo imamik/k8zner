@@ -54,7 +54,13 @@ func (m *mockK8sClient) GetWorkerExternalIPs(ctx context.Context) ([]string, err
 	return args.Get(0).([]string), args.Error(1)
 }
 
+func (m *mockK8sClient) HasIngressClass(ctx context.Context, name string) (bool, error) {
+	args := m.Called(ctx, name)
+	return args.Bool(0), args.Error(1)
+}
+
 func TestApplyManifests(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		addonName   string
@@ -89,6 +95,7 @@ func TestApplyManifests(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			client := new(mockK8sClient)
 			client.On("ApplyManifests", mock.Anything, tt.manifests, tt.addonName).Return(tt.mockErr)
 
@@ -105,6 +112,7 @@ func TestApplyManifests(t *testing.T) {
 }
 
 func TestApplyFromURL_Success(t *testing.T) {
+	t.Parallel()
 	manifestContent := `apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -128,6 +136,7 @@ data:
 }
 
 func TestApplyFromURL_HTTPError(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
@@ -141,6 +150,7 @@ func TestApplyFromURL_HTTPError(t *testing.T) {
 }
 
 func TestApplyFromURL_ServerError(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -154,6 +164,7 @@ func TestApplyFromURL_ServerError(t *testing.T) {
 }
 
 func TestApplyFromURL_InvalidURL(t *testing.T) {
+	t.Parallel()
 	client := new(mockK8sClient)
 
 	err := applyFromURL(context.Background(), client, "test-addon", "http://[::1]:namedport")
@@ -166,6 +177,7 @@ func TestApplyFromURL_InvalidURL(t *testing.T) {
 }
 
 func TestApplyFromURL_ApplyError(t *testing.T) {
+	t.Parallel()
 	manifestContent := `apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -185,7 +197,43 @@ metadata:
 	assert.Contains(t, err.Error(), "failed to apply manifests for addon test-addon")
 }
 
+func TestFetchManifestURL_Success(t *testing.T) {
+	t.Parallel()
+	expectedContent := "apiVersion: v1\nkind: ConfigMap"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(expectedContent))
+	}))
+	defer server.Close()
+
+	result, err := fetchManifestURL(context.Background(), server.URL)
+	require.NoError(t, err)
+	assert.Equal(t, expectedContent, string(result))
+}
+
+func TestFetchManifestURL_Non200Status(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer server.Close()
+
+	_, err := fetchManifestURL(context.Background(), server.URL)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "HTTP 403")
+}
+
+func TestFetchManifestURL_InvalidURL(t *testing.T) {
+	t.Parallel()
+	// Use a URL with a null byte which makes NewRequestWithContext fail
+	_, err := fetchManifestURL(context.Background(), "http://example.com/\x00invalid")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create request")
+}
+
 func TestApplyFromURL_ContextCanceled(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Slow response that will be canceled
 		select {

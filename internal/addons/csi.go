@@ -40,6 +40,14 @@ func applyCSI(ctx context.Context, client k8sclient.Client, cfg *config.Config) 
 		return fmt.Errorf("failed to render CSI chart: %w", err)
 	}
 
+	// Post-render: inject dnsPolicy since the CSI chart doesn't support it natively.
+	// Using host DNS avoids the CoreDNS dependency during bootstrap — without this,
+	// the CSI controller can't resolve api.hetzner.cloud and enters CrashLoopBackOff.
+	manifestBytes, err = patchDeploymentDNSPolicy(manifestBytes, "hcloud-csi-controller", "Default")
+	if err != nil {
+		return fmt.Errorf("failed to patch CSI controller dnsPolicy: %w", err)
+	}
+
 	// Apply manifests to cluster
 	if err := applyManifests(ctx, client, "hcloud-csi", manifestBytes); err != nil {
 		return fmt.Errorf("failed to apply CSI manifests: %w", err)
@@ -107,20 +115,8 @@ func buildCSIValues(cfg *config.Config) helm.Values {
 					"matchLabelKeys": []string{"pod-template-hash"},
 				},
 			},
-			"nodeSelector": helm.Values{
-				"node-role.kubernetes.io/control-plane": "",
-			},
-			"tolerations": []helm.Values{
-				{
-					"key":      "node-role.kubernetes.io/control-plane",
-					"effect":   "NoSchedule",
-					"operator": "Exists",
-				},
-				{
-					"key":      "node.cloudprovider.kubernetes.io/uninitialized",
-					"operator": "Exists",
-				},
-			},
+			"nodeSelector": helm.ControlPlaneNodeSelector(),
+			"tolerations":  helm.BootstrapTolerations(),
 		},
 		"storageClasses": storageClasses,
 	}

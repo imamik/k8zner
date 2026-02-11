@@ -7,13 +7,36 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
-	v2 "github.com/imamik/k8zner/internal/config/v2"
+	"github.com/imamik/k8zner/internal/config"
 	hcloud_client "github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning/image"
 )
+
+// Test result tracking for skip logic between tests
+var (
+	testResultsLock sync.Mutex
+	fullStackPassed bool
+)
+
+// SetFullStackPassed marks the full stack test as passed.
+// This is called by TestE2EFullStackDev after ALL subtests pass.
+func SetFullStackPassed() {
+	testResultsLock.Lock()
+	defer testResultsLock.Unlock()
+	fullStackPassed = true
+}
+
+// IsFullStackPassed returns whether TestE2EFullStackDev passed.
+// There is NO override - HA test will NEVER run if FullStack failed.
+func IsFullStackPassed() bool {
+	testResultsLock.Lock()
+	defer testResultsLock.Unlock()
+	return fullStackPassed
+}
 
 // TestMain orchestrates E2E tests to run sequentially and manage shared resources.
 func TestMain(m *testing.M) {
@@ -54,11 +77,11 @@ func buildSharedSnapshots(client *hcloud_client.RealClient) error {
 
 	// Use versions from the default version matrix for consistency
 	// Note: Kubernetes version is used WITHOUT 'v' prefix to match provisioning code labels
-	vm := v2.DefaultVersionMatrix()
+	vm := config.DefaultVersionMatrix()
 	talosVer := vm.Talos
 	k8sVer := vm.Kubernetes // NO 'v' prefix - must match provisioning labels
 
-	// Only build AMD64 - ARM64 is not used (see v2.Architecture constant)
+	// Only build AMD64 - ARM64 is not used (see config.Architecture constant)
 	labelsAMD64 := map[string]string{
 		"os":            "talos",
 		"talos-version": talosVer,

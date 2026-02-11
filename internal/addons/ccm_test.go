@@ -11,7 +11,9 @@ import (
 )
 
 func TestBuildCCMValues(t *testing.T) {
+	t.Parallel()
 	// Helper to create bool pointer
+
 	boolPtr := func(b bool) *bool { return &b }
 
 	tests := []struct {
@@ -129,8 +131,8 @@ func TestBuildCCMValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			networkID := int64(12345)
-			values := buildCCMValues(tt.cfg, networkID)
+			t.Parallel()
+			values := buildCCMValues(tt.cfg)
 
 			// Check kind
 			assert.Equal(t, "DaemonSet", values["kind"])
@@ -169,6 +171,7 @@ func TestBuildCCMValues(t *testing.T) {
 }
 
 func TestBuildCCMEnvVars(t *testing.T) {
+	t.Parallel()
 	boolPtr := func(b bool) *bool { return &b }
 
 	cfg := &config.Config{
@@ -218,6 +221,7 @@ func TestBuildCCMEnvVars(t *testing.T) {
 
 	for key, expectedValue := range expectedVars {
 		t.Run(key, func(t *testing.T) {
+			t.Parallel()
 			envVar, ok := env[key].(helm.Values)
 			require.True(t, ok, "env var %s should be present", key)
 			assert.Equal(t, expectedValue, envVar["value"], "env var %s should have correct value", key)
@@ -226,6 +230,7 @@ func TestBuildCCMEnvVars(t *testing.T) {
 }
 
 func TestBuildCCMEnvVarsLocationFallback(t *testing.T) {
+	t.Parallel()
 	boolPtr := func(b bool) *bool { return &b }
 
 	// Test that location falls back to cluster location when not set
@@ -249,7 +254,103 @@ func TestBuildCCMEnvVarsLocationFallback(t *testing.T) {
 	assert.Equal(t, "hel1", location["value"], "should fall back to cluster location")
 }
 
+func TestBuildCCMValues_Tolerations(t *testing.T) {
+	t.Parallel()
+	// Tolerations are critical for CCM to function properly.
+	// Without them, CCM cannot schedule on control plane nodes due to taints,
+	// creating a chicken-egg problem where CCM can't initialize nodes.
+	// See: https://kubernetes.io/blog/2025/02/14/cloud-controller-manager-chicken-egg-problem/
+
+	cfg := &config.Config{
+		Location: "fsn1",
+		Network: config.NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+		},
+		Addons: config.AddonsConfig{
+			CCM: config.CCMConfig{
+				Enabled: true,
+			},
+		},
+	}
+
+	values := buildCCMValues(cfg)
+
+	// Check tolerations are present (4 = BootstrapTolerations: control-plane, master, ccm-uninitialized, not-ready)
+	tolerations, ok := values["tolerations"].([]helm.Values)
+	require.True(t, ok, "tolerations must be present in CCM values")
+	require.Len(t, tolerations, 4, "CCM should use BootstrapTolerations (4 entries)")
+
+	// Verify control-plane toleration
+	assert.Equal(t, "node-role.kubernetes.io/control-plane", tolerations[0]["key"])
+	assert.Equal(t, "NoSchedule", tolerations[0]["effect"])
+	assert.Equal(t, "Exists", tolerations[0]["operator"])
+
+	// Verify master toleration (legacy)
+	assert.Equal(t, "node-role.kubernetes.io/master", tolerations[1]["key"])
+
+	// Verify uninitialized toleration (critical for bootstrap)
+	assert.Equal(t, "node.cloudprovider.kubernetes.io/uninitialized", tolerations[2]["key"])
+	assert.Equal(t, "true", tolerations[2]["value"])
+	assert.Equal(t, "NoSchedule", tolerations[2]["effect"])
+
+	// Verify not-ready toleration (helps during bootstrap)
+	assert.Equal(t, "node.kubernetes.io/not-ready", tolerations[3]["key"])
+	assert.Equal(t, "Exists", tolerations[3]["operator"])
+}
+
+func TestGetLBSubnetIPRange(t *testing.T) {
+	t.Parallel()
+	t.Run("returns subnet when config is valid", func(t *testing.T) {
+		t.Parallel()
+		cfg := &config.Config{
+			Network: config.NetworkConfig{
+				IPv4CIDR: "10.0.0.0/16",
+			},
+		}
+		_ = cfg.CalculateSubnets()
+		result := getLBSubnetIPRange(cfg)
+		assert.NotEmpty(t, result)
+	})
+
+	t.Run("returns empty on error", func(t *testing.T) {
+		t.Parallel()
+		// Empty config with no IPv4CIDR should cause GetSubnetForRole to fail
+		cfg := &config.Config{}
+		result := getLBSubnetIPRange(cfg)
+		assert.Equal(t, "", result)
+	})
+}
+
+func TestBuildCCMEnvVarsPrivateSubnetIPRange(t *testing.T) {
+	t.Parallel()
+	boolPtr := func(b bool) *bool { return &b }
+
+	cfg := &config.Config{
+		Location: "fsn1",
+		Network: config.NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+		},
+		Addons: config.AddonsConfig{
+			CCM: config.CCMConfig{
+				Enabled: true,
+				LoadBalancers: config.CCMLoadBalancerConfig{
+					Enabled: boolPtr(true),
+				},
+			},
+		},
+	}
+	// Calculate subnets so getLBSubnetIPRange returns a value
+	_ = cfg.CalculateSubnets()
+
+	env := buildCCMEnvVars(cfg, &cfg.Addons.CCM.LoadBalancers)
+
+	subnetRange, ok := env["HCLOUD_LOAD_BALANCERS_PRIVATE_SUBNET_IP_RANGE"].(helm.Values)
+	require.True(t, ok, "PRIVATE_SUBNET_IP_RANGE should be present when subnets are calculated")
+	assert.NotEmpty(t, subnetRange["value"])
+}
+
 func TestGetClusterCIDR(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		cfg      *config.Config
@@ -306,6 +407,7 @@ func TestGetClusterCIDR(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := getClusterCIDR(tt.cfg)
 			assert.Equal(t, tt.expected, result)
 		})

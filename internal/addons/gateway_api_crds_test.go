@@ -9,6 +9,7 @@ import (
 )
 
 func TestGatewayAPICRDsURLGeneration(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		version        string
@@ -43,6 +44,7 @@ func TestGatewayAPICRDsURLGeneration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cfg := &config.Config{
 				Addons: config.AddonsConfig{
 					GatewayAPICRDs: config.GatewayAPICRDsConfig{
@@ -60,13 +62,16 @@ func TestGatewayAPICRDsURLGeneration(t *testing.T) {
 }
 
 func TestGatewayAPICRDsConfig(t *testing.T) {
+	t.Parallel()
 	t.Run("enabled by default", func(t *testing.T) {
+		t.Parallel()
 		cfg := config.GatewayAPICRDsConfig{}
 		// Defaults are applied in config loader, not in struct
 		assert.False(t, cfg.Enabled) // struct default is false
 	})
 
 	t.Run("can be disabled", func(t *testing.T) {
+		t.Parallel()
 		cfg := config.GatewayAPICRDsConfig{
 			Enabled: false,
 		}
@@ -74,6 +79,7 @@ func TestGatewayAPICRDsConfig(t *testing.T) {
 	})
 
 	t.Run("custom version", func(t *testing.T) {
+		t.Parallel()
 		cfg := config.GatewayAPICRDsConfig{
 			Enabled: true,
 			Version: "v1.2.0",

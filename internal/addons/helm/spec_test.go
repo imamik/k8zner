@@ -9,6 +9,7 @@ import (
 )
 
 func TestGetChartSpec_KnownCharts(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name            string
 		chartName       string
@@ -97,6 +98,7 @@ func TestGetChartSpec_KnownCharts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			spec := GetChartSpec(tt.chartName, config.HelmChartConfig{})
 
 			assert.Equal(t, tt.expectedRepo, spec.Repository)
@@ -107,6 +109,7 @@ func TestGetChartSpec_KnownCharts(t *testing.T) {
 }
 
 func TestGetChartSpec_UnknownChart(t *testing.T) {
+	t.Parallel()
 	spec := GetChartSpec("unknown-chart", config.HelmChartConfig{})
 
 	// Should return empty spec
@@ -116,6 +119,7 @@ func TestGetChartSpec_UnknownChart(t *testing.T) {
 }
 
 func TestGetChartSpec_WithRepositoryOverride(t *testing.T) {
+	t.Parallel()
 	helmCfg := config.HelmChartConfig{
 		Repository: "https://custom.repo.io",
 	}
@@ -128,6 +132,7 @@ func TestGetChartSpec_WithRepositoryOverride(t *testing.T) {
 }
 
 func TestGetChartSpec_WithChartOverride(t *testing.T) {
+	t.Parallel()
 	helmCfg := config.HelmChartConfig{
 		Chart: "custom-cilium",
 	}
@@ -140,6 +145,7 @@ func TestGetChartSpec_WithChartOverride(t *testing.T) {
 }
 
 func TestGetChartSpec_WithVersionOverride(t *testing.T) {
+	t.Parallel()
 	helmCfg := config.HelmChartConfig{
 		Version: "1.16.0",
 	}
@@ -152,6 +158,7 @@ func TestGetChartSpec_WithVersionOverride(t *testing.T) {
 }
 
 func TestGetChartSpec_WithAllOverrides(t *testing.T) {
+	t.Parallel()
 	helmCfg := config.HelmChartConfig{
 		Repository: "https://my-private-repo.io",
 		Chart:      "my-custom-chart",
@@ -166,6 +173,7 @@ func TestGetChartSpec_WithAllOverrides(t *testing.T) {
 }
 
 func TestDefaultChartSpecs_ContainsAllExpectedCharts(t *testing.T) {
+	t.Parallel()
 	expectedCharts := []string{
 		"hcloud-ccm",
 		"hcloud-csi",
@@ -187,8 +195,10 @@ func TestDefaultChartSpecs_ContainsAllExpectedCharts(t *testing.T) {
 }
 
 func TestDefaultChartSpecs_AllHaveRequiredFields(t *testing.T) {
+	t.Parallel()
 	for name, spec := range DefaultChartSpecs {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			assert.NotEmpty(t, spec.Repository, "Repository should not be empty for %s", name)
 			assert.NotEmpty(t, spec.Name, "Name should not be empty for %s", name)
 			assert.NotEmpty(t, spec.Version, "Version should not be empty for %s", name)

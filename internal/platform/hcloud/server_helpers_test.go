@@ -8,6 +8,7 @@ import (
 )
 
 func TestServerIPv4(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		server   *hcloud.Server
@@ -42,6 +43,7 @@ func TestServerIPv4(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := ServerIPv4(tt.server)
 			if result != tt.expected {
 				t.Errorf("expected %q, got %q", tt.expected, result)
@@ -51,6 +53,7 @@ func TestServerIPv4(t *testing.T) {
 }
 
 func TestServerIPv6(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		server   *hcloud.Server
@@ -85,6 +88,7 @@ func TestServerIPv6(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := ServerIPv6(tt.server)
 			if result != tt.expected {
 				t.Errorf("expected %q, got %q", tt.expected, result)
@@ -94,6 +98,7 @@ func TestServerIPv6(t *testing.T) {
 }
 
 func TestLoadBalancerIPv4(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		lb       *hcloud.LoadBalancer
@@ -128,6 +133,7 @@ func TestLoadBalancerIPv4(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := LoadBalancerIPv4(tt.lb)
 			if result != tt.expected {
 				t.Errorf("expected %q, got %q", tt.expected, result)
@@ -137,6 +143,7 @@ func TestLoadBalancerIPv4(t *testing.T) {
 }
 
 func TestLoadBalancerIPv6(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		lb       *hcloud.LoadBalancer
@@ -171,6 +178,7 @@ func TestLoadBalancerIPv6(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := LoadBalancerIPv6(tt.lb)
 			if result != tt.expected {
 				t.Errorf("expected %q, got %q", tt.expected, result)
@@ -179,4 +187,84 @@ func TestLoadBalancerIPv6(t *testing.T) {
 	}
 }
 
-// TestResolvePlacementGroup is already tested in real_client_test.go
+func TestLoadBalancerPrivateIP(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		lb       *hcloud.LoadBalancer
+		expected string
+	}{
+		{
+			name:     "nil load balancer",
+			lb:       nil,
+			expected: "",
+		},
+		{
+			name: "load balancer with private network",
+			lb: &hcloud.LoadBalancer{
+				PrivateNet: []hcloud.LoadBalancerPrivateNet{
+					{IP: net.ParseIP("10.0.0.5")},
+				},
+			},
+			expected: "10.0.0.5",
+		},
+		{
+			name: "load balancer with empty private nets",
+			lb: &hcloud.LoadBalancer{
+				PrivateNet: []hcloud.LoadBalancerPrivateNet{},
+			},
+			expected: "",
+		},
+		{
+			name: "load balancer with nil IP in private net",
+			lb: &hcloud.LoadBalancer{
+				PrivateNet: []hcloud.LoadBalancerPrivateNet{
+					{IP: nil},
+				},
+			},
+			expected: "",
+		},
+		{
+			name: "load balancer with multiple private nets returns first",
+			lb: &hcloud.LoadBalancer{
+				PrivateNet: []hcloud.LoadBalancerPrivateNet{
+					{IP: net.ParseIP("10.0.1.1")},
+					{IP: net.ParseIP("10.0.2.1")},
+				},
+			},
+			expected: "10.0.1.1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := LoadBalancerPrivateIP(tt.lb)
+			if result != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestResolvePlacementGroup_Detailed(t *testing.T) {
+	t.Parallel()
+	t.Run("nil returns nil", func(t *testing.T) {
+		t.Parallel()
+		result := resolvePlacementGroup(nil)
+		if result != nil {
+			t.Errorf("expected nil, got %v", result)
+		}
+	})
+	t.Run("returns placement group with ID", func(t *testing.T) {
+		t.Parallel()
+		id := int64(42)
+		result := resolvePlacementGroup(&id)
+		if result == nil {
+			t.Fatal("expected non-nil")
+		}
+		if result.ID != 42 {
+			t.Errorf("expected ID 42, got %d", result.ID)
+		}
+	})
+}

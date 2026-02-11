@@ -6,302 +6,43 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/imamik/k8zner/internal/addons"
-	"github.com/imamik/k8zner/internal/config"
-	v2 "github.com/imamik/k8zner/internal/config/v2"
 )
 
-// phaseAddons installs and tests addons sequentially.
-// This is Phase 3 of the E2E lifecycle.
-// Tests are run sequentially to avoid API rate limiting and resource contention.
-//
-// The v2 config includes these addons:
-// - Core: Cilium (CNI), CCM, CSI, MetricsServer
-// - Ingress: Traefik (replaces ingress-nginx)
-// - TLS: CertManager
-// - GitOps: ArgoCD
-// - Optional: TalosBackup (when backup enabled), Cloudflare/ExternalDNS (when domain set)
-func phaseAddons(t *testing.T, state *E2EState) {
-	t.Log("Testing addons sequentially (v2 stack)...")
+// This file contains verification functions for addons that are used by the operator-centric tests.
+// The deprecated phaseAddons() and phaseAddonsAdvanced() functions have been removed.
+// Tests now use CreateClusterViaOperator() and verify addon status via the K8znerCluster CRD.
 
-	// Get HCloud token for addons
-	token := os.Getenv("HCLOUD_TOKEN")
-	if token == "" {
-		t.Fatal("HCLOUD_TOKEN required for addon testing")
-	}
+// mockTalosGenerator is a mock for E2E testing
+type mockTalosGenerator struct{}
 
-	// Core addons (required for basic functionality)
-	t.Run("Cilium", func(t *testing.T) { testAddonCilium(t, state) })
-	t.Run("CCM", func(t *testing.T) { testAddonCCM(t, state, token) })
-	t.Run("CSI", func(t *testing.T) { testAddonCSI(t, state, token) })
-	t.Run("MetricsServer", func(t *testing.T) { testAddonMetricsServer(t, state) })
-
-	// Standard v2 stack addons
-	t.Run("CertManager", func(t *testing.T) { testAddonCertManager(t, state) })
-	t.Run("Traefik", func(t *testing.T) { testAddonTraefik(t, state) })
-	t.Run("ArgoCD", func(t *testing.T) { testAddonArgoCD(t, state) })
-
-	// Optional addons (depend on environment variables)
-	t.Run("TalosBackup", func(t *testing.T) { testAddonTalosBackup(t, state) })
-
-	// DNS and TLS integration (requires CF_API_TOKEN and CF_DOMAIN env vars)
-	t.Run("Cloudflare", func(t *testing.T) { testAddonCloudflare(t, state, token) })
-
-	// ArgoCD Dashboard HTTPS test (requires Cloudflare to be set up first)
-	t.Run("ArgoCDDashboard", func(t *testing.T) { testArgoCDDashboard(t, state, token) })
-
-	t.Log("✓ Phase 3: Addons (all tested)")
+func (m *mockTalosGenerator) GenerateControlPlaneConfig(san []string, hostname string) ([]byte, error) {
+	return []byte("mock-cp-config"), nil
 }
 
-// testAddonCCM installs and tests the Hetzner Cloud Controller Manager.
-func testAddonCCM(t *testing.T, state *E2EState, token string) {
-	t.Log("Installing CCM addon...")
-
-	ctx := context.Background()
-	cfg := &config.Config{
-		ClusterName: state.ClusterName,
-		HCloudToken: token,
-		Addons: config.AddonsConfig{
-			CCM: config.CCMConfig{Enabled: true},
-		},
-	}
-
-	network, _ := state.Client.GetNetwork(ctx, state.ClusterName)
-	networkID := int64(0)
-	if network != nil {
-		networkID = network.ID
-	}
-
-	if err := addons.Apply(ctx, cfg, state.Kubeconfig, networkID); err != nil {
-		t.Fatalf("Failed to install CCM: %v", err)
-	}
-
-	// Wait for CCM pod
-	waitForPod(t, state.KubeconfigPath, "kube-system", "app.kubernetes.io/name=hcloud-cloud-controller-manager", 6*time.Minute)
-
-	// Verify provider IDs are set - CCM needs significant time to:
-	// 1. Initialize and become leader
-	// 2. Query Hetzner API for server metadata
-	// 3. Set provider IDs on all nodes
-	// Using 7 minutes to handle slow API responses and node initialization
-	verifyProviderIDs(t, state.KubeconfigPath, 7*time.Minute)
-
-	// Test LB provisioning
-	testCCMLoadBalancer(t, state)
-
-	state.AddonsInstalled["ccm"] = true
-	t.Log("✓ CCM addon working")
+func (m *mockTalosGenerator) GenerateWorkerConfig(hostname string) ([]byte, error) {
+	return []byte("mock-worker-config"), nil
 }
 
-// testAddonCSI installs and tests the Hetzner Cloud CSI Driver.
-func testAddonCSI(t *testing.T, state *E2EState, token string) {
-	t.Log("Installing CSI addon...")
-
-	ctx := context.Background()
-	cfg := &config.Config{
-		ClusterName: state.ClusterName,
-		HCloudToken: token,
-		Addons: config.AddonsConfig{
-			CSI: config.CSIConfig{
-				Enabled:             true,
-				DefaultStorageClass: true,
-			},
-		},
-	}
-
-	network, _ := state.Client.GetNetwork(ctx, state.ClusterName)
-	networkID := int64(0)
-	if network != nil {
-		networkID = network.ID
-	}
-
-	if err := addons.Apply(ctx, cfg, state.Kubeconfig, networkID); err != nil {
-		t.Fatalf("Failed to install CSI: %v", err)
-	}
-
-	// Wait for CSI controller
-	waitForPod(t, state.KubeconfigPath, "kube-system", "app.kubernetes.io/name=hcloud-csi,app.kubernetes.io/component=controller", 5*time.Minute)
-
-	// Verify StorageClass exists
-	verifyStorageClass(t, state.KubeconfigPath)
-
-	// Test volume lifecycle
-	testCSIVolume(t, state)
-
-	state.AddonsInstalled["csi"] = true
-	t.Log("✓ CSI addon working")
+func (m *mockTalosGenerator) GenerateAutoscalerConfig(poolName string, labels map[string]string, taints []string) ([]byte, error) {
+	return []byte("mock-autoscaler-config"), nil
 }
 
-// testAddonMetricsServer installs and tests the Metrics Server.
-func testAddonMetricsServer(t *testing.T, state *E2EState) {
-	t.Log("Installing Metrics Server addon...")
-
-	cfg := &config.Config{
-		ClusterName: state.ClusterName,
-		Addons: config.AddonsConfig{
-			MetricsServer: config.MetricsServerConfig{Enabled: true},
-		},
-	}
-
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
-		t.Fatalf("Failed to install Metrics Server: %v", err)
-	}
-
-	// Wait for metrics-server pod
-	waitForPod(t, state.KubeconfigPath, "kube-system", "app.kubernetes.io/name=metrics-server", 5*time.Minute)
-
-	// Test metrics API
-	testMetricsAPI(t, state.KubeconfigPath)
-
-	state.AddonsInstalled["metrics-server"] = true
-	t.Log("✓ Metrics Server addon working")
+func (m *mockTalosGenerator) GetClientConfig() ([]byte, error) {
+	return []byte("mock-client-config"), nil
 }
 
-// testAddonCertManager installs and tests Cert Manager.
-func testAddonCertManager(t *testing.T, state *E2EState) {
-	t.Log("Installing Cert Manager addon...")
-
-	cfg := &config.Config{
-		ClusterName: state.ClusterName,
-		Addons: config.AddonsConfig{
-			CertManager: config.CertManagerConfig{Enabled: true},
-		},
-	}
-
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
-		t.Fatalf("Failed to install Cert Manager: %v", err)
-	}
-
-	// Wait for cert-manager pods
-	waitForPod(t, state.KubeconfigPath, "cert-manager", "app.kubernetes.io/component=controller", 5*time.Minute)
-
-	// Verify CRDs exist
-	verifyCRDExists(t, state.KubeconfigPath, "certificates.cert-manager.io")
-
-	state.AddonsInstalled["cert-manager"] = true
-	t.Log("✓ Cert Manager addon working")
+func (m *mockTalosGenerator) SetEndpoint(endpoint string) {
 }
 
-// testAddonIngressNginx installs and tests Ingress NGINX.
-// testAddonTraefik installs and tests Traefik Proxy.
-// In v2 config, Traefik is the default ingress controller (replaces ingress-nginx).
-func testAddonTraefik(t *testing.T, state *E2EState) {
-	t.Log("Installing Traefik addon...")
+// =============================================================================
+// VERIFICATION FUNCTIONS - Used by operator-centric tests
+// =============================================================================
 
-	cfg := &config.Config{
-		ClusterName: state.ClusterName,
-		Addons: config.AddonsConfig{
-			Traefik: config.TraefikConfig{Enabled: true},
-		},
-	}
-
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
-		t.Fatalf("Failed to install Traefik: %v", err)
-	}
-
-	// Wait for traefik controller pod (increased timeout for large image pull)
-	waitForPod(t, state.KubeconfigPath, "traefik", "app.kubernetes.io/name=traefik", 8*time.Minute)
-
-	// Verify IngressClass "traefik" exists
-	verifyIngressClassExists(t, state.KubeconfigPath, "traefik")
-
-	state.AddonsInstalled["traefik"] = true
-	t.Log("✓ Traefik addon working")
-}
-
-// testAddonArgoCD installs and tests ArgoCD GitOps continuous delivery.
-func testAddonArgoCD(t *testing.T, state *E2EState) {
-	t.Log("Installing ArgoCD addon...")
-
-	cfg := &config.Config{
-		ClusterName: state.ClusterName,
-		Addons: config.AddonsConfig{
-			ArgoCD: config.ArgoCDConfig{
-				Enabled: true,
-			},
-		},
-	}
-
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
-		t.Fatalf("Failed to install ArgoCD: %v", err)
-	}
-
-	// Wait for ArgoCD server pod
-	t.Log("  Waiting for ArgoCD server...")
-	waitForPod(t, state.KubeconfigPath, "argocd", "app.kubernetes.io/name=argocd-server", 8*time.Minute)
-
-	// Wait for ArgoCD application controller
-	t.Log("  Waiting for ArgoCD application controller...")
-	waitForPod(t, state.KubeconfigPath, "argocd", "app.kubernetes.io/name=argocd-application-controller", 5*time.Minute)
-
-	// Wait for ArgoCD repo server
-	t.Log("  Waiting for ArgoCD repo server...")
-	waitForPod(t, state.KubeconfigPath, "argocd", "app.kubernetes.io/name=argocd-repo-server", 5*time.Minute)
-
-	// Verify ArgoCD CRDs exist
-	verifyCRDExists(t, state.KubeconfigPath, "applications.argoproj.io")
-	verifyCRDExists(t, state.KubeconfigPath, "applicationsets.argoproj.io")
-	verifyCRDExists(t, state.KubeconfigPath, "appprojects.argoproj.io")
-
-	// Test ArgoCD API availability
-	testArgoCDAPI(t, state)
-
-	state.AddonsInstalled["argocd"] = true
-	t.Log("✓ ArgoCD addon working")
-}
-
-// testArgoCDAPI verifies the ArgoCD server API is accessible.
-func testArgoCDAPI(t *testing.T, state *E2EState) {
-	t.Log("  Testing ArgoCD API availability...")
-
-	// Wait for the ArgoCD server service to be ready using label selector
-	for i := 0; i < 12; i++ {
-		cmd := exec.CommandContext(context.Background(), "kubectl",
-			"--kubeconfig", state.KubeconfigPath,
-			"get", "svc", "-n", "argocd", "-l", "app.kubernetes.io/name=argocd-server",
-			"-o", "jsonpath={.items[0].spec.clusterIP}")
-		output, err := cmd.CombinedOutput()
-		if err == nil && len(output) > 0 && string(output) != "" {
-			t.Log("  ✓ ArgoCD server service is ready")
-			break
-		}
-		if i == 11 {
-			// Debug: list all services in argocd namespace
-			listCmd := exec.CommandContext(context.Background(), "kubectl",
-				"--kubeconfig", state.KubeconfigPath,
-				"get", "svc", "-n", "argocd")
-			listOutput, _ := listCmd.CombinedOutput()
-			t.Logf("  Services in argocd namespace:\n%s", string(listOutput))
-			t.Fatal("ArgoCD server service not found")
-		}
-		time.Sleep(5 * time.Second)
-	}
-
-	// Verify default AppProject exists
-	for i := 0; i < 12; i++ {
-		cmd := exec.CommandContext(context.Background(), "kubectl",
-			"--kubeconfig", state.KubeconfigPath,
-			"get", "appproject", "-n", "argocd", "default")
-		if err := cmd.Run(); err == nil {
-			t.Log("  ✓ Default AppProject exists")
-			return
-		}
-		if i == 11 {
-			t.Log("  Warning: Default AppProject not found (may be created on first sync)")
-			return
-		}
-		time.Sleep(5 * time.Second)
-	}
-}
-
-// Addon test helper functions
-
+// waitForPod waits for a pod with the given selector to be running.
 func waitForPod(t *testing.T, kubeconfigPath, namespace, selector string, timeout time.Duration) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -309,27 +50,19 @@ func waitForPod(t *testing.T, kubeconfigPath, namespace, selector string, timeou
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
+	startTime := time.Now()
+	lastProgressLog := time.Now()
+
 	for {
 		select {
 		case <-ctx.Done():
-			// Timeout - gather diagnostics before failing
-			t.Logf("Timeout waiting for pod - gathering diagnostics...")
+			// Timeout - collect comprehensive diagnostics
+			t.Logf("Timeout waiting for pod - collecting comprehensive diagnostics...")
 
-			// Get pod details
-			descCmd := exec.CommandContext(context.Background(), "kubectl",
-				"--kubeconfig", kubeconfigPath,
-				"describe", "pod", "-n", namespace, "-l", selector)
-			if descOutput, _ := descCmd.CombinedOutput(); len(descOutput) > 0 {
-				t.Logf("Pod description:\n%s", string(descOutput))
-			}
-
-			// Get pod events
-			eventsCmd := exec.CommandContext(context.Background(), "kubectl",
-				"--kubeconfig", kubeconfigPath,
-				"get", "events", "-n", namespace, "--sort-by=.lastTimestamp")
-			if eventsOutput, _ := eventsCmd.CombinedOutput(); len(eventsOutput) > 0 {
-				t.Logf("Namespace events:\n%s", string(eventsOutput))
-			}
+			diag := NewDiagnosticCollector(t, kubeconfigPath, namespace, selector)
+			diag.WithComponentName(selector)
+			diag.Collect()
+			diag.Report()
 
 			t.Fatalf("Timeout waiting for pod with selector %s in namespace %s", selector, namespace)
 		case <-ticker.C:
@@ -339,14 +72,64 @@ func waitForPod(t *testing.T, kubeconfigPath, namespace, selector string, timeou
 				"-o", "jsonpath={.items[0].status.phase}")
 			output, err := cmd.CombinedOutput()
 			if err == nil && string(output) == "Running" {
-				t.Logf("  ✓ Pod %s is Running", selector)
+				t.Logf("  Pod %s is Running", selector)
 				return
 			}
-			t.Logf("  Waiting for pod (phase: %s)...", string(output))
+
+			// Log progress every 30 seconds during long waits
+			if time.Since(lastProgressLog) >= 30*time.Second {
+				elapsed := time.Since(startTime).Round(time.Second)
+				t.Logf("  [%s] Waiting for pod %s (phase: %s)...", elapsed, selector, string(output))
+				lastProgressLog = time.Now()
+			}
 		}
 	}
 }
 
+// waitForDaemonSet waits for a DaemonSet with the given selector to have ready pods.
+func waitForDaemonSet(t *testing.T, kubeconfigPath, namespace, selector string, timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	startTime := time.Now()
+	lastProgressLog := time.Now()
+
+	for {
+		select {
+		case <-ctx.Done():
+			// Timeout - collect comprehensive diagnostics
+			t.Logf("Timeout waiting for daemonset - collecting comprehensive diagnostics...")
+
+			diag := NewDiagnosticCollector(t, kubeconfigPath, namespace, selector)
+			diag.WithComponentName("DaemonSet: " + selector)
+			diag.Collect()
+			diag.Report()
+
+			t.Fatalf("Timeout waiting for daemonset with selector %s in namespace %s", selector, namespace)
+		case <-ticker.C:
+			cmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "daemonset", "-n", namespace, "-l", selector,
+				"-o", "jsonpath={.items[0].status.numberReady}")
+			output, err := cmd.CombinedOutput()
+			if err == nil && string(output) != "" && string(output) != "0" {
+				t.Logf("  DaemonSet %s has ready pods", selector)
+				return
+			}
+
+			if time.Since(lastProgressLog) >= 30*time.Second {
+				elapsed := time.Since(startTime).Round(time.Second)
+				t.Logf("  [%s] Waiting for daemonset %s...", elapsed, selector)
+				lastProgressLog = time.Now()
+			}
+		}
+	}
+}
+
+// verifyProviderIDs verifies all nodes have Hetzner provider IDs set.
 func verifyProviderIDs(t *testing.T, kubeconfigPath string, timeout time.Duration) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -383,7 +166,7 @@ func verifyProviderIDs(t *testing.T, kubeconfigPath string, timeout time.Duratio
 					}
 				}
 				if allSet && len(nodes.Items) > 0 {
-					t.Log("  ✓ All nodes have provider IDs")
+					t.Log("  All nodes have provider IDs")
 					return
 				}
 			}
@@ -391,6 +174,7 @@ func verifyProviderIDs(t *testing.T, kubeconfigPath string, timeout time.Duratio
 	}
 }
 
+// verifyStorageClass verifies the hcloud-volumes StorageClass exists.
 func verifyStorageClass(t *testing.T, kubeconfigPath string) {
 	cmd := exec.CommandContext(context.Background(), "kubectl",
 		"--kubeconfig", kubeconfigPath,
@@ -398,9 +182,10 @@ func verifyStorageClass(t *testing.T, kubeconfigPath string) {
 	if err := cmd.Run(); err != nil {
 		t.Fatal("StorageClass hcloud-volumes not found")
 	}
-	t.Log("  ✓ StorageClass hcloud-volumes exists")
+	t.Log("  StorageClass hcloud-volumes exists")
 }
 
+// verifyCRDExists verifies a CRD exists.
 func verifyCRDExists(t *testing.T, kubeconfigPath, crdName string) {
 	cmd := exec.CommandContext(context.Background(), "kubectl",
 		"--kubeconfig", kubeconfigPath,
@@ -408,9 +193,10 @@ func verifyCRDExists(t *testing.T, kubeconfigPath, crdName string) {
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("CRD %s not found", crdName)
 	}
-	t.Logf("  ✓ CRD %s exists", crdName)
+	t.Logf("  CRD %s exists", crdName)
 }
 
+// verifyIngressClassExists verifies an IngressClass exists.
 func verifyIngressClassExists(t *testing.T, kubeconfigPath, name string) {
 	cmd := exec.CommandContext(context.Background(), "kubectl",
 		"--kubeconfig", kubeconfigPath,
@@ -418,19 +204,72 @@ func verifyIngressClassExists(t *testing.T, kubeconfigPath, name string) {
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("IngressClass %s not found", name)
 	}
-	t.Logf("  ✓ IngressClass %s exists", name)
+	t.Logf("  IngressClass %s exists", name)
 }
 
+// verifyTraefikLoadBalancer checks that Traefik is deployed as a Deployment with LoadBalancer service.
+func verifyTraefikLoadBalancer(t *testing.T, kubeconfigPath string) {
+	// Verify Traefik is a Deployment (not DaemonSet)
+	cmd := exec.CommandContext(context.Background(), "kubectl",
+		"--kubeconfig", kubeconfigPath,
+		"-n", "traefik",
+		"get", "deployment", "-l", "app.kubernetes.io/name=traefik",
+		"-o", "jsonpath={.items[0].metadata.name}")
+	output, err := cmd.CombinedOutput()
+	if err != nil || strings.TrimSpace(string(output)) == "" {
+		t.Fatalf("Traefik Deployment not found: %v (output: %s)", err, string(output))
+	}
+	t.Logf("  Traefik Deployment: %s", strings.TrimSpace(string(output)))
+
+	// Verify service type is LoadBalancer
+	cmd = exec.CommandContext(context.Background(), "kubectl",
+		"--kubeconfig", kubeconfigPath,
+		"-n", "traefik",
+		"get", "svc", "-l", "app.kubernetes.io/name=traefik",
+		"-o", "jsonpath={.items[0].spec.type}")
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Failed to get Traefik service type: %v", err)
+	}
+	svcType := strings.TrimSpace(string(output))
+	if svcType != "LoadBalancer" {
+		t.Fatalf("Traefik service type is %q, expected LoadBalancer", svcType)
+	}
+	t.Logf("  Traefik service type: %s", svcType)
+
+	// Verify LB annotation exists
+	cmd = exec.CommandContext(context.Background(), "kubectl",
+		"--kubeconfig", kubeconfigPath,
+		"-n", "traefik",
+		"get", "svc", "-l", "app.kubernetes.io/name=traefik",
+		"-o", "jsonpath={.items[0].metadata.annotations.load-balancer\\.hetzner\\.cloud/name}")
+	output, err = cmd.CombinedOutput()
+	if err == nil && len(output) > 0 {
+		t.Logf("  Hetzner LB name: %s", string(output))
+	}
+}
+
+// verifyClusterIssuerExists verifies a ClusterIssuer exists.
+func verifyClusterIssuerExists(t *testing.T, kubeconfigPath, name string) {
+	cmd := exec.CommandContext(context.Background(), "kubectl",
+		"--kubeconfig", kubeconfigPath,
+		"get", "clusterissuer", name)
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("ClusterIssuer %s not found", name)
+	}
+	t.Logf("  ClusterIssuer %s exists", name)
+}
+
+// testMetricsAPI verifies the metrics API is working.
 func testMetricsAPI(t *testing.T, kubeconfigPath string) {
 	// Wait up to 3 minutes for metrics to be available
-	// Metrics server needs time to aggregate metrics from kubelets after startup
 	for i := 0; i < 18; i++ {
 		cmd := exec.CommandContext(context.Background(), "kubectl",
 			"--kubeconfig", kubeconfigPath,
 			"top", "nodes")
 		output, err := cmd.CombinedOutput()
 		if err == nil {
-			t.Log("  ✓ Metrics API working")
+			t.Log("  Metrics API working")
 			return
 		}
 		if i%6 == 5 {
@@ -445,7 +284,6 @@ func testMetricsAPI(t *testing.T, kubeconfigPath string) {
 func testCCMLoadBalancer(t *testing.T, state *E2EState) {
 	t.Log("  Testing CCM LB provisioning...")
 
-	// Create test deployment and service (extracted to helper for brevity)
 	testLBName := "e2e-ccm-test-lb"
 	manifest := fmt.Sprintf(`
 apiVersion: v1
@@ -473,9 +311,8 @@ spec:
 	}
 
 	// Wait for external IP (max 6 minutes)
-	// CCM needs time to create LB in Hetzner and update Service status
 	externalIP := ""
-	maxAttempts := 72 // 72 * 5s = 6 minutes
+	maxAttempts := 72
 	for i := 0; i < maxAttempts; i++ {
 		cmd = exec.CommandContext(context.Background(), "kubectl",
 			"--kubeconfig", state.KubeconfigPath,
@@ -486,64 +323,85 @@ spec:
 			break
 		}
 
-		// Log progress every 30 seconds
 		if i > 0 && i%6 == 0 {
 			elapsed := i * 5
 			t.Logf("  [%ds] Waiting for LB external IP...", elapsed)
-
-			// Show service description for debugging
-			if i == 12 { // At 1 minute mark
-				descCmd := exec.CommandContext(context.Background(), "kubectl",
-					"--kubeconfig", state.KubeconfigPath,
-					"describe", "svc", testLBName)
-				if descOutput, _ := descCmd.CombinedOutput(); len(descOutput) > 0 {
-					t.Logf("  Service status at %ds:\n%s", elapsed, string(descOutput))
-				}
-			}
 		}
 
 		time.Sleep(5 * time.Second)
 	}
 
 	if externalIP == "" {
-		// Gather diagnostic info before failing
-		t.Log("  CCM failed to provision load balancer - gathering diagnostics...")
-
-		// Show final service status
-		descCmd := exec.CommandContext(context.Background(), "kubectl",
-			"--kubeconfig", state.KubeconfigPath,
-			"describe", "svc", testLBName)
-		if descOutput, _ := descCmd.CombinedOutput(); len(descOutput) > 0 {
-			t.Logf("  Final service status:\n%s", string(descOutput))
-		}
-
-		// Show CCM logs
-		logsCmd := exec.CommandContext(context.Background(), "kubectl",
-			"--kubeconfig", state.KubeconfigPath,
-			"logs", "-n", "kube-system", "-l", "app.kubernetes.io/name=hcloud-cloud-controller-manager",
-			"--tail=50")
-		if logsOutput, _ := logsCmd.CombinedOutput(); len(logsOutput) > 0 {
-			t.Logf("  CCM logs (last 50 lines):\n%s", string(logsOutput))
-		}
-
 		t.Fatal("  CCM failed to provision load balancer")
 	}
 
-	t.Logf("  ✓ CCM provisioned LB with IP: %s", externalIP)
+	t.Logf("  CCM provisioned LB with IP: %s", externalIP)
 
 	// Cleanup
-	exec.CommandContext(context.Background(), "kubectl",
+	_ = exec.CommandContext(context.Background(), "kubectl",
 		"--kubeconfig", state.KubeconfigPath,
 		"delete", "svc", testLBName).Run()
 
-	// Wait for LB deletion
 	time.Sleep(30 * time.Second)
-	t.Log("  ✓ CCM LB test complete")
+	t.Log("  CCM LB test complete")
 }
 
 // testCSIVolume tests CSI's ability to provision and mount volumes.
+// waitForCSIReady waits for the CSI controller deployment to be ready.
+// This ensures the CSI driver can provision volumes before running volume tests.
+func waitForCSIReady(t *testing.T, kubeconfigPath string, timeout time.Duration) {
+	t.Log("  Waiting for CSI controller to be ready...")
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	startTime := time.Now()
+	lastProgressLog := time.Now()
+
+	for {
+		select {
+		case <-ctx.Done():
+			// Timeout - collect comprehensive diagnostics
+			t.Logf("Timeout waiting for CSI controller - collecting comprehensive diagnostics...")
+
+			diag := NewDiagnosticCollector(t, kubeconfigPath, "kube-system",
+				"app.kubernetes.io/name=hcloud-csi,app.kubernetes.io/component=controller")
+			diag.WithComponentName("hcloud-csi-controller")
+			diag.Collect()
+			diag.Report()
+
+			t.Fatalf("Timeout waiting for CSI controller to be ready after %v", timeout)
+		case <-ticker.C:
+			// Check if hcloud-csi-controller deployment has ready replicas
+			cmd := exec.CommandContext(context.Background(), "kubectl",
+				"--kubeconfig", kubeconfigPath,
+				"get", "deployment", "hcloud-csi-controller",
+				"-n", "kube-system",
+				"-o", "jsonpath={.status.readyReplicas}")
+			output, err := cmd.CombinedOutput()
+			if err == nil && strings.TrimSpace(string(output)) != "" && strings.TrimSpace(string(output)) != "0" {
+				elapsed := time.Since(startTime).Round(time.Second)
+				t.Logf("  CSI controller ready (after %v)", elapsed)
+				return
+			}
+
+			// Log progress every 30 seconds
+			if time.Since(lastProgressLog) >= 30*time.Second {
+				elapsed := time.Since(startTime).Round(time.Second)
+				t.Logf("  [%s] Waiting for CSI controller (readyReplicas: %s)...", elapsed, strings.TrimSpace(string(output)))
+				lastProgressLog = time.Now()
+			}
+		}
+	}
+}
+
 func testCSIVolume(t *testing.T, state *E2EState) {
 	t.Log("  Testing CSI volume provisioning...")
+
+	// Wait for CSI controller to be ready before testing volume provisioning
+	waitForCSIReady(t, state.KubeconfigPath, 8*time.Minute)
 
 	pvcName := "e2e-csi-test-pvc"
 	podName := "e2e-csi-test-pod"
@@ -601,36 +459,16 @@ spec:
 	}
 
 	// Wait for pod to be running (confirms volume attached)
-	// Hetzner volume provisioning + attachment can take 3-4 minutes
 	for i := 0; i < 48; i++ {
 		cmd = exec.CommandContext(context.Background(), "kubectl",
 			"--kubeconfig", state.KubeconfigPath,
 			"get", "pod", podName, "-o", "jsonpath={.status.phase}")
 		output, _ := cmd.CombinedOutput()
 		if string(output) == "Running" {
-			t.Log("  ✓ CSI volume provisioned and mounted")
+			t.Log("  CSI volume provisioned and mounted")
 			break
 		}
 		if i == 47 {
-			// Gather diagnostics before failing
-			t.Log("  Timeout - gathering diagnostics...")
-
-			// Get PVC status
-			pvcCmd := exec.CommandContext(context.Background(), "kubectl",
-				"--kubeconfig", state.KubeconfigPath,
-				"get", "pvc", pvcName, "-o", "wide")
-			if pvcOutput, _ := pvcCmd.CombinedOutput(); len(pvcOutput) > 0 {
-				t.Logf("  PVC status:\n%s", string(pvcOutput))
-			}
-
-			// Get pod events
-			descCmd := exec.CommandContext(context.Background(), "kubectl",
-				"--kubeconfig", state.KubeconfigPath,
-				"describe", "pod", podName)
-			if descOutput, _ := descCmd.CombinedOutput(); len(descOutput) > 0 {
-				t.Logf("  Pod description:\n%s", string(descOutput))
-			}
-
 			t.Fatal("  Timeout waiting for pod with CSI volume (4 minutes)")
 		}
 		if i > 0 && i%12 == 0 {
@@ -640,155 +478,21 @@ spec:
 	}
 
 	// Cleanup
-	exec.CommandContext(context.Background(), "kubectl",
+	_ = exec.CommandContext(context.Background(), "kubectl",
 		"--kubeconfig", state.KubeconfigPath,
 		"delete", "pod", podName, "--force", "--grace-period=0").Run()
-	exec.CommandContext(context.Background(), "kubectl",
+	_ = exec.CommandContext(context.Background(), "kubectl",
 		"--kubeconfig", state.KubeconfigPath,
 		"delete", "pvc", pvcName).Run()
 
 	time.Sleep(10 * time.Second)
-	t.Log("  ✓ CSI volume test complete")
+	t.Log("  CSI volume test complete")
 }
 
-// testAddonCilium installs and tests Cilium CNI.
-func testAddonCilium(t *testing.T, state *E2EState) {
-	t.Log("Installing Cilium addon...")
-
-	cfg := &config.Config{
-		ClusterName: state.ClusterName,
-		Network: config.NetworkConfig{
-			// IPv4CIDR is required for Cilium native routing mode with masquerading
-			// It's used as the ipv4NativeRoutingCIDR value
-			IPv4CIDR: "10.0.0.0/16",
-		},
-		Addons: config.AddonsConfig{
-			Cilium: config.CiliumConfig{
-				Enabled:                     true,
-				EncryptionEnabled:           true,
-				EncryptionType:              "wireguard",
-				RoutingMode:                 "native",
-				KubeProxyReplacementEnabled: true,
-				HubbleEnabled:               true,
-				HubbleRelayEnabled:          true,
-				HubbleUIEnabled:             false, // Skip UI to save resources in E2E
-			},
-		},
-	}
-
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
-		t.Fatalf("Failed to install Cilium: %v", err)
-	}
-
-	// Wait for Cilium operator pod
-	t.Log("  Waiting for Cilium operator...")
-	waitForPod(t, state.KubeconfigPath, "kube-system", "app.kubernetes.io/name=cilium-operator", 8*time.Minute)
-
-	// Wait for Cilium agent daemonset
-	t.Log("  Waiting for Cilium agents...")
-	waitForDaemonSet(t, state.KubeconfigPath, "kube-system", "app.kubernetes.io/name=cilium-agent", 8*time.Minute)
-
-	// Verify Hubble Relay is running
-	if cfg.Addons.Cilium.HubbleRelayEnabled {
-		t.Log("  Waiting for Hubble Relay...")
-		waitForPod(t, state.KubeconfigPath, "kube-system", "app.kubernetes.io/name=hubble-relay", 5*time.Minute)
-	}
-
-	// Test network connectivity between pods
-	testCiliumNetworkConnectivity(t, state)
-
-	state.AddonsInstalled["cilium"] = true
-	t.Log("✓ Cilium addon working")
-}
-
-// testAddonTalosBackup installs and tests Talos Backup.
-func testAddonTalosBackup(t *testing.T, state *E2EState) {
-	// Check if S3 credentials are provided
-	s3Bucket := os.Getenv("E2E_BACKUP_S3_BUCKET")
-	s3Endpoint := os.Getenv("E2E_BACKUP_S3_ENDPOINT")
-	s3AccessKey := os.Getenv("E2E_BACKUP_S3_ACCESS_KEY")
-	s3SecretKey := os.Getenv("E2E_BACKUP_S3_SECRET_KEY")
-	s3Region := os.Getenv("E2E_BACKUP_S3_REGION")
-	if s3Region == "" {
-		s3Region = "us-east-1" // Default region for AWS-compatible S3
-	}
-
-	if s3Bucket == "" || s3Endpoint == "" || s3AccessKey == "" || s3SecretKey == "" {
-		t.Log("Talos Backup test skipped (S3 credentials not provided)")
-		t.Log("  Set E2E_BACKUP_S3_BUCKET, E2E_BACKUP_S3_ENDPOINT, E2E_BACKUP_S3_ACCESS_KEY, E2E_BACKUP_S3_SECRET_KEY to test")
-		return
-	}
-
-	t.Logf("Installing Talos Backup addon with endpoint: %s", s3Endpoint)
-
-	cfg := &config.Config{
-		ClusterName: state.ClusterName,
-		Addons: config.AddonsConfig{
-			TalosBackup: config.TalosBackupConfig{
-				Enabled:           true,
-				Version:           v2.DefaultVersionMatrix().TalosBackup,
-				Schedule:          "0 2 * * *", // 2 AM daily
-				S3Bucket:          s3Bucket,
-				S3Region:          s3Region,
-				S3Endpoint:        s3Endpoint,
-				S3Prefix:          "e2e-test",
-				S3AccessKey:       s3AccessKey,
-				S3SecretKey:       s3SecretKey,
-				S3PathStyle:       true, // Required for Hetzner Object Storage
-				EnableCompression: true,
-			},
-		},
-	}
-
-	if err := addons.Apply(context.Background(), cfg, state.Kubeconfig, 0); err != nil {
-		t.Fatalf("Failed to install Talos Backup: %v", err)
-	}
-
-	// Verify CronJob exists
-	verifyCronJobExists(t, state.KubeconfigPath, "kube-system", "talos-backup")
-
-	// Verify Secret exists (generated name: talos-backup-s3-secrets)
-	verifySecretExists(t, state.KubeconfigPath, "kube-system", "talos-backup-s3-secrets")
-
-	// Verify Talos ServiceAccount exists (generated name: talos-backup-secrets)
-	verifyTalosServiceAccountExists(t, state.KubeconfigPath, "kube-system", "talos-backup-secrets")
-
-	state.AddonsInstalled["talos-backup"] = true
-	t.Log("✓ Talos Backup addon working")
-}
-
-// Helper functions for E2E tests
-
-func waitForDaemonSet(t *testing.T, kubeconfigPath, namespace, selector string, timeout time.Duration) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			t.Fatalf("Timeout waiting for daemonset with selector %s in namespace %s", selector, namespace)
-		case <-ticker.C:
-			cmd := exec.CommandContext(context.Background(), "kubectl",
-				"--kubeconfig", kubeconfigPath,
-				"get", "daemonset", "-n", namespace, "-l", selector,
-				"-o", "jsonpath={.items[0].status.numberReady}")
-			output, err := cmd.CombinedOutput()
-			if err == nil && string(output) != "" && string(output) != "0" {
-				t.Logf("  ✓ DaemonSet %s has ready pods", selector)
-				return
-			}
-			t.Logf("  Waiting for daemonset (ready: %s)...", string(output))
-		}
-	}
-}
-
+// testCiliumNetworkConnectivity tests Cilium network connectivity.
 func testCiliumNetworkConnectivity(t *testing.T, state *E2EState) {
 	t.Log("  Testing Cilium network connectivity...")
 
-	// Create a simple test pod
 	testPodName := "cilium-test-pod"
 	manifest := fmt.Sprintf(`
 apiVersion: v1
@@ -820,7 +524,7 @@ spec:
 			"get", "pod", testPodName, "-o", "jsonpath={.status.phase}")
 		output, _ := cmd.CombinedOutput()
 		if string(output) == "Running" {
-			t.Log("  ✓ Test pod running with Cilium networking")
+			t.Log("  Test pod running with Cilium networking")
 			break
 		}
 		if i == 23 {
@@ -830,62 +534,19 @@ spec:
 	}
 
 	// Cleanup
-	exec.CommandContext(context.Background(), "kubectl",
+	_ = exec.CommandContext(context.Background(), "kubectl",
 		"--kubeconfig", state.KubeconfigPath,
 		"delete", "pod", testPodName, "--force", "--grace-period=0").Run()
 
-	t.Log("  ✓ Cilium network connectivity test complete")
+	t.Log("  Cilium network connectivity test complete")
 }
 
-func verifyCronJobExists(t *testing.T, kubeconfigPath, namespace, name string) {
+// showExternalDNSLogs shows external-dns logs for debugging.
+func showExternalDNSLogs(t *testing.T, kubeconfigPath string) {
 	cmd := exec.CommandContext(context.Background(), "kubectl",
 		"--kubeconfig", kubeconfigPath,
-		"get", "cronjob", "-n", namespace, name)
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("CronJob %s not found in namespace %s", name, namespace)
-	}
-	t.Logf("  ✓ CronJob %s exists", name)
-}
-
-func verifySecretExists(t *testing.T, kubeconfigPath, namespace, name string) {
-	cmd := exec.CommandContext(context.Background(), "kubectl",
-		"--kubeconfig", kubeconfigPath,
-		"get", "secret", "-n", namespace, name)
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("Secret %s not found in namespace %s", name, namespace)
-	}
-	t.Logf("  ✓ Secret %s exists", name)
-}
-
-func verifyTalosServiceAccountExists(t *testing.T, kubeconfigPath, namespace, name string) {
-	// Talos ServiceAccounts use apiVersion: talos.dev/v1alpha1
-	cmd := exec.CommandContext(context.Background(), "kubectl",
-		"--kubeconfig", kubeconfigPath,
-		"get", "serviceaccount.talos.dev", "-n", namespace, name)
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("Talos ServiceAccount %s not found in namespace %s", name, namespace)
-	}
-	t.Logf("  ✓ Talos ServiceAccount %s exists", name)
-}
-
-// mockTalosGenerator is a mock for E2E testing
-type mockTalosGenerator struct{}
-
-func (m *mockTalosGenerator) GenerateControlPlaneConfig(san []string, hostname string) ([]byte, error) {
-	return []byte("mock-cp-config"), nil
-}
-
-func (m *mockTalosGenerator) GenerateWorkerConfig(hostname string) ([]byte, error) {
-	return []byte("mock-worker-config"), nil
-}
-
-func (m *mockTalosGenerator) GenerateAutoscalerConfig(poolName string, labels map[string]string, taints []string) ([]byte, error) {
-	return []byte("mock-autoscaler-config"), nil
-}
-
-func (m *mockTalosGenerator) GetClientConfig() ([]byte, error) {
-	return []byte("mock-client-config"), nil
-}
-
-func (m *mockTalosGenerator) SetEndpoint(endpoint string) {
+		"logs", "-n", "external-dns", "-l", "app.kubernetes.io/name=external-dns",
+		"--tail=30")
+	output, _ := cmd.CombinedOutput()
+	t.Logf("External-DNS logs:\n%s", string(output))
 }

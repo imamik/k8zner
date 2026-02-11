@@ -1,0 +1,23 @@
+# HA cluster with full monitoring stack.
+# Cost: ~80 EUR/month (3 CP + 3 workers + 2 LBs)
+#
+# Features:
+#   - kube-prometheus-stack (Prometheus, Grafana, Alertmanager)
+#   - Grafana dashboard at grafana.example.com
+#   - ArgoCD dashboard at argo.example.com
+#   - Automatic TLS certificates
+#
+# Usage:
+#   export HCLOUD_TOKEN="your-token"
+#   export CF_API_TOKEN="your-cloudflare-token"
+#   k8zner apply -c examples/monitoring.yaml
+
+name: monitored
+region: fsn1
+mode: ha
+workers:
+  count: 3
+  size: cx33
+domain: example.com
+monitoring: true
+grafana_subdomain: grafana
