@@ -53,7 +53,7 @@ func WaitForDoctorHealthy(t *testing.T, configPath string, timeout time.Duration
 
 	for time.Now().Before(deadline) {
 		cmd := exec.CommandContext(context.Background(), "k8zner", "doctor", "--json", "-c", configPath)
-		output, err := cmd.CombinedOutput()
+		output, err := cmd.Output()
 		if err != nil {
 			lastErr = fmt.Errorf("doctor command failed: %w", err)
 			time.Sleep(30 * time.Second)
