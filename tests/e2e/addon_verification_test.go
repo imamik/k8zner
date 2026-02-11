@@ -36,7 +36,7 @@ func RunDoctorCheck(t *testing.T, configPath string) *handlers.DoctorStatus {
 	t.Helper()
 
 	cmd := exec.CommandContext(context.Background(), "k8zner", "doctor", "--json", "-c", configPath)
-	output, err := cmd.CombinedOutput()
+	output, err := cmd.Output()
 	require.NoError(t, err, "k8zner doctor should succeed: %s", string(output))
 
 	var status handlers.DoctorStatus
