@@ -54,9 +54,9 @@ Running Kubernetes on Hetzner Cloud with Talos Linux requires specific networkin
 
 ### 4. Network CIDRs: Single Source of Truth
 
-**Decision**: All CIDR defaults are defined as constants in `internal/config/v2/versions.go` and referenced by both `v2.Expand()` and `SpecToConfig()`.
+**Decision**: All CIDR defaults are defined as constants in `internal/config/spec_versions.go` and referenced by both `ExpandSpec()` and `SpecToConfig()`.
 
-**Why**: The project has two config paths (CLI v2 YAML and Operator CRD). Hardcoding CIDRs as string literals in both paths caused a drift bug where `buildMachineConfigOptions()` used `10.244.0.0/16` (generic k8s default) while the network config used `10.0.128.0/17` (project default).
+**Why**: The project has two config paths (CLI YAML spec and Operator CRD). Hardcoding CIDRs as string literals in both paths caused a drift bug where `buildMachineConfigOptions()` used `10.244.0.0/16` (generic k8s default) while the network config used `10.0.128.0/17` (project default).
 
 **Consequences**:
 - Pod CIDR (`10.0.128.0/17`) must be WITHIN the network CIDR (`10.0.0.0/16`) for Cilium native routing

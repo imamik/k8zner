@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.0] - 2026-02-11
 
 ### Added
 
@@ -13,10 +13,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New clusters: bootstraps infrastructure, deploys operator, creates CRD
   - Existing clusters: updates CRD spec, operator reconciles changes
   - `--wait` flag to wait for operator to complete provisioning
+- **`K8znerCluster` CRD** for declarative cluster management via Kubernetes-native API
 - **`doctor` command** — Diagnose cluster configuration and live status
   - Pre-cluster mode: validates config, shows what would be created
   - Cluster mode: ASCII table with emoji indicators for infrastructure, nodes, and addons
   - `--watch` flag for continuous updates, `--json` for machine-readable output
+- **Control plane self-healing** — Detect failure, remove etcd member, replace node automatically
+- **Worker and CP scaling** via CRD updates (`k8zner apply` updates CRD, operator reconciles)
+- **kube-prometheus-stack** addon (Prometheus, Grafana, Alertmanager) via `monitoring: true`
+- **Operator Helm chart** for in-cluster deployment with leader election and metrics endpoint
+- **KIND-based integration tests** for operator reconciliation logic
+- **3 Architecture Decision Records**: networking, dual-path architecture, bootstrap tolerations
+- **Comprehensive test coverage improvements** (~30k lines of tests across 142 test files)
+
+### Changed
+
+- **Traefik**: always LoadBalancer service (was DaemonSet with hostNetwork) — **breaking**
+- **cert-manager**: DNS-01 via Cloudflare (was HTTP-01) for wildcard certificate support
+- **Cilium**: kube-proxy replacement enabled by default, tunnel mode, Hetzner-specific device config (`enp+`)
+- `config/v2` package consolidated into `config` (internal refactor, no user-facing config change)
+- E2E tests rewritten for operator-based lifecycle (24/24 passing)
+- `destroy` command config flag is now optional (auto-detects k8zner.yaml)
 
 ### Removed
 
@@ -32,11 +49,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`internal/pricing`** — CLI-only cost estimation
 - **`internal/util/prerequisites`** — not needed with operator approach
 - **`PrerequisitesCheckEnabled`** config field
+- **Floating IP support** — LoadBalancer-only approach
+- **ingress-nginx support** — Traefik is the sole ingress controller
 
-### Changed
+### Fixed
 
-- Traefik uses Deployment + LoadBalancer service (was "DaemonSet with hostNetwork")
-- `destroy` command config flag is now optional (auto-detects k8zner.yaml)
+- CSI CrashLoopBackOff during bootstrap (DNS resolution timing)
+- Cilium device detection on Talos (`enp+` pattern, not `eth0`)
+- ArgoCD Redis secret initialization (`redisSecretInit.enabled` must be true)
+- Bootstrap toleration gaps (3 tolerations needed for all bootstrap-critical pods)
+- CIDR drift between CLI and operator config paths
 
 ## [0.6.0] - 2026-01-31
 
@@ -231,7 +253,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Secrets stored locally in `./secrets/` directory
 - No credentials stored in cluster state
 
-[Unreleased]: https://github.com/imamik/k8zner/compare/v0.5.0...HEAD
+[0.7.0]: https://github.com/imamik/k8zner/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/imamik/k8zner/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/imamik/k8zner/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/imamik/k8zner/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/imamik/k8zner/compare/v0.2.1...v0.3.0

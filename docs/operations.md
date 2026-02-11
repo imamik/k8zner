@@ -203,6 +203,26 @@ Default Grafana credentials are managed by the Helm chart. Check the Grafana sec
 kubectl get secret -n monitoring kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' | base64 -d
 ```
 
+## Diagnosing Issues
+
+The `doctor` command provides a quick overview of cluster health:
+
+```bash
+# Pre-cluster: validate config and show what would be created
+k8zner doctor
+
+# With a running cluster: show infrastructure, node, and addon status
+k8zner doctor
+
+# Continuous monitoring (refreshes every 5 seconds)
+k8zner doctor --watch
+
+# Machine-readable output
+k8zner doctor --json
+```
+
+The output includes emoji indicators for each component's status and highlights any issues that need attention.
+
 ## Destroying a Cluster
 
 ```bash
