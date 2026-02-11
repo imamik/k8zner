@@ -3,8 +3,10 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -16,6 +18,53 @@ import (
 	"github.com/imamik/k8zner/internal/util/naming"
 )
 
+// recordPhaseTransition records a phase transition in the cluster's PhaseHistory.
+// It closes the previous phase record (if open) and opens a new one.
+func recordPhaseTransition(cluster *k8znerv1alpha1.K8znerCluster, newPhase k8znerv1alpha1.ProvisioningPhase) {
+	now := metav1.Now()
+
+	// Close the previous open phase record
+	for i := range cluster.Status.PhaseHistory {
+		if cluster.Status.PhaseHistory[i].EndedAt == nil {
+			cluster.Status.PhaseHistory[i].EndedAt = &now
+			d := now.Sub(cluster.Status.PhaseHistory[i].StartedAt.Time)
+			cluster.Status.PhaseHistory[i].Duration = d.Round(time.Second).String()
+		}
+	}
+
+	// Open a new record for the new phase
+	cluster.Status.PhaseHistory = append(cluster.Status.PhaseHistory, k8znerv1alpha1.PhaseRecord{
+		Phase:     newPhase,
+		StartedAt: now,
+	})
+
+	// Update PhaseStartedAt for timeout detection
+	cluster.Status.PhaseStartedAt = &now
+}
+
+// recordPhaseError records an error on the current open phase record and appends to LastErrors.
+func recordPhaseError(cluster *k8znerv1alpha1.K8znerCluster, component, message string) {
+	now := metav1.Now()
+
+	// Set error on current open phase
+	for i := range cluster.Status.PhaseHistory {
+		if cluster.Status.PhaseHistory[i].EndedAt == nil {
+			cluster.Status.PhaseHistory[i].Error = message
+		}
+	}
+
+	// Append to LastErrors ring buffer
+	cluster.Status.LastErrors = append(cluster.Status.LastErrors, k8znerv1alpha1.ErrorRecord{
+		Time:      now,
+		Phase:     string(cluster.Status.ProvisioningPhase),
+		Component: component,
+		Message:   message,
+	})
+	if len(cluster.Status.LastErrors) > k8znerv1alpha1.MaxLastErrors {
+		cluster.Status.LastErrors = cluster.Status.LastErrors[len(cluster.Status.LastErrors)-k8znerv1alpha1.MaxLastErrors:]
+	}
+}
+
 // reconcileInfrastructurePhase creates network, firewall, and load balancer.
 // If infrastructure already exists (from CLI bootstrap), it skips creation and proceeds to the next phase.
 func (r *ClusterReconciler) reconcileInfrastructurePhase(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (ctrl.Result, error) {
@@ -24,6 +73,9 @@ func (r *ClusterReconciler) reconcileInfrastructurePhase(ctx context.Context, cl
 
 	cluster.Status.Phase = k8znerv1alpha1.ClusterPhaseProvisioning
 	cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseInfrastructure
+	if len(cluster.Status.PhaseHistory) == 0 {
+		recordPhaseTransition(cluster, k8znerv1alpha1.PhaseInfrastructure)
+	}
 
 	// Check if infrastructure already exists (from CLI bootstrap)
 	infra := cluster.Status.Infrastructure
@@ -41,6 +93,7 @@ func (r *ClusterReconciler) reconcileInfrastructurePhase(ctx context.Context, cl
 		r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonInfrastructureCreated,
 			"Using existing infrastructure from CLI bootstrap")
 
+		recordPhaseTransition(cluster, k8znerv1alpha1.PhaseImage)
 		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseImage
 		return ctrl.Result{Requeue: true}, nil
 	}
@@ -76,6 +129,7 @@ func (r *ClusterReconciler) reconcileInfrastructurePhase(ctx context.Context, cl
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonInfrastructureCreated,
 		"Infrastructure provisioned successfully")
 
+	recordPhaseTransition(cluster, k8znerv1alpha1.PhaseImage)
 	cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseImage
 	return ctrl.Result{Requeue: true}, nil
 }
@@ -108,6 +162,7 @@ func (r *ClusterReconciler) reconcileImagePhase(ctx context.Context, cluster *k8
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonImageReady,
 		"Talos image is available")
 
+	recordPhaseTransition(cluster, k8znerv1alpha1.PhaseCompute)
 	cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseCompute
 	return ctrl.Result{Requeue: true}, nil
 }
@@ -142,8 +197,10 @@ func (r *ClusterReconciler) reconcileComputePhase(ctx context.Context, cluster *
 
 	// For CLI-bootstrapped clusters, skip Bootstrap phase (can't run from inside the cluster)
 	if cluster.Spec.Bootstrap != nil && cluster.Spec.Bootstrap.Completed {
+		recordPhaseTransition(cluster, k8znerv1alpha1.PhaseAddons)
 		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseAddons
 	} else {
+		recordPhaseTransition(cluster, k8znerv1alpha1.PhaseBootstrap)
 		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseBootstrap
 	}
 	return ctrl.Result{Requeue: true}, nil
@@ -177,6 +234,7 @@ func (r *ClusterReconciler) reconcileBootstrapPhase(ctx context.Context, cluster
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonBootstrapComplete,
 		"Cluster bootstrapped successfully")
 
+	recordPhaseTransition(cluster, k8znerv1alpha1.PhaseCNI)
 	cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseCNI
 	return ctrl.Result{Requeue: true}, nil
 }
@@ -223,6 +281,7 @@ func (r *ClusterReconciler) reconcileConfiguringPhase(ctx context.Context, clust
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonConfiguringComplete,
 		"Cluster configuration complete")
 
+	recordPhaseTransition(cluster, k8znerv1alpha1.PhaseComplete)
 	cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseComplete
 	cluster.Status.Phase = k8znerv1alpha1.ClusterPhaseRunning
 

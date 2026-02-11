@@ -88,7 +88,7 @@ func TestHelmRender(t *testing.T) {
 				},
 			}),
 			namespace:   "kube-system",
-			mustContain: []string{"kind: Deployment", "hcloud"},
+			mustContain: []string{"kind: DaemonSet", "hcloud"},
 		},
 		{
 			name:      "ExternalDNS",

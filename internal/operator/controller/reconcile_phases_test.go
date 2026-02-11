@@ -690,6 +690,248 @@ func TestReconcilePhases_EventRecording(t *testing.T) {
 	})
 }
 
+func TestRecordPhaseTransition(t *testing.T) {
+	t.Parallel()
+
+	t.Run("opens new record and closes previous", func(t *testing.T) {
+		t.Parallel()
+		cluster := &k8znerv1alpha1.K8znerCluster{}
+
+		recordPhaseTransition(cluster, k8znerv1alpha1.PhaseInfrastructure)
+		assert.Len(t, cluster.Status.PhaseHistory, 1)
+		assert.Equal(t, k8znerv1alpha1.PhaseInfrastructure, cluster.Status.PhaseHistory[0].Phase)
+		assert.Nil(t, cluster.Status.PhaseHistory[0].EndedAt)
+		assert.NotNil(t, cluster.Status.PhaseStartedAt)
+
+		recordPhaseTransition(cluster, k8znerv1alpha1.PhaseImage)
+		assert.Len(t, cluster.Status.PhaseHistory, 2)
+		// First record should be closed
+		assert.NotNil(t, cluster.Status.PhaseHistory[0].EndedAt)
+		assert.NotEmpty(t, cluster.Status.PhaseHistory[0].Duration)
+		// Second record should be open
+		assert.Nil(t, cluster.Status.PhaseHistory[1].EndedAt)
+		assert.Equal(t, k8znerv1alpha1.PhaseImage, cluster.Status.PhaseHistory[1].Phase)
+	})
+
+	t.Run("handles empty history", func(t *testing.T) {
+		t.Parallel()
+		cluster := &k8znerv1alpha1.K8znerCluster{}
+
+		recordPhaseTransition(cluster, k8znerv1alpha1.PhaseCNI)
+		assert.Len(t, cluster.Status.PhaseHistory, 1)
+	})
+}
+
+func TestRecordPhaseError(t *testing.T) {
+	t.Parallel()
+
+	t.Run("appends to LastErrors ring buffer", func(t *testing.T) {
+		t.Parallel()
+		cluster := &k8znerv1alpha1.K8znerCluster{}
+		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseAddons
+
+		recordPhaseError(cluster, "traefik", "timeout installing")
+
+		assert.Len(t, cluster.Status.LastErrors, 1)
+		assert.Equal(t, "traefik", cluster.Status.LastErrors[0].Component)
+		assert.Equal(t, "timeout installing", cluster.Status.LastErrors[0].Message)
+		assert.Equal(t, "Addons", cluster.Status.LastErrors[0].Phase)
+	})
+
+	t.Run("sets error on open phase record", func(t *testing.T) {
+		t.Parallel()
+		cluster := &k8znerv1alpha1.K8znerCluster{}
+		recordPhaseTransition(cluster, k8znerv1alpha1.PhaseAddons)
+
+		recordPhaseError(cluster, "cert-manager", "CRD not ready")
+
+		assert.Equal(t, "CRD not ready", cluster.Status.PhaseHistory[0].Error)
+	})
+
+	t.Run("ring buffer caps at MaxLastErrors", func(t *testing.T) {
+		t.Parallel()
+		cluster := &k8znerv1alpha1.K8znerCluster{}
+		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseAddons
+
+		for i := 0; i < 15; i++ {
+			recordPhaseError(cluster, "test", "error")
+		}
+
+		assert.Len(t, cluster.Status.LastErrors, k8znerv1alpha1.MaxLastErrors)
+	})
+}
+
+func TestAddonRetryBackoff(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		retryCount int
+		expected   string
+	}{
+		{0, "10s"},
+		{1, "10s"},
+		{2, "30s"},
+		{3, "1m0s"},
+		{5, "1m0s"},
+		{10, "1m0s"},
+	}
+
+	for _, tt := range tests {
+		got := addonRetryBackoff(tt.retryCount)
+		assert.Equal(t, tt.expected, got.String(), "retry %d", tt.retryCount)
+	}
+}
+
+func TestCheckPhaseTimeout(t *testing.T) {
+	t.Parallel()
+	scheme := setupTestScheme(t)
+
+	t.Run("emits warning event when phase exceeds threshold", func(t *testing.T) {
+		t.Parallel()
+		// Set PhaseStartedAt to 10 minutes ago (well over 2x any expected duration)
+		tenMinAgo := metav1.NewTime(metav1.Now().Add(-10 * 60 * 1e9))
+		cluster := &k8znerv1alpha1.K8znerCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-cluster",
+				Namespace: "default",
+			},
+			Status: k8znerv1alpha1.K8znerClusterStatus{
+				ProvisioningPhase: k8znerv1alpha1.PhaseInfrastructure,
+				PhaseStartedAt:    &tenMinAgo,
+			},
+		}
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(cluster).
+			WithStatusSubresource(cluster).
+			Build()
+		recorder := record.NewFakeRecorder(10)
+
+		r := NewClusterReconciler(fakeClient, scheme, recorder, WithMetrics(false))
+
+		r.checkPhaseTimeout(context.Background(), cluster)
+
+		// Should have emitted a warning event
+		select {
+		case event := <-recorder.Events:
+			assert.Contains(t, event, "PhaseTimeout")
+		default:
+			t.Error("expected PhaseTimeout event")
+		}
+
+		// Should also have recorded an error
+		assert.NotEmpty(t, cluster.Status.LastErrors)
+	})
+
+	t.Run("no warning when phase is within threshold", func(t *testing.T) {
+		t.Parallel()
+		now := metav1.Now()
+		cluster := &k8znerv1alpha1.K8znerCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-cluster",
+				Namespace: "default",
+			},
+			Status: k8znerv1alpha1.K8znerClusterStatus{
+				ProvisioningPhase: k8znerv1alpha1.PhaseInfrastructure,
+				PhaseStartedAt:    &now,
+			},
+		}
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(cluster).
+			WithStatusSubresource(cluster).
+			Build()
+		recorder := record.NewFakeRecorder(10)
+
+		r := NewClusterReconciler(fakeClient, scheme, recorder, WithMetrics(false))
+
+		r.checkPhaseTimeout(context.Background(), cluster)
+
+		// No events expected
+		select {
+		case event := <-recorder.Events:
+			t.Errorf("unexpected event: %s", event)
+		default:
+			// Good
+		}
+	})
+
+	t.Run("no-op when PhaseStartedAt is nil", func(t *testing.T) {
+		t.Parallel()
+		cluster := &k8znerv1alpha1.K8znerCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-cluster",
+				Namespace: "default",
+			},
+			Status: k8znerv1alpha1.K8znerClusterStatus{
+				ProvisioningPhase: k8znerv1alpha1.PhaseInfrastructure,
+			},
+		}
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(cluster).
+			WithStatusSubresource(cluster).
+			Build()
+		recorder := record.NewFakeRecorder(10)
+
+		r := NewClusterReconciler(fakeClient, scheme, recorder, WithMetrics(false))
+
+		r.checkPhaseTimeout(context.Background(), cluster)
+
+		select {
+		case event := <-recorder.Events:
+			t.Errorf("unexpected event: %s", event)
+		default:
+			// Good
+		}
+	})
+}
+
+func TestPhaseHistoryRecording(t *testing.T) {
+	t.Parallel()
+	scheme := setupTestScheme(t)
+
+	t.Run("infrastructure skip records phase history", func(t *testing.T) {
+		t.Parallel()
+		cluster := &k8znerv1alpha1.K8znerCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-cluster",
+				Namespace: "default",
+			},
+			Status: k8znerv1alpha1.K8znerClusterStatus{
+				Infrastructure: k8znerv1alpha1.InfrastructureStatus{
+					NetworkID:      1,
+					LoadBalancerID: 2,
+					FirewallID:     3,
+				},
+			},
+		}
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(cluster).
+			WithStatusSubresource(cluster).
+			Build()
+		recorder := record.NewFakeRecorder(10)
+
+		r := NewClusterReconciler(fakeClient, scheme, recorder, WithMetrics(false))
+
+		_, _ = r.reconcileInfrastructurePhase(context.Background(), cluster)
+
+		// Should have phase history entries:
+		// 1. Infrastructure (recorded on entry when history was empty)
+		// 2. Image (recorded on transition)
+		require.Len(t, cluster.Status.PhaseHistory, 2)
+		assert.Equal(t, k8znerv1alpha1.PhaseInfrastructure, cluster.Status.PhaseHistory[0].Phase)
+		assert.NotNil(t, cluster.Status.PhaseHistory[0].EndedAt, "Infrastructure should be closed")
+		assert.Equal(t, k8znerv1alpha1.PhaseImage, cluster.Status.PhaseHistory[1].Phase)
+		assert.Nil(t, cluster.Status.PhaseHistory[1].EndedAt, "Image should be open")
+	})
+}
+
 func TestReconcileMainSwitchDispatch(t *testing.T) {
 	t.Parallel()
 	scheme := setupTestScheme(t)

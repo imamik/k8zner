@@ -348,6 +348,9 @@ spec:
                 additionalProperties:
                   description: AddonStatus represents the status of an installed addon.
                   properties:
+                    duration:
+                      description: Duration is a human-readable duration of the installation
+                      type: string
                     healthy:
                       description: Healthy indicates if the addon is healthy
                       type: boolean
@@ -375,6 +378,13 @@ spec:
                       - Installed
                       - Failed
                       - Upgrading
+                      type: string
+                    retryCount:
+                      description: RetryCount tracks the number of installation retries
+                      type: integer
+                    startedAt:
+                      description: StartedAt is when the addon installation started
+                      format: date-time
                       type: string
                     version:
                       description: Version is the installed version
@@ -589,6 +599,30 @@ spec:
                     description: SubnetID is the Hetzner subnet ID
                     type: string
                 type: object
+              lastErrors:
+                description: LastErrors is a ring buffer of recent errors (max 10).
+                items:
+                  description: ErrorRecord records a recent error for observability.
+                  properties:
+                    component:
+                      description: Component is the component that produced the error
+                      type: string
+                    message:
+                      description: Message is the error message
+                      type: string
+                    phase:
+                      description: Phase is the provisioning phase when the error
+                        occurred
+                      type: string
+                    time:
+                      description: Time is when the error occurred
+                      format: date-time
+                      type: string
+                  required:
+                  - message
+                  - time
+                  type: object
+                type: array
               lastReconcileTime:
                 description: LastReconcileTime is when the operator last reconciled
                   this cluster
@@ -607,6 +641,35 @@ spec:
                 - Healing
                 - Failed
                 type: string
+              phaseHistory:
+                description: PhaseHistory records timing information for each provisioning
+                  phase.
+                items:
+                  description: PhaseRecord records timing information for a provisioning
+                    phase.
+                  properties:
+                    duration:
+                      description: Duration is a human-readable duration string
+                      type: string
+                    endedAt:
+                      description: EndedAt is when this phase completed
+                      format: date-time
+                      type: string
+                    error:
+                      description: Error is set if the phase encountered an error
+                      type: string
+                    phase:
+                      description: Phase is the provisioning phase
+                      type: string
+                    startedAt:
+                      description: StartedAt is when this phase started
+                      format: date-time
+                      type: string
+                  required:
+                  - phase
+                  - startedAt
+                  type: object
+                type: array
               phaseStartedAt:
                 description: |-
                   PhaseStartedAt tracks when the current provisioning phase started.
