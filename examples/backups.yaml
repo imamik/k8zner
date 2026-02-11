@@ -1,0 +1,22 @@
+# HA cluster with automatic etcd backups to Hetzner Object Storage.
+# Cost: ~64 EUR/month + storage (~0.01 EUR/GB/month)
+#
+# Features:
+#   - Hourly etcd snapshots via CronJob
+#   - Compressed backups in Hetzner Object Storage
+#   - Auto-created S3 bucket: {name}-etcd-backups
+#   - Backup bucket is preserved on cluster destroy (safety)
+#
+# Usage:
+#   export HCLOUD_TOKEN="your-token"
+#   export HETZNER_S3_ACCESS_KEY="your-s3-access-key"
+#   export HETZNER_S3_SECRET_KEY="your-s3-secret-key"
+#   k8zner apply -c examples/backups.yaml
+
+name: backed-up
+region: fsn1
+mode: ha
+workers:
+  count: 3
+  size: cx33
+backup: true

@@ -34,6 +34,7 @@ linters:
         - emptyStringTest  # len(s) == 0 is fine
         - octalLiteral     # 0600 is widely understood
         - unnamedResult    # Named results not always clearer
+        - sloppyReassign   # False positive with defer-captured error variables
 
     revive:
       rules:

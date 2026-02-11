@@ -26,14 +26,22 @@ func (p *Provisioner) Provision(ctx *provisioning.Context) error {
 	ctx.Observer.Printf("[Destroy] Starting cluster destruction for: %s", ctx.Config.ClusterName)
 
 	// Build label selector for cluster resources
-	clusterLabels := labels.NewLabelBuilder(ctx.Config.ClusterName).
-		WithTestIDIfSet(ctx.Config.TestID).
-		Build()
+	// IMPORTANT: Use only cluster labels, NOT managed-by, because:
+	// - CLI-created resources have k8zner.io/managed-by: k8zner
+	// - Operator-created resources have k8zner.io/managed-by: k8zner-operator
+	// Both should be cleaned up when destroying the cluster.
+	clusterLabels := map[string]string{
+		labels.KeyCluster:       ctx.Config.ClusterName,
+		labels.LegacyKeyCluster: ctx.Config.ClusterName,
+	}
+	if ctx.Config.TestID != "" {
+		clusterLabels[labels.LegacyKeyTestID] = ctx.Config.TestID
+	}
 
 	provisioning.LogResourceDeleting(ctx.Observer, "destroy", "cluster", ctx.Config.ClusterName)
 
 	// Delete all cluster resources by label
-	// This includes: servers, load balancers, floating IPs, firewalls, networks,
+	// This includes: servers, load balancers, firewalls, networks,
 	// placement groups, SSH keys, and certificates
 	if err := ctx.Infra.CleanupByLabel(ctx, clusterLabels); err != nil {
 		return fmt.Errorf("failed to cleanup cluster resources: %w", err)

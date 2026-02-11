@@ -4,8 +4,10 @@ package s3
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -14,6 +16,19 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 )
+
+const (
+	// MetadataFileName is the name of the metadata file used to identify k8zner-managed buckets.
+	MetadataFileName = "k8zner_metadata.json"
+)
+
+// BucketMetadata contains metadata about a k8zner-managed S3 bucket.
+// This file is written to each bucket to verify ownership during cleanup.
+type BucketMetadata struct {
+	ClusterName string `json:"clusterName"`
+	ManagedBy   string `json:"managedBy"`
+	CreatedAt   string `json:"createdAt"`
+}
 
 // Client wraps the S3 client for Hetzner Object Storage.
 type Client struct {
@@ -53,6 +68,55 @@ func (c *Client) CreateBucket(ctx context.Context, bucketName string) error {
 		return fmt.Errorf("failed to create bucket %s: %w", bucketName, err)
 	}
 	return nil
+}
+
+// CreateBucketWithMetadata creates a new S3 bucket and writes k8zner metadata file.
+// This allows safe identification and cleanup of k8zner-managed buckets.
+func (c *Client) CreateBucketWithMetadata(ctx context.Context, bucketName, clusterName string) error {
+	// Create the bucket
+	if err := c.CreateBucket(ctx, bucketName); err != nil {
+		return err
+	}
+
+	// Write metadata file
+	return c.WriteMetadata(ctx, bucketName, clusterName)
+}
+
+// WriteMetadata writes the k8zner metadata file to a bucket.
+// This can be used to add metadata to existing buckets.
+func (c *Client) WriteMetadata(ctx context.Context, bucketName, clusterName string) error {
+	metadata := BucketMetadata{
+		ClusterName: clusterName,
+		ManagedBy:   "k8zner",
+		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
+	}
+
+	data, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+
+	return c.PutObject(ctx, bucketName, MetadataFileName, data)
+}
+
+// GetMetadata retrieves the k8zner metadata from a bucket.
+// Returns nil if the metadata file doesn't exist.
+func (c *Client) GetMetadata(ctx context.Context, bucketName string) (*BucketMetadata, error) {
+	data, err := c.GetObject(ctx, bucketName, MetadataFileName)
+	if err != nil {
+		// Check if it's a not found error
+		if isNotFoundError(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var metadata BucketMetadata
+	if err := json.Unmarshal(data, &metadata); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+	}
+
+	return &metadata, nil
 }
 
 // BucketExists checks if a bucket exists and is accessible.

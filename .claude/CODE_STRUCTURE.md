@@ -2,16 +2,33 @@
 
 This document defines the structural patterns and quality standards for the k8zner codebase. These rules emerged from active refactoring and represent our agreed-upon approach.
 
-## 1. Package Structure
+## 1. Architecture: Dual-Path (CLI + Operator)
 
-- **cmd/**: Split commands (CLI definitions) from handlers (business logic)
+The codebase has two entry points that drive the same shared layers:
+
+- **CLI path** (`cmd/k8zner/`): On-machine provisioning via Cobra commands. Bootstraps a single CP node, installs all addons in one shot.
+- **Operator path** (`cmd/operator/`): Kubernetes controller reconciling `K8znerCluster` CRDs. Scales CP from 1→N, installs addons in phases, handles self-healing.
+
+Both paths share: `internal/addons/`, `internal/provisioning/`, `internal/platform/`, `internal/config/`.
+
+### Package Structure
+
+- **api/v1alpha1/**: CRD types (`K8znerCluster` spec, status, phase constants)
+- **cmd/k8zner/**: CLI — split commands (Cobra definitions) from handlers (business logic)
+- **cmd/operator/**: Operator entrypoint — sets up controller-runtime
+- **cmd/cleanup/**: Standalone cleanup utility for destroying cluster resources
 - **internal/**: Organize by domain and responsibility:
+  - **operator/controller/**: CRD reconciliation (phases, scaling, healing, health checks)
+  - **operator/provisioning/**: CRD spec → internal Config adapter
+  - **operator/addons/**: Operator-specific addon phase manager
   - **provisioning/**: All cluster provisioning (compute, infrastructure, images, bootstrap)
-  - **addons/**: Addon installation
-  - **config/**: Configuration management
-  - **platform/**: External system integrations (hcloud, talos, ssh)
-  - **util/**: Reusable utilities (async, labels, naming, retry, etc.)
-- One package = one responsibility - provisioning is acceptable as a larger package when the domain is cohesive
+  - **addons/**: Addon installation (shared by CLI and operator)
+    - **addons/helm/**: Helm chart rendering, value building, and chart client
+    - **addons/k8sclient/**: Kubernetes API operations (apply manifests, manage secrets)
+  - **config/**: Configuration management; **config/v2/** for YAML spec + defaults
+  - **platform/**: External system integrations (hcloud, talos, ssh, s3)
+  - **util/**: Reusable utilities (async, keygen, labels, naming, rdns, retry)
+- One package = one responsibility — provisioning is acceptable as a larger package when the domain is cohesive
 
 ## 2. Function Design
 
@@ -30,6 +47,8 @@ This document defines the structural patterns and quality standards for the k8zn
 - CLI framework (cobra) isolated in commands/, never in handlers/
 - Configuration loading separate from execution
 - Write critical state (secrets) before risky operations (reconciliation)
+- Operator controller logic separate from shared provisioning/addon layers
+- CRD types (`api/v1alpha1/`) never import internal packages
 
 ## 4. Documentation
 
@@ -136,8 +155,9 @@ Split when a single file exceeds ~200 lines AND has clear sub-responsibilities:
 
 ### Examples from our codebase:
 - ✅ `internal/provisioning` - Cohesive domain (cluster provisioning), all related operations together
-- ✅ `internal/addons` - Clear domain (cluster addons), reusable, external boundary (kubectl)
+- ✅ `internal/addons` - Clear domain (cluster addons), reusable by both CLI and operator
 - ✅ `internal/platform/hcloud` - External system boundary, many operations
+- ✅ `internal/operator/controller` - CRD reconciliation, thematic file split (phases, scaling, healing, health)
 - ✅ `cmd/k8zner/commands` - CLI commands separate from handlers
 - ✅ `cmd/k8zner/handlers` - Business logic separate from CLI framework
 - ✅ `internal/util/*` - Small, focused utilities (async, naming, labels, retry)
@@ -146,13 +166,63 @@ Split when a single file exceeds ~200 lines AND has clear sub-responsibilities:
 The provisioning domain is organized into focused subpackages, each with a clear single responsibility:
 
 - **`infrastructure/`** — Network, Firewall, Load Balancers, Floating IPs
-- **`compute/`** — Servers, Control Plane, Workers, Node Pools  
+- **`compute/`** — Servers, Control Plane, Workers, Node Pools
 - **`image/`** — Talos image building and snapshot management
 - **`cluster/`** — Bootstrap and Talos configuration application
+- **`destroy/`** — Resource cleanup and cluster teardown
+- **`upgrade/`** — Node upgrade provisioning
 
-Each subpackage interacts with the `internal/platform/hcloud` layer for cloud operations. The `internal/orchestration` package coordinates these provisioners in the correct order, managing state flow between them. Shared interfaces and state types live at the `internal/provisioning` root level.
+Each subpackage interacts with the `internal/platform/hcloud` layer for cloud operations. The provisioning pipeline (`internal/provisioning/pipeline.go`) coordinates these provisioners in the correct order. Shared interfaces and state types live at the `internal/provisioning` root level.
 
-## 9. Generic Operations & Code Reuse
+## 9. Operator Controller Patterns
+
+### Thematic File Splitting
+
+The operator controller (`internal/operator/controller/`) uses a single struct (`ClusterReconciler`) split across thematic files. Same package, same struct — no new interfaces or abstractions needed.
+
+| File | Responsibility |
+|------|---------------|
+| `cluster_controller.go` | Struct, constants, options, `Reconcile()` entry point, `SetupWithManager` |
+| `reconcile_phases.go` | Phase state machine (Infrastructure → Image → Compute → Bootstrap → CNI → Addons → Running) |
+| `reconcile_addons.go` | CNI and addon phase reconciliation (Cilium readiness, addon installation order) |
+| `reconcile_scaling_cp.go` | Control plane scaling (up/down), etcd membership safety |
+| `reconcile_scaling_workers.go` | Worker scaling (up/down), node pool management |
+| `reconcile_healing.go` | Self-healing node replacement |
+| `reconcile_health.go` | Health checks, node readiness, cluster phase updates |
+| `server_provisioning.go` | Shared provisioning helpers (create server, SSH keys, snapshot lookup) |
+| `node_status.go` | Node phase tracking in CRD status |
+| `cluster_state.go` | Cluster state aggregation and node status tracking |
+| `talos_client.go` | Talos node communication, config generation, health checks |
+| `interfaces.go` | Interface definitions for HCloud, Talos, and Kubernetes clients |
+| `metrics.go` | Prometheus metrics registration and recording |
+| `node_state_verifier.go` | Node state verification against expected cluster topology |
+
+**When to split a controller file**: when a single file exceeds ~800 lines and methods group by theme. Keep the struct definition and entry point in the main file; move method groups to thematic files.
+
+### Config Round-Trip
+
+Three representations of cluster configuration must stay in sync:
+
+1. **v2 YAML spec** (`internal/config/v2/types.go`) — user-facing config file
+2. **Internal Config** (`internal/config/types.go`) — runtime representation with expanded defaults
+3. **CRD spec** (`api/v1alpha1/types.go`) — Kubernetes-native representation
+
+The round-trip flows:
+- **CLI path**: v2 YAML → `v2.Expand()` → internal Config → provisioning/addons
+- **Operator path**: CRD spec → `adapter.SpecToConfig()` → internal Config → provisioning/addons
+
+`SpecToConfig()` must replicate the same defaults that `v2.Expand()` sets. When adding CRD fields, trace the full round-trip to avoid silent mismatches.
+
+### Shared Addon Installation
+
+`internal/addons/` is shared by both paths. Entry points:
+- `Apply()` — CLI path: installs everything including Cilium and Operator
+- `ApplyWithoutCilium()` — Operator path: skips Cilium (installed in CNI phase) and Operator (already running)
+- `ApplyCilium()` — Operator CNI phase: installs only Cilium
+
+All three delegate to a shared `applyAddons()` with options controlling inclusion.
+
+## 10. Generic Operations & Code Reuse
 
 ### When to Use Go Generics
 
@@ -226,7 +296,7 @@ return (&EnsureOperation[*hcloud.Network, hcloud.NetworkCreateOpts, any]{
 4. **Type Safety:** Full compile-time type checking
 5. **Testability:** Generic operations can be unit tested independently
 
-## 10. External Commands & Resources
+## 11. External Commands & Resources
 
 ### Executing External Commands
 - Use `exec.CommandContext` for external tools (kubectl, ssh, etc.)

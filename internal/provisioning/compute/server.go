@@ -92,21 +92,20 @@ func (p *Provisioner) ensureServer(ctx *provisioning.Context, spec ServerSpec) (
 		enableIPv6 = true
 	}
 
-	_, err = ctx.Infra.CreateServer(
-		ctx,
-		spec.Name,
-		image,
-		spec.Type,
-		spec.Location,
-		ctx.Config.SSHKeys,
-		serverLabels,
-		spec.UserData,
-		spec.PlacementGroup,
-		networkID,
-		spec.PrivateIP,
-		enableIPv4,
-		enableIPv6,
-	)
+	_, err = ctx.Infra.CreateServer(ctx, hcloud.ServerCreateOpts{
+		Name:             spec.Name,
+		ImageType:        image,
+		ServerType:       spec.Type,
+		Location:         spec.Location,
+		SSHKeys:          ctx.Config.SSHKeys,
+		Labels:           serverLabels,
+		UserData:         spec.UserData,
+		PlacementGroupID: spec.PlacementGroup,
+		NetworkID:        networkID,
+		PrivateIP:        spec.PrivateIP,
+		EnablePublicIPv4: enableIPv4,
+		EnablePublicIPv6: enableIPv6,
+	})
 	if err != nil {
 		return ServerInfo{}, fmt.Errorf("failed to create server %s: %w", spec.Name, err)
 	}

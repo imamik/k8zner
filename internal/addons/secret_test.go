@@ -14,6 +14,7 @@ import (
 // Note: Uses mockK8sClient from kubectl_test.go (same package)
 
 func TestCreateHCloudSecret(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		token       string
@@ -48,6 +49,7 @@ func TestCreateHCloudSecret(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			client := new(mockK8sClient)
 
 			// Capture the secret to verify its structure
@@ -78,7 +80,26 @@ func TestCreateHCloudSecret(t *testing.T) {
 	}
 }
 
+func TestCreateHCloudSecret_EmptyToken(t *testing.T) {
+	t.Parallel()
+	client := new(mockK8sClient)
+
+	err := createHCloudSecret(context.Background(), client, "", 12345)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "hcloud token is empty")
+}
+
+func TestCreateHCloudSecret_ZeroNetworkID(t *testing.T) {
+	t.Parallel()
+	client := new(mockK8sClient)
+
+	err := createHCloudSecret(context.Background(), client, "test-token", 0)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "network ID is 0")
+}
+
 func TestCreateHCloudSecret_NetworkIDFormat(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		networkID      int64
@@ -103,6 +124,7 @@ func TestCreateHCloudSecret_NetworkIDFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			client := new(mockK8sClient)
 
 			var capturedSecret *corev1.Secret

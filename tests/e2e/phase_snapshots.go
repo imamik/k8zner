@@ -9,15 +9,16 @@ import (
 	"testing"
 	"time"
 
-	v2 "github.com/imamik/k8zner/internal/config/v2"
+	"github.com/imamik/k8zner/internal/config"
+	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning/image"
 	"github.com/imamik/k8zner/internal/util/keygen"
 )
 
-// Get versions from the v2 default version matrix
+// Get versions from the default version matrix
 // Note: Kubernetes version is used WITHOUT 'v' prefix to match provisioning code labels
 var (
-	versionMatrix = v2.DefaultVersionMatrix()
+	versionMatrix = config.DefaultVersionMatrix()
 	talosVersion  = versionMatrix.Talos
 	k8sVersion    = versionMatrix.Kubernetes // NO 'v' prefix - must match provisioning labels
 )
@@ -126,7 +127,7 @@ func createVerificationSSHKey(ctx context.Context, t *testing.T, state *E2EState
 func verifySnapshot(ctx context.Context, t *testing.T, state *E2EState, arch, snapshotID, sshKeyName string) {
 	serverName := fmt.Sprintf("%s-verify-%s-%d", state.ClusterName, arch, time.Now().Unix())
 
-	serverType := "cx23" // Must match disk size of image builder server
+	serverType := "cpx22" // Must match disk size of image builder server - better availability than cx23
 	if arch == "arm64" {
 		serverType = "cax11"
 	}
@@ -140,7 +141,15 @@ func verifySnapshot(ctx context.Context, t *testing.T, state *E2EState, arch, sn
 
 	t.Logf("Creating verification server %s from snapshot...", serverName)
 	// Enable public IPv4 so we can access the Talos API for verification
-	_, err := state.Client.CreateServer(ctx, serverName, snapshotID, serverType, "", []string{sshKeyName}, labels, "", nil, 0, "", true, true)
+	_, err := state.Client.CreateServer(ctx, hcloud.ServerCreateOpts{
+		Name:             serverName,
+		ImageType:        snapshotID,
+		ServerType:       serverType,
+		SSHKeys:          []string{sshKeyName},
+		Labels:           labels,
+		EnablePublicIPv4: true,
+		EnablePublicIPv6: true,
+	})
 	if err != nil {
 		t.Fatalf("Failed to create verification server: %v", err)
 	}

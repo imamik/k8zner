@@ -11,8 +11,9 @@ import (
 )
 
 // applyTraefik installs the Traefik Proxy ingress controller.
-// Traefik uses LoadBalancer service type for Kubernetes-native external IP discovery,
-// which allows external-dns to auto-discover the IP for DNS records.
+// Traefik uses a Deployment with a LoadBalancer service. CCM creates
+// a Hetzner LB automatically via annotations, and external-dns
+// auto-discovers the LB IP from the Ingress status for DNS records.
 func applyTraefik(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	// Create namespace first
 	namespaceYAML := createTraefikNamespace()
@@ -23,34 +24,17 @@ func applyTraefik(ctx context.Context, client k8sclient.Client, cfg *config.Conf
 	// Build values matching the ingress-nginx configuration style
 	values := buildTraefikValues(cfg)
 
-	// Get chart spec with any config overrides
-	spec := helm.GetChartSpec("traefik", cfg.Addons.Traefik.Helm)
-
-	// Render helm chart
-	manifestBytes, err := helm.RenderFromSpec(ctx, spec, "traefik", values)
-	if err != nil {
-		return fmt.Errorf("failed to render traefik chart: %w", err)
-	}
-
-	// Apply all manifests
-	if err := applyManifests(ctx, client, "traefik", manifestBytes); err != nil {
-		return fmt.Errorf("failed to apply traefik manifests: %w", err)
-	}
-
-	return nil
+	return installHelmAddon(ctx, client, "traefik", "traefik", cfg.Addons.Traefik.Helm, values)
 }
 
 // buildTraefikValues creates helm values for Traefik configuration.
-// When hostNetwork is enabled (dev mode): uses DaemonSet with direct host port binding.
-// When hostNetwork is disabled (HA mode): uses LoadBalancer service with Hetzner LB.
+// Always uses Deployment with LoadBalancer service. CCM creates a Hetzner LB
+// via annotations on the Service object.
 func buildTraefikValues(cfg *config.Config) helm.Values {
 	traefikCfg := cfg.Addons.Traefik
 	workerCount := getWorkerCount(cfg)
 
-	// Check if hostNetwork mode is enabled (dev mode)
-	hostNetwork := traefikCfg.HostNetwork != nil && *traefikCfg.HostNetwork
-
-	// Determine replicas (not used for DaemonSet)
+	// Determine replicas
 	replicas := 2
 	if traefikCfg.Replicas != nil {
 		replicas = *traefikCfg.Replicas
@@ -58,23 +42,21 @@ func buildTraefikValues(cfg *config.Config) helm.Values {
 		replicas = 3
 	}
 
-	// Determine kind (default: Deployment, or DaemonSet for hostNetwork)
+	// Determine kind (default: Deployment)
 	kind := traefikCfg.Kind
 	if kind == "" {
-		if hostNetwork {
-			kind = "DaemonSet"
-		} else {
-			kind = "Deployment"
-		}
+		kind = "Deployment"
 	}
 
 	// Build the deployment configuration
-	deployment := buildTraefikDeployment(replicas, kind, hostNetwork)
+	deployment := buildTraefikDeployment(replicas, kind)
 
-	// External traffic policy - default to "Local" (preserves client IP)
+	// External traffic policy - default to "Cluster" for reliability.
+	// "Local" preserves client IP but introduces health check node port complexity
+	// with Hetzner LBs. "Cluster" is what kube-hetzner and other projects use.
 	externalTrafficPolicy := traefikCfg.ExternalTrafficPolicy
 	if externalTrafficPolicy == "" {
-		externalTrafficPolicy = "Local"
+		externalTrafficPolicy = "Cluster"
 	}
 
 	// Ingress class name
@@ -94,27 +76,16 @@ func buildTraefikValues(cfg *config.Config) helm.Values {
 		"ingressClass": buildTraefikIngressClass(ingressClassName),
 		"ingressRoute": buildTraefikIngressRoute(),
 		"providers":    buildTraefikProviders(),
-		"ports":        buildTraefikPorts(hostNetwork),
-		"service":      buildTraefikService(cfg.ClusterName, externalTrafficPolicy, location, hostNetwork),
-		// Add tolerations for CCM uninitialized taint
-		// This allows Traefik to schedule before CCM has fully initialized nodes
-		"tolerations": []helm.Values{
-			{
-				"key":      "node.cloudprovider.kubernetes.io/uninitialized",
-				"operator": "Exists",
-			},
-		},
-	}
-
-	// Add proxy protocol args only for LoadBalancer mode (not hostNetwork)
-	if !hostNetwork {
-		values["additionalArguments"] = []string{
-			// Enable proxy protocol for proper client IP preservation with Hetzner LBs
-			"--entryPoints.web.proxyProtocol.trustedIPs=127.0.0.1/32,10.0.0.0/8",
-			"--entryPoints.websecure.proxyProtocol.trustedIPs=127.0.0.1/32,10.0.0.0/8",
-		}
-		// Topology spread constraints for HA (not relevant for DaemonSet)
-		values["topologySpreadConstraints"] = buildTraefikTopologySpread(workerCount)
+		"ports":        buildTraefikPorts(),
+		"service":      buildTraefikService(cfg.ClusterName, externalTrafficPolicy, location),
+		"tolerations":  []helm.Values{helm.CCMUninitializedToleration()},
+		"topologySpreadConstraints": func() []helm.Values {
+			hostnamePolicy := "ScheduleAnyway"
+			if workerCount > 1 {
+				hostnamePolicy = "DoNotSchedule"
+			}
+			return helm.TopologySpread("traefik", "traefik", hostnamePolicy)
+		}(),
 	}
 
 	// Merge custom Helm values from config
@@ -122,8 +93,8 @@ func buildTraefikValues(cfg *config.Config) helm.Values {
 }
 
 // buildTraefikDeployment creates the deployment configuration.
-func buildTraefikDeployment(replicas int, kind string, hostNetwork bool) helm.Values {
-	deployment := helm.Values{
+func buildTraefikDeployment(replicas int, kind string) helm.Values {
+	return helm.Values{
 		"enabled":  true,
 		"kind":     kind,
 		"replicas": replicas,
@@ -132,15 +103,6 @@ func buildTraefikDeployment(replicas int, kind string, hostNetwork bool) helm.Va
 			"maxUnavailable": 1,
 		},
 	}
-
-	// Enable hostNetwork mode for direct port binding (dev mode)
-	if hostNetwork {
-		deployment["hostNetwork"] = true
-		// When using hostNetwork, set dnsPolicy to ClusterFirstWithHostNet
-		deployment["dnsPolicy"] = "ClusterFirstWithHostNet"
-	}
-
-	return deployment
 }
 
 // buildTraefikIngressClass creates the IngressClass configuration.
@@ -153,7 +115,7 @@ func buildTraefikIngressClass(name string) helm.Values {
 }
 
 // buildTraefikIngressRoute creates the IngressRoute configuration for the dashboard.
-// IngressRoute requires Traefik CRDs which we don't install, so always disabled.
+// Disabled because we use standard Kubernetes Ingress, not Traefik's CRD-based IngressRoute.
 func buildTraefikIngressRoute() helm.Values {
 	return helm.Values{
 		"dashboard": helm.Values{
@@ -163,8 +125,9 @@ func buildTraefikIngressRoute() helm.Values {
 }
 
 // buildTraefikProviders creates the providers configuration.
-// We disable kubernetesCRD and only use standard Kubernetes Ingress resources
-// to avoid requiring Traefik CRDs installation.
+// Only kubernetesIngress is enabled - we use standard Kubernetes Ingress resources,
+// not Traefik's IngressRoute CRDs. The kubernetesIngress provider discovers TLS
+// secrets referenced in Ingress spec.tls[].secretName (created by cert-manager).
 func buildTraefikProviders() helm.Values {
 	return helm.Values{
 		"kubernetesCRD": helm.Values{
@@ -181,37 +144,29 @@ func buildTraefikProviders() helm.Values {
 }
 
 // buildTraefikPorts creates the ports configuration.
-// When hostNetwork is true: uses hostPort for direct binding to 80/443.
-// When hostNetwork is false: uses standard service ports with proxy protocol.
+// Uses standard container ports (8000/8443) mapped to service ports (80/443).
+// TLS is explicitly enabled on websecure so Traefik terminates TLS using certs
+// from Kubernetes secrets (created by cert-manager via Ingress annotations).
 // Note: Traefik chart v39+ uses new schema where 'expose' is an object with 'default' key.
-func buildTraefikPorts(hostNetwork bool) helm.Values {
-	webPort := helm.Values{
-		"port":        8000,
-		"expose":      helm.Values{"default": true},
-		"exposedPort": 80,
-		"protocol":    "TCP",
-	}
-
-	websecurePort := helm.Values{
-		"port":        8443,
-		"expose":      helm.Values{"default": true},
-		"exposedPort": 443,
-		"protocol":    "TCP",
-	}
-
-	if hostNetwork {
-		// In hostNetwork mode, bind directly to host ports
-		webPort["hostPort"] = 80
-		websecurePort["hostPort"] = 443
-	} else {
-		// In LoadBalancer mode, enable proxy protocol for client IP preservation
-		webPort["proxyProtocol"] = helm.Values{"enabled": true}
-		websecurePort["proxyProtocol"] = helm.Values{"enabled": true}
-	}
-
+func buildTraefikPorts() helm.Values {
 	return helm.Values{
-		"web":       webPort,
-		"websecure": websecurePort,
+		"web": helm.Values{
+			"port":        8000,
+			"expose":      helm.Values{"default": true},
+			"exposedPort": 80,
+			"protocol":    "TCP",
+		},
+		"websecure": helm.Values{
+			"port":        8443,
+			"expose":      helm.Values{"default": true},
+			"exposedPort": 443,
+			"protocol":    "TCP",
+			"http": helm.Values{
+				"tls": helm.Values{
+					"enabled": true,
+				},
+			},
+		},
 		"traefik": helm.Values{
 			"port":   9000,
 			"expose": helm.Values{"default": false},
@@ -220,83 +175,32 @@ func buildTraefikPorts(hostNetwork bool) helm.Values {
 }
 
 // buildTraefikService creates the service configuration.
-// When hostNetwork is true: uses ClusterIP (no external LB needed).
-// When hostNetwork is false: uses LoadBalancer with Hetzner annotations.
-func buildTraefikService(clusterName, externalTrafficPolicy, location string, hostNetwork bool) helm.Values {
-	if hostNetwork {
-		// In hostNetwork mode, use ClusterIP - traffic goes directly to host ports
-		return helm.Values{
-			"enabled": true,
-			"type":    "ClusterIP",
-		}
-	}
-
+// Always uses LoadBalancer with Hetzner annotations. CCM creates the LB automatically.
+func buildTraefikService(clusterName, externalTrafficPolicy, location string) helm.Values {
 	// Use proper naming convention for the load balancer
 	lbName := naming.IngressLoadBalancer(clusterName)
 
-	// In LoadBalancer mode, create Hetzner LB with proxy protocol
 	return helm.Values{
 		"enabled": true,
 		"type":    "LoadBalancer",
 		"spec": helm.Values{
 			"externalTrafficPolicy": externalTrafficPolicy,
 		},
-		// Hetzner LB annotations for proxy protocol support
+		// Hetzner LB annotations - CCM creates the LB automatically
 		"annotations": helm.Values{
-			"load-balancer.hetzner.cloud/name":               lbName,
-			"load-balancer.hetzner.cloud/use-private-ip":     "true",
-			"load-balancer.hetzner.cloud/uses-proxyprotocol": "true",
-			"load-balancer.hetzner.cloud/location":           location,
-		},
-	}
-}
-
-// buildTraefikTopologySpread creates topology spread constraints for Traefik.
-// Two constraints: hostname (strict if multiple workers) and zone (soft).
-func buildTraefikTopologySpread(workerCount int) []helm.Values {
-	// Determine whenUnsatisfiable for hostname constraint
-	hostnameUnsatisfiable := "ScheduleAnyway"
-	if workerCount > 1 {
-		hostnameUnsatisfiable = "DoNotSchedule"
-	}
-
-	labelSelector := helm.Values{
-		"matchLabels": helm.Values{
-			"app.kubernetes.io/instance": "traefik",
-			"app.kubernetes.io/name":     "traefik",
-		},
-	}
-
-	return []helm.Values{
-		{
-			"topologyKey":       "kubernetes.io/hostname",
-			"maxSkew":           1,
-			"whenUnsatisfiable": hostnameUnsatisfiable,
-			"labelSelector":     labelSelector,
-			"matchLabelKeys":    []string{"pod-template-hash"},
-		},
-		{
-			"topologyKey":       "topology.kubernetes.io/zone",
-			"maxSkew":           1,
-			"whenUnsatisfiable": "ScheduleAnyway",
-			"labelSelector":     labelSelector,
-			"matchLabelKeys":    []string{"pod-template-hash"},
+			"load-balancer.hetzner.cloud/name":                    lbName,
+			"load-balancer.hetzner.cloud/use-private-ip":          "true",
+			"load-balancer.hetzner.cloud/disable-private-ingress": "true",
+			"load-balancer.hetzner.cloud/location":                location,
 		},
 	}
 }
 
 // createTraefikNamespace returns the traefik namespace manifest.
-// The namespace has privileged PodSecurity labels to allow hostPort binding,
-// which is required when Traefik is deployed with hostNetwork mode.
 func createTraefikNamespace() string {
-	return `apiVersion: v1
-kind: Namespace
-metadata:
-  name: traefik
-  labels:
-    # Required for hostNetwork/hostPort to work with PodSecurity admission
-    pod-security.kubernetes.io/enforce: privileged
-    pod-security.kubernetes.io/audit: privileged
-    pod-security.kubernetes.io/warn: privileged
-`
+	return helm.NamespaceManifest("traefik", map[string]string{
+		"pod-security.kubernetes.io/enforce": "baseline",
+		"pod-security.kubernetes.io/audit":   "baseline",
+		"pod-security.kubernetes.io/warn":    "baseline",
+	})
 }

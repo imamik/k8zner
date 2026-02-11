@@ -7,12 +7,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/imamik/k8zner/internal/config"
-	v2 "github.com/imamik/k8zner/internal/config/v2"
 	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning"
 )
 
 func TestDestroy(t *testing.T) {
+	t.Parallel()
 	origLoad := loadV2ConfigFile
 	origExpand := expandV2Config
 	origInfra := newInfraClient
@@ -26,10 +26,10 @@ func TestDestroy(t *testing.T) {
 		newProvisioningContext = origCtx
 	}()
 
-	loadV2ConfigFile = func(_ string) (*v2.Config, error) {
-		return &v2.Config{Name: "test", Region: v2.RegionFalkenstein, Mode: v2.ModeDev, Workers: v2.Worker{Count: 1, Size: v2.SizeCX22}}, nil
+	loadV2ConfigFile = func(_ string) (*config.Spec, error) {
+		return &config.Spec{Name: "test", Region: config.RegionFalkenstein, Mode: config.ModeDev, Workers: config.WorkerSpec{Count: 1, Size: config.SizeCX22}}, nil
 	}
-	expandV2Config = func(_ *v2.Config) (*config.Config, error) {
+	expandV2Config = func(_ *config.Spec) (*config.Config, error) {
 		return &config.Config{ClusterName: "test"}, nil
 	}
 	newInfraClient = func(_ string) hcloud.InfrastructureManager { return &hcloud.MockClient{} }

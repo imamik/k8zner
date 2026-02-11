@@ -9,6 +9,7 @@ import (
 )
 
 func TestApply_EmptyKubeconfig(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
 		Addons:      config.AddonsConfig{CCM: config.CCMConfig{Enabled: true}},
@@ -19,6 +20,7 @@ func TestApply_EmptyKubeconfig(t *testing.T) {
 }
 
 func TestApply_NoAddonsConfigured(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		ClusterName: "test-cluster",
 		Addons: config.AddonsConfig{
@@ -38,6 +40,7 @@ users: []`)
 }
 
 func TestHasEnabledAddons(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		cfg      *config.Config
@@ -62,12 +65,14 @@ func TestHasEnabledAddons(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.expected, hasEnabledAddons(tt.cfg))
 		})
 	}
 }
 
 func TestGetControlPlaneCount(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		cfg      *config.Config
@@ -95,12 +100,14 @@ func TestGetControlPlaneCount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.expected, getControlPlaneCount(tt.cfg))
 		})
 	}
 }
 
 func TestValidateAddonConfig(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		cfg     *config.Config
@@ -118,7 +125,7 @@ func TestValidateAddonConfig(t *testing.T) {
 					CCM: config.CCMConfig{Enabled: true},
 				},
 			},
-			wantErr: "ccm/csi addons require hcloud_token",
+			wantErr: "ccm/csi/operator addons require hcloud_token",
 		},
 		{
 			name: "CCM enabled with token",
@@ -172,10 +179,69 @@ func TestValidateAddonConfig(t *testing.T) {
 			},
 			wantErr: "",
 		},
+		{
+			name: "CSI enabled without token",
+			cfg: &config.Config{
+				Addons: config.AddonsConfig{
+					CSI: config.CSIConfig{Enabled: true},
+				},
+			},
+			wantErr: "ccm/csi/operator addons require hcloud_token",
+		},
+		{
+			name: "Operator enabled without token",
+			cfg: &config.Config{
+				Addons: config.AddonsConfig{
+					Operator: config.OperatorConfig{Enabled: true},
+				},
+			},
+			wantErr: "ccm/csi/operator addons require hcloud_token",
+		},
+		{
+			name: "CertManager Cloudflare without Cloudflare addon",
+			cfg: &config.Config{
+				Addons: config.AddonsConfig{
+					CertManager: config.CertManagerConfig{
+						Enabled: true,
+						Cloudflare: config.CertManagerCloudflareConfig{
+							Enabled: true,
+						},
+					},
+				},
+			},
+			wantErr: "cert-manager cloudflare integration requires cloudflare addon",
+		},
+		{
+			name: "TalosBackup with bucket but missing access key",
+			cfg: &config.Config{
+				Addons: config.AddonsConfig{
+					TalosBackup: config.TalosBackupConfig{
+						Enabled:  true,
+						S3Bucket: "test-bucket",
+					},
+				},
+			},
+			wantErr: "talos-backup addon requires s3_access_key and s3_secret_key",
+		},
+		{
+			name: "TalosBackup with bucket and keys but missing endpoint",
+			cfg: &config.Config{
+				Addons: config.AddonsConfig{
+					TalosBackup: config.TalosBackupConfig{
+						Enabled:     true,
+						S3Bucket:    "test-bucket",
+						S3AccessKey: "access-key",
+						S3SecretKey: "secret-key",
+					},
+				},
+			},
+			wantErr: "talos-backup addon requires s3_endpoint",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := validateAddonConfig(tt.cfg)
 			if tt.wantErr == "" {
 				assert.NoError(t, err)

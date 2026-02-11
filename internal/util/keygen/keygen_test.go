@@ -11,6 +11,7 @@ import (
 )
 
 func TestGenerateRSAKeyPair_ValidBits(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		bits int
@@ -21,6 +22,7 @@ func TestGenerateRSAKeyPair_ValidBits(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			keyPair, err := GenerateRSAKeyPair(tt.bits)
 			if err != nil {
 				t.Fatalf("GenerateRSAKeyPair(%d) failed: %v", tt.bits, err)
@@ -42,8 +44,10 @@ func TestGenerateRSAKeyPair_ValidBits(t *testing.T) {
 }
 
 func TestGenerateRSAKeyPair_InvalidBits(t *testing.T) {
+	t.Parallel()
 	// RSA key generation fails for very small bit sizes
 	// The minimum practical size varies by implementation
+
 	tests := []struct {
 		name string
 		bits int
@@ -54,6 +58,7 @@ func TestGenerateRSAKeyPair_InvalidBits(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := GenerateRSAKeyPair(tt.bits)
 			if err == nil {
 				t.Errorf("GenerateRSAKeyPair(%d) should have failed", tt.bits)
@@ -63,6 +68,7 @@ func TestGenerateRSAKeyPair_InvalidBits(t *testing.T) {
 }
 
 func TestKeyPair_PrivateKeyPEMFormat(t *testing.T) {
+	t.Parallel()
 	keyPair, err := GenerateRSAKeyPair(2048)
 	if err != nil {
 		t.Fatalf("GenerateRSAKeyPair failed: %v", err)
@@ -90,6 +96,7 @@ func TestKeyPair_PrivateKeyPEMFormat(t *testing.T) {
 }
 
 func TestKeyPair_PublicKeySSHFormat(t *testing.T) {
+	t.Parallel()
 	keyPair, err := GenerateRSAKeyPair(2048)
 	if err != nil {
 		t.Fatalf("GenerateRSAKeyPair failed: %v", err)
@@ -115,6 +122,7 @@ func TestKeyPair_PublicKeySSHFormat(t *testing.T) {
 }
 
 func TestGenerateRSAKeyPair_Uniqueness(t *testing.T) {
+	t.Parallel()
 	keyPair1, err := GenerateRSAKeyPair(2048)
 	if err != nil {
 		t.Fatalf("first GenerateRSAKeyPair failed: %v", err)
@@ -135,6 +143,7 @@ func TestGenerateRSAKeyPair_Uniqueness(t *testing.T) {
 }
 
 func TestGenerateRSAKeyPair_KeyPairCorrespondence(t *testing.T) {
+	t.Parallel()
 	keyPair, err := GenerateRSAKeyPair(2048)
 	if err != nil {
 		t.Fatalf("GenerateRSAKeyPair failed: %v", err)

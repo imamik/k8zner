@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -18,16 +19,19 @@ import (
 )
 
 func TestNewProvisioner(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner()
 	require.NotNil(t, p)
 }
 
 func TestProvisioner_Name(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner()
 	assert.Equal(t, "cluster", p.Name())
 }
 
 func TestGenerateDummyCert(t *testing.T) {
+	t.Parallel()
 	cert, key, err := generateDummyCert()
 	require.NoError(t, err)
 
@@ -52,9 +56,11 @@ func TestGenerateDummyCert(t *testing.T) {
 }
 
 func TestGetFirstControlPlaneIP(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner()
 
 	t.Run("with control plane nodes", func(t *testing.T) {
+		t.Parallel()
 		ctx := &provisioning.Context{
 			State: provisioning.NewState(),
 		}
@@ -69,6 +75,7 @@ func TestGetFirstControlPlaneIP(t *testing.T) {
 	})
 
 	t.Run("with no control plane nodes", func(t *testing.T) {
+		t.Parallel()
 		ctx := &provisioning.Context{
 			State: provisioning.NewState(),
 		}
@@ -80,7 +87,9 @@ func TestGetFirstControlPlaneIP(t *testing.T) {
 }
 
 func TestWaitForPort_Success(t *testing.T) {
+	t.Parallel()
 	// Start a test server
+
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	defer func() { _ = listener.Close() }()
@@ -96,7 +105,9 @@ func TestWaitForPort_Success(t *testing.T) {
 }
 
 func TestWaitForPort_Timeout(t *testing.T) {
+	t.Parallel()
 	// Use a port that's definitely not listening
+
 	ctx := context.Background()
 	timeouts := config.TestTimeouts()
 	err := waitForPort(ctx, "127.0.0.1", 59999, 100*time.Millisecond, timeouts.PortPoll, timeouts.DialTimeout)
@@ -105,6 +116,7 @@ func TestWaitForPort_Timeout(t *testing.T) {
 }
 
 func TestWaitForPort_ContextCancelled(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
@@ -115,9 +127,11 @@ func TestWaitForPort_ContextCancelled(t *testing.T) {
 }
 
 func TestIsAlreadyBootstrapped(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner()
 
 	t.Run("marker exists", func(t *testing.T) {
+		t.Parallel()
 		mockInfra := &hcloud_internal.MockClient{
 			GetCertificateFunc: func(_ context.Context, name string) (*hcloud.Certificate, error) {
 				if name == "test-cluster-state" {
@@ -141,6 +155,7 @@ func TestIsAlreadyBootstrapped(t *testing.T) {
 	})
 
 	t.Run("marker does not exist", func(t *testing.T) {
+		t.Parallel()
 		mockInfra := &hcloud_internal.MockClient{
 			GetCertificateFunc: func(_ context.Context, _ string) (*hcloud.Certificate, error) {
 				return nil, nil
@@ -162,9 +177,11 @@ func TestIsAlreadyBootstrapped(t *testing.T) {
 }
 
 func TestEnsureTalosConfigInState(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner()
 
 	t.Run("config already in state", func(t *testing.T) {
+		t.Parallel()
 		ctx := &provisioning.Context{
 			State: provisioning.NewState(),
 		}
@@ -177,6 +194,7 @@ func TestEnsureTalosConfigInState(t *testing.T) {
 }
 
 func TestBootstrap_StateMarkerPresent(t *testing.T) {
+	t.Parallel()
 	mockInfra := new(hcloud_internal.MockClient)
 	p := NewProvisioner()
 
@@ -211,7 +229,9 @@ func TestBootstrap_StateMarkerPresent(t *testing.T) {
 }
 
 func TestProvision(t *testing.T) {
+	t.Parallel()
 	// Test that Provision() delegates to BootstrapCluster()
+
 	p := NewProvisioner()
 	mockInfra := &hcloud_internal.MockClient{
 		GetCertificateFunc: func(_ context.Context, name string) (*hcloud.Certificate, error) {
@@ -240,6 +260,7 @@ func TestProvision(t *testing.T) {
 }
 
 func TestApplyWorkerConfigs_NoWorkers(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner()
 
 	observer := provisioning.NewConsoleObserver()
@@ -258,9 +279,11 @@ func TestApplyWorkerConfigs_NoWorkers(t *testing.T) {
 }
 
 func TestCreateStateMarker(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner()
 
 	t.Run("success", func(t *testing.T) {
+		t.Parallel()
 		var capturedLabels map[string]string
 		var capturedName string
 
@@ -290,6 +313,7 @@ func TestCreateStateMarker(t *testing.T) {
 	})
 
 	t.Run("failure", func(t *testing.T) {
+		t.Parallel()
 		mockInfra := &hcloud_internal.MockClient{
 			EnsureCertificateFunc: func(_ context.Context, _, _, _ string, _ map[string]string) (*hcloud.Certificate, error) {
 				return nil, context.DeadlineExceeded
@@ -313,6 +337,7 @@ func TestCreateStateMarker(t *testing.T) {
 }
 
 func TestTryRetrieveExistingKubeconfig(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner()
 
 	// This tests the error path - when kubeconfig cannot be retrieved
@@ -337,6 +362,7 @@ func TestTryRetrieveExistingKubeconfig(t *testing.T) {
 }
 
 func TestRetrieveAndStoreKubeconfig_Error(t *testing.T) {
+	t.Parallel()
 	p := NewProvisioner()
 
 	observer := provisioning.NewConsoleObserver()
@@ -354,4 +380,426 @@ func TestRetrieveAndStoreKubeconfig_Error(t *testing.T) {
 	err := p.retrieveAndStoreKubeconfig(pCtx)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to retrieve kubeconfig")
+}
+
+// mockTalosConfigProducer is a mock implementation of TalosConfigProducer for testing.
+type mockTalosConfigProducer struct {
+	getClientConfigFunc          func() ([]byte, error)
+	generateControlPlaneConfigFn func(san []string, hostname string, serverID int64) ([]byte, error)
+	generateWorkerConfigFn       func(hostname string, serverID int64) ([]byte, error)
+}
+
+func (m *mockTalosConfigProducer) SetMachineConfigOptions(_ any) {}
+func (m *mockTalosConfigProducer) SetEndpoint(_ string)          {}
+func (m *mockTalosConfigProducer) GetNodeVersion(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
+func (m *mockTalosConfigProducer) UpgradeNode(_ context.Context, _, _ string, _ provisioning.UpgradeOptions) error {
+	return nil
+}
+func (m *mockTalosConfigProducer) UpgradeKubernetes(_ context.Context, _, _ string) error {
+	return nil
+}
+func (m *mockTalosConfigProducer) WaitForNodeReady(_ context.Context, _ string, _ time.Duration) error {
+	return nil
+}
+func (m *mockTalosConfigProducer) HealthCheck(_ context.Context, _ string) error { return nil }
+func (m *mockTalosConfigProducer) GenerateAutoscalerConfig(_ string, _ map[string]string, _ []string) ([]byte, error) {
+	return nil, nil
+}
+func (m *mockTalosConfigProducer) GetClientConfig() ([]byte, error) {
+	if m.getClientConfigFunc != nil {
+		return m.getClientConfigFunc()
+	}
+	return nil, fmt.Errorf("not implemented")
+}
+func (m *mockTalosConfigProducer) GenerateControlPlaneConfig(san []string, hostname string, serverID int64) ([]byte, error) {
+	if m.generateControlPlaneConfigFn != nil {
+		return m.generateControlPlaneConfigFn(san, hostname, serverID)
+	}
+	return []byte("mock-config"), nil
+}
+func (m *mockTalosConfigProducer) GenerateWorkerConfig(hostname string, serverID int64) ([]byte, error) {
+	if m.generateWorkerConfigFn != nil {
+		return m.generateWorkerConfigFn(hostname, serverID)
+	}
+	return []byte("mock-config"), nil
+}
+
+func TestEnsureTalosConfigInState_ErrorFromGetClientConfig(t *testing.T) {
+	t.Parallel()
+	p := NewProvisioner()
+
+	mockTalos := &mockTalosConfigProducer{
+		getClientConfigFunc: func() ([]byte, error) {
+			return nil, fmt.Errorf("talos secrets not found")
+		},
+	}
+
+	pCtx := &provisioning.Context{
+		State: provisioning.NewState(),
+		Talos: mockTalos,
+	}
+
+	err := p.ensureTalosConfigInState(pCtx)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get client config")
+	assert.Contains(t, err.Error(), "talos secrets not found")
+}
+
+func TestEnsureTalosConfigInState_SuccessFromTalos(t *testing.T) {
+	t.Parallel()
+	p := NewProvisioner()
+
+	mockTalos := &mockTalosConfigProducer{
+		getClientConfigFunc: func() ([]byte, error) {
+			return []byte("fresh-config-from-talos"), nil
+		},
+	}
+
+	pCtx := &provisioning.Context{
+		State: provisioning.NewState(),
+		Talos: mockTalos,
+	}
+
+	err := p.ensureTalosConfigInState(pCtx)
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("fresh-config-from-talos"), pCtx.State.TalosConfig)
+}
+
+func TestBootstrapCluster_FailsWhenTalosConfigMissing(t *testing.T) {
+	t.Parallel()
+	p := NewProvisioner()
+
+	mockTalos := &mockTalosConfigProducer{
+		getClientConfigFunc: func() ([]byte, error) {
+			return nil, fmt.Errorf("no secrets bundle")
+		},
+	}
+
+	observer := provisioning.NewConsoleObserver()
+	pCtx := &provisioning.Context{
+		Context:  context.Background(),
+		Config:   &config.Config{ClusterName: "test-cluster"},
+		State:    provisioning.NewState(),
+		Talos:    mockTalos,
+		Observer: observer,
+		Logger:   observer,
+		Timeouts: config.TestTimeouts(),
+	}
+
+	err := p.BootstrapCluster(pCtx)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get client config")
+}
+
+func TestApplyControlPlaneConfigs_GenerateConfigError(t *testing.T) {
+	t.Parallel()
+	p := NewProvisioner()
+
+	mockTalos := &mockTalosConfigProducer{
+		generateControlPlaneConfigFn: func(_ []string, hostname string, _ int64) ([]byte, error) {
+			return nil, fmt.Errorf("failed to generate config for %s", hostname)
+		},
+	}
+
+	observer := provisioning.NewConsoleObserver()
+	pCtx := &provisioning.Context{
+		Context:  context.Background(),
+		Config:   &config.Config{ClusterName: "test-cluster"},
+		State:    provisioning.NewState(),
+		Talos:    mockTalos,
+		Observer: observer,
+		Logger:   observer,
+		Timeouts: config.TestTimeouts(),
+	}
+	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "10.0.0.1"}
+	pCtx.State.ControlPlaneServerIDs = map[string]int64{"cp-1": 100}
+
+	err := p.applyControlPlaneConfigs(pCtx)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to generate machine config")
+}
+
+func TestApplyWorkerConfigs_GenerateConfigError(t *testing.T) {
+	t.Parallel()
+	p := NewProvisioner()
+
+	mockTalos := &mockTalosConfigProducer{
+		generateWorkerConfigFn: func(hostname string, _ int64) ([]byte, error) {
+			return nil, fmt.Errorf("worker config generation failed for %s", hostname)
+		},
+	}
+
+	observer := provisioning.NewConsoleObserver()
+	pCtx := &provisioning.Context{
+		Context:  context.Background(),
+		Config:   &config.Config{ClusterName: "test-cluster"},
+		State:    provisioning.NewState(),
+		Talos:    mockTalos,
+		Observer: observer,
+		Logger:   observer,
+		Timeouts: config.TestTimeouts(),
+	}
+	pCtx.State.WorkerIPs = map[string]string{"worker-1": "10.0.0.10"}
+	pCtx.State.WorkerServerIDs = map[string]int64{"worker-1": 200}
+
+	err := p.ApplyWorkerConfigs(pCtx)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to generate worker config")
+}
+
+func TestGetLBEndpoint(t *testing.T) {
+	t.Parallel()
+	p := NewProvisioner()
+
+	t.Run("returns IP from state LB", func(t *testing.T) {
+		t.Parallel()
+		observer := provisioning.NewConsoleObserver()
+		pCtx := &provisioning.Context{
+			Context:  context.Background(),
+			Config:   &config.Config{ClusterName: "test-cluster"},
+			State:    provisioning.NewState(),
+			Observer: observer,
+			Logger:   observer,
+		}
+		pCtx.State.LoadBalancer = &hcloud.LoadBalancer{
+			PublicNet: hcloud.LoadBalancerPublicNet{
+				IPv4: hcloud.LoadBalancerPublicNetIPv4{
+					IP: net.ParseIP("5.6.7.8"),
+				},
+			},
+		}
+
+		ip := p.getLBEndpoint(pCtx)
+		assert.Equal(t, "5.6.7.8", ip)
+	})
+
+	t.Run("fetches LB from API when not in state", func(t *testing.T) {
+		t.Parallel()
+		mockInfra := &hcloud_internal.MockClient{
+			GetLoadBalancerFunc: func(_ context.Context, name string) (*hcloud.LoadBalancer, error) {
+				if name == "test-cluster-kube" {
+					return &hcloud.LoadBalancer{
+						PublicNet: hcloud.LoadBalancerPublicNet{
+							IPv4: hcloud.LoadBalancerPublicNetIPv4{
+								IP: net.ParseIP("9.10.11.12"),
+							},
+						},
+					}, nil
+				}
+				return nil, nil
+			},
+		}
+
+		observer := provisioning.NewConsoleObserver()
+		pCtx := &provisioning.Context{
+			Context:  context.Background(),
+			Config:   &config.Config{ClusterName: "test-cluster"},
+			State:    provisioning.NewState(),
+			Infra:    mockInfra,
+			Observer: observer,
+			Logger:   observer,
+		}
+
+		ip := p.getLBEndpoint(pCtx)
+		assert.Equal(t, "9.10.11.12", ip)
+		// Verify LB was cached in state
+		assert.NotNil(t, pCtx.State.LoadBalancer)
+	})
+
+	t.Run("returns empty when no LB available", func(t *testing.T) {
+		t.Parallel()
+		mockInfra := &hcloud_internal.MockClient{
+			GetLoadBalancerFunc: func(_ context.Context, _ string) (*hcloud.LoadBalancer, error) {
+				return nil, nil
+			},
+		}
+
+		observer := provisioning.NewConsoleObserver()
+		pCtx := &provisioning.Context{
+			Context:  context.Background(),
+			Config:   &config.Config{ClusterName: "test-cluster"},
+			State:    provisioning.NewState(),
+			Infra:    mockInfra,
+			Observer: observer,
+			Logger:   observer,
+		}
+
+		ip := p.getLBEndpoint(pCtx)
+		assert.Empty(t, ip)
+	})
+
+	t.Run("returns empty when API errors", func(t *testing.T) {
+		t.Parallel()
+		mockInfra := &hcloud_internal.MockClient{
+			GetLoadBalancerFunc: func(_ context.Context, _ string) (*hcloud.LoadBalancer, error) {
+				return nil, fmt.Errorf("API error")
+			},
+		}
+
+		observer := provisioning.NewConsoleObserver()
+		pCtx := &provisioning.Context{
+			Context:  context.Background(),
+			Config:   &config.Config{ClusterName: "test-cluster"},
+			State:    provisioning.NewState(),
+			Infra:    mockInfra,
+			Observer: observer,
+			Logger:   observer,
+		}
+
+		ip := p.getLBEndpoint(pCtx)
+		assert.Empty(t, ip)
+	})
+}
+
+func TestIsAlreadyBootstrapped_Error(t *testing.T) {
+	t.Parallel()
+	p := NewProvisioner()
+
+	mockInfra := &hcloud_internal.MockClient{
+		GetCertificateFunc: func(_ context.Context, _ string) (*hcloud.Certificate, error) {
+			return nil, fmt.Errorf("API error")
+		},
+	}
+
+	observer := provisioning.NewConsoleObserver()
+	ctx := &provisioning.Context{
+		Context:  context.Background(),
+		Config:   &config.Config{ClusterName: "test-cluster"},
+		State:    provisioning.NewState(),
+		Infra:    mockInfra,
+		Observer: observer,
+		Logger:   observer,
+	}
+
+	// API error should be treated as "not bootstrapped" (returns false, not error)
+	assert.False(t, p.isAlreadyBootstrapped(ctx))
+}
+
+func TestBootstrapEtcd_InvalidTalosConfig(t *testing.T) {
+	t.Parallel()
+	p := NewProvisioner()
+
+	observer := provisioning.NewConsoleObserver()
+	pCtx := &provisioning.Context{
+		Context:  context.Background(),
+		Config:   &config.Config{ClusterName: "test-cluster"},
+		State:    provisioning.NewState(),
+		Observer: observer,
+		Logger:   observer,
+		Timeouts: config.TestTimeouts(),
+	}
+	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "10.0.0.1"}
+	pCtx.State.TalosConfig = []byte("not-valid-yaml")
+
+	err := p.bootstrapEtcd(pCtx)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse talos config")
+}
+
+func TestWaitForControlPlaneReady_InvalidTalosConfig(t *testing.T) {
+	t.Parallel()
+	p := NewProvisioner()
+
+	observer := provisioning.NewConsoleObserver()
+	pCtx := &provisioning.Context{
+		Context:  context.Background(),
+		Config:   &config.Config{ClusterName: "test-cluster", ClusterAccess: "private"},
+		State:    provisioning.NewState(),
+		Observer: observer,
+		Logger:   observer,
+		Timeouts: config.TestTimeouts(),
+	}
+	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "10.0.0.1"}
+	pCtx.State.TalosConfig = []byte("invalid-config")
+	pCtx.State.LoadBalancer = &hcloud.LoadBalancer{
+		PublicNet: hcloud.LoadBalancerPublicNet{
+			IPv4: hcloud.LoadBalancerPublicNetIPv4{
+				IP: net.ParseIP("5.5.5.5"),
+			},
+		},
+	}
+
+	err := p.waitForControlPlaneReadyViaLB(pCtx)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse talos config")
+}
+
+func TestRetrieveAndStoreKubeconfig_PrivateFirstNoLB(t *testing.T) {
+	t.Parallel()
+	p := NewProvisioner()
+
+	mockInfra := &hcloud_internal.MockClient{
+		GetLoadBalancerFunc: func(_ context.Context, _ string) (*hcloud.LoadBalancer, error) {
+			return nil, nil
+		},
+	}
+
+	observer := provisioning.NewConsoleObserver()
+	pCtx := &provisioning.Context{
+		Context:  context.Background(),
+		Config:   &config.Config{ClusterName: "test-cluster", ClusterAccess: "private"},
+		State:    provisioning.NewState(),
+		Infra:    mockInfra,
+		Observer: observer,
+		Logger:   observer,
+		Timeouts: config.TestTimeouts(),
+	}
+
+	err := p.retrieveAndStoreKubeconfig(pCtx)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "private-first mode requires Load Balancer")
+}
+
+func TestBootstrapEtcd_PrivateFirstNoLB(t *testing.T) {
+	t.Parallel()
+	p := NewProvisioner()
+
+	mockInfra := &hcloud_internal.MockClient{
+		GetLoadBalancerFunc: func(_ context.Context, _ string) (*hcloud.LoadBalancer, error) {
+			return nil, nil
+		},
+	}
+
+	observer := provisioning.NewConsoleObserver()
+	pCtx := &provisioning.Context{
+		Context:  context.Background(),
+		Config:   &config.Config{ClusterName: "test-cluster", ClusterAccess: "private"},
+		State:    provisioning.NewState(),
+		Infra:    mockInfra,
+		Observer: observer,
+		Logger:   observer,
+		Timeouts: config.TestTimeouts(),
+	}
+
+	err := p.bootstrapEtcd(pCtx)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "private-first mode requires Load Balancer")
+}
+
+func TestApplyControlPlaneConfigsViaLB_NoLB(t *testing.T) {
+	t.Parallel()
+	p := NewProvisioner()
+
+	mockInfra := &hcloud_internal.MockClient{
+		GetLoadBalancerFunc: func(_ context.Context, _ string) (*hcloud.LoadBalancer, error) {
+			return nil, nil
+		},
+	}
+
+	observer := provisioning.NewConsoleObserver()
+	pCtx := &provisioning.Context{
+		Context:  context.Background(),
+		Config:   &config.Config{ClusterName: "test-cluster"},
+		State:    provisioning.NewState(),
+		Infra:    mockInfra,
+		Observer: observer,
+		Logger:   observer,
+		Timeouts: config.TestTimeouts(),
+	}
+
+	err := p.applyControlPlaneConfigsViaLB(pCtx)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "private-first mode requires Load Balancer")
 }

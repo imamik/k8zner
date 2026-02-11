@@ -74,6 +74,8 @@ func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
 			PoolIndex:        i,
 			RDNSIPv4:         rdnsIPv4,
 			RDNSIPv6:         rdnsIPv6,
+			EnablePublicIPv4: ctx.Config.ShouldEnablePublicIPv4(),
+			EnablePublicIPv6: ctx.Config.ShouldEnablePublicIPv6(),
 		})
 		if err != nil {
 			return fmt.Errorf("failed to reconcile node pool %s: %w", pool.Name, err)

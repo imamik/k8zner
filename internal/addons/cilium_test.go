@@ -13,6 +13,7 @@ import (
 )
 
 func TestBuildCiliumValues(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name                     string
 		config                   *config.Config
@@ -108,6 +109,7 @@ func TestBuildCiliumValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			values := buildCiliumValues(tt.config)
 
 			// Check routing mode
@@ -129,6 +131,25 @@ func TestBuildCiliumValues(t *testing.T) {
 			if tt.config.Addons.Cilium.EncryptionEnabled && tt.config.Addons.Cilium.EncryptionType == "ipsec" {
 				assert.True(t, bpf["hostLegacyRouting"].(bool))
 			}
+
+			// Check devices - must include all PCI ethernet interfaces for LB health checks
+			// Talos uses predictable PCI names (enp1s0, enp7s0), not eth0/eth1
+			assert.Equal(t, "enp+", values["devices"])
+
+			// Check autoDirectNodeRoutes - must be true for native routing
+			if tt.expectedRoutingMode == "native" {
+				assert.True(t, values["autoDirectNodeRoutes"].(bool))
+			} else {
+				assert.False(t, values["autoDirectNodeRoutes"].(bool))
+			}
+
+			// Verify nodePort.directRoutingDevice is always set to enp1s0
+			// kube-proxy replacement requires this even in tunnel mode
+			// Talos on Hetzner uses enp1s0 as the first PCI device (default route)
+			np, ok := values["nodePort"]
+			assert.True(t, ok, "nodePort values should be set")
+			npValues := np.(helm.Values)
+			assert.Equal(t, "enp1s0", npValues["directRoutingDevice"], "directRoutingDevice should be enp1s0 (default route device on Talos)")
 
 			// Check K8s service settings
 			assert.Equal(t, "127.0.0.1", values["k8sServiceHost"])
@@ -155,6 +176,7 @@ func TestBuildCiliumValues(t *testing.T) {
 }
 
 func TestBuildCiliumOperatorConfig(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name              string
 		controlPlaneCount int
@@ -180,8 +202,8 @@ func TestBuildCiliumOperatorConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ciliumCfg := config.CiliumConfig{}
-			config := buildCiliumOperatorConfig(ciliumCfg, tt.controlPlaneCount)
+			t.Parallel()
+			config := buildCiliumOperatorConfig(tt.controlPlaneCount)
 
 			assert.Equal(t, tt.expectedReplicas, config["replicas"])
 
@@ -189,13 +211,13 @@ func TestBuildCiliumOperatorConfig(t *testing.T) {
 			nodeSelector := config["nodeSelector"].(helm.Values)
 			assert.Contains(t, nodeSelector, "node-role.kubernetes.io/control-plane")
 
-			// Check tolerations (should have control-plane, master, not-ready, and CCM uninitialized)
+			// Check tolerations (should use BootstrapTolerations: control-plane, master, ccm-uninitialized, not-ready)
 			tolerations := config["tolerations"].([]helm.Values)
 			assert.Len(t, tolerations, 4)
 			assert.Equal(t, "node-role.kubernetes.io/control-plane", tolerations[0]["key"])
 			assert.Equal(t, "node-role.kubernetes.io/master", tolerations[1]["key"])
-			assert.Equal(t, "node.kubernetes.io/not-ready", tolerations[2]["key"])
-			assert.Equal(t, "node.cloudprovider.kubernetes.io/uninitialized", tolerations[3]["key"])
+			assert.Equal(t, "node.cloudprovider.kubernetes.io/uninitialized", tolerations[2]["key"])
+			assert.Equal(t, "node.kubernetes.io/not-ready", tolerations[3]["key"])
 
 			// Check PDB
 			if tt.expectPDB {
@@ -224,6 +246,7 @@ func TestBuildCiliumOperatorConfig(t *testing.T) {
 }
 
 func TestBuildCiliumHubbleConfig(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		hubbleEnabled bool
@@ -268,6 +291,7 @@ func TestBuildCiliumHubbleConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cfg := &config.Config{
 				Addons: config.AddonsConfig{
 					Cilium: config.CiliumConfig{
@@ -296,6 +320,7 @@ func TestBuildCiliumHubbleConfig(t *testing.T) {
 }
 
 func TestBuildCiliumIPSecSecret(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		Addons: config.AddonsConfig{
 			Cilium: config.CiliumConfig{
@@ -336,6 +361,7 @@ func TestBuildCiliumIPSecSecret(t *testing.T) {
 }
 
 func TestBuildCiliumIPSecSecretDefaults(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		Addons: config.AddonsConfig{
 			Cilium: config.CiliumConfig{
@@ -361,6 +387,7 @@ func TestBuildCiliumIPSecSecretDefaults(t *testing.T) {
 }
 
 func TestGenerateIPSecKey(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		keySize        int
@@ -385,6 +412,7 @@ func TestGenerateIPSecKey(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			key, err := generateIPSecKey(tt.keySize)
 			require.NoError(t, err)
 
@@ -398,7 +426,9 @@ func TestGenerateIPSecKey(t *testing.T) {
 }
 
 func TestGenerateIPSecKeyRandomness(t *testing.T) {
+	t.Parallel()
 	// Generate multiple keys and ensure they're all different
+
 	keys := make(map[string]bool)
 	for i := 0; i < 10; i++ {
 		key, err := generateIPSecKey(128)
@@ -411,6 +441,7 @@ func TestGenerateIPSecKeyRandomness(t *testing.T) {
 }
 
 func TestBuildCiliumValuesNativeRoutingCIDR(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name                  string
 		networkCIDR           string
@@ -433,6 +464,7 @@ func TestBuildCiliumValuesNativeRoutingCIDR(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cfg := &config.Config{
 				Network: config.NetworkConfig{
 					IPv4CIDR:              tt.networkCIDR,
@@ -455,6 +487,7 @@ func TestBuildCiliumValuesNativeRoutingCIDR(t *testing.T) {
 }
 
 func TestBuildCiliumValuesKubeProxyReplacement(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		Network: config.NetworkConfig{
 			IPv4CIDR: "10.0.0.0/8",
@@ -484,6 +517,7 @@ func TestBuildCiliumValuesKubeProxyReplacement(t *testing.T) {
 }
 
 func TestBuildCiliumValuesBPFDatapathMode(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		datapathMode string
@@ -513,6 +547,7 @@ func TestBuildCiliumValuesBPFDatapathMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cfg := &config.Config{
 				Network: config.NetworkConfig{IPv4CIDR: "10.0.0.0/8"},
 				ControlPlane: config.ControlPlaneConfig{
@@ -534,6 +569,7 @@ func TestBuildCiliumValuesBPFDatapathMode(t *testing.T) {
 }
 
 func TestBuildCiliumValuesPolicyCIDRMatchMode(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		matchMode     string
@@ -553,6 +589,7 @@ func TestBuildCiliumValuesPolicyCIDRMatchMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cfg := &config.Config{
 				Network: config.NetworkConfig{IPv4CIDR: "10.0.0.0/8"},
 				ControlPlane: config.ControlPlaneConfig{
@@ -573,6 +610,7 @@ func TestBuildCiliumValuesPolicyCIDRMatchMode(t *testing.T) {
 }
 
 func TestBuildCiliumValuesSocketLBHostNamespaceOnly(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name              string
 		hostNamespaceOnly bool
@@ -589,6 +627,7 @@ func TestBuildCiliumValuesSocketLBHostNamespaceOnly(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cfg := &config.Config{
 				Network: config.NetworkConfig{IPv4CIDR: "10.0.0.0/8"},
 				ControlPlane: config.ControlPlaneConfig{
@@ -610,6 +649,7 @@ func TestBuildCiliumValuesSocketLBHostNamespaceOnly(t *testing.T) {
 }
 
 func TestBuildCiliumGatewayAPIConfig(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name                    string
 		proxyProtocolEnabled    *bool
@@ -649,6 +689,7 @@ func TestBuildCiliumGatewayAPIConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ciliumCfg := config.CiliumConfig{
 				GatewayAPIEnabled:               true,
 				GatewayAPIProxyProtocolEnabled:  tt.proxyProtocolEnabled,
@@ -667,6 +708,7 @@ func TestBuildCiliumGatewayAPIConfig(t *testing.T) {
 }
 
 func TestBuildCiliumPrometheusConfig(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name                  string
 		serviceMonitorEnabled bool
@@ -683,6 +725,7 @@ func TestBuildCiliumPrometheusConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ciliumCfg := config.CiliumConfig{
 				ServiceMonitorEnabled: tt.serviceMonitorEnabled,
 			}

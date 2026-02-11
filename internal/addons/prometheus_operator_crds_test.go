@@ -9,6 +9,7 @@ import (
 )
 
 func TestPrometheusOperatorCRDsURLGeneration(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		version     string
@@ -33,6 +34,7 @@ func TestPrometheusOperatorCRDsURLGeneration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cfg := &config.Config{
 				Addons: config.AddonsConfig{
 					PrometheusOperatorCRDs: config.PrometheusOperatorCRDsConfig{
@@ -49,13 +51,16 @@ func TestPrometheusOperatorCRDsURLGeneration(t *testing.T) {
 }
 
 func TestPrometheusOperatorCRDsConfig(t *testing.T) {
+	t.Parallel()
 	t.Run("enabled by default", func(t *testing.T) {
+		t.Parallel()
 		cfg := config.PrometheusOperatorCRDsConfig{}
 		// Defaults are applied in config loader, not in struct
 		assert.False(t, cfg.Enabled) // struct default is false
 	})
 
 	t.Run("can be disabled", func(t *testing.T) {
+		t.Parallel()
 		cfg := config.PrometheusOperatorCRDsConfig{
 			Enabled: false,
 		}
@@ -63,6 +68,7 @@ func TestPrometheusOperatorCRDsConfig(t *testing.T) {
 	})
 
 	t.Run("custom version", func(t *testing.T) {
+		t.Parallel()
 		cfg := config.PrometheusOperatorCRDsConfig{
 			Enabled: true,
 			Version: "v0.85.0",

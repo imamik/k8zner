@@ -134,15 +134,19 @@ func resolvePlacementGroup(placementGroupID *int64) *hcloud.PlacementGroup {
 }
 
 // attachServerToNetwork attaches a server to a network with the specified private IP and powers it on.
+// If privateIP is empty, HCloud will auto-assign an IP from the network's subnet.
 func (c *RealClient) attachServerToNetwork(ctx context.Context, server *hcloud.Server, networkID int64, privateIP string) error {
-	ip := net.ParseIP(privateIP)
-	if ip == nil {
-		return fmt.Errorf("invalid private ip: %s", privateIP)
-	}
-
 	attachOpts := hcloud.ServerAttachToNetworkOpts{
 		Network: &hcloud.Network{ID: networkID},
-		IP:      ip,
+	}
+
+	// Only set IP if privateIP is provided; otherwise let HCloud auto-assign
+	if privateIP != "" {
+		ip := net.ParseIP(privateIP)
+		if ip == nil {
+			return fmt.Errorf("invalid private ip: %s", privateIP)
+		}
+		attachOpts.IP = ip
 	}
 
 	// Attach to network with retry logic (network might not be ready immediately)
@@ -198,6 +202,15 @@ func LoadBalancerIPv4(lb *hcloud.LoadBalancer) string {
 func LoadBalancerIPv6(lb *hcloud.LoadBalancer) string {
 	if lb != nil && lb.PublicNet.IPv6.IP != nil {
 		return lb.PublicNet.IPv6.IP.String()
+	}
+	return ""
+}
+
+// LoadBalancerPrivateIP extracts the private IP address from a load balancer's first private network.
+// Returns empty string if the load balancer has no private networks attached.
+func LoadBalancerPrivateIP(lb *hcloud.LoadBalancer) string {
+	if lb != nil && len(lb.PrivateNet) > 0 && lb.PrivateNet[0].IP != nil {
+		return lb.PrivateNet[0].IP.String()
 	}
 	return ""
 }
