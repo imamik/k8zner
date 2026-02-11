@@ -105,7 +105,7 @@ func (r *ClusterReconciler) installAndWaitForCNI(ctx context.Context, cluster *k
 	}
 
 	readyNow := metav1.Now()
-	ciliumDur := readyNow.Time.Sub(ciliumStart.Time)
+	ciliumDur := readyNow.Sub(ciliumStart.Time)
 	cluster.Status.Addons[k8znerv1alpha1.AddonNameCilium] = k8znerv1alpha1.AddonStatus{
 		Installed:          true,
 		Healthy:            true,
@@ -321,7 +321,7 @@ func (r *ClusterReconciler) installNextAddon(ctx context.Context, cluster *k8zne
 		}
 
 		now := metav1.Now()
-		dur := now.Time.Sub(installStart.Time)
+		dur := now.Sub(installStart.Time)
 		cluster.Status.Addons[step.Name] = k8znerv1alpha1.AddonStatus{
 			Installed:          true,
 			Healthy:            true,

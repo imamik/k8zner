@@ -173,9 +173,6 @@ func (m *Model) updateCRDStatus(msg CRDStatusMsg) {
 	m.PhaseHistory = msg.PhaseHistory
 	m.LastErrors = msg.LastErrors
 	m.LastReconcile = msg.LastReconcile
-	if msg.ClusterPhase != "" && m.Region == "" {
-		// Region may be populated from CRD
-	}
 }
 
 func (m *Model) updateETA() {

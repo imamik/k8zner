@@ -16,9 +16,6 @@ var (
 			Bold(true).
 			Foreground(colorWhite)
 
-	subtitleStyle = lipgloss.NewStyle().
-			Foreground(colorDim)
-
 	sectionStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(colorBlue).

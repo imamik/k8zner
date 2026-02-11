@@ -27,7 +27,7 @@ func recordPhaseTransition(cluster *k8znerv1alpha1.K8znerCluster, newPhase k8zne
 	for i := range cluster.Status.PhaseHistory {
 		if cluster.Status.PhaseHistory[i].EndedAt == nil {
 			cluster.Status.PhaseHistory[i].EndedAt = &now
-			d := now.Time.Sub(cluster.Status.PhaseHistory[i].StartedAt.Time)
+			d := now.Sub(cluster.Status.PhaseHistory[i].StartedAt.Time)
 			cluster.Status.PhaseHistory[i].Duration = d.Round(time.Second).String()
 		}
 	}

@@ -259,7 +259,7 @@ func renderAddonRow(b *strings.Builder, name string, addon k8znerv1alpha1.AddonS
 		extra = sf(warningStyle)(fmt.Sprintf("retry %d", addon.RetryCount))
 	}
 
-	b.WriteString(fmt.Sprintf("    %s %-20s %s\n", style(icon), style(name), extra))
+	fmt.Fprintf(b, "    %s %-20s %s\n", style(icon), style(name), extra)
 }
 
 func renderPhaseHistory(b *strings.Builder, m Model) {
@@ -281,8 +281,8 @@ func renderPhaseHistory(b *strings.Builder, m Model) {
 			icon = crossMark
 			style = failedStyle.Render
 		}
-		b.WriteString(fmt.Sprintf("    %s %-18s %s\n",
-			style(icon), style(string(rec.Phase)), dimStyle.Render(dur)))
+		fmt.Fprintf(b, "    %s %-18s %s\n",
+			style(icon), style(string(rec.Phase)), dimStyle.Render(dur))
 	}
 }
 
@@ -300,8 +300,8 @@ func renderErrors(b *strings.Builder, m Model) {
 		if component == "" {
 			component = err.Phase
 		}
-		b.WriteString(fmt.Sprintf("    %s [%s] %s\n",
-			failedStyle.Render(crossMark), component, dimStyle.Render(err.Message)))
+		fmt.Fprintf(b, "    %s [%s] %s\n",
+			failedStyle.Render(crossMark), component, dimStyle.Render(err.Message))
 	}
 }
 
