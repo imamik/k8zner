@@ -1,4 +1,4 @@
-package v2
+package config
 
 import (
 	"testing"
@@ -6,17 +6,17 @@ import (
 
 // Package-level vars to prevent compiler optimization of benchmark results.
 var (
-	benchResultConfig    *Config
+	benchResultSpec      *Spec
 	benchResultExpanded  any
 	benchResultValidateE error
 )
 
-func BenchmarkExpand_DevMode(b *testing.B) {
-	cfg := &Config{
+func BenchmarkExpandSpec_DevMode(b *testing.B) {
+	cfg := &Spec{
 		Name:   "bench-dev",
 		Region: RegionFalkenstein,
 		Mode:   ModeDev,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 1,
 			Size:  SizeCX23,
 		},
@@ -26,19 +26,19 @@ func BenchmarkExpand_DevMode(b *testing.B) {
 	b.ResetTimer()
 	var err error
 	for b.Loop() {
-		benchResultExpanded, err = Expand(cfg)
+		benchResultExpanded, err = ExpandSpec(cfg)
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-func BenchmarkExpand_HAMode(b *testing.B) {
-	cfg := &Config{
+func BenchmarkExpandSpec_HAMode(b *testing.B) {
+	cfg := &Spec{
 		Name:   "bench-ha",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 3,
 			Size:  SizeCX33,
 		},
@@ -48,27 +48,27 @@ func BenchmarkExpand_HAMode(b *testing.B) {
 	b.ResetTimer()
 	var err error
 	for b.Loop() {
-		benchResultExpanded, err = Expand(cfg)
+		benchResultExpanded, err = ExpandSpec(cfg)
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-func BenchmarkExpand_FullConfig(b *testing.B) {
+func BenchmarkExpandSpec_FullConfig(b *testing.B) {
 	b.Setenv("CF_API_TOKEN", "bench-token")
 	b.Setenv("HETZNER_S3_ACCESS_KEY", "bench-s3-key")
 	b.Setenv("HETZNER_S3_SECRET_KEY", "bench-s3-secret")
 
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "bench-full",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 5,
 			Size:  SizeCX53,
 		},
-		ControlPlane: &ControlPlane{
+		ControlPlane: &ControlPlaneSpec{
 			Size: SizeCX43,
 		},
 		Domain:           "example.com",
@@ -83,19 +83,19 @@ func BenchmarkExpand_FullConfig(b *testing.B) {
 	b.ResetTimer()
 	var err error
 	for b.Loop() {
-		benchResultExpanded, err = Expand(cfg)
+		benchResultExpanded, err = ExpandSpec(cfg)
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-func BenchmarkExpand_Parallel(b *testing.B) {
-	cfg := &Config{
+func BenchmarkExpandSpec_Parallel(b *testing.B) {
+	cfg := &Spec{
 		Name:   "bench-parallel",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 3,
 			Size:  SizeCX33,
 		},
@@ -105,7 +105,7 @@ func BenchmarkExpand_Parallel(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			result, err := Expand(cfg)
+			result, err := ExpandSpec(cfg)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -114,7 +114,7 @@ func BenchmarkExpand_Parallel(b *testing.B) {
 	})
 }
 
-func BenchmarkLoadFromBytes_MinimalConfig(b *testing.B) {
+func BenchmarkLoadSpecFromBytes_MinimalConfig(b *testing.B) {
 	yamlData := []byte(`name: bench-minimal
 region: fsn1
 mode: dev
@@ -127,14 +127,14 @@ workers:
 	b.ResetTimer()
 	var err error
 	for b.Loop() {
-		benchResultConfig, err = LoadFromBytes(yamlData)
+		benchResultSpec, err = LoadSpecFromBytes(yamlData)
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-func BenchmarkLoadFromBytes_FullConfig(b *testing.B) {
+func BenchmarkLoadSpecFromBytes_FullConfig(b *testing.B) {
 	b.Setenv("CF_API_TOKEN", "bench-token")
 	b.Setenv("HETZNER_S3_ACCESS_KEY", "bench-s3-key")
 	b.Setenv("HETZNER_S3_SECRET_KEY", "bench-s3-secret")
@@ -159,14 +159,14 @@ backup: true
 	b.ResetTimer()
 	var err error
 	for b.Loop() {
-		benchResultConfig, err = LoadFromBytes(yamlData)
+		benchResultSpec, err = LoadSpecFromBytes(yamlData)
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-func BenchmarkLoadFromBytesWithoutValidation(b *testing.B) {
+func BenchmarkLoadSpecFromBytesWithoutValidation(b *testing.B) {
 	yamlData := []byte(`name: bench-novalidate
 region: fsn1
 mode: ha
@@ -183,19 +183,19 @@ backup: true
 	b.ResetTimer()
 	var err error
 	for b.Loop() {
-		benchResultConfig, err = LoadFromBytesWithoutValidation(yamlData)
+		benchResultSpec, err = LoadSpecFromBytesWithoutValidation(yamlData)
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-func BenchmarkValidate_ValidConfig(b *testing.B) {
-	cfg := &Config{
+func BenchmarkValidate_ValidSpec(b *testing.B) {
+	cfg := &Spec{
 		Name:   "bench-valid",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 3,
 			Size:  SizeCX33,
 		},
@@ -208,16 +208,16 @@ func BenchmarkValidate_ValidConfig(b *testing.B) {
 	}
 }
 
-func BenchmarkValidate_FullConfig(b *testing.B) {
+func BenchmarkValidate_FullSpec(b *testing.B) {
 	b.Setenv("CF_API_TOKEN", "bench-token")
 	b.Setenv("HETZNER_S3_ACCESS_KEY", "bench-key")
 	b.Setenv("HETZNER_S3_SECRET_KEY", "bench-secret")
 
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "bench-valid-full",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 5,
 			Size:  SizeCX53,
 		},
@@ -234,12 +234,12 @@ func BenchmarkValidate_FullConfig(b *testing.B) {
 	}
 }
 
-func BenchmarkValidate_InvalidConfig(b *testing.B) {
-	cfg := &Config{
+func BenchmarkValidate_InvalidSpec(b *testing.B) {
+	cfg := &Spec{
 		Name:   "INVALID-NAME",
 		Region: "invalid-region",
 		Mode:   "invalid-mode",
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 99,
 			Size:  "invalid",
 		},
@@ -252,7 +252,7 @@ func BenchmarkValidate_InvalidConfig(b *testing.B) {
 	}
 }
 
-func BenchmarkLoadFromBytes_Parallel(b *testing.B) {
+func BenchmarkLoadSpecFromBytes_Parallel(b *testing.B) {
 	yamlData := []byte(`name: bench-parallel
 region: fsn1
 mode: ha
@@ -265,7 +265,7 @@ workers:
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			result, err := LoadFromBytes(yamlData)
+			result, err := LoadSpecFromBytes(yamlData)
 			if err != nil {
 				b.Fatal(err)
 			}

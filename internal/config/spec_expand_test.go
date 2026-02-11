@@ -1,27 +1,25 @@
-package v2
+package config
 
 import (
 	"os"
 	"testing"
-
-	"github.com/imamik/k8zner/internal/config"
 )
 
-func TestExpand_BasicConfig(t *testing.T) {
+func TestExpandSpec_BasicConfig(t *testing.T) {
 	t.Parallel()
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "test-cluster",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 3,
 			Size:  SizeCX32,
 		},
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
 	// Verify basic fields
@@ -33,21 +31,21 @@ func TestExpand_BasicConfig(t *testing.T) {
 	}
 }
 
-func TestExpand_ControlPlane_DevMode(t *testing.T) {
+func TestExpandSpec_ControlPlane_DevMode(t *testing.T) {
 	t.Parallel()
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "dev-cluster",
 		Region: RegionNuremberg,
 		Mode:   ModeDev,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 1,
 			Size:  SizeCX22,
 		},
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
 	// Dev mode should have 1 control plane
@@ -67,21 +65,21 @@ func TestExpand_ControlPlane_DevMode(t *testing.T) {
 	}
 }
 
-func TestExpand_ControlPlane_HAMode(t *testing.T) {
+func TestExpandSpec_ControlPlane_HAMode(t *testing.T) {
 	t.Parallel()
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "ha-cluster",
 		Region: RegionHelsinki,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 3,
 			Size:  SizeCX32,
 		},
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
 	// HA mode should have 3 control planes
@@ -95,21 +93,21 @@ func TestExpand_ControlPlane_HAMode(t *testing.T) {
 	}
 }
 
-func TestExpand_Workers(t *testing.T) {
+func TestExpandSpec_Workers(t *testing.T) {
 	t.Parallel()
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "worker-test",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 5,
 			Size:  SizeCX52,
 		},
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
 	// Should have exactly 1 worker pool
@@ -134,21 +132,21 @@ func TestExpand_Workers(t *testing.T) {
 	}
 }
 
-func TestExpand_Network(t *testing.T) {
+func TestExpandSpec_Network(t *testing.T) {
 	t.Parallel()
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "network-test",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 3,
 			Size:  SizeCX32,
 		},
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
 	// Verify network CIDRs
@@ -166,21 +164,21 @@ func TestExpand_Network(t *testing.T) {
 	}
 }
 
-func TestExpand_Talos(t *testing.T) {
+func TestExpandSpec_Talos(t *testing.T) {
 	t.Parallel()
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "talos-test",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 3,
 			Size:  SizeCX32,
 		},
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
 	vm := DefaultVersionMatrix()
@@ -195,21 +193,21 @@ func TestExpand_Talos(t *testing.T) {
 	}
 }
 
-func TestExpand_Addons(t *testing.T) {
+func TestExpandSpec_Addons(t *testing.T) {
 	t.Parallel()
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "addon-test",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 3,
 			Size:  SizeCX32,
 		},
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
 	// All addons should be enabled
@@ -248,24 +246,24 @@ func TestExpand_Addons(t *testing.T) {
 	}
 }
 
-func TestExpand_WithDomain(t *testing.T) {
+func TestExpandSpec_WithDomain(t *testing.T) {
 	os.Setenv("CF_API_TOKEN", "test-token")
 	defer os.Unsetenv("CF_API_TOKEN")
 
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "domain-test",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 3,
 			Size:  SizeCX32,
 		},
 		Domain: "example.com",
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
 	// Cloudflare should be enabled when domain is set
@@ -287,21 +285,21 @@ func TestExpand_WithDomain(t *testing.T) {
 	}
 }
 
-func TestExpand_WithoutDomain(t *testing.T) {
+func TestExpandSpec_WithoutDomain(t *testing.T) {
 	t.Parallel()
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "no-domain",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 3,
 			Size:  SizeCX32,
 		},
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
 	// Cloudflare should be disabled when no domain
@@ -315,156 +313,138 @@ func TestExpand_WithoutDomain(t *testing.T) {
 	}
 }
 
-func TestExpand_ArgoCDIngressWithDomain(t *testing.T) {
+func TestExpandSpec_ArgoCDIngressWithDomain(t *testing.T) {
 	os.Setenv("CF_API_TOKEN", "test-token")
 	defer os.Unsetenv("CF_API_TOKEN")
 
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "argocd-test",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 2,
 			Size:  SizeCX33,
 		},
 		Domain: "example.com",
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
-	// ArgoCD should be enabled
 	if !expanded.Addons.ArgoCD.Enabled {
 		t.Error("ArgoCD should be enabled")
 	}
-
-	// ArgoCD ingress should be enabled when domain is set
 	if !expanded.Addons.ArgoCD.IngressEnabled {
 		t.Error("ArgoCD IngressEnabled should be true when domain is set")
 	}
-
-	// ArgoCD ingress host should be argo.example.com (default subdomain)
 	expectedHost := "argo.example.com"
 	if expanded.Addons.ArgoCD.IngressHost != expectedHost {
 		t.Errorf("ArgoCD IngressHost = %q, want %q", expanded.Addons.ArgoCD.IngressHost, expectedHost)
 	}
-
-	// IngressClassName should be traefik
 	if expanded.Addons.ArgoCD.IngressClassName != "traefik" {
 		t.Errorf("ArgoCD IngressClassName = %q, want %q", expanded.Addons.ArgoCD.IngressClassName, "traefik")
 	}
-
-	// TLS should be enabled
 	if !expanded.Addons.ArgoCD.IngressTLS {
 		t.Error("ArgoCD IngressTLS should be true when domain is set")
 	}
 }
 
-func TestExpand_ArgoCDCustomSubdomain(t *testing.T) {
+func TestExpandSpec_ArgoCDCustomSubdomain(t *testing.T) {
 	os.Setenv("CF_API_TOKEN", "test-token")
 	defer os.Unsetenv("CF_API_TOKEN")
 
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "argocd-custom",
 		Region: RegionFalkenstein,
 		Mode:   ModeDev,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 1,
 			Size:  SizeCX23,
 		},
 		Domain:        "mycompany.com",
-		ArgoSubdomain: "gitops", // Custom subdomain
+		ArgoSubdomain: "gitops",
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
-	// ArgoCD ingress host should use custom subdomain
 	expectedHost := "gitops.mycompany.com"
 	if expanded.Addons.ArgoCD.IngressHost != expectedHost {
 		t.Errorf("ArgoCD IngressHost = %q, want %q", expanded.Addons.ArgoCD.IngressHost, expectedHost)
 	}
 }
 
-func TestExpand_ArgoCDNoIngressWithoutDomain(t *testing.T) {
+func TestExpandSpec_ArgoCDNoIngressWithoutDomain(t *testing.T) {
 	t.Parallel()
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "argocd-nodomain",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 2,
 			Size:  SizeCX33,
 		},
-		// No domain set
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
-	// ArgoCD should still be enabled
 	if !expanded.Addons.ArgoCD.Enabled {
 		t.Error("ArgoCD should be enabled even without domain")
 	}
-
-	// But ingress should NOT be enabled
 	if expanded.Addons.ArgoCD.IngressEnabled {
 		t.Error("ArgoCD IngressEnabled should be false when no domain is set")
 	}
-
-	// IngressHost should be empty
 	if expanded.Addons.ArgoCD.IngressHost != "" {
 		t.Errorf("ArgoCD IngressHost should be empty when no domain, got %q", expanded.Addons.ArgoCD.IngressHost)
 	}
 }
 
-func TestExpand_Ingress_DevMode(t *testing.T) {
+func TestExpandSpec_Ingress_DevMode(t *testing.T) {
 	t.Parallel()
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "dev-ingress",
 		Region: RegionFalkenstein,
 		Mode:   ModeDev,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 1,
 			Size:  SizeCX22,
 		},
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
-	// No separate ingress LB - Traefik's LoadBalancer Service creates the LB via CCM
 	if expanded.Ingress.Enabled {
 		t.Error("Ingress should be disabled (Traefik Service creates LB via CCM)")
 	}
 }
 
-func TestExpand_Traefik_DevMode(t *testing.T) {
+func TestExpandSpec_Traefik_DevMode(t *testing.T) {
 	t.Parallel()
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "dev-traefik",
 		Region: RegionFalkenstein,
 		Mode:   ModeDev,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 1,
 			Size:  SizeCX22,
 		},
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
-	// Traefik always uses Deployment with LoadBalancer service (no hostNetwork)
 	if expanded.Addons.Traefik.HostNetwork != nil {
 		t.Error("Traefik.HostNetwork should be nil (not set)")
 	}
@@ -473,24 +453,23 @@ func TestExpand_Traefik_DevMode(t *testing.T) {
 	}
 }
 
-func TestExpand_Traefik_HAMode(t *testing.T) {
+func TestExpandSpec_Traefik_HAMode(t *testing.T) {
 	t.Parallel()
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "ha-traefik",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 3,
 			Size:  SizeCX32,
 		},
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
-	// Traefik always uses Deployment with LoadBalancer service (no hostNetwork)
 	if expanded.Addons.Traefik.HostNetwork != nil {
 		t.Error("Traefik.HostNetwork should be nil (not set)")
 	}
@@ -499,44 +478,43 @@ func TestExpand_Traefik_HAMode(t *testing.T) {
 	}
 }
 
-func TestExpand_Ingress_HAMode(t *testing.T) {
+func TestExpandSpec_Ingress_HAMode(t *testing.T) {
 	t.Parallel()
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "ha-ingress",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 3,
 			Size:  SizeCX32,
 		},
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
-	// No separate ingress LB - Traefik's LoadBalancer Service creates the LB via CCM
 	if expanded.Ingress.Enabled {
 		t.Error("Ingress should be disabled (Traefik Service creates LB via CCM)")
 	}
 }
 
-func TestExpand_Kubernetes(t *testing.T) {
+func TestExpandSpec_Kubernetes(t *testing.T) {
 	t.Parallel()
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "k8s-test",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 3,
 			Size:  SizeCX32,
 		},
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
 	vm := DefaultVersionMatrix()
@@ -545,31 +523,28 @@ func TestExpand_Kubernetes(t *testing.T) {
 		t.Errorf("Kubernetes.Version = %q, want %q", expanded.Kubernetes.Version, vm.Kubernetes)
 	}
 
-	// API load balancer should be enabled for HA
 	if !expanded.Kubernetes.APILoadBalancerEnabled {
 		t.Error("APILoadBalancerEnabled should be true for HA mode")
 	}
 }
 
-// verifyIPv6Only checks that all nodes are configured for IPv6-only
-func TestExpand_IPv6Only(t *testing.T) {
+func TestExpandSpec_IPv6Only(t *testing.T) {
 	t.Parallel()
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "ipv6-test",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 3,
 			Size:  SizeCX32,
 		},
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
-	// Verify IPv6-only configuration
 	if expanded.Talos.Machine.PublicIPv4Enabled == nil || *expanded.Talos.Machine.PublicIPv4Enabled {
 		t.Error("PublicIPv4Enabled should be false for IPv6-only")
 	}
@@ -578,116 +553,100 @@ func TestExpand_IPv6Only(t *testing.T) {
 	}
 }
 
-// Helper to check expand returns valid internal config
-func TestExpand_ReturnsValidConfig(t *testing.T) {
+func TestExpandSpec_ReturnsValidConfig(t *testing.T) {
 	t.Parallel()
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "valid-test",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 3,
 			Size:  SizeCX32,
 		},
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
-	// Type assertion to verify it's the correct type
-	var _ *config.Config = expanded
+	var _ *Config = expanded
 }
 
-func TestExpand_WithBackupEnabled(t *testing.T) {
+func TestExpandSpec_WithBackupEnabled(t *testing.T) {
 	os.Setenv("HETZNER_S3_ACCESS_KEY", "test-access-key")
 	os.Setenv("HETZNER_S3_SECRET_KEY", "test-secret-key")
 	defer os.Unsetenv("HETZNER_S3_ACCESS_KEY")
 	defer os.Unsetenv("HETZNER_S3_SECRET_KEY")
 
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "backup-test",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 3,
 			Size:  SizeCX32,
 		},
 		Backup: true,
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
-	// TalosBackup should be enabled
 	if !expanded.Addons.TalosBackup.Enabled {
 		t.Error("TalosBackup should be enabled when backup is true")
 	}
-
-	// Verify bucket name
 	expectedBucket := "backup-test-etcd-backups"
 	if expanded.Addons.TalosBackup.S3Bucket != expectedBucket {
 		t.Errorf("TalosBackup.S3Bucket = %q, want %q", expanded.Addons.TalosBackup.S3Bucket, expectedBucket)
 	}
-
-	// Verify S3 region
 	if expanded.Addons.TalosBackup.S3Region != "fsn1" {
 		t.Errorf("TalosBackup.S3Region = %q, want %q", expanded.Addons.TalosBackup.S3Region, "fsn1")
 	}
-
-	// Verify S3 endpoint
 	expectedEndpoint := "https://fsn1.your-objectstorage.com"
 	if expanded.Addons.TalosBackup.S3Endpoint != expectedEndpoint {
 		t.Errorf("TalosBackup.S3Endpoint = %q, want %q", expanded.Addons.TalosBackup.S3Endpoint, expectedEndpoint)
 	}
-
-	// Verify credentials are from env vars
 	if expanded.Addons.TalosBackup.S3AccessKey != "test-access-key" {
 		t.Errorf("TalosBackup.S3AccessKey = %q, want %q", expanded.Addons.TalosBackup.S3AccessKey, "test-access-key")
 	}
 	if expanded.Addons.TalosBackup.S3SecretKey != "test-secret-key" {
 		t.Errorf("TalosBackup.S3SecretKey = %q, want %q", expanded.Addons.TalosBackup.S3SecretKey, "test-secret-key")
 	}
-
-	// Verify hourly schedule
 	if expanded.Addons.TalosBackup.Schedule != "0 * * * *" {
 		t.Errorf("TalosBackup.Schedule = %q, want %q", expanded.Addons.TalosBackup.Schedule, "0 * * * *")
 	}
-
-	// Verify compression is enabled
 	if !expanded.Addons.TalosBackup.EnableCompression {
 		t.Error("TalosBackup.EnableCompression should be true")
 	}
 }
 
-func TestExpand_WithBackupDisabled(t *testing.T) {
+func TestExpandSpec_WithBackupDisabled(t *testing.T) {
 	t.Parallel()
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "no-backup",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 3,
 			Size:  SizeCX32,
 		},
 		Backup: false,
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
-	// TalosBackup should be disabled
 	if expanded.Addons.TalosBackup.Enabled {
 		t.Error("TalosBackup should be disabled when backup is false")
 	}
 }
 
-func TestExpand_BackupDifferentRegions(t *testing.T) {
+func TestExpandSpec_BackupDifferentRegions(t *testing.T) {
 	os.Setenv("HETZNER_S3_ACCESS_KEY", "test-key")
 	os.Setenv("HETZNER_S3_SECRET_KEY", "test-secret")
 	defer os.Unsetenv("HETZNER_S3_ACCESS_KEY")
@@ -704,20 +663,20 @@ func TestExpand_BackupDifferentRegions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.region), func(t *testing.T) {
-			cfg := &Config{
+			cfg := &Spec{
 				Name:   "region-test",
 				Region: tt.region,
 				Mode:   ModeDev,
-				Workers: Worker{
+				Workers: WorkerSpec{
 					Count: 1,
 					Size:  SizeCX22,
 				},
 				Backup: true,
 			}
 
-			expanded, err := Expand(cfg)
+			expanded, err := ExpandSpec(cfg)
 			if err != nil {
-				t.Fatalf("Expand() error = %v", err)
+				t.Fatalf("ExpandSpec() error = %v", err)
 			}
 
 			if expanded.Addons.TalosBackup.S3Endpoint != tt.expectedEndpoint {
@@ -727,86 +686,79 @@ func TestExpand_BackupDifferentRegions(t *testing.T) {
 	}
 }
 
-func TestExpand_BackupEncryptionDisabled(t *testing.T) {
+func TestExpandSpec_BackupEncryptionDisabled(t *testing.T) {
 	os.Setenv("HETZNER_S3_ACCESS_KEY", "test-access-key")
 	os.Setenv("HETZNER_S3_SECRET_KEY", "test-secret-key")
 	defer os.Unsetenv("HETZNER_S3_ACCESS_KEY")
 	defer os.Unsetenv("HETZNER_S3_SECRET_KEY")
 
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "encryption-test",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 3,
 			Size:  SizeCX32,
 		},
 		Backup: true,
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
-	// v2 config defaults to EncryptionDisabled=true (private bucket provides security)
 	if !expanded.Addons.TalosBackup.EncryptionDisabled {
-		t.Error("TalosBackup.EncryptionDisabled should be true for v2 config")
+		t.Error("TalosBackup.EncryptionDisabled should be true for spec config")
 	}
 }
 
-func TestExpand_MonitoringDisabledByDefault(t *testing.T) {
+func TestExpandSpec_MonitoringDisabledByDefault(t *testing.T) {
 	t.Parallel()
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "monitoring-test",
 		Region: RegionNuremberg,
 		Mode:   ModeDev,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 2,
 			Size:  SizeCX22,
 		},
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
-	// Monitoring should be disabled by default
 	if expanded.Addons.KubePrometheusStack.Enabled {
 		t.Error("KubePrometheusStack should be disabled by default")
 	}
 }
 
-func TestExpand_MonitoringEnabledWithoutDomain(t *testing.T) {
+func TestExpandSpec_MonitoringEnabledWithoutDomain(t *testing.T) {
 	t.Parallel()
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "monitoring-test",
 		Region: RegionNuremberg,
 		Mode:   ModeDev,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 2,
 			Size:  SizeCX22,
 		},
 		Monitoring: true,
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
-	// Monitoring should be enabled
 	if !expanded.Addons.KubePrometheusStack.Enabled {
 		t.Error("KubePrometheusStack should be enabled when Monitoring is true")
 	}
-
-	// Grafana ingress should NOT be enabled without domain
 	if expanded.Addons.KubePrometheusStack.Grafana.IngressEnabled {
 		t.Error("Grafana ingress should not be enabled without domain")
 	}
-
-	// Prometheus persistence should be enabled by default
 	if !expanded.Addons.KubePrometheusStack.Prometheus.Persistence.Enabled {
 		t.Error("Prometheus persistence should be enabled by default")
 	}
@@ -815,15 +767,15 @@ func TestExpand_MonitoringEnabledWithoutDomain(t *testing.T) {
 	}
 }
 
-func TestExpand_MonitoringEnabledWithDomain(t *testing.T) {
+func TestExpandSpec_MonitoringEnabledWithDomain(t *testing.T) {
 	os.Setenv("CF_API_TOKEN", "test-cf-token")
 	defer os.Unsetenv("CF_API_TOKEN")
 
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "monitoring-test",
 		Region: RegionNuremberg,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 3,
 			Size:  SizeCX32,
 		},
@@ -831,17 +783,15 @@ func TestExpand_MonitoringEnabledWithDomain(t *testing.T) {
 		Monitoring: true,
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
-	// Monitoring should be enabled
 	if !expanded.Addons.KubePrometheusStack.Enabled {
 		t.Error("KubePrometheusStack should be enabled")
 	}
 
-	// Grafana ingress should be enabled with domain
 	grafana := expanded.Addons.KubePrometheusStack.Grafana
 	if !grafana.IngressEnabled {
 		t.Error("Grafana ingress should be enabled with domain")
@@ -857,15 +807,15 @@ func TestExpand_MonitoringEnabledWithDomain(t *testing.T) {
 	}
 }
 
-func TestExpand_MonitoringCustomGrafanaSubdomain(t *testing.T) {
+func TestExpandSpec_MonitoringCustomGrafanaSubdomain(t *testing.T) {
 	os.Setenv("CF_API_TOKEN", "test-cf-token")
 	defer os.Unsetenv("CF_API_TOKEN")
 
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "monitoring-test",
 		Region: RegionNuremberg,
 		Mode:   ModeDev,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 2,
 			Size:  SizeCX22,
 		},
@@ -874,12 +824,11 @@ func TestExpand_MonitoringCustomGrafanaSubdomain(t *testing.T) {
 		Monitoring:       true,
 	}
 
-	expanded, err := Expand(cfg)
+	expanded, err := ExpandSpec(cfg)
 	if err != nil {
-		t.Fatalf("Expand() error = %v", err)
+		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
-	// Custom subdomain should be used
 	if expanded.Addons.KubePrometheusStack.Grafana.IngressHost != "metrics.example.com" {
 		t.Errorf("Grafana ingress host = %s, want metrics.example.com",
 			expanded.Addons.KubePrometheusStack.Grafana.IngressHost)

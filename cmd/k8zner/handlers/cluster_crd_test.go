@@ -11,7 +11,6 @@ import (
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	"github.com/imamik/k8zner/internal/config"
-	v2config "github.com/imamik/k8zner/internal/config/v2"
 	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning"
 )
@@ -344,7 +343,7 @@ func TestGetWorkerSize(t *testing.T) {
 	t.Run("returns default for no workers", func(t *testing.T) {
 		t.Parallel()
 		cfg := &config.Config{}
-		assert.Equal(t, v2config.DefaultWorkerServerType, getWorkerSize(cfg))
+		assert.Equal(t, config.DefaultWorkerServerType, getWorkerSize(cfg))
 	})
 
 	t.Run("returns first pool server type", func(t *testing.T) {

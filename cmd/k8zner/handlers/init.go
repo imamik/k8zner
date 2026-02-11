@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	v2config "github.com/imamik/k8zner/internal/config/v2"
+	"github.com/imamik/k8zner/internal/config"
 )
 
 // Factory function variables for init - can be replaced in tests.
@@ -17,10 +17,10 @@ var (
 	}
 
 	// runV2Wizard runs the simplified wizard.
-	runV2Wizard = v2config.RunWizard
+	runV2Wizard = config.RunWizard
 
 	// writeV2Config writes the config to a file.
-	writeV2Config = v2config.WriteYAML
+	writeV2Config = config.WriteSpecYAML
 )
 
 // Init runs the v2 configuration wizard and writes the result to a file.
@@ -36,7 +36,7 @@ func Init(ctx context.Context, outputPath string) error {
 		return fmt.Errorf("wizard canceled: %w", err)
 	}
 
-	cfg := result.ToConfig()
+	cfg := result.ToSpec()
 
 	if err := writeV2Config(cfg, outputPath); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
@@ -59,7 +59,7 @@ func printWelcome() {
 }
 
 // printInitSuccess prints the success message with summary and next steps.
-func printInitSuccess(outputPath string, cfg *v2config.Config) {
+func printInitSuccess(outputPath string, cfg *config.Spec) {
 	fmt.Println()
 	fmt.Println("Configuration saved!")
 	fmt.Println()
@@ -74,7 +74,7 @@ func printInitSuccess(outputPath string, cfg *v2config.Config) {
 	fmt.Printf("  Mode:           %s\n", cfg.Mode)
 	fmt.Printf("  Control Planes: %d x %s\n", cfg.ControlPlaneCount(), cfg.ControlPlaneSize())
 	fmt.Printf("  Workers:        %d x %s\n", cfg.Workers.Count, cfg.Workers.Size)
-	fmt.Printf("  Load Balancers: %d x %s\n", cfg.LoadBalancerCount(), v2config.LoadBalancerType)
+	fmt.Printf("  Load Balancers: %d x %s\n", cfg.LoadBalancerCount(), config.LoadBalancerType)
 	if cfg.Domain != "" {
 		fmt.Printf("  Domain:         %s\n", cfg.Domain)
 	}

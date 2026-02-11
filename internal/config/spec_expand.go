@@ -1,15 +1,13 @@
-package v2
+package config
 
 import (
 	"os"
-
-	"github.com/imamik/k8zner/internal/config"
 )
 
 // boolPtr returns a pointer to a boolean value.
 func boolPtr(b bool) *bool { return &b }
 
-// Expand converts a simplified v2 Config to the full internal config.Config
+// ExpandSpec converts a simplified Spec to the full internal Config
 // that the provisioning layer expects.
 //
 // This is where all the opinionated defaults are applied:
@@ -17,11 +15,11 @@ func boolPtr(b bool) *bool { return &b }
 // - Hardcoded addon stack
 // - Pinned versions
 // - Secure network configuration
-func Expand(cfg *Config) (*config.Config, error) {
+func ExpandSpec(cfg *Spec) (*Config, error) {
 	vm := DefaultVersionMatrix()
 
 	// Create the full internal config
-	internal := &config.Config{
+	internal := &Config{
 		// Basic cluster info
 		ClusterName: cfg.Name,
 		Location:    string(cfg.Region),
@@ -69,8 +67,8 @@ func Expand(cfg *Config) (*config.Config, error) {
 	return internal, nil
 }
 
-func expandNetwork(cfg *Config) config.NetworkConfig {
-	return config.NetworkConfig{
+func expandNetwork(cfg *Spec) NetworkConfig {
+	return NetworkConfig{
 		IPv4CIDR:           NetworkCIDR,
 		NodeIPv4CIDR:       NodeCIDR,
 		ServiceIPv4CIDR:    ServiceCIDR,
@@ -80,8 +78,8 @@ func expandNetwork(cfg *Config) config.NetworkConfig {
 	}
 }
 
-func expandFirewall(cfg *Config) config.FirewallConfig {
-	return config.FirewallConfig{
+func expandFirewall(cfg *Spec) FirewallConfig {
+	return FirewallConfig{
 		// Auto-detect current IP for API access
 		UseCurrentIPv4: boolPtr(true),
 		UseCurrentIPv6: boolPtr(true),
@@ -90,11 +88,11 @@ func expandFirewall(cfg *Config) config.FirewallConfig {
 	}
 }
 
-func expandControlPlane(cfg *Config) config.ControlPlaneConfig {
+func expandControlPlane(cfg *Spec) ControlPlaneConfig {
 	cpCount := cfg.ControlPlaneCount()
 
-	return config.ControlPlaneConfig{
-		NodePools: []config.ControlPlaneNodePool{
+	return ControlPlaneConfig{
+		NodePools: []ControlPlaneNodePool{
 			{
 				Name:       "control-plane",
 				Location:   string(cfg.Region),
@@ -108,8 +106,8 @@ func expandControlPlane(cfg *Config) config.ControlPlaneConfig {
 	}
 }
 
-func expandWorkers(cfg *Config) []config.WorkerNodePool {
-	return []config.WorkerNodePool{
+func expandWorkers(cfg *Spec) []WorkerNodePool {
+	return []WorkerNodePool{
 		{
 			Name:           "workers",
 			Location:       string(cfg.Region),
@@ -123,18 +121,18 @@ func expandWorkers(cfg *Config) []config.WorkerNodePool {
 	}
 }
 
-func expandIngress(cfg *Config) config.IngressConfig {
+func expandIngress(cfg *Spec) IngressConfig {
 	// Ingress LB is not pre-provisioned; Traefik's LoadBalancer Service
 	// creates a Hetzner LB automatically via CCM annotations.
-	return config.IngressConfig{
+	return IngressConfig{
 		Enabled: false,
 	}
 }
 
-func expandTalos(cfg *Config, vm VersionMatrix) config.TalosConfig {
-	return config.TalosConfig{
+func expandTalos(cfg *Spec, vm VersionMatrix) TalosConfig {
+	return TalosConfig{
 		Version: vm.Talos,
-		Machine: config.TalosMachineConfig{
+		Machine: TalosMachineConfig{
 			// IPv6-only configuration
 			IPv6Enabled:       boolPtr(true),
 			PublicIPv4Enabled: boolPtr(false), // No public IPv4!
@@ -157,8 +155,8 @@ func expandTalos(cfg *Config, vm VersionMatrix) config.TalosConfig {
 	}
 }
 
-func expandKubernetes(cfg *Config, vm VersionMatrix) config.KubernetesConfig {
-	return config.KubernetesConfig{
+func expandKubernetes(cfg *Spec, vm VersionMatrix) KubernetesConfig {
+	return KubernetesConfig{
 		Version: vm.Kubernetes,
 		Domain:  "cluster.local",
 
@@ -171,31 +169,31 @@ func expandKubernetes(cfg *Config, vm VersionMatrix) config.KubernetesConfig {
 	}
 }
 
-func expandAddons(cfg *Config, vm VersionMatrix) config.AddonsConfig {
+func expandAddons(cfg *Spec, vm VersionMatrix) AddonsConfig {
 	hasDomain := cfg.HasDomain()
 
-	return config.AddonsConfig{
+	return AddonsConfig{
 		// Hetzner Cloud Controller Manager - always enabled
-		CCM: config.DefaultCCM(),
+		CCM: DefaultCCM(),
 
 		// Hetzner CSI Driver - always enabled
-		CSI: config.DefaultCSI(),
+		CSI: DefaultCSI(),
 
 		// Cilium CNI - always enabled with kube-proxy replacement
-		Cilium: config.DefaultCilium(),
+		Cilium: DefaultCilium(),
 
 		// Traefik ingress - always enabled (replaces ingress-nginx)
-		Traefik: config.DefaultTraefik(true),
+		Traefik: DefaultTraefik(true),
 
 		// Ingress-nginx - disabled (we use Traefik)
-		IngressNginx: config.IngressNginxConfig{
+		IngressNginx: IngressNginxConfig{
 			Enabled: false,
 		},
 
 		// cert-manager - always enabled
-		CertManager: config.CertManagerConfig{
+		CertManager: CertManagerConfig{
 			Enabled: true,
-			Cloudflare: config.CertManagerCloudflareConfig{
+			Cloudflare: CertManagerCloudflareConfig{
 				Enabled:    hasDomain,
 				Email:      cfg.GetCertEmail(),
 				Production: true, // Use production Let's Encrypt
@@ -203,7 +201,7 @@ func expandAddons(cfg *Config, vm VersionMatrix) config.AddonsConfig {
 		},
 
 		// Metrics server - always enabled
-		MetricsServer: config.MetricsServerConfig{
+		MetricsServer: MetricsServerConfig{
 			Enabled: true,
 		},
 
@@ -211,30 +209,30 @@ func expandAddons(cfg *Config, vm VersionMatrix) config.AddonsConfig {
 		ArgoCD: expandArgoCD(cfg),
 
 		// Gateway API CRDs - always enabled
-		GatewayAPICRDs: config.DefaultGatewayAPICRDs(),
+		GatewayAPICRDs: DefaultGatewayAPICRDs(),
 
 		// Prometheus Operator CRDs - always enabled
-		PrometheusOperatorCRDs: config.DefaultPrometheusOperatorCRDs(),
+		PrometheusOperatorCRDs: DefaultPrometheusOperatorCRDs(),
 
 		// Kube Prometheus Stack - enabled only when monitoring is set
 		KubePrometheusStack: expandKubePrometheusStack(cfg),
 
 		// Talos CCM - always enabled
-		TalosCCM: config.TalosCCMConfig{
+		TalosCCM: TalosCCMConfig{
 			Enabled: true,
 			Version: vm.TalosCCM,
 		},
 
 		// Cloudflare - enabled only when domain is set
 		// API token is read from CF_API_TOKEN environment variable
-		Cloudflare: config.CloudflareConfig{
+		Cloudflare: CloudflareConfig{
 			Enabled:  hasDomain,
 			Domain:   cfg.Domain,
 			APIToken: os.Getenv("CF_API_TOKEN"),
 		},
 
 		// External DNS - enabled only when domain is set
-		ExternalDNS: config.ExternalDNSConfig{
+		ExternalDNS: ExternalDNSConfig{
 			Enabled:    hasDomain,
 			TXTOwnerID: cfg.Name,
 			Policy:     "sync",
@@ -246,12 +244,12 @@ func expandAddons(cfg *Config, vm VersionMatrix) config.AddonsConfig {
 	}
 }
 
-func expandTalosBackup(cfg *Config) config.TalosBackupConfig {
+func expandTalosBackup(cfg *Spec) TalosBackupConfig {
 	if !cfg.HasBackup() {
-		return config.TalosBackupConfig{Enabled: false}
+		return TalosBackupConfig{Enabled: false}
 	}
 
-	return config.TalosBackupConfig{
+	return TalosBackupConfig{
 		Enabled:            true,
 		Schedule:           "0 * * * *", // Hourly
 		S3Bucket:           cfg.BackupBucketName(),
@@ -261,12 +259,12 @@ func expandTalosBackup(cfg *Config) config.TalosBackupConfig {
 		S3SecretKey:        os.Getenv("HETZNER_S3_SECRET_KEY"),
 		S3Prefix:           "etcd-backups",
 		EnableCompression:  true,
-		EncryptionDisabled: true, // v2 config: encryption disabled by default (private bucket provides security)
+		EncryptionDisabled: true, // Spec config: encryption disabled by default (private bucket provides security)
 	}
 }
 
-func expandArgoCD(cfg *Config) config.ArgoCDConfig {
-	argoCfg := config.ArgoCDConfig{
+func expandArgoCD(cfg *Spec) ArgoCDConfig {
+	argoCfg := ArgoCDConfig{
 		Enabled: true,
 		HA:      cfg.Mode == ModeHA,
 	}
@@ -282,21 +280,21 @@ func expandArgoCD(cfg *Config) config.ArgoCDConfig {
 	return argoCfg
 }
 
-func expandKubePrometheusStack(cfg *Config) config.KubePrometheusStackConfig {
+func expandKubePrometheusStack(cfg *Spec) KubePrometheusStackConfig {
 	if !cfg.HasMonitoring() {
-		return config.KubePrometheusStackConfig{Enabled: false}
+		return KubePrometheusStackConfig{Enabled: false}
 	}
 
-	promCfg := config.KubePrometheusStackConfig{
+	promCfg := KubePrometheusStackConfig{
 		Enabled: true,
-		Grafana: config.KubePrometheusGrafanaConfig{},
-		Prometheus: config.KubePrometheusPrometheusConfig{
-			Persistence: config.KubePrometheusPersistenceConfig{
+		Grafana: KubePrometheusGrafanaConfig{},
+		Prometheus: KubePrometheusPrometheusConfig{
+			Persistence: KubePrometheusPersistenceConfig{
 				Enabled: true,
 				Size:    "50Gi",
 			},
 		},
-		Alertmanager: config.KubePrometheusAlertmanagerConfig{},
+		Alertmanager: KubePrometheusAlertmanagerConfig{},
 	}
 
 	// Enable Grafana ingress with TLS when domain is configured

@@ -11,13 +11,12 @@ import (
 
 	"github.com/imamik/k8zner/internal/addons/k8sclient"
 	"github.com/imamik/k8zner/internal/config"
-	v2 "github.com/imamik/k8zner/internal/config/v2"
 	"github.com/imamik/k8zner/internal/platform/s3"
 )
 
 // talosBackupVersion returns the pinned talos-backup version from the version matrix.
 func talosBackupVersion() string {
-	return v2.DefaultVersionMatrix().TalosBackup
+	return config.DefaultVersionMatrix().TalosBackup
 }
 
 // applyTalosBackup installs the Talos etcd backup CronJob.

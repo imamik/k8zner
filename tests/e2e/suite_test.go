@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	v2 "github.com/imamik/k8zner/internal/config/v2"
+	"github.com/imamik/k8zner/internal/config"
 	hcloud_client "github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning/image"
 )
@@ -77,11 +77,11 @@ func buildSharedSnapshots(client *hcloud_client.RealClient) error {
 
 	// Use versions from the default version matrix for consistency
 	// Note: Kubernetes version is used WITHOUT 'v' prefix to match provisioning code labels
-	vm := v2.DefaultVersionMatrix()
+	vm := config.DefaultVersionMatrix()
 	talosVer := vm.Talos
 	k8sVer := vm.Kubernetes // NO 'v' prefix - must match provisioning labels
 
-	// Only build AMD64 - ARM64 is not used (see v2.Architecture constant)
+	// Only build AMD64 - ARM64 is not used (see config.Architecture constant)
 	labelsAMD64 := map[string]string{
 		"os":            "talos",
 		"talos-version": talosVer,

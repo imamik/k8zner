@@ -2,10 +2,6 @@ package config
 
 import "testing"
 
-func boolPtr(b bool) *bool {
-	return &b
-}
-
 func TestIsPrivateFirst(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

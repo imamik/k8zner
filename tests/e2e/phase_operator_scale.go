@@ -13,7 +13,6 @@ import (
 
 	"github.com/imamik/k8zner/internal/addons"
 	"github.com/imamik/k8zner/internal/config"
-	v2 "github.com/imamik/k8zner/internal/config/v2"
 )
 
 // phaseOperatorScale tests scaling the cluster via the K8znerCluster CRD.
@@ -144,7 +143,7 @@ stringData:
 	t.Logf("Credentials Secret created: %s", credentialsSecretName)
 
 	// Get versions from version matrix
-	versionMatrix := v2.DefaultVersionMatrix()
+	versionMatrix := config.DefaultVersionMatrix()
 
 	// Create K8znerCluster CRD with all required fields
 	// Use CPX22 (shared vCPU) for better availability in E2E tests

@@ -21,7 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
-	configv2 "github.com/imamik/k8zner/internal/config/v2"
+	"github.com/imamik/k8zner/internal/config"
 	operatorprov "github.com/imamik/k8zner/internal/operator/provisioning"
 	"github.com/imamik/k8zner/internal/platform/hcloud"
 )
@@ -96,7 +96,7 @@ const (
 // normalizeServerSize converts legacy server type names to current Hetzner names.
 // For example, cx22 → cx23 (Hetzner renamed types in 2024).
 func normalizeServerSize(size string) string {
-	return string(configv2.ServerSize(size).Normalize())
+	return string(config.ServerSize(size).Normalize())
 }
 
 // ClusterReconciler reconciles a K8znerCluster object.

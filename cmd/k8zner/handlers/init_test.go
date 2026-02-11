@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	v2 "github.com/imamik/k8zner/internal/config/v2"
+	"github.com/imamik/k8zner/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,13 +37,13 @@ func TestPrintWelcome(t *testing.T) {
 
 func TestPrintInitSuccess(t *testing.T) {
 	t.Run("dev mode", func(t *testing.T) {
-		cfg := &v2.Config{
+		cfg := &config.Spec{
 			Name:   "test-cluster",
-			Region: v2.RegionFalkenstein,
-			Mode:   v2.ModeDev,
-			Workers: v2.Worker{
+			Region: config.RegionFalkenstein,
+			Mode:   config.ModeDev,
+			Workers: config.WorkerSpec{
 				Count: 2,
-				Size:  v2.SizeCX32,
+				Size:  config.SizeCX32,
 			},
 		}
 
@@ -63,13 +63,13 @@ func TestPrintInitSuccess(t *testing.T) {
 	})
 
 	t.Run("ha mode", func(t *testing.T) {
-		cfg := &v2.Config{
+		cfg := &config.Spec{
 			Name:   "production",
-			Region: v2.RegionNuremberg,
-			Mode:   v2.ModeHA,
-			Workers: v2.Worker{
+			Region: config.RegionNuremberg,
+			Mode:   config.ModeHA,
+			Workers: config.WorkerSpec{
 				Count: 3,
-				Size:  v2.SizeCX42,
+				Size:  config.SizeCX42,
 			},
 			Domain: "example.com",
 		}
@@ -88,13 +88,13 @@ func TestPrintInitSuccess(t *testing.T) {
 	})
 
 	t.Run("shows included features", func(t *testing.T) {
-		cfg := &v2.Config{
+		cfg := &config.Spec{
 			Name:   "test",
-			Region: v2.RegionFalkenstein,
-			Mode:   v2.ModeDev,
-			Workers: v2.Worker{
+			Region: config.RegionFalkenstein,
+			Mode:   config.ModeDev,
+			Workers: config.WorkerSpec{
 				Count: 1,
-				Size:  v2.SizeCX22,
+				Size:  config.SizeCX22,
 			},
 		}
 
@@ -130,12 +130,12 @@ func captureOutput(f func()) string {
 func TestInit_WithInjection(t *testing.T) {
 	saveAndRestoreInitFactories(t)
 
-	validResult := &v2.WizardResult{
+	validResult := &config.WizardResult{
 		Name:        "test-cluster",
-		Region:      v2.RegionFalkenstein,
-		Mode:        v2.ModeDev,
+		Region:      config.RegionFalkenstein,
+		Mode:        config.ModeDev,
 		WorkerCount: 2,
-		WorkerSize:  v2.SizeCX32,
+		WorkerSize:  config.SizeCX32,
 	}
 
 	t.Run("success flow - new file", func(t *testing.T) {
@@ -143,11 +143,11 @@ func TestInit_WithInjection(t *testing.T) {
 			return false
 		}
 
-		runV2Wizard = func(_ context.Context) (*v2.WizardResult, error) {
+		runV2Wizard = func(_ context.Context) (*config.WizardResult, error) {
 			return validResult, nil
 		}
 
-		writeV2Config = func(_ *v2.Config, _ string) error {
+		writeV2Config = func(_ *config.Spec, _ string) error {
 			return nil
 		}
 
@@ -163,11 +163,11 @@ func TestInit_WithInjection(t *testing.T) {
 			return true
 		}
 
-		runV2Wizard = func(_ context.Context) (*v2.WizardResult, error) {
+		runV2Wizard = func(_ context.Context) (*config.WizardResult, error) {
 			return validResult, nil
 		}
 
-		writeV2Config = func(_ *v2.Config, _ string) error {
+		writeV2Config = func(_ *config.Spec, _ string) error {
 			return nil
 		}
 
@@ -187,7 +187,7 @@ func TestInit_WithInjection(t *testing.T) {
 			return false
 		}
 
-		runV2Wizard = func(_ context.Context) (*v2.WizardResult, error) {
+		runV2Wizard = func(_ context.Context) (*config.WizardResult, error) {
 			return nil, errors.New("user canceled")
 		}
 
@@ -203,11 +203,11 @@ func TestInit_WithInjection(t *testing.T) {
 			return false
 		}
 
-		runV2Wizard = func(_ context.Context) (*v2.WizardResult, error) {
+		runV2Wizard = func(_ context.Context) (*config.WizardResult, error) {
 			return validResult, nil
 		}
 
-		writeV2Config = func(_ *v2.Config, _ string) error {
+		writeV2Config = func(_ *config.Spec, _ string) error {
 			return errors.New("permission denied")
 		}
 
@@ -219,24 +219,24 @@ func TestInit_WithInjection(t *testing.T) {
 	})
 
 	t.Run("converts wizard result to config", func(t *testing.T) {
-		var capturedConfig *v2.Config
+		var capturedConfig *config.Spec
 
 		fileExists = func(_ string) bool {
 			return false
 		}
 
-		runV2Wizard = func(_ context.Context) (*v2.WizardResult, error) {
-			return &v2.WizardResult{
+		runV2Wizard = func(_ context.Context) (*config.WizardResult, error) {
+			return &config.WizardResult{
 				Name:        "my-cluster",
-				Region:      v2.RegionHelsinki,
-				Mode:        v2.ModeHA,
+				Region:      config.RegionHelsinki,
+				Mode:        config.ModeHA,
 				WorkerCount: 5,
-				WorkerSize:  v2.SizeCX52,
+				WorkerSize:  config.SizeCX52,
 				Domain:      "test.example.com",
 			}, nil
 		}
 
-		writeV2Config = func(cfg *v2.Config, _ string) error {
+		writeV2Config = func(cfg *config.Spec, _ string) error {
 			capturedConfig = cfg
 			return nil
 		}
@@ -248,10 +248,10 @@ func TestInit_WithInjection(t *testing.T) {
 
 		require.NotNil(t, capturedConfig)
 		assert.Equal(t, "my-cluster", capturedConfig.Name)
-		assert.Equal(t, v2.RegionHelsinki, capturedConfig.Region)
-		assert.Equal(t, v2.ModeHA, capturedConfig.Mode)
+		assert.Equal(t, config.RegionHelsinki, capturedConfig.Region)
+		assert.Equal(t, config.ModeHA, capturedConfig.Mode)
 		assert.Equal(t, 5, capturedConfig.Workers.Count)
-		assert.Equal(t, v2.SizeCX52, capturedConfig.Workers.Size)
+		assert.Equal(t, config.SizeCX52, capturedConfig.Workers.Size)
 		assert.Equal(t, "test.example.com", capturedConfig.Domain)
 	})
 }

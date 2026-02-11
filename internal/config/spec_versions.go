@@ -1,4 +1,4 @@
-package v2
+package config
 
 // VersionMatrix contains all pinned, tested versions for the k8zner stack.
 // These versions are validated to work together and are not configurable.

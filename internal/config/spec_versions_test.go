@@ -1,4 +1,4 @@
-package v2
+package config
 
 import (
 	"testing"
@@ -8,7 +8,6 @@ func TestVersionMatrix_Validate(t *testing.T) {
 	t.Parallel()
 	vm := DefaultVersionMatrix()
 
-	// All versions should be non-empty
 	if vm.Talos == "" {
 		t.Error("Talos version is empty")
 	}
@@ -45,7 +44,6 @@ func TestVersionMatrix_TalosVersion(t *testing.T) {
 	t.Parallel()
 	vm := DefaultVersionMatrix()
 
-	// Talos version should start with 'v'
 	if vm.Talos[0] != 'v' {
 		t.Errorf("Talos version should start with 'v', got %s", vm.Talos)
 	}
@@ -55,7 +53,6 @@ func TestVersionMatrix_KubernetesVersion(t *testing.T) {
 	t.Parallel()
 	vm := DefaultVersionMatrix()
 
-	// Kubernetes version should not start with 'v' (API expects without v)
 	if vm.Kubernetes[0] == 'v' {
 		t.Errorf("Kubernetes version should not start with 'v', got %s", vm.Kubernetes)
 	}
@@ -65,7 +62,6 @@ func TestVersionMatrix_HelmChartVersions(t *testing.T) {
 	t.Parallel()
 	vm := DefaultVersionMatrix()
 
-	// Helm chart versions typically don't start with 'v'
 	versions := []struct {
 		name    string
 		version string
@@ -90,8 +86,6 @@ func TestVersionMatrix_HelmChartVersions(t *testing.T) {
 
 func TestDefaultControlPlaneServerType(t *testing.T) {
 	t.Parallel()
-	// Default control plane server type should be cx23 (dedicated vCPU for consistent performance)
-
 	if DefaultControlPlaneServerType != "cx23" {
 		t.Errorf("DefaultControlPlaneServerType = %s, want cx23", DefaultControlPlaneServerType)
 	}
@@ -99,8 +93,6 @@ func TestDefaultControlPlaneServerType(t *testing.T) {
 
 func TestLoadBalancerType(t *testing.T) {
 	t.Parallel()
-	// Load balancer type should always be lb11
-
 	if LoadBalancerType != "lb11" {
 		t.Errorf("LoadBalancerType = %s, want lb11", LoadBalancerType)
 	}

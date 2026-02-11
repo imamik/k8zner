@@ -10,7 +10,6 @@ import (
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	"github.com/imamik/k8zner/internal/config"
-	configv2 "github.com/imamik/k8zner/internal/config/v2"
 	"github.com/imamik/k8zner/internal/platform/talos"
 	"github.com/imamik/k8zner/internal/provisioning"
 )
@@ -32,11 +31,11 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 		// NodeIPv4CIDR is critical for CCM subnet configuration - it determines
 		// where load balancers are attached in the private network.
 		Network: config.NetworkConfig{
-			IPv4CIDR:           defaultString(spec.Network.IPv4CIDR, configv2.NetworkCIDR),
-			NodeIPv4CIDR:       defaultString(spec.Network.NodeIPv4CIDR, configv2.NodeCIDR),
+			IPv4CIDR:           defaultString(spec.Network.IPv4CIDR, config.NetworkCIDR),
+			NodeIPv4CIDR:       defaultString(spec.Network.NodeIPv4CIDR, config.NodeCIDR),
 			NodeIPv4SubnetMask: 25, // /25 subnets for each role (126 IPs per subnet)
-			PodIPv4CIDR:        defaultString(spec.Network.PodCIDR, configv2.PodCIDR),
-			ServiceIPv4CIDR:    defaultString(spec.Network.ServiceCIDR, configv2.ServiceCIDR),
+			PodIPv4CIDR:        defaultString(spec.Network.PodCIDR, config.PodCIDR),
+			ServiceIPv4CIDR:    defaultString(spec.Network.ServiceCIDR, config.ServiceCIDR),
 		},
 
 		// Talos configuration
@@ -165,7 +164,7 @@ func configureCloudflare(cfg *config.Config, spec *k8znerv1alpha1.K8znerClusterS
 
 // normalizeServerSize converts legacy server type names to current Hetzner names.
 func normalizeServerSize(size string) string {
-	return string(configv2.ServerSize(strings.ToLower(size)).Normalize())
+	return string(config.ServerSize(strings.ToLower(size)).Normalize())
 }
 
 // expandFirewallFromSpec derives firewall config from the CRD spec.
@@ -336,9 +335,9 @@ func buildMachineConfigOptions(k8sCluster *k8znerv1alpha1.K8znerCluster) *talos.
 		CoreDNSEnabled:          true,
 		DiscoveryServiceEnabled: true,
 		KubeProxyReplacement:    true, // Cilium replaces kube-proxy
-		NodeIPv4CIDR:            defaultString(k8sCluster.Spec.Network.IPv4CIDR, configv2.NetworkCIDR),
-		PodIPv4CIDR:             defaultString(k8sCluster.Spec.Network.PodCIDR, configv2.PodCIDR),
-		ServiceIPv4CIDR:         defaultString(k8sCluster.Spec.Network.ServiceCIDR, configv2.ServiceCIDR),
-		EtcdSubnet:              defaultString(k8sCluster.Spec.Network.IPv4CIDR, configv2.NetworkCIDR),
+		NodeIPv4CIDR:            defaultString(k8sCluster.Spec.Network.IPv4CIDR, config.NetworkCIDR),
+		PodIPv4CIDR:             defaultString(k8sCluster.Spec.Network.PodCIDR, config.PodCIDR),
+		ServiceIPv4CIDR:         defaultString(k8sCluster.Spec.Network.ServiceCIDR, config.ServiceCIDR),
+		EtcdSubnet:              defaultString(k8sCluster.Spec.Network.IPv4CIDR, config.NetworkCIDR),
 	}
 }

@@ -16,7 +16,6 @@ import (
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	"github.com/imamik/k8zner/internal/config"
-	v2config "github.com/imamik/k8zner/internal/config/v2"
 	hcloudInternal "github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning"
 	"github.com/imamik/k8zner/internal/util/naming"
@@ -344,7 +343,7 @@ func getWorkerCount(cfg *config.Config) int {
 
 func getWorkerSize(cfg *config.Config) string {
 	if len(cfg.Workers) == 0 {
-		return v2config.DefaultWorkerServerType
+		return config.DefaultWorkerServerType
 	}
 	return cfg.Workers[0].ServerType
 }

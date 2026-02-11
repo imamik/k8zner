@@ -1,4 +1,4 @@
-package v2
+package config
 
 import (
 	"testing"
@@ -13,71 +13,19 @@ func TestValidateClusterName(t *testing.T) {
 		input     string
 		wantError bool
 	}{
-		{
-			name:      "valid simple name",
-			input:     "my-cluster",
-			wantError: false,
-		},
-		{
-			name:      "valid with numbers",
-			input:     "cluster-123",
-			wantError: false,
-		},
-		{
-			name:      "valid lowercase only",
-			input:     "mycluster",
-			wantError: false,
-		},
-		{
-			name:      "valid numbers only",
-			input:     "cluster1",
-			wantError: false,
-		},
-		{
-			name:      "empty string",
-			input:     "",
-			wantError: true,
-		},
-		{
-			name:      "too long (64 chars)",
-			input:     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-			wantError: true,
-		},
-		{
-			name:      "max length (63 chars)",
-			input:     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-			wantError: false,
-		},
-		{
-			name:      "uppercase letters (auto-lowercased)",
-			input:     "MyCluster",
-			wantError: false, // validated after ToLower conversion
-		},
-		{
-			name:      "starts with hyphen",
-			input:     "-cluster",
-			wantError: true,
-		},
-		{
-			name:      "ends with hyphen",
-			input:     "cluster-",
-			wantError: true,
-		},
-		{
-			name:      "contains underscore",
-			input:     "my_cluster",
-			wantError: true,
-		},
-		{
-			name:      "contains space",
-			input:     "my cluster",
-			wantError: true,
-		},
-		{
-			name:      "contains dot",
-			input:     "my.cluster",
-			wantError: true,
-		},
+		{"valid simple name", "my-cluster", false},
+		{"valid with numbers", "cluster-123", false},
+		{"valid lowercase only", "mycluster", false},
+		{"valid numbers only", "cluster1", false},
+		{"empty string", "", true},
+		{"too long (64 chars)", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", true},
+		{"max length (63 chars)", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", false},
+		{"uppercase letters (auto-lowercased)", "MyCluster", false},
+		{"starts with hyphen", "-cluster", true},
+		{"ends with hyphen", "cluster-", true},
+		{"contains underscore", "my_cluster", true},
+		{"contains space", "my cluster", true},
+		{"contains dot", "my.cluster", true},
 	}
 
 	for _, tt := range tests {
@@ -98,41 +46,13 @@ func TestValidateDomain(t *testing.T) {
 		input     string
 		wantError bool
 	}{
-		{
-			name:      "empty is optional",
-			input:     "",
-			wantError: false,
-		},
-		{
-			name:      "valid simple domain",
-			input:     "example.com",
-			wantError: false,
-		},
-		{
-			name:      "valid subdomain",
-			input:     "sub.example.com",
-			wantError: false,
-		},
-		{
-			name:      "valid nested subdomain",
-			input:     "deep.sub.example.com",
-			wantError: false,
-		},
-		{
-			name:      "valid org tld",
-			input:     "example.org",
-			wantError: false,
-		},
-		{
-			name:      "invalid no tld",
-			input:     "example",
-			wantError: true,
-		},
-		{
-			name:      "invalid single part",
-			input:     "localhost",
-			wantError: true,
-		},
+		{"empty is optional", "", false},
+		{"valid simple domain", "example.com", false},
+		{"valid subdomain", "sub.example.com", false},
+		{"valid nested subdomain", "deep.sub.example.com", false},
+		{"valid org tld", "example.org", false},
+		{"invalid no tld", "example", true},
+		{"invalid single part", "localhost", true},
 	}
 
 	for _, tt := range tests {
@@ -147,7 +67,7 @@ func TestValidateDomain(t *testing.T) {
 	}
 }
 
-func TestWizardResult_ToConfig(t *testing.T) {
+func TestWizardResult_ToSpec(t *testing.T) {
 	t.Run("converts dev mode result", func(t *testing.T) {
 		result := &WizardResult{
 			Name:        "test-cluster",
@@ -157,7 +77,7 @@ func TestWizardResult_ToConfig(t *testing.T) {
 			WorkerSize:  SizeCX32,
 		}
 
-		cfg := result.ToConfig()
+		cfg := result.ToSpec()
 
 		require.NotNil(t, cfg)
 		assert.Equal(t, "test-cluster", cfg.Name)
@@ -178,7 +98,7 @@ func TestWizardResult_ToConfig(t *testing.T) {
 			Domain:      "example.com",
 		}
 
-		cfg := result.ToConfig()
+		cfg := result.ToSpec()
 
 		require.NotNil(t, cfg)
 		assert.Equal(t, "production", cfg.Name)
@@ -198,35 +118,31 @@ func TestWizardResult_ToConfig(t *testing.T) {
 			WorkerSize:  SizeCX42,
 		}
 
-		cfg := result.ToConfig()
+		cfg := result.ToSpec()
 
-		// HA mode = 3 control planes
 		assert.Equal(t, 3, cfg.ControlPlaneCount())
-		// HA mode = 2 load balancers
 		assert.Equal(t, 2, cfg.LoadBalancerCount())
 	})
 }
 
-func TestWriteYAML(t *testing.T) {
+func TestWriteSpecYAML(t *testing.T) {
 	t.Run("writes valid yaml", func(t *testing.T) {
-		cfg := &Config{
+		cfg := &Spec{
 			Name:   "test-cluster",
 			Region: RegionFalkenstein,
 			Mode:   ModeDev,
-			Workers: Worker{
+			Workers: WorkerSpec{
 				Count: 2,
 				Size:  SizeCX32,
 			},
 		}
 
-		// Create temp file
 		tmpFile := t.TempDir() + "/test.yaml"
 
-		err := WriteYAML(cfg, tmpFile)
+		err := WriteSpecYAML(cfg, tmpFile)
 		require.NoError(t, err)
 
-		// Read it back
-		loadedCfg, err := LoadWithoutValidation(tmpFile)
+		loadedCfg, err := LoadSpecWithoutValidation(tmpFile)
 		require.NoError(t, err)
 
 		assert.Equal(t, cfg.Name, loadedCfg.Name)

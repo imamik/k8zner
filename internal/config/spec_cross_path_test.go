@@ -1,4 +1,4 @@
-package v2_test
+package config_test
 
 import (
 	"os"
@@ -11,14 +11,12 @@ import (
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	"github.com/imamik/k8zner/internal/config"
-	v2 "github.com/imamik/k8zner/internal/config/v2"
 	opprovisioning "github.com/imamik/k8zner/internal/operator/provisioning"
 )
 
 // TestCrossPath_SharedDefaultsUsed verifies that both config paths use the
 // shared config.Default*() builders, producing identical defaults for all
-// core addon fields. Since both paths now call the same functions, this test
-// is a spot-check safety net rather than exhaustive field comparison.
+// core addon fields.
 func TestCrossPath_SharedDefaultsUsed(t *testing.T) {
 	t.Parallel()
 
@@ -28,20 +26,20 @@ func TestCrossPath_SharedDefaultsUsed(t *testing.T) {
 	defer os.Unsetenv("CF_API_TOKEN")
 
 	// --- CLI path ---
-	v2Cfg := &v2.Config{
+	spec := &config.Spec{
 		Name:   "cross-path-test",
-		Region: v2.RegionFalkenstein,
-		Mode:   v2.ModeHA,
-		Workers: v2.Worker{
+		Region: config.RegionFalkenstein,
+		Mode:   config.ModeHA,
+		Workers: config.WorkerSpec{
 			Count: 3,
-			Size:  v2.SizeCX33,
+			Size:  config.SizeCX33,
 		},
 		Domain:     "example.com",
 		Monitoring: true,
 	}
 
-	expanded, err := v2.Expand(v2Cfg)
-	require.NoError(t, err, "v2.Expand should not error")
+	expanded, err := config.ExpandSpec(spec)
+	require.NoError(t, err, "ExpandSpec should not error")
 
 	// --- Operator path ---
 	cluster := &k8znerv1alpha1.K8znerCluster{
@@ -167,17 +165,17 @@ func TestCrossPath_WithoutDomain(t *testing.T) {
 	defer os.Unsetenv("HCLOUD_TOKEN")
 
 	// CLI path
-	v2Cfg := &v2.Config{
+	spec := &config.Spec{
 		Name:   "no-domain-test",
-		Region: v2.RegionNuremberg,
-		Mode:   v2.ModeDev,
-		Workers: v2.Worker{
+		Region: config.RegionNuremberg,
+		Mode:   config.ModeDev,
+		Workers: config.WorkerSpec{
 			Count: 1,
-			Size:  v2.SizeCX23,
+			Size:  config.SizeCX23,
 		},
 	}
 
-	expanded, err := v2.Expand(v2Cfg)
+	expanded, err := config.ExpandSpec(spec)
 	require.NoError(t, err)
 
 	// Operator path

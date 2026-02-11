@@ -1,5 +1,4 @@
-// Package v2 provides the simplified, opinionated configuration schema.
-package v2
+package config
 
 import (
 	"errors"
@@ -12,9 +11,9 @@ import (
 // domainRegex is compiled once at package init for domain validation.
 var domainRegex = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$`)
 
-// Config is the simplified, opinionated configuration for k8zner.
+// Spec is the simplified, opinionated configuration for k8zner.
 // It requires only 5 fields to deploy a production-ready Kubernetes cluster.
-type Config struct {
+type Spec struct {
 	// Name is the cluster name, used for resource naming and tagging.
 	// Must be DNS-safe: lowercase alphanumeric and hyphens, must start with letter.
 	Name string `yaml:"name"`
@@ -26,11 +25,11 @@ type Config struct {
 	Mode Mode `yaml:"mode"`
 
 	// Workers defines the worker pool configuration.
-	Workers Worker `yaml:"workers"`
+	Workers WorkerSpec `yaml:"workers"`
 
 	// ControlPlane defines optional control plane configuration.
 	// If not specified, defaults to cpx21 (3 shared vCPU, 4GB RAM).
-	ControlPlane *ControlPlane `yaml:"control_plane,omitempty"`
+	ControlPlane *ControlPlaneSpec `yaml:"control_plane,omitempty"`
 
 	// Domain enables automatic DNS and TLS via Cloudflare.
 	// Requires CF_API_TOKEN environment variable.
@@ -172,8 +171,8 @@ func (m Mode) String() string {
 	}
 }
 
-// Worker defines the worker pool configuration.
-type Worker struct {
+// WorkerSpec defines the worker pool configuration.
+type WorkerSpec struct {
 	// Count is the number of worker nodes (1-5).
 	Count int `yaml:"count"`
 
@@ -181,8 +180,8 @@ type Worker struct {
 	Size ServerSize `yaml:"size"`
 }
 
-// ControlPlane defines the optional control plane configuration.
-type ControlPlane struct {
+// ControlPlaneSpec defines the optional control plane configuration.
+type ControlPlaneSpec struct {
 	// Size is the Hetzner server type for control plane nodes.
 	// Defaults to cpx21 (3 shared vCPU, 4GB RAM) if not specified.
 	Size ServerSize `yaml:"size,omitempty"`
@@ -316,7 +315,7 @@ func (s ServerSize) String() string {
 }
 
 // Validate validates the configuration and returns an error if invalid.
-func (c *Config) Validate() error {
+func (c *Spec) Validate() error {
 	var errs []error
 
 	// Name: required, DNS-safe
@@ -368,27 +367,27 @@ func (c *Config) Validate() error {
 }
 
 // ControlPlaneCount returns the number of control plane nodes.
-func (c *Config) ControlPlaneCount() int {
+func (c *Spec) ControlPlaneCount() int {
 	return c.Mode.ControlPlaneCount()
 }
 
 // LoadBalancerCount returns the number of load balancers.
-func (c *Config) LoadBalancerCount() int {
+func (c *Spec) LoadBalancerCount() int {
 	return c.Mode.LoadBalancerCount()
 }
 
 // HasDomain returns true if a domain is configured.
-func (c *Config) HasDomain() bool {
+func (c *Spec) HasDomain() bool {
 	return c.Domain != ""
 }
 
 // HasBackup returns true if backup is enabled.
-func (c *Config) HasBackup() bool {
+func (c *Spec) HasBackup() bool {
 	return c.Backup
 }
 
 // GetArgoSubdomain returns the ArgoCD subdomain (default: "argo").
-func (c *Config) GetArgoSubdomain() string {
+func (c *Spec) GetArgoSubdomain() string {
 	if c.ArgoSubdomain == "" {
 		return "argo"
 	}
@@ -397,7 +396,7 @@ func (c *Config) GetArgoSubdomain() string {
 
 // ArgoHost returns the full ArgoCD hostname (e.g., "argo.example.com").
 // Returns empty string if no domain is configured.
-func (c *Config) ArgoHost() string {
+func (c *Spec) ArgoHost() string {
 	if c.Domain == "" {
 		return ""
 	}
@@ -405,7 +404,7 @@ func (c *Config) ArgoHost() string {
 }
 
 // GetGrafanaSubdomain returns the subdomain for Grafana (default: "grafana").
-func (c *Config) GetGrafanaSubdomain() string {
+func (c *Spec) GetGrafanaSubdomain() string {
 	if c.GrafanaSubdomain == "" {
 		return "grafana"
 	}
@@ -414,7 +413,7 @@ func (c *Config) GetGrafanaSubdomain() string {
 
 // GrafanaHost returns the full Grafana hostname (e.g., "grafana.example.com").
 // Returns empty string if no domain is configured.
-func (c *Config) GrafanaHost() string {
+func (c *Spec) GrafanaHost() string {
 	if c.Domain == "" {
 		return ""
 	}
@@ -422,13 +421,13 @@ func (c *Config) GrafanaHost() string {
 }
 
 // HasMonitoring returns true if monitoring is enabled.
-func (c *Config) HasMonitoring() bool {
+func (c *Spec) HasMonitoring() bool {
 	return c.Monitoring
 }
 
 // GetCertEmail returns the email address for Let's Encrypt certificates.
 // If not set, defaults to "admin@{domain}".
-func (c *Config) GetCertEmail() string {
+func (c *Spec) GetCertEmail() string {
 	if c.CertEmail != "" {
 		return c.CertEmail
 	}
@@ -439,28 +438,28 @@ func (c *Config) GetCertEmail() string {
 }
 
 // BackupBucketName returns the S3 bucket name for etcd backups.
-func (c *Config) BackupBucketName() string {
+func (c *Spec) BackupBucketName() string {
 	return c.Name + "-etcd-backups"
 }
 
 // S3Endpoint returns the Hetzner S3 endpoint for the configured region.
-func (c *Config) S3Endpoint() string {
+func (c *Spec) S3Endpoint() string {
 	return "https://" + string(c.Region) + ".your-objectstorage.com"
 }
 
 // TotalWorkerVCPU returns the total vCPU across all workers.
-func (c *Config) TotalWorkerVCPU() int {
+func (c *Spec) TotalWorkerVCPU() int {
 	return c.Workers.Count * c.Workers.Size.Specs().VCPU
 }
 
 // TotalWorkerRAMGB returns the total RAM in GB across all workers.
-func (c *Config) TotalWorkerRAMGB() int {
+func (c *Spec) TotalWorkerRAMGB() int {
 	return c.Workers.Count * c.Workers.Size.Specs().RAMGB
 }
 
 // ControlPlaneSize returns the server size for control planes.
 // Returns the configured size or defaults to CX23 (2 dedicated vCPU, 4GB RAM).
-func (c *Config) ControlPlaneSize() ServerSize {
+func (c *Spec) ControlPlaneSize() ServerSize {
 	if c.ControlPlane != nil && c.ControlPlane.Size != "" {
 		return c.ControlPlane.Size.Normalize()
 	}

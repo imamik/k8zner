@@ -1,4 +1,4 @@
-package v2
+package config
 
 import (
 	"os"
@@ -6,10 +6,8 @@ import (
 	"testing"
 )
 
-func TestLoad_ValidConfig(t *testing.T) {
+func TestLoadSpec_ValidConfig(t *testing.T) {
 	t.Parallel()
-	// Create a temporary config file
-
 	content := `
 name: my-cluster
 region: fsn1
@@ -24,9 +22,9 @@ workers:
 		t.Fatalf("Failed to write test config: %v", err)
 	}
 
-	cfg, err := Load(configPath)
+	cfg, err := LoadSpec(configPath)
 	if err != nil {
-		t.Fatalf("Load() error = %v", err)
+		t.Fatalf("LoadSpec() error = %v", err)
 	}
 
 	if cfg.Name != "my-cluster" {
@@ -46,7 +44,7 @@ workers:
 	}
 }
 
-func TestLoad_WithDomain(t *testing.T) {
+func TestLoadSpec_WithDomain(t *testing.T) {
 	content := `
 name: production
 region: nbg1
@@ -62,13 +60,12 @@ domain: example.com
 		t.Fatalf("Failed to write test config: %v", err)
 	}
 
-	// Set CF_API_TOKEN for validation
 	os.Setenv("CF_API_TOKEN", "test-token")
 	defer os.Unsetenv("CF_API_TOKEN")
 
-	cfg, err := Load(configPath)
+	cfg, err := LoadSpec(configPath)
 	if err != nil {
-		t.Fatalf("Load() error = %v", err)
+		t.Fatalf("LoadSpec() error = %v", err)
 	}
 
 	if cfg.Domain != "example.com" {
@@ -76,7 +73,7 @@ domain: example.com
 	}
 }
 
-func TestLoad_MinimalDevConfig(t *testing.T) {
+func TestLoadSpec_MinimalDevConfig(t *testing.T) {
 	t.Parallel()
 	content := `
 name: dev
@@ -92,9 +89,9 @@ workers:
 		t.Fatalf("Failed to write test config: %v", err)
 	}
 
-	cfg, err := Load(configPath)
+	cfg, err := LoadSpec(configPath)
 	if err != nil {
-		t.Fatalf("Load() error = %v", err)
+		t.Fatalf("LoadSpec() error = %v", err)
 	}
 
 	if cfg.Mode != ModeDev {
@@ -108,15 +105,15 @@ workers:
 	}
 }
 
-func TestLoad_FileNotFound(t *testing.T) {
+func TestLoadSpec_FileNotFound(t *testing.T) {
 	t.Parallel()
-	_, err := Load("/nonexistent/path/k8zner.yaml")
+	_, err := LoadSpec("/nonexistent/path/k8zner.yaml")
 	if err == nil {
-		t.Error("Load() expected error for nonexistent file")
+		t.Error("LoadSpec() expected error for nonexistent file")
 	}
 }
 
-func TestLoad_InvalidYAML(t *testing.T) {
+func TestLoadSpec_InvalidYAML(t *testing.T) {
 	t.Parallel()
 	content := `
 name: my-cluster
@@ -128,13 +125,13 @@ region: [invalid yaml
 		t.Fatalf("Failed to write test config: %v", err)
 	}
 
-	_, err := Load(configPath)
+	_, err := LoadSpec(configPath)
 	if err == nil {
-		t.Error("Load() expected error for invalid YAML")
+		t.Error("LoadSpec() expected error for invalid YAML")
 	}
 }
 
-func TestLoad_ValidationFailure(t *testing.T) {
+func TestLoadSpec_ValidationFailure(t *testing.T) {
 	t.Parallel()
 	content := `
 name: INVALID_NAME
@@ -150,13 +147,13 @@ workers:
 		t.Fatalf("Failed to write test config: %v", err)
 	}
 
-	_, err := Load(configPath)
+	_, err := LoadSpec(configPath)
 	if err == nil {
-		t.Error("Load() expected validation error")
+		t.Error("LoadSpec() expected validation error")
 	}
 }
 
-func TestLoadWithoutValidation(t *testing.T) {
+func TestLoadSpecWithoutValidation(t *testing.T) {
 	t.Parallel()
 	content := `
 name: INVALID_NAME
@@ -172,10 +169,9 @@ workers:
 		t.Fatalf("Failed to write test config: %v", err)
 	}
 
-	// LoadWithoutValidation should not return validation errors
-	cfg, err := LoadWithoutValidation(configPath)
+	cfg, err := LoadSpecWithoutValidation(configPath)
 	if err != nil {
-		t.Fatalf("LoadWithoutValidation() error = %v", err)
+		t.Fatalf("LoadSpecWithoutValidation() error = %v", err)
 	}
 
 	if cfg.Name != "INVALID_NAME" {
@@ -183,7 +179,7 @@ workers:
 	}
 }
 
-func TestLoadFromBytes(t *testing.T) {
+func TestLoadSpecFromBytes(t *testing.T) {
 	t.Parallel()
 	content := []byte(`
 name: test-cluster
@@ -194,9 +190,9 @@ workers:
   size: cx42
 `)
 
-	cfg, err := LoadFromBytes(content)
+	cfg, err := LoadSpecFromBytes(content)
 	if err != nil {
-		t.Fatalf("LoadFromBytes() error = %v", err)
+		t.Fatalf("LoadSpecFromBytes() error = %v", err)
 	}
 
 	if cfg.Name != "test-cluster" {
@@ -207,9 +203,8 @@ workers:
 	}
 }
 
-func TestLoadFromBytes_ValidationError(t *testing.T) {
+func TestLoadSpecFromBytes_ValidationError(t *testing.T) {
 	t.Parallel()
-	// Valid YAML but invalid config (uppercase name)
 	content := []byte(`
 name: INVALID
 region: fsn1
@@ -218,9 +213,9 @@ workers:
   count: 3
   size: cx32
 `)
-	_, err := LoadFromBytes(content)
+	_, err := LoadSpecFromBytes(content)
 	if err == nil {
-		t.Error("LoadFromBytes() expected validation error for invalid name")
+		t.Error("LoadSpecFromBytes() expected validation error for invalid name")
 	}
 	if !containsString(err.Error(), "validation failed") {
 		t.Errorf("Expected validation error, got: %v", err)
@@ -238,13 +233,13 @@ func TestDefaultConfigPath(t *testing.T) {
 	}
 }
 
-func TestSave(t *testing.T) {
+func TestSaveSpec(t *testing.T) {
 	t.Parallel()
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "test-cluster",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 3,
 			Size:  SizeCX32,
 		},
@@ -253,39 +248,36 @@ func TestSave(t *testing.T) {
 	tmpDir := t.TempDir()
 	savePath := filepath.Join(tmpDir, "output.yaml")
 
-	err := Save(cfg, savePath)
+	err := SaveSpec(cfg, savePath)
 	if err != nil {
-		t.Fatalf("Save() error = %v", err)
+		t.Fatalf("SaveSpec() error = %v", err)
 	}
 
-	// Verify file was written and can be loaded back
-	loaded, err := LoadWithoutValidation(savePath)
+	loaded, err := LoadSpecWithoutValidation(savePath)
 	if err != nil {
-		t.Fatalf("LoadWithoutValidation() error = %v", err)
+		t.Fatalf("LoadSpecWithoutValidation() error = %v", err)
 	}
 	if loaded.Name != "test-cluster" {
 		t.Errorf("Name = %q, want %q", loaded.Name, "test-cluster")
 	}
 }
 
-func TestSave_InvalidPath(t *testing.T) {
+func TestSaveSpec_InvalidPath(t *testing.T) {
 	t.Parallel()
-	cfg := &Config{Name: "test"}
-	err := Save(cfg, "/nonexistent/directory/k8zner.yaml")
+	cfg := &Spec{Name: "test"}
+	err := SaveSpec(cfg, "/nonexistent/directory/k8zner.yaml")
 	if err == nil {
-		t.Error("Save() expected error for invalid path")
+		t.Error("SaveSpec() expected error for invalid path")
 	}
 }
 
 func TestFindConfigFile(t *testing.T) {
-	// Create a temp directory with a config file
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "k8zner.yaml")
 	if err := os.WriteFile(configPath, []byte("name: test"), 0644); err != nil {
 		t.Fatalf("Failed to write config: %v", err)
 	}
 
-	// Change to temp dir for the test
 	originalDir, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("Failed to get cwd: %v", err)
@@ -322,30 +314,23 @@ func TestFindConfigFile_NotFound(t *testing.T) {
 	}
 }
 
-// TestLoadFromBytes_InvalidYAML tests the parseConfig error branch inside LoadFromBytes
-// (lines 42-43 in loader.go). When invalid YAML is passed, parseConfig returns an error
-// which LoadFromBytes should propagate.
-func TestLoadFromBytes_InvalidYAML(t *testing.T) {
+func TestLoadSpecFromBytes_InvalidYAML(t *testing.T) {
 	t.Parallel()
-	_, err := LoadFromBytes([]byte("{{{{invalid yaml"))
+	_, err := LoadSpecFromBytes([]byte("{{{{invalid yaml"))
 	if err == nil {
-		t.Fatal("LoadFromBytes() expected error for invalid YAML, got nil")
+		t.Fatal("LoadSpecFromBytes() expected error for invalid YAML, got nil")
 	}
 }
 
-// TestLoadFromBytesWithoutValidation_InvalidYAML tests the parseConfig error path
-// through LoadFromBytesWithoutValidation.
-func TestLoadFromBytesWithoutValidation_InvalidYAML(t *testing.T) {
+func TestLoadSpecFromBytesWithoutValidation_InvalidYAML(t *testing.T) {
 	t.Parallel()
-	_, err := LoadFromBytesWithoutValidation([]byte("{{{{not valid yaml"))
+	_, err := LoadSpecFromBytesWithoutValidation([]byte("{{{{not valid yaml"))
 	if err == nil {
-		t.Fatal("LoadFromBytesWithoutValidation() expected error for invalid YAML, got nil")
+		t.Fatal("LoadSpecFromBytesWithoutValidation() expected error for invalid YAML, got nil")
 	}
 }
 
-// TestLoadFromBytesWithoutValidation_Valid tests LoadFromBytesWithoutValidation
-// with valid YAML that would fail validation (uppercase name).
-func TestLoadFromBytesWithoutValidation_Valid(t *testing.T) {
+func TestLoadSpecFromBytesWithoutValidation_Valid(t *testing.T) {
 	t.Parallel()
 	content := []byte(`
 name: INVALID
@@ -355,33 +340,27 @@ workers:
   count: 3
   size: cx32
 `)
-	cfg, err := LoadFromBytesWithoutValidation(content)
+	cfg, err := LoadSpecFromBytesWithoutValidation(content)
 	if err != nil {
-		t.Fatalf("LoadFromBytesWithoutValidation() error = %v", err)
+		t.Fatalf("LoadSpecFromBytesWithoutValidation() error = %v", err)
 	}
 	if cfg.Name != "INVALID" {
 		t.Errorf("Name = %q, want %q", cfg.Name, "INVALID")
 	}
 }
 
-// TestFindConfigFile_InParentDirectory tests FindConfigFile walking up the directory tree
-// to find a config file in a parent directory (lines 92-106 in loader.go).
 func TestFindConfigFile_InParentDirectory(t *testing.T) {
-	// Create a temp directory structure: parent/child/
-	// Place config file in parent, chdir to child
 	tmpDir := t.TempDir()
 	childDir := filepath.Join(tmpDir, "child")
 	if err := os.Mkdir(childDir, 0755); err != nil {
 		t.Fatalf("Failed to create child dir: %v", err)
 	}
 
-	// Write config file in parent (tmpDir)
 	configPath := filepath.Join(tmpDir, DefaultConfigFilename)
 	if err := os.WriteFile(configPath, []byte("name: test"), 0644); err != nil {
 		t.Fatalf("Failed to write config: %v", err)
 	}
 
-	// Change to child directory
 	originalDir, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("Failed to get cwd: %v", err)
@@ -400,13 +379,10 @@ func TestFindConfigFile_InParentDirectory(t *testing.T) {
 	}
 }
 
-// TestDefaultConfigPath_ReturnsJoinedPath verifies that DefaultConfigPath returns
-// the config filename joined with the current working directory.
 func TestDefaultConfigPath_ReturnsJoinedPath(t *testing.T) {
 	t.Parallel()
 	path := DefaultConfigPath()
 
-	// The path should be an absolute path ending with the default config filename
 	if !filepath.IsAbs(path) {
 		t.Errorf("DefaultConfigPath() = %q, expected absolute path", path)
 	}
@@ -421,14 +397,13 @@ func TestDefaultConfigPath_ReturnsJoinedPath(t *testing.T) {
 	}
 }
 
-// TestSave_RoundTrip verifies that Save followed by Load produces the same configuration.
-func TestSave_RoundTrip(t *testing.T) {
+func TestSaveSpec_RoundTrip(t *testing.T) {
 	t.Parallel()
-	cfg := &Config{
+	cfg := &Spec{
 		Name:   "round-trip",
 		Region: RegionFalkenstein,
 		Mode:   ModeDev,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 2,
 			Size:  SizeCX42,
 		},
@@ -437,13 +412,13 @@ func TestSave_RoundTrip(t *testing.T) {
 	tmpDir := t.TempDir()
 	savePath := filepath.Join(tmpDir, "roundtrip.yaml")
 
-	if err := Save(cfg, savePath); err != nil {
-		t.Fatalf("Save() error = %v", err)
+	if err := SaveSpec(cfg, savePath); err != nil {
+		t.Fatalf("SaveSpec() error = %v", err)
 	}
 
-	loaded, err := LoadWithoutValidation(savePath)
+	loaded, err := LoadSpecWithoutValidation(savePath)
 	if err != nil {
-		t.Fatalf("LoadWithoutValidation() error = %v", err)
+		t.Fatalf("LoadSpecWithoutValidation() error = %v", err)
 	}
 
 	if loaded.Name != cfg.Name {
@@ -460,18 +435,15 @@ func TestSave_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestLoadWithoutValidation_FileNotFound tests the error path when the file does not exist.
-func TestLoadWithoutValidation_FileNotFound(t *testing.T) {
+func TestLoadSpecWithoutValidation_FileNotFound(t *testing.T) {
 	t.Parallel()
-	_, err := LoadWithoutValidation("/nonexistent/path/config.yaml")
+	_, err := LoadSpecWithoutValidation("/nonexistent/path/config.yaml")
 	if err == nil {
-		t.Error("LoadWithoutValidation() expected error for nonexistent file")
+		t.Error("LoadSpecWithoutValidation() expected error for nonexistent file")
 	}
 }
 
-// TestLoadWithoutValidation_InvalidYAML tests the parseConfig error path
-// through LoadWithoutValidation when the file contains invalid YAML.
-func TestLoadWithoutValidation_InvalidYAML(t *testing.T) {
+func TestLoadSpecWithoutValidation_InvalidYAML(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "bad.yaml")
@@ -479,8 +451,8 @@ func TestLoadWithoutValidation_InvalidYAML(t *testing.T) {
 		t.Fatalf("Failed to write test config: %v", err)
 	}
 
-	_, err := LoadWithoutValidation(configPath)
+	_, err := LoadSpecWithoutValidation(configPath)
 	if err == nil {
-		t.Error("LoadWithoutValidation() expected error for invalid YAML")
+		t.Error("LoadSpecWithoutValidation() expected error for invalid YAML")
 	}
 }

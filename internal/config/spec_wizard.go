@@ -1,4 +1,4 @@
-package v2
+package config
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"github.com/charmbracelet/huh"
 )
 
-// WizardResult holds the user's choices from the v2 wizard.
+// WizardResult holds the user's choices from the wizard.
 type WizardResult struct {
 	Name        string
 	Region      Region
@@ -18,7 +18,7 @@ type WizardResult struct {
 	Domain      string
 }
 
-// RunWizard runs the simplified v2 configuration wizard.
+// RunWizard runs the simplified configuration wizard.
 func RunWizard(ctx context.Context) (*WizardResult, error) {
 	result := &WizardResult{
 		// Defaults
@@ -110,13 +110,13 @@ func RunWizard(ctx context.Context) (*WizardResult, error) {
 	return result, nil
 }
 
-// ToConfig converts the wizard result to a v2 Config.
-func (r *WizardResult) ToConfig() *Config {
-	return &Config{
+// ToSpec converts the wizard result to a Spec.
+func (r *WizardResult) ToSpec() *Spec {
+	return &Spec{
 		Name:   r.Name,
 		Region: r.Region,
 		Mode:   r.Mode,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: r.WorkerCount,
 			Size:  r.WorkerSize,
 		},
@@ -158,7 +158,7 @@ func validateDomain(s string) error {
 	return nil
 }
 
-// WriteYAML writes the v2 config to a YAML file.
-func WriteYAML(cfg *Config, path string) error {
-	return Save(cfg, path)
+// WriteSpecYAML writes the spec config to a YAML file.
+func WriteSpecYAML(cfg *Spec, path string) error {
+	return SaveSpec(cfg, path)
 }

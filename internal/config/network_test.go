@@ -557,4 +557,3 @@ func TestGetSubnetForRole_UnknownRole(t *testing.T) {
 		t.Errorf("expected unknown role error, got: %v", err)
 	}
 }
-

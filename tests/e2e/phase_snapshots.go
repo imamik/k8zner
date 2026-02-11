@@ -9,16 +9,16 @@ import (
 	"testing"
 	"time"
 
-	v2 "github.com/imamik/k8zner/internal/config/v2"
+	"github.com/imamik/k8zner/internal/config"
 	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning/image"
 	"github.com/imamik/k8zner/internal/util/keygen"
 )
 
-// Get versions from the v2 default version matrix
+// Get versions from the default version matrix
 // Note: Kubernetes version is used WITHOUT 'v' prefix to match provisioning code labels
 var (
-	versionMatrix = v2.DefaultVersionMatrix()
+	versionMatrix = config.DefaultVersionMatrix()
 	talosVersion  = versionMatrix.Talos
 	k8sVersion    = versionMatrix.Kubernetes // NO 'v' prefix - must match provisioning labels
 )

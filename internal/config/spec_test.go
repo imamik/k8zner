@@ -1,4 +1,4 @@
-package v2
+package config
 
 import (
 	"os"
@@ -193,21 +193,21 @@ func TestServerSize_Specs(t *testing.T) {
 	}
 }
 
-func TestConfig_Validate(t *testing.T) {
+func TestSpec_Validate(t *testing.T) {
 	tests := []struct {
 		name      string
-		config    Config
+		config    Spec
 		envVars   map[string]string
 		wantError bool
 		errorMsg  string
 	}{
 		{
 			name: "valid minimal config",
-			config: Config{
+			config: Spec{
 				Name:   "my-cluster",
 				Region: RegionFalkenstein,
 				Mode:   ModeHA,
-				Workers: Worker{
+				Workers: WorkerSpec{
 					Count: 3,
 					Size:  SizeCX32,
 				},
@@ -216,11 +216,11 @@ func TestConfig_Validate(t *testing.T) {
 		},
 		{
 			name: "valid config with domain",
-			config: Config{
+			config: Spec{
 				Name:   "production",
 				Region: RegionNuremberg,
 				Mode:   ModeHA,
-				Workers: Worker{
+				Workers: WorkerSpec{
 					Count: 3,
 					Size:  SizeCX32,
 				},
@@ -231,10 +231,10 @@ func TestConfig_Validate(t *testing.T) {
 		},
 		{
 			name: "missing name",
-			config: Config{
+			config: Spec{
 				Region: RegionFalkenstein,
 				Mode:   ModeHA,
-				Workers: Worker{
+				Workers: WorkerSpec{
 					Count: 3,
 					Size:  SizeCX32,
 				},
@@ -244,11 +244,11 @@ func TestConfig_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid name - uppercase",
-			config: Config{
+			config: Spec{
 				Name:   "MyCluster",
 				Region: RegionFalkenstein,
 				Mode:   ModeHA,
-				Workers: Worker{
+				Workers: WorkerSpec{
 					Count: 3,
 					Size:  SizeCX32,
 				},
@@ -258,11 +258,11 @@ func TestConfig_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid name - underscore",
-			config: Config{
+			config: Spec{
 				Name:   "my_cluster",
 				Region: RegionFalkenstein,
 				Mode:   ModeHA,
-				Workers: Worker{
+				Workers: WorkerSpec{
 					Count: 3,
 					Size:  SizeCX32,
 				},
@@ -272,11 +272,11 @@ func TestConfig_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid name - starts with hyphen",
-			config: Config{
+			config: Spec{
 				Name:   "-cluster",
 				Region: RegionFalkenstein,
 				Mode:   ModeHA,
-				Workers: Worker{
+				Workers: WorkerSpec{
 					Count: 3,
 					Size:  SizeCX32,
 				},
@@ -286,11 +286,11 @@ func TestConfig_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid region",
-			config: Config{
+			config: Spec{
 				Name:   "my-cluster",
 				Region: Region("invalid"),
 				Mode:   ModeHA,
-				Workers: Worker{
+				Workers: WorkerSpec{
 					Count: 3,
 					Size:  SizeCX32,
 				},
@@ -300,11 +300,11 @@ func TestConfig_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid mode",
-			config: Config{
+			config: Spec{
 				Name:   "my-cluster",
 				Region: RegionFalkenstein,
 				Mode:   Mode("invalid"),
-				Workers: Worker{
+				Workers: WorkerSpec{
 					Count: 3,
 					Size:  SizeCX32,
 				},
@@ -314,11 +314,11 @@ func TestConfig_Validate(t *testing.T) {
 		},
 		{
 			name: "workers count too low",
-			config: Config{
+			config: Spec{
 				Name:   "my-cluster",
 				Region: RegionFalkenstein,
 				Mode:   ModeHA,
-				Workers: Worker{
+				Workers: WorkerSpec{
 					Count: 0,
 					Size:  SizeCX32,
 				},
@@ -328,11 +328,11 @@ func TestConfig_Validate(t *testing.T) {
 		},
 		{
 			name: "workers count too high",
-			config: Config{
+			config: Spec{
 				Name:   "my-cluster",
 				Region: RegionFalkenstein,
 				Mode:   ModeHA,
-				Workers: Worker{
+				Workers: WorkerSpec{
 					Count: 6,
 					Size:  SizeCX32,
 				},
@@ -342,11 +342,11 @@ func TestConfig_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid worker size",
-			config: Config{
+			config: Spec{
 				Name:   "my-cluster",
 				Region: RegionFalkenstein,
 				Mode:   ModeHA,
-				Workers: Worker{
+				Workers: WorkerSpec{
 					Count: 3,
 					Size:  ServerSize("invalid"),
 				},
@@ -356,11 +356,11 @@ func TestConfig_Validate(t *testing.T) {
 		},
 		{
 			name: "domain without CF_API_TOKEN",
-			config: Config{
+			config: Spec{
 				Name:   "my-cluster",
 				Region: RegionFalkenstein,
 				Mode:   ModeHA,
-				Workers: Worker{
+				Workers: WorkerSpec{
 					Count: 3,
 					Size:  SizeCX32,
 				},
@@ -371,11 +371,11 @@ func TestConfig_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid domain",
-			config: Config{
+			config: Spec{
 				Name:   "my-cluster",
 				Region: RegionFalkenstein,
 				Mode:   ModeHA,
-				Workers: Worker{
+				Workers: WorkerSpec{
 					Count: 3,
 					Size:  SizeCX32,
 				},
@@ -399,22 +399,22 @@ func TestConfig_Validate(t *testing.T) {
 
 			if tt.wantError {
 				if err == nil {
-					t.Errorf("Config.Validate() expected error containing %q, got nil", tt.errorMsg)
+					t.Errorf("Spec.Validate() expected error containing %q, got nil", tt.errorMsg)
 					return
 				}
 				if tt.errorMsg != "" && !containsString(err.Error(), tt.errorMsg) {
-					t.Errorf("Config.Validate() error = %v, want error containing %q", err, tt.errorMsg)
+					t.Errorf("Spec.Validate() error = %v, want error containing %q", err, tt.errorMsg)
 				}
 			} else {
 				if err != nil {
-					t.Errorf("Config.Validate() unexpected error = %v", err)
+					t.Errorf("Spec.Validate() unexpected error = %v", err)
 				}
 			}
 		})
 	}
 }
 
-func TestConfig_ControlPlaneCount(t *testing.T) {
+func TestSpec_ControlPlaneCount(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		mode Mode
@@ -427,15 +427,15 @@ func TestConfig_ControlPlaneCount(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(string(tt.mode), func(t *testing.T) {
 			t.Parallel()
-			c := Config{Mode: tt.mode}
+			c := Spec{Mode: tt.mode}
 			if got := c.ControlPlaneCount(); got != tt.want {
-				t.Errorf("Config.ControlPlaneCount() = %v, want %v", got, tt.want)
+				t.Errorf("Spec.ControlPlaneCount() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestConfig_LoadBalancerCount(t *testing.T) {
+func TestSpec_LoadBalancerCount(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		mode Mode
@@ -448,15 +448,15 @@ func TestConfig_LoadBalancerCount(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(string(tt.mode), func(t *testing.T) {
 			t.Parallel()
-			c := Config{Mode: tt.mode}
+			c := Spec{Mode: tt.mode}
 			if got := c.LoadBalancerCount(); got != tt.want {
-				t.Errorf("Config.LoadBalancerCount() = %v, want %v", got, tt.want)
+				t.Errorf("Spec.LoadBalancerCount() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestConfig_HasDomain(t *testing.T) {
+func TestSpec_HasDomain(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name   string
@@ -470,61 +470,61 @@ func TestConfig_HasDomain(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			c := Config{Domain: tt.domain}
+			c := Spec{Domain: tt.domain}
 			if got := c.HasDomain(); got != tt.want {
-				t.Errorf("Config.HasDomain() = %v, want %v", got, tt.want)
+				t.Errorf("Spec.HasDomain() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestConfig_TotalWorkerVCPU(t *testing.T) {
+func TestSpec_TotalWorkerVCPU(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name    string
-		workers Worker
+		workers WorkerSpec
 		want    int
 	}{
-		{"3x cx32", Worker{Count: 3, Size: SizeCX32}, 12},
-		{"5x cx52", Worker{Count: 5, Size: SizeCX52}, 80},
-		{"1x cx22", Worker{Count: 1, Size: SizeCX22}, 2},
+		{"3x cx32", WorkerSpec{Count: 3, Size: SizeCX32}, 12},
+		{"5x cx52", WorkerSpec{Count: 5, Size: SizeCX52}, 80},
+		{"1x cx22", WorkerSpec{Count: 1, Size: SizeCX22}, 2},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			c := Config{Workers: tt.workers}
+			c := Spec{Workers: tt.workers}
 			if got := c.TotalWorkerVCPU(); got != tt.want {
-				t.Errorf("Config.TotalWorkerVCPU() = %v, want %v", got, tt.want)
+				t.Errorf("Spec.TotalWorkerVCPU() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestConfig_TotalWorkerRAMGB(t *testing.T) {
+func TestSpec_TotalWorkerRAMGB(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name    string
-		workers Worker
+		workers WorkerSpec
 		want    int
 	}{
-		{"3x cx32", Worker{Count: 3, Size: SizeCX32}, 24},
-		{"5x cx52", Worker{Count: 5, Size: SizeCX52}, 160},
-		{"1x cx22", Worker{Count: 1, Size: SizeCX22}, 4},
+		{"3x cx32", WorkerSpec{Count: 3, Size: SizeCX32}, 24},
+		{"5x cx52", WorkerSpec{Count: 5, Size: SizeCX52}, 160},
+		{"1x cx22", WorkerSpec{Count: 1, Size: SizeCX22}, 4},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			c := Config{Workers: tt.workers}
+			c := Spec{Workers: tt.workers}
 			if got := c.TotalWorkerRAMGB(); got != tt.want {
-				t.Errorf("Config.TotalWorkerRAMGB() = %v, want %v", got, tt.want)
+				t.Errorf("Spec.TotalWorkerRAMGB() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestConfig_HasBackup(t *testing.T) {
+func TestSpec_HasBackup(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name   string
@@ -538,15 +538,15 @@ func TestConfig_HasBackup(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			c := Config{Backup: tt.backup}
+			c := Spec{Backup: tt.backup}
 			if got := c.HasBackup(); got != tt.want {
-				t.Errorf("Config.HasBackup() = %v, want %v", got, tt.want)
+				t.Errorf("Spec.HasBackup() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestConfig_BackupBucketName(t *testing.T) {
+func TestSpec_BackupBucketName(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name        string
@@ -560,15 +560,15 @@ func TestConfig_BackupBucketName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			c := Config{Name: tt.clusterName}
+			c := Spec{Name: tt.clusterName}
 			if got := c.BackupBucketName(); got != tt.want {
-				t.Errorf("Config.BackupBucketName() = %v, want %v", got, tt.want)
+				t.Errorf("Spec.BackupBucketName() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestConfig_S3Endpoint(t *testing.T) {
+func TestSpec_S3Endpoint(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name   string
@@ -583,20 +583,20 @@ func TestConfig_S3Endpoint(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			c := Config{Region: tt.region}
+			c := Spec{Region: tt.region}
 			if got := c.S3Endpoint(); got != tt.want {
-				t.Errorf("Config.S3Endpoint() = %v, want %v", got, tt.want)
+				t.Errorf("Spec.S3Endpoint() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestConfig_Validate_Backup(t *testing.T) {
-	validConfig := Config{
+func TestSpec_Validate_Backup(t *testing.T) {
+	validSpec := Spec{
 		Name:   "my-cluster",
 		Region: RegionFalkenstein,
 		Mode:   ModeHA,
-		Workers: Worker{
+		Workers: WorkerSpec{
 			Count: 3,
 			Size:  SizeCX32,
 		},
@@ -659,28 +659,28 @@ func TestConfig_Validate_Backup(t *testing.T) {
 				defer os.Unsetenv(k)
 			}
 
-			cfg := validConfig
+			cfg := validSpec
 			cfg.Backup = tt.backup
 			err := cfg.Validate()
 
 			if tt.wantError {
 				if err == nil {
-					t.Errorf("Config.Validate() expected error containing %q, got nil", tt.errorMsg)
+					t.Errorf("Spec.Validate() expected error containing %q, got nil", tt.errorMsg)
 					return
 				}
 				if tt.errorMsg != "" && !containsString(err.Error(), tt.errorMsg) {
-					t.Errorf("Config.Validate() error = %v, want error containing %q", err, tt.errorMsg)
+					t.Errorf("Spec.Validate() error = %v, want error containing %q", err, tt.errorMsg)
 				}
 			} else {
 				if err != nil {
-					t.Errorf("Config.Validate() unexpected error = %v", err)
+					t.Errorf("Spec.Validate() unexpected error = %v", err)
 				}
 			}
 		})
 	}
 }
 
-func TestConfig_GetCertEmail(t *testing.T) {
+func TestSpec_GetCertEmail(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name      string
@@ -697,15 +697,15 @@ func TestConfig_GetCertEmail(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			c := Config{CertEmail: tt.certEmail, Domain: tt.domain}
+			c := Spec{CertEmail: tt.certEmail, Domain: tt.domain}
 			if got := c.GetCertEmail(); got != tt.want {
-				t.Errorf("Config.GetCertEmail() = %v, want %v", got, tt.want)
+				t.Errorf("Spec.GetCertEmail() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestConfig_ArgoHost(t *testing.T) {
+func TestSpec_ArgoHost(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name          string
@@ -722,15 +722,15 @@ func TestConfig_ArgoHost(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			c := Config{Domain: tt.domain, ArgoSubdomain: tt.argoSubdomain}
+			c := Spec{Domain: tt.domain, ArgoSubdomain: tt.argoSubdomain}
 			if got := c.ArgoHost(); got != tt.want {
-				t.Errorf("Config.ArgoHost() = %v, want %v", got, tt.want)
+				t.Errorf("Spec.ArgoHost() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestConfig_HasMonitoring(t *testing.T) {
+func TestSpec_HasMonitoring(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name       string
@@ -744,15 +744,15 @@ func TestConfig_HasMonitoring(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			c := Config{Monitoring: tt.monitoring}
+			c := Spec{Monitoring: tt.monitoring}
 			if got := c.HasMonitoring(); got != tt.want {
-				t.Errorf("Config.HasMonitoring() = %v, want %v", got, tt.want)
+				t.Errorf("Spec.HasMonitoring() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestConfig_GetGrafanaSubdomain(t *testing.T) {
+func TestSpec_GetGrafanaSubdomain(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name             string
@@ -766,15 +766,15 @@ func TestConfig_GetGrafanaSubdomain(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			c := Config{GrafanaSubdomain: tt.grafanaSubdomain}
+			c := Spec{GrafanaSubdomain: tt.grafanaSubdomain}
 			if got := c.GetGrafanaSubdomain(); got != tt.want {
-				t.Errorf("Config.GetGrafanaSubdomain() = %v, want %v", got, tt.want)
+				t.Errorf("Spec.GetGrafanaSubdomain() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestConfig_GrafanaHost(t *testing.T) {
+func TestSpec_GrafanaHost(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name             string
@@ -791,9 +791,9 @@ func TestConfig_GrafanaHost(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			c := Config{Domain: tt.domain, GrafanaSubdomain: tt.grafanaSubdomain}
+			c := Spec{Domain: tt.domain, GrafanaSubdomain: tt.grafanaSubdomain}
 			if got := c.GrafanaHost(); got != tt.want {
-				t.Errorf("Config.GrafanaHost() = %v, want %v", got, tt.want)
+				t.Errorf("Spec.GrafanaHost() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -829,29 +829,29 @@ func TestMode_String_Default(t *testing.T) {
 	assert.Equal(t, "custom-mode", Mode("custom-mode").String())
 }
 
-func TestConfig_ControlPlaneSize(t *testing.T) {
+func TestSpec_ControlPlaneSize(t *testing.T) {
 	t.Parallel()
 	t.Run("nil control plane returns default", func(t *testing.T) {
 		t.Parallel()
-		c := Config{ControlPlane: nil}
+		c := Spec{ControlPlane: nil}
 		assert.Equal(t, SizeCX23, c.ControlPlaneSize())
 	})
 
 	t.Run("empty size returns default", func(t *testing.T) {
 		t.Parallel()
-		c := Config{ControlPlane: &ControlPlane{Size: ""}}
+		c := Spec{ControlPlane: &ControlPlaneSpec{Size: ""}}
 		assert.Equal(t, SizeCX23, c.ControlPlaneSize())
 	})
 
 	t.Run("explicit size is returned", func(t *testing.T) {
 		t.Parallel()
-		c := Config{ControlPlane: &ControlPlane{Size: SizeCX33}}
+		c := Spec{ControlPlane: &ControlPlaneSpec{Size: SizeCX33}}
 		assert.Equal(t, SizeCX33, c.ControlPlaneSize())
 	})
 
 	t.Run("old size name is normalized", func(t *testing.T) {
 		t.Parallel()
-		c := Config{ControlPlane: &ControlPlane{Size: SizeCX32}}
+		c := Spec{ControlPlane: &ControlPlaneSpec{Size: SizeCX32}}
 		assert.Equal(t, SizeCX33, c.ControlPlaneSize())
 	})
 }
@@ -895,7 +895,13 @@ func TestIsValidDomain(t *testing.T) {
 		{"valid", "example.com", true},
 		{"valid subdomain", "sub.example.com", true},
 		{"empty", "", false},
-		{"too long", func() string { s := ""; for i := 0; i < 50; i++ { s += "abcde." }; return s + "com" }(), false},
+		{"too long", func() string {
+			s := ""
+			for i := 0; i < 50; i++ {
+				s += "abcde."
+			}
+			return s + "com"
+		}(), false},
 		{"no dot", "localhost", false},
 		{"spaces", "exa mple.com", false},
 	}

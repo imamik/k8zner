@@ -14,7 +14,6 @@ import (
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	"github.com/imamik/k8zner/internal/config"
-	v2 "github.com/imamik/k8zner/internal/config/v2"
 	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning"
 )
@@ -47,10 +46,10 @@ func TestLoadConfig(t *testing.T) {
 		}()
 
 		findV2ConfigFile = func() (string, error) { return "k8zner.yaml", nil }
-		loadV2ConfigFile = func(_ string) (*v2.Config, error) {
-			return &v2.Config{Name: "test", Region: v2.RegionFalkenstein, Mode: v2.ModeDev, Workers: v2.Worker{Count: 1, Size: v2.SizeCX22}}, nil
+		loadV2ConfigFile = func(_ string) (*config.Spec, error) {
+			return &config.Spec{Name: "test", Region: config.RegionFalkenstein, Mode: config.ModeDev, Workers: config.WorkerSpec{Count: 1, Size: config.SizeCX22}}, nil
 		}
-		expandV2Config = func(cfg *v2.Config) (*config.Config, error) {
+		expandV2Config = func(cfg *config.Spec) (*config.Config, error) {
 			return &config.Config{ClusterName: cfg.Name}, nil
 		}
 

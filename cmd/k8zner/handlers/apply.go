@@ -19,7 +19,6 @@ import (
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	"github.com/imamik/k8zner/internal/config"
-	v2config "github.com/imamik/k8zner/internal/config/v2"
 	hcloudInternal "github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/platform/talos"
 	"github.com/imamik/k8zner/internal/provisioning"
@@ -79,13 +78,13 @@ var (
 	writeFile = os.WriteFile
 
 	// loadV2ConfigFile loads v2 config from file (for testing injection).
-	loadV2ConfigFile = v2config.Load
+	loadV2ConfigFile = config.LoadSpec
 
 	// expandV2Config expands v2 config to internal format (for testing injection).
-	expandV2Config = v2config.Expand
+	expandV2Config = config.ExpandSpec
 
 	// findV2ConfigFile finds the v2 config file (for testing injection).
-	findV2ConfigFile = v2config.FindConfigFile
+	findV2ConfigFile = config.FindConfigFile
 
 	// Factory functions for provisioners - can be replaced in tests.
 	newInfraProvisioner    = infrastructure.NewProvisioner

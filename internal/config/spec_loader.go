@@ -1,4 +1,4 @@
-package v2
+package config
 
 import (
 	"fmt"
@@ -11,9 +11,9 @@ import (
 // DefaultConfigFilename is the default configuration filename.
 const DefaultConfigFilename = "k8zner.yaml"
 
-// Load loads and validates a configuration from a file.
-func Load(path string) (*Config, error) {
-	cfg, err := LoadWithoutValidation(path)
+// LoadSpec loads and validates a configuration from a file.
+func LoadSpec(path string) (*Spec, error) {
+	cfg, err := LoadSpecWithoutValidation(path)
 	if err != nil {
 		return nil, err
 	}
@@ -25,20 +25,20 @@ func Load(path string) (*Config, error) {
 	return cfg, nil
 }
 
-// LoadWithoutValidation loads a configuration from a file without validation.
+// LoadSpecWithoutValidation loads a configuration from a file without validation.
 // This is useful for tooling that needs to read partially valid configs.
-func LoadWithoutValidation(path string) (*Config, error) {
+func LoadSpecWithoutValidation(path string) (*Spec, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	return parseConfig(data)
+	return parseSpec(data)
 }
 
-// LoadFromBytes loads and validates a configuration from bytes.
-func LoadFromBytes(data []byte) (*Config, error) {
-	cfg, err := parseConfig(data)
+// LoadSpecFromBytes loads and validates a configuration from bytes.
+func LoadSpecFromBytes(data []byte) (*Spec, error) {
+	cfg, err := parseSpec(data)
 	if err != nil {
 		return nil, err
 	}
@@ -50,14 +50,14 @@ func LoadFromBytes(data []byte) (*Config, error) {
 	return cfg, nil
 }
 
-// LoadFromBytesWithoutValidation loads a configuration from bytes without validation.
-func LoadFromBytesWithoutValidation(data []byte) (*Config, error) {
-	return parseConfig(data)
+// LoadSpecFromBytesWithoutValidation loads a configuration from bytes without validation.
+func LoadSpecFromBytesWithoutValidation(data []byte) (*Spec, error) {
+	return parseSpec(data)
 }
 
-// parseConfig parses YAML data into a Config struct.
-func parseConfig(data []byte) (*Config, error) {
-	var cfg Config
+// parseSpec parses YAML data into a Spec struct.
+func parseSpec(data []byte) (*Spec, error) {
+	var cfg Spec
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse YAML: %w", err)
 	}
@@ -108,8 +108,8 @@ func FindConfigFile() (string, error) {
 	return "", fmt.Errorf("config file %s not found", DefaultConfigFilename)
 }
 
-// Save writes a configuration to a file.
-func Save(cfg *Config, path string) error {
+// SaveSpec writes a configuration to a file.
+func SaveSpec(cfg *Spec, path string) error {
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
