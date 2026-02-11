@@ -2550,13 +2550,13 @@ func TestRealClient_CreateServer_WithNetworkAttachment(t *testing.T) {
 	ctx := context.Background()
 
 	serverID, err := client.CreateServer(ctx, ServerCreateOpts{
-		Name:            "server-with-net",
-		ImageType:       "ubuntu-22.04",
-		ServerType:      "cx21",
-		Location:        "nbg1",
-		SSHKeys:         []string{},
-		NetworkID:       100,
-		PrivateIP:       "10.0.0.5",
+		Name:             "server-with-net",
+		ImageType:        "ubuntu-22.04",
+		ServerType:       "cx21",
+		Location:         "nbg1",
+		SSHKeys:          []string{},
+		NetworkID:        100,
+		PrivateIP:        "10.0.0.5",
 		EnablePublicIPv4: true,
 		EnablePublicIPv6: true,
 	})

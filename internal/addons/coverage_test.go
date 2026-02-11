@@ -967,8 +967,8 @@ func TestBuildArgoCDIngress_NoClassName(t *testing.T) {
 	cfg := &config.Config{
 		Addons: config.AddonsConfig{
 			ArgoCD: config.ArgoCDConfig{
-				IngressEnabled: true,
-				IngressHost:    "argocd.example.com",
+				IngressEnabled:   true,
+				IngressHost:      "argocd.example.com",
 				IngressClassName: "", // empty
 			},
 		},
@@ -1563,7 +1563,6 @@ spec:
 	assert.Contains(t, resultStr, "APP_ENV")
 }
 
-
 // ============================================================================
 // operator.go coverage improvements
 // ============================================================================
@@ -1790,7 +1789,7 @@ func TestBuildCCMEnvVars_NoHealthCheck(t *testing.T) {
 		Location: "fsn1",
 		Addons: config.AddonsConfig{
 			CCM: config.CCMConfig{
-				Enabled: true,
+				Enabled:       true,
 				LoadBalancers: config.CCMLoadBalancerConfig{
 					// No health check settings
 				},

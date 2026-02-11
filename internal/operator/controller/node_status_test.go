@@ -236,7 +236,7 @@ func TestUpdateNodePhase_UpdateExistingWithIPs(t *testing.T) {
 		Phase:     k8znerv1alpha1.NodePhaseWaitingForIP,
 		Reason:    "Server created, waiting for IP assignment",
 		ServerID:  12345,
-		PublicIP:   "1.2.3.4",
+		PublicIP:  "1.2.3.4",
 		PrivateIP: "10.0.0.5",
 	})
 
@@ -268,7 +268,7 @@ func TestUpdateNodePhase_AddNewNode(t *testing.T) {
 		Phase:     k8znerv1alpha1.NodePhaseCreatingServer,
 		Reason:    "Creating server",
 		ServerID:  99999,
-		PublicIP:   "5.6.7.8",
+		PublicIP:  "5.6.7.8",
 		PrivateIP: "10.0.1.1",
 	})
 

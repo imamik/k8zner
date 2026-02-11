@@ -638,8 +638,8 @@ func TestDetermineNodePhaseFromState_AllBranches(t *testing.T) {
 		{
 			name: "K8s node exists not ready with kubelet running",
 			info: &nodeStateInfo{
-				K8sNodeExists:      true,
-				K8sNodeReady:       false,
+				K8sNodeExists:       true,
+				K8sNodeReady:        false,
 				TalosKubeletRunning: true,
 			},
 			expectedPhase: k8znerv1alpha1.NodePhaseNodeInitializing,
@@ -648,8 +648,8 @@ func TestDetermineNodePhaseFromState_AllBranches(t *testing.T) {
 		{
 			name: "K8s node exists not ready without kubelet",
 			info: &nodeStateInfo{
-				K8sNodeExists:      true,
-				K8sNodeReady:       false,
+				K8sNodeExists:       true,
+				K8sNodeReady:        false,
 				TalosKubeletRunning: false,
 			},
 			expectedPhase: k8znerv1alpha1.NodePhaseWaitingForK8s,
@@ -658,7 +658,7 @@ func TestDetermineNodePhaseFromState_AllBranches(t *testing.T) {
 		{
 			name: "Talos configured kubelet running no k8s node",
 			info: &nodeStateInfo{
-				TalosConfigured:    true,
+				TalosConfigured:     true,
 				TalosKubeletRunning: true,
 			},
 			expectedPhase: k8znerv1alpha1.NodePhaseWaitingForK8s,
@@ -667,7 +667,7 @@ func TestDetermineNodePhaseFromState_AllBranches(t *testing.T) {
 		{
 			name: "Talos configured kubelet not running",
 			info: &nodeStateInfo{
-				TalosConfigured:    true,
+				TalosConfigured:     true,
 				TalosKubeletRunning: false,
 			},
 			expectedPhase: k8znerv1alpha1.NodePhaseRebootingWithConfig,
@@ -949,15 +949,15 @@ func TestCheckStuckNodes_MixedCPAndWorkerStuck(t *testing.T) {
 		Status: k8znerv1alpha1.K8znerClusterStatus{
 			ControlPlanes: k8znerv1alpha1.NodeGroupStatus{
 				Nodes: []k8znerv1alpha1.NodeStatus{
-					{Name: "cp-1", Phase: k8znerv1alpha1.NodePhaseReady},                                                     // skip
-					{Name: "cp-2", Phase: k8znerv1alpha1.NodePhaseWaitingForIP, PhaseTransitionTime: &pastTime},               // stuck (5m timeout)
-					{Name: "cp-3", Phase: k8znerv1alpha1.NodePhaseWaitingForTalosAPI, PhaseTransitionTime: &recentTime},        // not yet timed out
+					{Name: "cp-1", Phase: k8znerv1alpha1.NodePhaseReady},                                                // skip
+					{Name: "cp-2", Phase: k8znerv1alpha1.NodePhaseWaitingForIP, PhaseTransitionTime: &pastTime},         // stuck (5m timeout)
+					{Name: "cp-3", Phase: k8znerv1alpha1.NodePhaseWaitingForTalosAPI, PhaseTransitionTime: &recentTime}, // not yet timed out
 				},
 			},
 			Workers: k8znerv1alpha1.NodeGroupStatus{
 				Nodes: []k8znerv1alpha1.NodeStatus{
 					{Name: "w-1", Phase: k8znerv1alpha1.NodePhaseRemovingFromEtcd, PhaseTransitionTime: &pastTime}, // stuck (5m timeout)
-					{Name: "w-2", Phase: k8znerv1alpha1.NodePhaseFailed},                                          // skip
+					{Name: "w-2", Phase: k8znerv1alpha1.NodePhaseFailed},                                           // skip
 				},
 			},
 		},
@@ -1776,8 +1776,8 @@ func TestBuildClusterSANs_MultipleNodesWithMixedIPs(t *testing.T) {
 			ControlPlanes: k8znerv1alpha1.NodeGroupStatus{
 				Nodes: []k8znerv1alpha1.NodeStatus{
 					{PrivateIP: "10.0.0.1", PublicIP: "1.1.1.1"},
-					{PrivateIP: "10.0.0.2", PublicIP: ""},      // no public IP
-					{PrivateIP: "", PublicIP: "3.3.3.3"},         // no private IP
+					{PrivateIP: "10.0.0.2", PublicIP: ""}, // no public IP
+					{PrivateIP: "", PublicIP: "3.3.3.3"},  // no private IP
 				},
 			},
 		},
@@ -4846,8 +4846,8 @@ func TestVerifyAndUpdateNodeStates_ProgressionDetection(t *testing.T) {
 			ControlPlanes: k8znerv1alpha1.NodeGroupStatus{
 				Nodes: []k8znerv1alpha1.NodeStatus{
 					{
-						Name:    "cp-1",
-						Phase:   k8znerv1alpha1.NodePhaseWaitingForK8s, // behind actual state
+						Name:     "cp-1",
+						Phase:    k8znerv1alpha1.NodePhaseWaitingForK8s, // behind actual state
 						PublicIP: "5.5.5.5",
 					},
 				},

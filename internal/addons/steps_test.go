@@ -298,8 +298,8 @@ func TestEnabledSteps_OrderGaps(t *testing.T) {
 	cfg := &config.Config{
 		Addons: config.AddonsConfig{
 			CCM:     config.CCMConfig{Enabled: true},     // order 2
-			Traefik: config.TraefikConfig{Enabled: true},  // order 6
-			ArgoCD:  config.ArgoCDConfig{Enabled: true},   // order 8
+			Traefik: config.TraefikConfig{Enabled: true}, // order 6
+			ArgoCD:  config.ArgoCDConfig{Enabled: true},  // order 8
 		},
 	}
 

@@ -123,11 +123,11 @@ func TestFindUnhealthyNodes_MixedStates(t *testing.T) {
 	oldTime := metav1.NewTime(time.Now().Add(-10 * time.Minute))
 	recentTime := metav1.NewTime(time.Now().Add(-30 * time.Second))
 	nodes := []k8znerv1alpha1.NodeStatus{
-		{Name: "w-1", Healthy: true},                                   // healthy
-		{Name: "w-2", Healthy: false, UnhealthySince: &oldTime},        // past threshold
-		{Name: "w-3", Healthy: false, UnhealthySince: nil},             // no timestamp
-		{Name: "w-4", Healthy: false, UnhealthySince: &recentTime},     // below threshold
-		{Name: "w-5", Healthy: false, UnhealthySince: &oldTime},        // past threshold
+		{Name: "w-1", Healthy: true},                               // healthy
+		{Name: "w-2", Healthy: false, UnhealthySince: &oldTime},    // past threshold
+		{Name: "w-3", Healthy: false, UnhealthySince: nil},         // no timestamp
+		{Name: "w-4", Healthy: false, UnhealthySince: &recentTime}, // below threshold
+		{Name: "w-5", Healthy: false, UnhealthySince: &oldTime},    // past threshold
 	}
 	result := findUnhealthyNodes(nodes, 3*time.Minute)
 	require.Len(t, result, 2)
