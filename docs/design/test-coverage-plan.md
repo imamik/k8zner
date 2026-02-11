@@ -11,7 +11,7 @@ This plan targets the biggest coverage gaps, organized by priority and risk.
 **Package:** `internal/operator/provisioning/`
 **Gap:** `spec_converter.go` (371 lines, 0 tests) — CRD spec to internal Config conversion.
 
-This is the single most impactful gap. Mismatches between `SpecToConfig()` and `v2.Expand()` have caused two production regressions already (Traefik defaults, Cilium kube-proxy replacement).
+This is the single most impactful gap. Mismatches between `SpecToConfig()` and `ExpandSpec()` have caused two production regressions already (Traefik defaults, Cilium kube-proxy replacement).
 
 ### Tests to write: `spec_converter_test.go`
 
@@ -387,13 +387,13 @@ Every resource operation delegates to these generics. Testing them unlocks confi
 
 ## Phase 12: Fuzz Tests (LOW — polish)
 
-**Package:** `internal/config/v2/`
+**Package:** `internal/config/`
 
 ### Tests to write: `fuzz_test.go`
 
 | Test | What it verifies |
 |------|-----------------|
-| `FuzzExpandConfig` | `v2.Expand()` doesn't panic on arbitrary YAML |
+| `FuzzExpandConfig` | `ExpandSpec()` doesn't panic on arbitrary YAML |
 | `FuzzParseConfig` | Config loader handles malformed input gracefully |
 
 **Package:** `internal/operator/provisioning/`
@@ -419,7 +419,7 @@ Every resource operation delegates to these generics. Testing them unlocks confi
 | 9 | provisioning/compute | pool + cp + workers + server | 15 | MEDIUM |
 | 10 | cmd/handlers | cluster_crd + bootstrap | 11 | MEDIUM |
 | 11 | provisioning/cluster | bootstrap_helpers + network | 5 | LOW |
-| 12 | config/v2 + operator/provisioning | fuzz tests | 3 | LOW |
+| 12 | config + operator/provisioning | fuzz tests | 3 | LOW |
 | | | **Total** | **~188** | |
 
 ### Existing Mock Infrastructure

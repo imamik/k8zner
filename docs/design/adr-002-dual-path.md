@@ -19,13 +19,13 @@ Both modes perform the same core operations (provisioning infrastructure, instal
 Both paths share the same internal packages (`provisioning/`, `addons/`, `platform/`, `config/`) and converge through a single runtime representation (`config.Config`).
 
 ```
-CLI:      k8zner.yaml  -->  v2.Expand()     -->  config.Config  -->  provisioning/addons
+CLI:      k8zner.yaml  -->  ExpandSpec()     -->  config.Config  -->  provisioning/addons
 Operator: CRD spec     -->  SpecToConfig()  -->  config.Config  -->  provisioning/addons
 ```
 
 ### Config Round-Trip Safety
 
-`SpecToConfig()` must replicate the same defaults that `v2.Expand()` sets. Both reference shared constants from `config/v2/versions.go` for network CIDRs, version pins, and addon defaults. Shared helper functions (`config.DefaultCilium()`, `config.DefaultTraefik()`, etc.) ensure addon configurations are identical.
+`SpecToConfig()` must replicate the same defaults that `ExpandSpec()` sets. Both reference shared constants from `config/spec_versions.go` for network CIDRs, version pins, and addon defaults. Shared helper functions (`config.DefaultCilium()`, `config.DefaultTraefik()`, etc.) ensure addon configurations are identical.
 
 ### Adapter Pattern for Operator
 
@@ -55,8 +55,8 @@ func (a *PhaseAdapter) ReconcileInfrastructure(pCtx, cluster) error {
 - **Extensibility**: Adding operator phases only requires new reconciliation methods
 
 ### Risks
-- **Default synchronization**: When adding CRD fields, must trace the full round-trip through both `v2.Expand()` and `SpecToConfig()`. This has caused bugs twice (Traefik settings, Cilium settings).
-- **Mitigation**: Shared `config.Default*()` functions and `configv2` constants minimize drift. Tests validate both paths produce equivalent configs.
+- **Default synchronization**: When adding CRD fields, must trace the full round-trip through both `ExpandSpec()` and `SpecToConfig()`. This has caused bugs twice (Traefik settings, Cilium settings).
+- **Mitigation**: Shared `config.Default*()` functions and `config` constants minimize drift. Tests validate both paths produce equivalent configs.
 
 ### Intentional Differences
 

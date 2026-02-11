@@ -16,7 +16,7 @@ k8zner uses an **operator-first architecture**. The CLI bootstraps infrastructur
 ├─────────────┬─────────────┬─────────────┬──────────────────────┤
 │ Provisioning│   Config    │   Platform  │     Operator         │
 │ ├─ infra    │ ├─ types    │ ├─ hcloud   │ ├─ controller        │
-│ ├─ compute  │ ├─ v2       │ ├─ talos    │ ├─ adapter           │
+│ ├─ compute  │ ├─ spec     │ ├─ talos    │ ├─ adapter           │
 │ ├─ image    │ ├─ wizard   │ └─ ssh      │ ├─ addons            │
 │ └─ cluster  │ └─ validate │             │ └─ CRD (K8znerCluster)│
 └─────────────┴─────────────┴─────────────┴──────────────────────┘
@@ -66,7 +66,7 @@ The codebase has two entry points that share the same core layers:
                     │          │                         │                 │
                     │          ▼                         ▼                 │
                     │   ┌──────────────┐        ┌───────────────────┐     │
-                    │   │ v2.Expand()  │        │ SpecToConfig()    │     │
+                    │   │ ExpandSpec() │        │ SpecToConfig()    │     │
                     │   └──────┬───────┘        └────────┬──────────┘     │
                     │          │                         │                 │
                     │          └────────────┬────────────┘                 │
@@ -104,16 +104,16 @@ All three delegate to a shared `applyAddons()` with options controlling inclusio
 
 Three representations of cluster configuration must stay in sync:
 
-1. **v2 YAML spec** (`internal/config/v2/types.go`) — user-facing config file
+1. **YAML spec** (`internal/config/spec.go`) — user-facing config file
 2. **Internal Config** (`internal/config/types.go`) — runtime representation with expanded defaults
 3. **CRD spec** (`api/v1alpha1/types.go`) — Kubernetes-native representation
 
 ```
-CLI:      k8zner.yaml  ──▶  v2.Expand()     ──▶  config.Config  ──▶  provisioning/addons
+CLI:      k8zner.yaml  ──▶  ExpandSpec()    ──▶  config.Config  ──▶  provisioning/addons
 Operator: CRD spec     ──▶  SpecToConfig()  ──▶  config.Config  ──▶  provisioning/addons
 ```
 
-`SpecToConfig()` references the same constants from `config/v2/versions.go` that `v2.Expand()` uses,
+`SpecToConfig()` references the same constants from `config/spec_versions.go` that `ExpandSpec()` uses,
 ensuring both paths produce identical `config.Config` for equivalent inputs.
 
 ## Project Structure
@@ -134,10 +134,9 @@ internal/
 │
 ├── config/               # Configuration handling
 │   ├── types.go          # Internal config struct
-│   └── v2/               # Simplified config (k8zner.yaml)
-│       ├── types.go       # V2 config types
-│       ├── expand.go      # V2 → internal config expansion
-│       └── versions.go    # Version matrix, network CIDRs, constants
+│   ├── spec.go           # Spec types (k8zner.yaml)
+│   ├── spec_expand.go    # Spec → internal config expansion
+│   └── spec_versions.go  # Version matrix, network CIDRs, constants
 │
 ├── provisioning/         # Infrastructure provisioning
 │   ├── infrastructure/   # Network, firewall, LB
@@ -204,11 +203,11 @@ Talos images are built once and reused:
 ## Data Flow
 
 ```
-k8zner.yaml (v2 config)
+k8zner.yaml
        │
        ▼
 ┌─────────────────┐
-│  Config Loader  │  v2 → internal config expansion
+│  Config Loader  │  spec → internal config expansion
 └────────┬────────┘
          │
          ▼

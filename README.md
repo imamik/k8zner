@@ -501,7 +501,6 @@ internal/
 │   ├── provisioning/     # CRD spec → config adapter
 │   └── addons/           # Operator addon phase manager
 ├── config/               # Configuration handling
-│   └── v2/               # Simplified config schema + version matrix
 ├── provisioning/         # Infrastructure provisioning (shared by CLI + operator)
 │   ├── infrastructure/   # Network, firewall, LBs
 │   ├── compute/          # Servers, node pools
