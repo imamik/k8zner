@@ -420,6 +420,9 @@ func (r *ClusterReconciler) reconcileWithStateMachine(ctx context.Context, clust
 		}
 	}
 
+	// Check for phase timeout: emit warning event if phase exceeds 2x expected duration
+	r.checkPhaseTimeout(ctx, cluster)
+
 	logger.Info("reconciling with state machine", "phase", currentPhase)
 
 	switch currentPhase {
@@ -453,6 +456,47 @@ func (r *ClusterReconciler) reconcileWithStateMachine(ctx context.Context, clust
 		logger.Info("unknown provisioning phase, resetting to infrastructure", "phase", currentPhase)
 		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseInfrastructure
 		return ctrl.Result{Requeue: true}, nil
+	}
+}
+
+// phaseExpectedDurations maps provisioning phases to expected durations.
+// Used for timeout detection: warning emitted at 2x expected duration.
+var phaseExpectedDurations = map[k8znerv1alpha1.ProvisioningPhase]time.Duration{
+	k8znerv1alpha1.PhaseInfrastructure: 30 * time.Second,
+	k8znerv1alpha1.PhaseImage:          2 * time.Minute,
+	k8znerv1alpha1.PhaseCompute:        1 * time.Minute,
+	k8znerv1alpha1.PhaseBootstrap:      3 * time.Minute,
+	k8znerv1alpha1.PhaseCNI:            2 * time.Minute,
+	k8znerv1alpha1.PhaseAddons:         5 * time.Minute,
+}
+
+// checkPhaseTimeout emits a warning event if the current phase exceeds 2x expected duration.
+func (r *ClusterReconciler) checkPhaseTimeout(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) {
+	if cluster.Status.PhaseStartedAt == nil {
+		return
+	}
+
+	expected, ok := phaseExpectedDurations[cluster.Status.ProvisioningPhase]
+	if !ok {
+		return
+	}
+
+	elapsed := time.Since(cluster.Status.PhaseStartedAt.Time)
+	threshold := 2 * expected
+
+	if elapsed > threshold {
+		logger := log.FromContext(ctx)
+		logger.Info("phase is taking longer than expected",
+			"phase", cluster.Status.ProvisioningPhase,
+			"elapsed", elapsed.Round(time.Second),
+			"expected", expected)
+
+		r.Recorder.Eventf(cluster, corev1.EventTypeWarning, "PhaseTimeout",
+			"Phase %s has been running for %s (expected %s)",
+			cluster.Status.ProvisioningPhase, elapsed.Round(time.Second), expected)
+
+		recordPhaseError(cluster, string(cluster.Status.ProvisioningPhase),
+			fmt.Sprintf("phase exceeds expected duration: %s > %s", elapsed.Round(time.Second), expected))
 	}
 }
 

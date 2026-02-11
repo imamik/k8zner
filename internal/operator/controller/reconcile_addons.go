@@ -61,9 +61,11 @@ func (r *ClusterReconciler) reconcileCNIPhase(ctx context.Context, cluster *k8zn
 
 	// For CLI-bootstrapped clusters, workers don't exist yet - go through compute/bootstrap first
 	if cluster.Spec.Bootstrap != nil && cluster.Spec.Bootstrap.Completed {
+		recordPhaseTransition(cluster, k8znerv1alpha1.PhaseCompute)
 		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseCompute
 	} else {
 		// For operator-managed clusters, compute/bootstrap already ran - proceed to addons
+		recordPhaseTransition(cluster, k8znerv1alpha1.PhaseAddons)
 		cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseAddons
 	}
 	return ctrl.Result{Requeue: true}, nil
@@ -74,8 +76,11 @@ func (r *ClusterReconciler) installAndWaitForCNI(ctx context.Context, cluster *k
 	logger := log.FromContext(ctx)
 
 	logger.Info("installing Cilium CNI")
+	ciliumStart := metav1.Now()
+
 	if err := addons.ApplyCilium(ctx, cfg, kubeconfig); err != nil {
 		r.logAndRecordError(ctx, cluster, err, EventReasonCNIFailed, "Failed to install Cilium")
+		recordPhaseError(cluster, k8znerv1alpha1.AddonNameCilium, err.Error())
 		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 	}
 
@@ -89,6 +94,7 @@ func (r *ClusterReconciler) installAndWaitForCNI(ctx context.Context, cluster *k
 		Phase:              k8znerv1alpha1.AddonPhaseInstalling,
 		LastTransitionTime: &now,
 		InstallOrder:       k8znerv1alpha1.AddonOrderCilium,
+		StartedAt:          &ciliumStart,
 	}
 
 	logger.Info("waiting for Cilium to be ready")
@@ -98,12 +104,16 @@ func (r *ClusterReconciler) installAndWaitForCNI(ctx context.Context, cluster *k
 		return ctrl.Result{RequeueAfter: fastRequeueAfter}, nil
 	}
 
+	readyNow := metav1.Now()
+	ciliumDur := readyNow.Time.Sub(ciliumStart.Time)
 	cluster.Status.Addons[k8znerv1alpha1.AddonNameCilium] = k8znerv1alpha1.AddonStatus{
 		Installed:          true,
 		Healthy:            true,
 		Phase:              k8znerv1alpha1.AddonPhaseInstalled,
-		LastTransitionTime: &now,
+		LastTransitionTime: &readyNow,
 		InstallOrder:       k8znerv1alpha1.AddonOrderCilium,
+		StartedAt:          &ciliumStart,
+		Duration:           ciliumDur.Round(time.Second).String(),
 	}
 
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, EventReasonCNIReady,
@@ -270,27 +280,56 @@ func (r *ClusterReconciler) installNextAddon(ctx context.Context, cluster *k8zne
 
 	steps := addons.EnabledSteps(cfg)
 	for _, step := range steps {
-		if _, installed := cluster.Status.Addons[step.Name]; installed {
-			continue
+		if existing, ok := cluster.Status.Addons[step.Name]; ok {
+			// Skip if already installed successfully
+			if existing.Phase == k8znerv1alpha1.AddonPhaseInstalled {
+				continue
+			}
+			// Failed addons will be retried (retry count tracked in status)
 		}
 
 		logger.Info("installing addon", "addon", step.Name, "order", step.Order)
 		r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonAddonsInstalling,
 			"Installing addon: %s", step.Name)
 
+		installStart := metav1.Now()
+
 		if err := addons.InstallStep(ctx, step.Name, cfg, kubeconfig, networkID); err != nil {
 			r.logAndRecordError(ctx, cluster, err, EventReasonAddonsFailed,
 				fmt.Sprintf("Failed to install addon: %s", step.Name))
-			return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+			recordPhaseError(cluster, step.Name, err.Error())
+
+			// Track retry count and use exponential backoff
+			existing, hasExisting := cluster.Status.Addons[step.Name]
+			retryCount := 0
+			if hasExisting {
+				retryCount = existing.RetryCount
+			}
+			retryCount++
+			now := metav1.Now()
+			cluster.Status.Addons[step.Name] = k8znerv1alpha1.AddonStatus{
+				Phase:              k8znerv1alpha1.AddonPhaseFailed,
+				LastTransitionTime: &now,
+				InstallOrder:       step.Order,
+				RetryCount:         retryCount,
+				Message:            err.Error(),
+			}
+
+			// Exponential backoff: 10s, 30s, 60s, 60s, ...
+			backoff := addonRetryBackoff(retryCount)
+			return ctrl.Result{RequeueAfter: backoff}, nil
 		}
 
 		now := metav1.Now()
+		dur := now.Time.Sub(installStart.Time)
 		cluster.Status.Addons[step.Name] = k8znerv1alpha1.AddonStatus{
 			Installed:          true,
 			Healthy:            true,
 			Phase:              k8znerv1alpha1.AddonPhaseInstalled,
 			LastTransitionTime: &now,
 			InstallOrder:       step.Order,
+			StartedAt:          &installStart,
+			Duration:           dur.Round(time.Second).String(),
 		}
 
 		logger.Info("addon installed successfully", "addon", step.Name)
@@ -302,6 +341,7 @@ func (r *ClusterReconciler) installNextAddon(ctx context.Context, cluster *k8zne
 		"All addons installed successfully")
 
 	cluster.Status.PhaseStartedAt = nil
+	recordPhaseTransition(cluster, k8znerv1alpha1.PhaseComplete)
 	cluster.Status.ProvisioningPhase = k8znerv1alpha1.PhaseComplete
 	cluster.Status.Phase = k8znerv1alpha1.ClusterPhaseRunning
 
@@ -309,6 +349,19 @@ func (r *ClusterReconciler) installNextAddon(ctx context.Context, cluster *k8zne
 		"Cluster provisioning complete")
 
 	return ctrl.Result{Requeue: true}, nil
+}
+
+// addonRetryBackoff returns the backoff duration for addon retries.
+// Schedule: 10s, 30s, 60s, 60s, ...
+func addonRetryBackoff(retryCount int) time.Duration {
+	switch {
+	case retryCount <= 1:
+		return 10 * time.Second
+	case retryCount == 2:
+		return 30 * time.Second
+	default:
+		return 60 * time.Second
+	}
 }
 
 // clientConfigFromKubeconfig creates a rest.Config from kubeconfig bytes.
