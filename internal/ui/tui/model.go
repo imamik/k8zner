@@ -12,6 +12,7 @@ import (
 // BootstrapPhase represents a CLI bootstrap phase for display.
 type BootstrapPhase struct {
 	Name   string
+	Key    string
 	Done   bool
 	Active bool
 	Err    error
@@ -40,7 +41,11 @@ type Model struct {
 
 	// ETA
 	EstimatedRemaining time.Duration
+	PerformanceScale   float64
 	StartTime          time.Time
+
+	// Animation
+	SpinnerFrame int
 
 	// UI state
 	Width  int
@@ -55,17 +60,20 @@ type Model struct {
 // NewApplyModel creates a model for the apply command TUI.
 func NewApplyModel(clusterName, region string) Model {
 	return Model{
-		ClusterName: clusterName,
-		Region:      region,
-		StartTime:   time.Now(),
-		Mode:        "apply",
+		ClusterName:      clusterName,
+		Region:           region,
+		StartTime:        time.Now(),
+		Mode:             "apply",
+		PerformanceScale: 1.0,
 		BootstrapPhases: []BootstrapPhase{
-			{Name: "Talos Image"},
-			{Name: "Infrastructure"},
-			{Name: "Control Plane"},
-			{Name: "Bootstrap"},
-			{Name: "Operator"},
-			{Name: "CRD"},
+			{Name: "Talos Image: Resolve Version", Key: "image:resolve"},
+			{Name: "Talos Image: Build/Fetch", Key: "image:build"},
+			{Name: "Talos Image: Snapshot Ready", Key: "image:snapshot"},
+			{Name: "Infrastructure", Key: "infrastructure"},
+			{Name: "Control Plane", Key: "compute"},
+			{Name: "Bootstrap", Key: "bootstrap"},
+			{Name: "Operator", Key: "operator"},
+			{Name: "CRD", Key: "crd"},
 		},
 	}
 }
@@ -73,9 +81,10 @@ func NewApplyModel(clusterName, region string) Model {
 // NewDoctorModel creates a model for the doctor command TUI.
 func NewDoctorModel(clusterName string) Model {
 	return Model{
-		ClusterName: clusterName,
-		StartTime:   time.Now(),
-		Mode:        "doctor",
+		ClusterName:      clusterName,
+		StartTime:        time.Now(),
+		Mode:             "doctor",
+		PerformanceScale: 1.0,
 	}
 }
 
@@ -112,6 +121,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case TickMsg:
+		m.SpinnerFrame++
 		m.updateETA()
 		return m, tickCmd()
 
@@ -128,17 +138,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) updateBootstrapPhase(msg BootstrapPhaseMsg) {
-	phaseMap := map[string]int{
-		"image":          0,
-		"infrastructure": 1,
-		"compute":        2,
-		"bootstrap":      3,
-		"operator":       4,
-		"crd":            5,
+	idx := -1
+	for i, phase := range m.BootstrapPhases {
+		if phase.Key == msg.Phase {
+			idx = i
+			break
+		}
 	}
-
-	idx, ok := phaseMap[msg.Phase]
-	if !ok {
+	if idx < 0 {
 		return
 	}
 
@@ -189,7 +196,8 @@ func (m *Model) updateETA() {
 		}
 	}
 
-	m.EstimatedRemaining = benchmarks.EstimateRemaining(string(m.ProvPhase), phaseElapsed, m.PhaseHistory)
+	m.PerformanceScale = benchmarks.PerformanceScale(string(m.ProvPhase), phaseElapsed, m.PhaseHistory)
+	m.EstimatedRemaining = benchmarks.EstimateRemainingWithScale(string(m.ProvPhase), phaseElapsed, m.PhaseHistory, m.PerformanceScale)
 }
 
 func tickCmd() tea.Cmd {

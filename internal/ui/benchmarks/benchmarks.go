@@ -40,6 +40,16 @@ var PhaseOrder = []string{
 // EstimateRemaining calculates the estimated time remaining based on
 // current phase, elapsed time, and historical phase records.
 func EstimateRemaining(currentPhase string, phaseElapsed time.Duration, history []k8znerv1alpha1.PhaseRecord) time.Duration {
+	return EstimateRemainingWithScale(currentPhase, phaseElapsed, history, PerformanceScale(currentPhase, phaseElapsed, history))
+}
+
+// EstimateRemainingWithScale calculates ETA while applying a performance scale factor.
+func EstimateRemainingWithScale(
+	currentPhase string,
+	phaseElapsed time.Duration,
+	history []k8znerv1alpha1.PhaseRecord,
+	scale float64,
+) time.Duration {
 	var remaining time.Duration
 
 	// Find the index of the current phase
@@ -57,6 +67,7 @@ func EstimateRemaining(currentPhase string, phaseElapsed time.Duration, history 
 	// For the current phase: max(0, expected - elapsed)
 	if expected, ok := DefaultTimings[currentPhase]; ok {
 		expectedDur := time.Duration(expected) * time.Second
+		expectedDur = time.Duration(float64(expectedDur) * scale)
 		if expectedDur > phaseElapsed {
 			remaining += expectedDur - phaseElapsed
 		}
@@ -76,11 +87,59 @@ func EstimateRemaining(currentPhase string, phaseElapsed time.Duration, history 
 			continue
 		}
 		if expected, ok := DefaultTimings[phase]; ok {
-			remaining += time.Duration(expected) * time.Second
+			expectedDur := time.Duration(expected) * time.Second
+			remaining += time.Duration(float64(expectedDur) * scale)
 		}
 	}
 
 	return remaining
+}
+
+// PerformanceScale derives a speed multiplier from observed-vs-expected durations.
+// Example: expected 3m, observed 4m30s => scale=1.5 (future ETAs are stretched by 50%).
+func PerformanceScale(currentPhase string, phaseElapsed time.Duration, history []k8znerv1alpha1.PhaseRecord) float64 {
+	var expectedTotal time.Duration
+	var actualTotal time.Duration
+
+	for _, rec := range history {
+		expectedSecs, ok := DefaultTimings[string(rec.Phase)]
+		if !ok || rec.EndedAt == nil {
+			continue
+		}
+		expectedTotal += time.Duration(expectedSecs) * time.Second
+		actualTotal += rec.EndedAt.Time.Sub(rec.StartedAt.Time)
+	}
+
+	// If current phase is overrunning, fold it in immediately so ETA adapts quickly.
+	if expectedSecs, ok := DefaultTimings[currentPhase]; ok && phaseElapsed > 0 {
+		expectedCurrent := time.Duration(expectedSecs) * time.Second
+		if phaseElapsed > expectedCurrent {
+			expectedTotal += expectedCurrent
+			actualTotal += phaseElapsed
+		}
+	}
+
+	if expectedTotal == 0 || actualTotal == 0 {
+		return 1.0
+	}
+
+	scale := float64(actualTotal) / float64(expectedTotal)
+	if scale < 0.6 {
+		return 0.6
+	}
+	if scale > 3.0 {
+		return 3.0
+	}
+	return scale
+}
+
+// AddonExpectedDuration returns the benchmark duration for an addon.
+func AddonExpectedDuration(addon string) (time.Duration, bool) {
+	secs, ok := DefaultTimings["addon:"+addon]
+	if !ok {
+		return 0, false
+	}
+	return time.Duration(secs) * time.Second, true
 }
 
 // TotalEstimate returns the total estimated provisioning time.

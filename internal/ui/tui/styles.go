@@ -45,10 +45,12 @@ var (
 			MarginTop(1)
 )
 
+var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
 const (
-	checkMark = "[OK]"
-	crossMark = "[!!]"
-	spinner   = "[..]"
-	pending   = "[  ]"
-	warnMark  = "[??]"
+	checkMark = "✓"
+	crossMark = "✗"
+	spinner   = "◌"
+	pending   = "·"
+	warnMark  = "⚠"
 )
