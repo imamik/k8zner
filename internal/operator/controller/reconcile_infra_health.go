@@ -44,15 +44,16 @@ func (r *ClusterReconciler) reconcileInfraHealth(ctx context.Context, cluster *k
 	// Load Balancer
 	lbName := naming.KubeAPILoadBalancer(cluster.Name)
 	lb, err := r.hcloudClient.GetLoadBalancer(ctx, lbName)
-	if err != nil {
+	switch {
+	case err != nil:
 		logger.V(1).Info("failed to check load balancer", "error", err)
 		infra.LoadBalancerReady = false
-	} else if lb != nil {
+	case lb != nil:
 		infra.LoadBalancerReady = true
 		if lb.PublicNet.Enabled && lb.PublicNet.IPv4.IP != nil {
 			infra.LoadBalancerIP = lb.PublicNet.IPv4.IP.String()
 		}
-	} else {
+	default:
 		infra.LoadBalancerReady = false
 	}
 

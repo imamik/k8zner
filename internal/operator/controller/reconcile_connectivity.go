@@ -113,21 +113,21 @@ func (r *ClusterReconciler) probeEndpoint(ctx context.Context, host string) k8zn
 
 	// TLS probe (connect and check handshake)
 	tlsConn, err := tls.DialWithDialer(&net.Dialer{Timeout: 5 * time.Second}, "tcp", host+":443", &tls.Config{
-		InsecureSkipVerify: true,
+		InsecureSkipVerify: true, //nolint:gosec // health probe checks TLS handshake, not cert validity
 	})
 	if err != nil {
 		ep.Message = "TLS handshake failed"
 		logger.V(1).Info("endpoint TLS failed", "host", host, "error", err)
 		return ep
 	}
-	tlsConn.Close()
+	_ = tlsConn.Close()
 	ep.TLSReady = true
 
 	// HTTPS probe
 	httpClient := &http.Client{
 		Timeout: 10 * time.Second,
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // health probe checks reachability, not cert validity
 		},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
@@ -139,7 +139,7 @@ func (r *ClusterReconciler) probeEndpoint(ctx context.Context, host string) k8zn
 		logger.V(1).Info("endpoint HTTPS failed", "host", host, "error", err)
 		return ep
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	if resp.StatusCode < 500 {
 		ep.HTTPReady = true
