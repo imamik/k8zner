@@ -240,8 +240,14 @@ func TestE2EFullStackDev(t *testing.T) {
 
 	// =========================================================================
 	// SUBTEST 04: Verify External Connectivity (DNS + TLS + HTTPS)
+	// Non-fatal: uses t.Run instead of runSubtest so failures don't block
+	// subsequent tests. External connectivity depends on DNS propagation
+	// and Let's Encrypt which can be unreliable.
 	// =========================================================================
-	runSubtest("04_VerifyConnectivity", func(t *testing.T) {
+	t.Run("04_VerifyConnectivity", func(t *testing.T) {
+		if !allSubtestsPassed || state == nil {
+			t.Skip("Skipping: previous subtest failed")
+		}
 		vctx := &AddonVerificationContext{
 			KubeconfigPath: state.KubeconfigPath,
 			Domain:         cfDomain,
