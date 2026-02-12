@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-02-12
+
+### Added
+
+- **TUI dashboard** for real-time provisioning observability (#138)
+  - Progress bar with ETA, node status table, addon grid with timing and retry info
+  - Phase history timeline with durations, error ring buffer (last 10)
+  - `apply` shows TUI during bootstrap; `doctor --watch` uses TUI; `--ci` flag for plain log output
+- **Operator addon health probes** — core addon and connectivity checks (DNS, TLS, HTTPS) reported in CRD status (#139)
+- **Cloudflare DNS cleanup** on `destroy` — removes DNS records created by external-dns (#139)
+
+### Changed
+
+- **E2E test refactor** — shared addon verification functions across FullStack and HA test suites (#139)
+- **Operator hardening** — phase transition recording, addon retry with exponential backoff (10s/30s/60s), timeout detection with K8s Warning events (#138)
+- `doctor` health check timeout increased to 10m (#139)
+
 ## [0.7.0] - 2026-02-11
 
 ### Added
@@ -253,6 +270,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Secrets stored locally in `./secrets/` directory
 - No credentials stored in cluster state
 
+[0.8.0]: https://github.com/imamik/k8zner/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/imamik/k8zner/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/imamik/k8zner/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/imamik/k8zner/compare/v0.4.0...v0.5.0
