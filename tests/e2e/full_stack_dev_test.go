@@ -186,11 +186,8 @@ func TestE2EFullStackDev(t *testing.T) {
 		}
 		VerifyAllAddonsDeep(t, ctx, vctx, state)
 
-		// Validate via doctor JSON
-		status := RunDoctorCheck(t, configPath)
-		AssertClusterRunning(t, status, 1, 1)
-		AssertInfraHealthy(t, status)
-		AssertAllAddonsHealthy(t, status, []string{
+		// Validate via doctor JSON (wait for operator to populate all health fields)
+		expectedAddons := []string{
 			k8znerv1alpha1.AddonNameCilium,
 			k8znerv1alpha1.AddonNameCCM,
 			k8znerv1alpha1.AddonNameCSI,
@@ -201,8 +198,37 @@ func TestE2EFullStackDev(t *testing.T) {
 			k8znerv1alpha1.AddonNameArgoCD,
 			k8znerv1alpha1.AddonNameMonitoring,
 			k8znerv1alpha1.AddonNameTalosBackup,
+		}
+		WaitForDoctorHealthy(t, configPath, 5*time.Minute, func(status *handlers.DoctorStatus) error {
+			if status.Phase != "Running" {
+				return fmt.Errorf("cluster phase %s, want Running", status.Phase)
+			}
+			if status.ControlPlanes.Ready < 1 {
+				return fmt.Errorf("CPs ready %d, want >= 1", status.ControlPlanes.Ready)
+			}
+			if status.Workers.Ready < 1 {
+				return fmt.Errorf("workers ready %d, want >= 1", status.Workers.Ready)
+			}
+			if !status.Infrastructure.Network {
+				return fmt.Errorf("network not healthy")
+			}
+			if !status.Infrastructure.Firewall {
+				return fmt.Errorf("firewall not healthy")
+			}
+			if !status.Infrastructure.LoadBalancer {
+				return fmt.Errorf("load balancer not healthy")
+			}
+			for _, name := range expectedAddons {
+				addon, ok := status.Addons[name]
+				if !ok || !addon.Installed || !addon.Healthy {
+					return fmt.Errorf("addon %s not ready", name)
+				}
+			}
+			if !status.Connectivity.KubeAPI {
+				return fmt.Errorf("kube API not reachable")
+			}
+			return nil
 		})
-		AssertConnectivityHealthy(t, status)
 	})
 
 	// =========================================================================
