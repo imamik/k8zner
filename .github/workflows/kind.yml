@@ -1,0 +1,56 @@
+name: Kind Integration Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      layer:
+        description: "Test layer to run (empty for all)"
+        required: false
+        default: ""
+        type: choice
+        options:
+          - ""
+          - "01_CRDs"
+          - "02_Core"
+          - "03_Ingress"
+          - "04_GitOps"
+          - "05_Monitoring"
+          - "06_Integration"
+  schedule:
+    # Run nightly at 3 AM UTC
+    - cron: "0 3 * * *"
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.25"
+
+jobs:
+  kind-tests:
+    name: Kind Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Setup kind
+        run: go install sigs.k8s.io/kind@latest
+
+      - name: Run kind tests
+        run: |
+          LAYER="${{ github.event.inputs.layer }}"
+          if [ -n "$LAYER" ]; then
+            make test-kind-layer LAYER="$LAYER"
+          else
+            # Single-node for CI speed
+            KIND_WORKERS=0 make test-kind
+          fi
+
+      - name: Cleanup
+        if: always()
+        run: kind delete cluster --name k8zner-test 2>/dev/null || true

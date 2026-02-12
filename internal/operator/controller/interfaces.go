@@ -27,6 +27,12 @@ type hcloudClient interface {
 	// Network operations
 	GetNetwork(ctx context.Context, name string) (*hcloudgo.Network, error)
 
+	// Firewall operations
+	GetFirewall(ctx context.Context, name string) (*hcloudgo.Firewall, error)
+
+	// Load balancer operations
+	GetLoadBalancer(ctx context.Context, name string) (*hcloudgo.LoadBalancer, error)
+
 	// Image operations
 	GetSnapshotByLabels(ctx context.Context, labels map[string]string) (*hcloudgo.Image, error)
 }

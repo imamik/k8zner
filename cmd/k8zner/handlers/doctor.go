@@ -14,7 +14,9 @@ import (
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	"github.com/imamik/k8zner/internal/config"
+	hcloudInternal "github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/ui/tui"
+	"github.com/imamik/k8zner/internal/util/naming"
 )
 
 // DoctorStatus represents the cluster diagnostic status.
@@ -27,13 +29,31 @@ type DoctorStatus struct {
 	ControlPlanes  NodeGroupHealth        `json:"controlPlanes"`
 	Workers        NodeGroupHealth        `json:"workers"`
 	Addons         map[string]AddonHealth `json:"addons"`
+	Connectivity   ConnectivityHealth     `json:"connectivity,omitempty"`
 }
 
 // InfrastructureHealth represents infrastructure component status.
 type InfrastructureHealth struct {
-	Network      bool `json:"network"`
-	Firewall     bool `json:"firewall"`
-	LoadBalancer bool `json:"loadBalancer"`
+	Network        bool   `json:"network"`
+	Firewall       bool   `json:"firewall"`
+	LoadBalancer   bool   `json:"loadBalancer"`
+	LoadBalancerIP string `json:"loadBalancerIP,omitempty"`
+}
+
+// ConnectivityHealth represents connectivity probe results.
+type ConnectivityHealth struct {
+	KubeAPI    bool            `json:"kubeAPI"`
+	MetricsAPI bool            `json:"metricsAPI"`
+	Endpoints  []EndpointCheck `json:"endpoints,omitempty"`
+}
+
+// EndpointCheck represents external endpoint health.
+type EndpointCheck struct {
+	Host    string `json:"host"`
+	DNS     bool   `json:"dns"`
+	TLS     bool   `json:"tls"`
+	HTTP    bool   `json:"http"`
+	Message string `json:"message,omitempty"`
 }
 
 // NodeGroupHealth represents control plane or worker status.
@@ -95,11 +115,23 @@ func Doctor(ctx context.Context, configPath string, watch, jsonOutput bool) erro
 }
 
 // doctorPreCluster shows diagnostic info when no cluster exists.
+// It probes the Hetzner Cloud API to check if infrastructure resources exist.
 func doctorPreCluster(cfg *config.Config, jsonOutput bool) error {
 	status := &DoctorStatus{
 		ClusterName: cfg.ClusterName,
 		Region:      cfg.Location,
 		Phase:       "Not Created",
+	}
+
+	// Probe hcloud API for existing infrastructure
+	token := os.Getenv("HCLOUD_TOKEN")
+	if token != "" {
+		infraClient := newInfraClient(token)
+		status.Infrastructure = probeInfraHealth(context.Background(), infraClient, cfg.ClusterName)
+		// If any infra exists, it's a partial provisioning
+		if status.Infrastructure.Network || status.Infrastructure.Firewall || status.Infrastructure.LoadBalancer {
+			status.Phase = "Provisioning"
+		}
 	}
 
 	if jsonOutput {
@@ -109,7 +141,21 @@ func doctorPreCluster(cfg *config.Config, jsonOutput bool) error {
 	fmt.Println()
 	printHeader(cfg.ClusterName, cfg.Location)
 
-	fmt.Println("  Status: Not created")
+	if status.Phase == "Provisioning" {
+		fmt.Println("  Status: Provisioning (pre-kubeconfig)")
+		fmt.Println()
+		fmt.Println("  Infrastructure")
+		fmt.Println("  " + strings.Repeat("─", 35))
+		printRow("Network", status.Infrastructure.Network, "")
+		printRow("Firewall", status.Infrastructure.Firewall, "")
+		lbExtra := ""
+		if status.Infrastructure.LoadBalancerIP != "" {
+			lbExtra = status.Infrastructure.LoadBalancerIP
+		}
+		printRow("Load Balancer", status.Infrastructure.LoadBalancer, lbExtra)
+	} else {
+		fmt.Println("  Status: Not created")
+	}
 	fmt.Println()
 
 	fmt.Println("  Configuration:")
@@ -125,10 +171,38 @@ func doctorPreCluster(cfg *config.Config, jsonOutput bool) error {
 	fmt.Printf("    Talos:          %s\n", cfg.Talos.Version)
 
 	fmt.Println()
-	fmt.Println("  Run 'k8zner apply' to create the cluster.")
+	if status.Phase == "Not Created" {
+		fmt.Println("  Run 'k8zner apply' to create the cluster.")
+	} else {
+		fmt.Println("  Infrastructure partially created. Run 'k8zner apply' to continue or 'k8zner destroy' to clean up.")
+	}
 	fmt.Println()
 
 	return nil
+}
+
+// probeInfraHealth checks hcloud API for existing infrastructure resources.
+func probeInfraHealth(ctx context.Context, infraClient hcloudInternal.InfrastructureManager, clusterName string) InfrastructureHealth {
+	health := InfrastructureHealth{}
+
+	// CLI creates network and firewall with cluster name directly (no suffix)
+	if nw, err := infraClient.GetNetwork(ctx, clusterName); err == nil && nw != nil {
+		health.Network = true
+	}
+
+	if fw, err := infraClient.GetFirewall(ctx, clusterName); err == nil && fw != nil {
+		health.Firewall = true
+	}
+
+	lbName := naming.KubeAPILoadBalancer(clusterName)
+	if lb, err := infraClient.GetLoadBalancer(ctx, lbName); err == nil && lb != nil {
+		health.LoadBalancer = true
+		if lb.PublicNet.Enabled && lb.PublicNet.IPv4.IP != nil {
+			health.LoadBalancerIP = lb.PublicNet.IPv4.IP.String()
+		}
+	}
+
+	return health
 }
 
 // doctorShow displays the current cluster status once.
@@ -184,15 +258,38 @@ func getClusterStatus(ctx context.Context, k8sClient client.Client, clusterName 
 		}, nil
 	}
 
+	infra := k8zCluster.Status.Infrastructure
+
+	// Use *Ready booleans if available, fall back to ID != 0
+	networkReady := infra.NetworkReady || infra.NetworkID != 0
+	firewallReady := infra.FirewallReady || infra.FirewallID != 0
+	lbReady := infra.LoadBalancerReady || infra.LoadBalancerID != 0
+
+	// Map connectivity status
+	var connectivity ConnectivityHealth
+	conn := k8zCluster.Status.Connectivity
+	connectivity.KubeAPI = conn.KubeAPIReady
+	connectivity.MetricsAPI = conn.MetricsAPIReady
+	for _, ep := range conn.Endpoints {
+		connectivity.Endpoints = append(connectivity.Endpoints, EndpointCheck{
+			Host:    ep.Host,
+			DNS:     ep.DNSReady,
+			TLS:     ep.TLSReady,
+			HTTP:    ep.HTTPReady,
+			Message: ep.Message,
+		})
+	}
+
 	return &DoctorStatus{
 		ClusterName:  clusterName,
 		Region:       k8zCluster.Spec.Region,
 		Phase:        string(k8zCluster.Status.Phase),
 		Provisioning: string(k8zCluster.Status.ProvisioningPhase),
 		Infrastructure: InfrastructureHealth{
-			Network:      k8zCluster.Status.Infrastructure.NetworkID != 0,
-			Firewall:     k8zCluster.Status.Infrastructure.FirewallID != 0,
-			LoadBalancer: k8zCluster.Status.Infrastructure.LoadBalancerID != 0,
+			Network:        networkReady,
+			Firewall:       firewallReady,
+			LoadBalancer:   lbReady,
+			LoadBalancerIP: infra.LoadBalancerIP,
 		},
 		ControlPlanes: NodeGroupHealth{
 			Desired:   k8zCluster.Status.ControlPlanes.Desired,
@@ -204,7 +301,8 @@ func getClusterStatus(ctx context.Context, k8sClient client.Client, clusterName 
 			Ready:     k8zCluster.Status.Workers.Ready,
 			Unhealthy: k8zCluster.Status.Workers.Unhealthy,
 		},
-		Addons: buildAddonHealth(k8zCluster.Status.Addons),
+		Addons:       buildAddonHealth(k8zCluster.Status.Addons),
+		Connectivity: connectivity,
 	}, nil
 }
 
@@ -302,6 +400,33 @@ func printDoctorFormatted(status *DoctorStatus) error {
 		}
 	}
 
+	// Connectivity
+	if status.Connectivity.KubeAPI || len(status.Connectivity.Endpoints) > 0 {
+		fmt.Println()
+		fmt.Println("  Connectivity")
+		fmt.Println("  " + strings.Repeat("─", 35))
+		printRow("Kube API", status.Connectivity.KubeAPI, "")
+		printRow("Metrics API", status.Connectivity.MetricsAPI, "")
+		for _, ep := range status.Connectivity.Endpoints {
+			allOK := ep.DNS && ep.TLS && ep.HTTP
+			extra := ""
+			if !allOK {
+				parts := []string{}
+				if !ep.DNS {
+					parts = append(parts, "DNS")
+				}
+				if !ep.TLS {
+					parts = append(parts, "TLS")
+				}
+				if !ep.HTTP {
+					parts = append(parts, "HTTP")
+				}
+				extra = "missing: " + strings.Join(parts, ",")
+			}
+			printRow(ep.Host, allOK, extra)
+		}
+	}
+
 	fmt.Println()
 	return nil
 }
@@ -377,6 +502,53 @@ func doctorShowStyled(ctx context.Context, k8sClient client.Client, cfg *config.
 
 	fmt.Println(tui.RenderDoctorOnce(msg, cfg.ClusterName, cfg.Location))
 	return nil
+}
+
+// doctorSummaryLine returns a compact one-line summary of doctor status for log output.
+func doctorSummaryLine(status *DoctorStatus) string {
+	infraOK := 0
+	if status.Infrastructure.Network {
+		infraOK++
+	}
+	if status.Infrastructure.Firewall {
+		infraOK++
+	}
+	if status.Infrastructure.LoadBalancer {
+		infraOK++
+	}
+
+	addonsTotal := 0
+	addonsHealthy := 0
+	for _, a := range status.Addons {
+		if a.Installed {
+			addonsTotal++
+			if a.Healthy {
+				addonsHealthy++
+			}
+		}
+	}
+
+	epTotal := len(status.Connectivity.Endpoints)
+	epOK := 0
+	for _, ep := range status.Connectivity.Endpoints {
+		if ep.DNS && ep.TLS && ep.HTTP {
+			epOK++
+		}
+	}
+
+	parts := []string{
+		fmt.Sprintf("infra=%d/3", infraOK),
+		fmt.Sprintf("cp=%d/%d", status.ControlPlanes.Ready, status.ControlPlanes.Desired),
+		fmt.Sprintf("workers=%d/%d", status.Workers.Ready, status.Workers.Desired),
+	}
+	if addonsTotal > 0 {
+		parts = append(parts, fmt.Sprintf("addons=%d/%d", addonsHealthy, addonsTotal))
+	}
+	if epTotal > 0 {
+		parts = append(parts, fmt.Sprintf("endpoints=%d/%d", epOK, epTotal))
+	}
+
+	return "[" + strings.Join(parts, " ") + "]"
 }
 
 func addonExtra(addon AddonHealth) string {

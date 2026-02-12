@@ -57,7 +57,13 @@ func waitForOperatorComplete(ctx context.Context, clusterName string, kubeconfig
 			continue
 		}
 
-		log.Printf("Status: %s (phase: %s)", clusterPhase, phase)
+		// Show doctor status summary for richer monitoring
+		if status, statusErr := getClusterStatus(ctx, k8sClient, clusterName); statusErr == nil {
+			healthySummary := doctorSummaryLine(status)
+			log.Printf("Status: %s (phase: %s) %s", clusterPhase, phase, healthySummary)
+		} else {
+			log.Printf("Status: %s (phase: %s)", clusterPhase, phase)
+		}
 
 		if phase == k8znerv1alpha1.PhaseComplete && clusterPhase == k8znerv1alpha1.ClusterPhaseRunning {
 			log.Println("Cluster provisioning complete!")

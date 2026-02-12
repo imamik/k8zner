@@ -468,7 +468,7 @@ func ScaleCluster(ctx context.Context, t *testing.T, state *OperatorTestContext,
 	UpdateTestConfigWorkers(t, state.ConfigPath, workerCount)
 
 	// Apply the change
-	if err := handlers.Apply(ctx, state.ConfigPath, false); err != nil {
+	if err := handlers.Apply(ctx, state.ConfigPath, false, false); err != nil {
 		return fmt.Errorf("k8zner apply failed: %w", err)
 	}
 

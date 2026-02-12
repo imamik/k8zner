@@ -152,9 +152,10 @@ func TestPrintDoctorJSON(t *testing.T) {
 		Region:      "nbg1",
 		Phase:       "Running",
 		Infrastructure: InfrastructureHealth{
-			Network:      true,
-			Firewall:     true,
-			LoadBalancer: true,
+			Network:        true,
+			Firewall:       true,
+			LoadBalancer:   true,
+			LoadBalancerIP: "1.2.3.4",
 		},
 		ControlPlanes: NodeGroupHealth{
 			Desired: 3, Ready: 3, Unhealthy: 0,
@@ -164,6 +165,13 @@ func TestPrintDoctorJSON(t *testing.T) {
 		},
 		Addons: map[string]AddonHealth{
 			"cilium": {Installed: true, Healthy: true, Phase: "Installed"},
+		},
+		Connectivity: ConnectivityHealth{
+			KubeAPI:    true,
+			MetricsAPI: true,
+			Endpoints: []EndpointCheck{
+				{Host: "argo.example.com", DNS: true, TLS: true, HTTP: true, Message: "HTTP 200"},
+			},
 		},
 	}
 
@@ -181,9 +189,14 @@ func TestPrintDoctorJSON(t *testing.T) {
 	assert.Equal(t, "nbg1", parsed.Region)
 	assert.Equal(t, "Running", parsed.Phase)
 	assert.True(t, parsed.Infrastructure.Network)
+	assert.Equal(t, "1.2.3.4", parsed.Infrastructure.LoadBalancerIP)
 	assert.Equal(t, 3, parsed.ControlPlanes.Ready)
 	assert.Equal(t, 2, parsed.Workers.Ready)
 	assert.True(t, parsed.Addons["cilium"].Healthy)
+	assert.True(t, parsed.Connectivity.KubeAPI)
+	assert.True(t, parsed.Connectivity.MetricsAPI)
+	require.Len(t, parsed.Connectivity.Endpoints, 1)
+	assert.True(t, parsed.Connectivity.Endpoints[0].HTTP)
 }
 
 func TestPrintDoctorFormatted(t *testing.T) {

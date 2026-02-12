@@ -328,6 +328,10 @@ type K8znerClusterStatus struct {
 	// +optional
 	ImageSnapshot *ImageStatus `json:"imageSnapshot,omitempty"`
 
+	// Connectivity tracks external connectivity probe results
+	// +optional
+	Connectivity ConnectivityStatus `json:"connectivity,omitempty"`
+
 	// PhaseStartedAt tracks when the current provisioning phase started.
 	// Used for timeout detection in long-running phases like addon installation.
 	// +optional
@@ -440,6 +444,54 @@ type InfrastructureStatus struct {
 	// SnapshotID is the Hetzner Talos image snapshot ID
 	// +optional
 	SnapshotID int64 `json:"snapshotID,omitempty"`
+
+	// NetworkReady indicates the network exists and is healthy
+	// +optional
+	NetworkReady bool `json:"networkReady,omitempty"`
+
+	// FirewallReady indicates the firewall exists and is healthy
+	// +optional
+	FirewallReady bool `json:"firewallReady,omitempty"`
+
+	// LoadBalancerReady indicates the load balancer exists and has a public IP
+	// +optional
+	LoadBalancerReady bool `json:"loadBalancerReady,omitempty"`
+}
+
+// ConnectivityStatus tracks external connectivity probes.
+type ConnectivityStatus struct {
+	// KubeAPIReady indicates the Kubernetes API is reachable
+	KubeAPIReady bool `json:"kubeAPIReady"`
+
+	// MetricsAPIReady indicates the metrics API is available
+	MetricsAPIReady bool `json:"metricsAPIReady"`
+
+	// Endpoints is the health of external endpoints (ArgoCD, Grafana, etc.)
+	// +optional
+	Endpoints []EndpointHealth `json:"endpoints,omitempty"`
+
+	// LastCheck is when connectivity was last checked
+	// +optional
+	LastCheck *metav1.Time `json:"lastCheck,omitempty"`
+}
+
+// EndpointHealth represents the health of a single external endpoint.
+type EndpointHealth struct {
+	// Host is the FQDN of the endpoint
+	Host string `json:"host"`
+
+	// DNSReady indicates the DNS record resolves
+	DNSReady bool `json:"dnsReady"`
+
+	// TLSReady indicates the TLS certificate exists
+	TLSReady bool `json:"tlsReady"`
+
+	// HTTPReady indicates HTTPS returns a successful response
+	HTTPReady bool `json:"httpReady"`
+
+	// Message provides additional context
+	// +optional
+	Message string `json:"message,omitempty"`
 }
 
 // ImageStatus tracks the Talos image snapshot.
@@ -634,6 +686,10 @@ type AddonStatus struct {
 	// RetryCount tracks the number of installation retries
 	// +optional
 	RetryCount int `json:"retryCount,omitempty"`
+
+	// LastHealthCheck is when the addon runtime health was last checked
+	// +optional
+	LastHealthCheck *metav1.Time `json:"lastHealthCheck,omitempty"`
 }
 
 // +kubebuilder:object:root=true
