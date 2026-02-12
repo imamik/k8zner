@@ -119,10 +119,9 @@ func AssertConnectivityHealthy(t *testing.T, status *handlers.DoctorStatus) {
 	}
 }
 
-// VerifyAllAddonsDeep performs full deep validation of all addons.
-// This includes waiting for DNS propagation, TLS cert issuance, and HTTPS connectivity.
-// Used once after initial cluster setup (~25-30 min).
-func VerifyAllAddonsDeep(t *testing.T, ctx context.Context, vctx *AddonVerificationContext, state *OperatorTestContext) {
+// VerifyAllAddonsCore performs core validation of all addons (pods running, basic functionality).
+// Does NOT include DNS/TLS/HTTPS checks — those go in VerifyExternalConnectivity.
+func VerifyAllAddonsCore(t *testing.T, ctx context.Context, vctx *AddonVerificationContext, state *OperatorTestContext) {
 	t.Helper()
 
 	cluster := GetClusterStatus(ctx, state)
@@ -133,7 +132,7 @@ func VerifyAllAddonsDeep(t *testing.T, ctx context.Context, vctx *AddonVerificat
 	legacyState := state.ToE2EState()
 
 	// Cilium
-	t.Log("  [Deep] Verifying Cilium...")
+	t.Log("  [Core] Verifying Cilium...")
 	cilium, ok := cluster.Status.Addons[k8znerv1alpha1.AddonNameCilium]
 	if !ok || !cilium.Installed {
 		t.Fatal("Cilium should be installed")
@@ -141,71 +140,96 @@ func VerifyAllAddonsDeep(t *testing.T, ctx context.Context, vctx *AddonVerificat
 	testCiliumNetworkConnectivity(t, legacyState)
 
 	// CCM
-	t.Log("  [Deep] Verifying CCM...")
+	t.Log("  [Core] Verifying CCM...")
 	if err := WaitForAddonInstalled(ctx, t, state, k8znerv1alpha1.AddonNameCCM, 2*time.Minute); err != nil {
 		t.Fatalf("CCM should be installed: %v", err)
 	}
 	testCCMLoadBalancer(t, legacyState)
 
 	// CSI
-	t.Log("  [Deep] Verifying CSI...")
+	t.Log("  [Core] Verifying CSI...")
 	if err := WaitForAddonInstalled(ctx, t, state, k8znerv1alpha1.AddonNameCSI, 2*time.Minute); err != nil {
 		t.Fatalf("CSI should be installed: %v", err)
 	}
 	testCSIVolume(t, legacyState)
 
 	// Metrics Server
-	t.Log("  [Deep] Verifying Metrics Server...")
+	t.Log("  [Core] Verifying Metrics Server...")
 	testMetricsAPI(t, vctx.KubeconfigPath)
 
 	// Traefik
-	t.Log("  [Deep] Verifying Traefik...")
+	t.Log("  [Core] Verifying Traefik...")
 	verifyIngressClassExists(t, vctx.KubeconfigPath, "traefik")
 	waitForPod(t, vctx.KubeconfigPath, "traefik", "app.kubernetes.io/name=traefik", 5*time.Minute)
 	verifyTraefikLoadBalancer(t, vctx.KubeconfigPath)
 
 	// CertManager
-	t.Log("  [Deep] Verifying CertManager...")
+	t.Log("  [Core] Verifying CertManager...")
 	verifyClusterIssuerExists(t, vctx.KubeconfigPath, "letsencrypt-cloudflare-staging")
 	waitForPod(t, vctx.KubeconfigPath, "cert-manager", "app.kubernetes.io/name=cert-manager", 5*time.Minute)
 
 	// ExternalDNS
-	t.Log("  [Deep] Verifying ExternalDNS...")
+	t.Log("  [Core] Verifying ExternalDNS...")
 	waitForPod(t, vctx.KubeconfigPath, "external-dns", "app.kubernetes.io/name=external-dns", 5*time.Minute)
 
-	// ArgoCD (with DNS + TLS + HTTPS)
-	t.Log("  [Deep] Verifying ArgoCD...")
+	// ArgoCD (pod + ingress)
+	t.Log("  [Core] Verifying ArgoCD...")
 	waitForPod(t, vctx.KubeconfigPath, "argocd", "app.kubernetes.io/name=argocd-server", 5*time.Minute)
 	verifyArgoCDIngressConfigured(t, vctx.KubeconfigPath, vctx.ArgoHost)
-	waitForDNSRecord(t, vctx.ArgoHost, 8*time.Minute)
-	waitForArgoCDTLSCertificate(t, vctx.KubeconfigPath, 12*time.Minute)
-	testArgoCDHTTPSAccess(t, vctx.ArgoHost, 5*time.Minute)
-	t.Logf("  ArgoCD accessible at https://%s", vctx.ArgoHost)
 
-	// Grafana (with DNS + TLS + HTTPS)
-	t.Log("  [Deep] Verifying Grafana...")
+	// Grafana (pod + ingress)
+	t.Log("  [Core] Verifying Grafana...")
 	waitForPod(t, vctx.KubeconfigPath, "monitoring", "app.kubernetes.io/name=grafana", 5*time.Minute)
 	verifyGrafanaIngressExists(t, vctx.KubeconfigPath, vctx.GrafanaHost)
-	verifyGrafanaDNSRecord(t, legacyState, vctx.GrafanaHost, 8*time.Minute)
-	verifyGrafanaCertificate(t, vctx.KubeconfigPath, 12*time.Minute)
-	testGrafanaHTTPSConnectivity(t, vctx.GrafanaHost, 5*time.Minute)
-	t.Logf("  Grafana accessible at https://%s", vctx.GrafanaHost)
 
 	// Prometheus
-	t.Log("  [Deep] Verifying Prometheus...")
+	t.Log("  [Core] Verifying Prometheus...")
 	waitForPrometheusReady(t, vctx.KubeconfigPath, 8*time.Minute)
 	verifyPrometheusTargets(t, vctx.KubeconfigPath)
 	verifyServiceMonitors(t, vctx.KubeconfigPath)
 
 	// Alertmanager
-	t.Log("  [Deep] Verifying Alertmanager...")
+	t.Log("  [Core] Verifying Alertmanager...")
 	waitForAlertmanagerReady(t, vctx.KubeconfigPath, 5*time.Minute)
 
-	// Backup (CronJob only - trigger stays in Dev test)
-	t.Log("  [Deep] Verifying Backup...")
+	// Backup (CronJob only)
+	t.Log("  [Core] Verifying Backup...")
 	verifyBackupCronJob(t, vctx.KubeconfigPath, "0 * * * *")
 
-	t.Log("  [Deep] All addon verification passed!")
+	t.Log("  [Core] All addon core verification passed!")
+}
+
+// VerifyExternalConnectivity verifies DNS + TLS + HTTPS for ArgoCD and Grafana.
+// This is separated from core addon checks because it depends on external services
+// (DNS propagation, Let's Encrypt cert issuance) which can be slow/flaky.
+func VerifyExternalConnectivity(t *testing.T, vctx *AddonVerificationContext, state *OperatorTestContext) {
+	t.Helper()
+
+	legacyState := state.ToE2EState()
+
+	// ArgoCD: DNS -> TLS -> HTTPS
+	t.Log("  [Connectivity] Verifying ArgoCD...")
+	waitForDNSRecord(t, vctx.ArgoHost, 10*time.Minute)
+	waitForArgoCDTLSCertificate(t, vctx.KubeconfigPath, 12*time.Minute)
+	testArgoCDHTTPSAccess(t, vctx.ArgoHost, 5*time.Minute)
+	t.Logf("  ArgoCD accessible at https://%s", vctx.ArgoHost)
+
+	// Grafana: DNS -> TLS -> HTTPS
+	t.Log("  [Connectivity] Verifying Grafana...")
+	verifyGrafanaDNSRecord(t, legacyState, vctx.GrafanaHost, 10*time.Minute)
+	verifyGrafanaCertificate(t, vctx.KubeconfigPath, 12*time.Minute)
+	testGrafanaHTTPSConnectivity(t, vctx.GrafanaHost, 5*time.Minute)
+	t.Logf("  Grafana accessible at https://%s", vctx.GrafanaHost)
+
+	t.Log("  [Connectivity] All external connectivity checks passed!")
+}
+
+// VerifyAllAddonsDeep performs full deep validation (core + connectivity).
+// Used by HA tests that need a single-call verification.
+func VerifyAllAddonsDeep(t *testing.T, ctx context.Context, vctx *AddonVerificationContext, state *OperatorTestContext) {
+	t.Helper()
+	VerifyAllAddonsCore(t, ctx, vctx, state)
+	VerifyExternalConnectivity(t, vctx, state)
 }
 
 // VerifyAllAddonsHealthy performs fast health checks on all addons.

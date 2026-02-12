@@ -175,16 +175,16 @@ func TestE2EFullStackDev(t *testing.T) {
 	}
 
 	// =========================================================================
-	// SUBTEST 03: Verify All Addons (deep validation + doctor)
+	// SUBTEST 03: Verify Addon Pods (core addon functionality)
 	// =========================================================================
-	runSubtest("03_VerifyAllAddons", func(t *testing.T) {
+	runSubtest("03_VerifyAddonPods", func(t *testing.T) {
 		vctx := &AddonVerificationContext{
 			KubeconfigPath: state.KubeconfigPath,
 			Domain:         cfDomain,
 			ArgoHost:       argoHost,
 			GrafanaHost:    grafanaHost,
 		}
-		VerifyAllAddonsDeep(t, ctx, vctx, state)
+		VerifyAllAddonsCore(t, ctx, vctx, state)
 
 		// Validate via doctor JSON (wait for operator to populate all health fields)
 		expectedAddons := []string{
@@ -230,17 +230,27 @@ func TestE2EFullStackDev(t *testing.T) {
 					return fmt.Errorf("addon %s not healthy (msg=%s)", name, addon.Message)
 				}
 			}
-			// Note: Connectivity check (KubeAPI, Endpoints) is not validated here
-			// because the CRD connectivity fields require a reconcile cycle in
-			// Running phase with PhaseComplete, which may not have occurred yet.
 			return nil
 		})
 	})
 
 	// =========================================================================
-	// SUBTEST 04: Verify Backup (trigger + S3 verification)
+	// SUBTEST 04: Verify External Connectivity (DNS + TLS + HTTPS)
 	// =========================================================================
-	runSubtest("04_VerifyBackup", func(t *testing.T) {
+	runSubtest("04_VerifyConnectivity", func(t *testing.T) {
+		vctx := &AddonVerificationContext{
+			KubeconfigPath: state.KubeconfigPath,
+			Domain:         cfDomain,
+			ArgoHost:       argoHost,
+			GrafanaHost:    grafanaHost,
+		}
+		VerifyExternalConnectivity(t, vctx, state)
+	})
+
+	// =========================================================================
+	// SUBTEST 05: Verify Backup (trigger + S3 verification)
+	// =========================================================================
+	runSubtest("05_VerifyBackup", func(t *testing.T) {
 		// Trigger manual backup
 		triggerBackupJob(t, state.KubeconfigPath, 5*time.Minute)
 
