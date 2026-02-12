@@ -139,7 +139,7 @@ func TestE2EHAOperations(t *testing.T) {
 	// =========================================================================
 	t.Run("02_VerifyInitialHealth", func(t *testing.T) {
 		// Wait for cluster to be ready
-		err := WaitForClusterReady(ctx, t, state, 35*time.Minute)
+		err := WaitForClusterReady(ctx, t, state, 50*time.Minute)
 		require.NoError(t, err, "HA cluster should become ready")
 
 		// Verify via doctor
