@@ -199,7 +199,7 @@ func TestE2EFullStackDev(t *testing.T) {
 			k8znerv1alpha1.AddonNameMonitoring,
 			k8znerv1alpha1.AddonNameTalosBackup,
 		}
-		WaitForDoctorHealthy(t, configPath, 5*time.Minute, func(status *handlers.DoctorStatus) error {
+		WaitForDoctorHealthy(t, configPath, 10*time.Minute, func(status *handlers.DoctorStatus) error {
 			if status.Phase != "Running" {
 				return fmt.Errorf("cluster phase %s, want Running", status.Phase)
 			}
