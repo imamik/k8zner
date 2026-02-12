@@ -1,7 +1,10 @@
 package config
 
 import (
+	"os"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -86,6 +89,8 @@ func TestWizardResult_ToSpec(t *testing.T) {
 		assert.Equal(t, 2, cfg.Workers.Count)
 		assert.Equal(t, SizeCX32, cfg.Workers.Size)
 		assert.Empty(t, cfg.Domain)
+		assert.NotNil(t, cfg.ControlPlane)
+		assert.Equal(t, SizeCX32, cfg.ControlPlane.Size)
 	})
 
 	t.Run("converts ha mode result with domain", func(t *testing.T) {
@@ -107,6 +112,8 @@ func TestWizardResult_ToSpec(t *testing.T) {
 		assert.Equal(t, 5, cfg.Workers.Count)
 		assert.Equal(t, SizeCX52, cfg.Workers.Size)
 		assert.Equal(t, "example.com", cfg.Domain)
+		assert.NotNil(t, cfg.ControlPlane)
+		assert.Equal(t, SizeCX52, cfg.ControlPlane.Size)
 	})
 
 	t.Run("converted config reports correct counts", func(t *testing.T) {
@@ -142,13 +149,16 @@ func TestWriteSpecYAML(t *testing.T) {
 		err := WriteSpecYAML(cfg, tmpFile)
 		require.NoError(t, err)
 
-		loadedCfg, err := LoadSpecWithoutValidation(tmpFile)
+		data, err := os.ReadFile(tmpFile)
 		require.NoError(t, err)
 
-		assert.Equal(t, cfg.Name, loadedCfg.Name)
-		assert.Equal(t, cfg.Region, loadedCfg.Region)
-		assert.Equal(t, cfg.Mode, loadedCfg.Mode)
-		assert.Equal(t, cfg.Workers.Count, loadedCfg.Workers.Count)
-		assert.Equal(t, cfg.Workers.Size, loadedCfg.Workers.Size)
+		var loadedCfg Config
+		err = yaml.Unmarshal(data, &loadedCfg)
+		require.NoError(t, err)
+
+		assert.Equal(t, cfg.Name, loadedCfg.ClusterName)
+		assert.Equal(t, string(cfg.Region), loadedCfg.Location)
+		require.Len(t, loadedCfg.ControlPlane.NodePools, 1)
+		assert.Equal(t, string(cfg.Workers.Size.Normalize()), loadedCfg.Workers[0].ServerType)
 	})
 }
