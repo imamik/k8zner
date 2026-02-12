@@ -13,6 +13,11 @@ import (
 	"github.com/imamik/k8zner/internal/util/keygen"
 )
 
+const (
+	// rescueSystemWaitTime is the initial wait for rescue system to become available via SSH.
+	rescueSystemWaitTime = 10 * time.Second
+)
+
 // Builder builds a Talos image on Hetzner Cloud.
 type Builder struct {
 	infra hcloud.InfrastructureManager
@@ -120,7 +125,7 @@ func (b *Builder) Build(ctx context.Context, talosVersion, k8sVersion, architect
 	// We need to wait for SSH to come back up. The SSH client handles retries,
 	// but after a reboot it might take a moment.
 	log.Printf("Waiting for Rescue System...")
-	time.Sleep(10 * time.Second) // Give it a head start.
+	time.Sleep(rescueSystemWaitTime)
 
 	client, err := ssh.NewClient(&ssh.Config{
 		Host:       ip,
