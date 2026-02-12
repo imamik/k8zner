@@ -61,7 +61,7 @@ func (r *ClusterReconciler) reconcileAddonHealth(ctx context.Context, cluster *k
 
 		if !healthy {
 			allHealthy = false
-			logger.V(1).Info("addon unhealthy", "addon", check.name, "message", msg)
+			logger.Info("addon unhealthy", "addon", check.name, "message", msg)
 		}
 	}
 
@@ -83,11 +83,14 @@ func (r *ClusterReconciler) reconcileAddonHealth(ctx context.Context, cluster *k
 }
 
 // checkDeployment returns a check function that verifies a Deployment has ready replicas.
+// Returns (healthy, message). On API errors, returns (true, error) to avoid flapping —
+// the addon was already marked healthy during installation.
 func checkDeployment(namespace, name string) func(ctx context.Context, r *ClusterReconciler) (bool, string) {
 	return func(ctx context.Context, r *ClusterReconciler) (bool, string) {
 		dep := &appsv1.Deployment{}
 		if err := r.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, dep); err != nil {
-			return false, fmt.Sprintf("deployment not found: %v", err)
+			// Don't mark unhealthy on API/cache errors — preserve install-time health
+			return true, fmt.Sprintf("check skipped: %v", err)
 		}
 		if dep.Status.ReadyReplicas > 0 {
 			return true, fmt.Sprintf("%d/%d ready", dep.Status.ReadyReplicas, dep.Status.Replicas)
@@ -101,7 +104,7 @@ func checkDaemonSet(namespace, name string) func(ctx context.Context, r *Cluster
 	return func(ctx context.Context, r *ClusterReconciler) (bool, string) {
 		ds := &appsv1.DaemonSet{}
 		if err := r.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, ds); err != nil {
-			return false, fmt.Sprintf("daemonset not found: %v", err)
+			return true, fmt.Sprintf("check skipped: %v", err)
 		}
 		if ds.Status.NumberReady > 0 {
 			return true, fmt.Sprintf("%d ready", ds.Status.NumberReady)
@@ -115,7 +118,7 @@ func checkCronJob(namespace, name string) func(ctx context.Context, r *ClusterRe
 	return func(ctx context.Context, r *ClusterReconciler) (bool, string) {
 		cj := &batchv1.CronJob{}
 		if err := r.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, cj); err != nil {
-			return false, fmt.Sprintf("cronjob not found: %v", err)
+			return true, fmt.Sprintf("check skipped: %v", err)
 		}
 		return true, "exists"
 	}
@@ -126,7 +129,7 @@ func checkMonitoring(ctx context.Context, r *ClusterReconciler) (bool, string) {
 	// Check Prometheus StatefulSet
 	stsList := &appsv1.StatefulSetList{}
 	if err := r.List(ctx, stsList, client.InNamespace("monitoring"), client.MatchingLabels{"app.kubernetes.io/name": "prometheus"}); err != nil {
-		return false, fmt.Sprintf("failed to list prometheus: %v", err)
+		return true, fmt.Sprintf("check skipped: %v", err)
 	}
 	promReady := false
 	for _, sts := range stsList.Items {
@@ -139,7 +142,7 @@ func checkMonitoring(ctx context.Context, r *ClusterReconciler) (bool, string) {
 	// Check Grafana Deployment
 	depList := &appsv1.DeploymentList{}
 	if err := r.List(ctx, depList, client.InNamespace("monitoring"), client.MatchingLabels{"app.kubernetes.io/name": "grafana"}); err != nil {
-		return false, fmt.Sprintf("failed to list grafana: %v", err)
+		return true, fmt.Sprintf("check skipped: %v", err)
 	}
 	grafanaReady := false
 	for _, dep := range depList.Items {

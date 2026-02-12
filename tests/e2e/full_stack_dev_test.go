@@ -220,8 +220,14 @@ func TestE2EFullStackDev(t *testing.T) {
 			}
 			for _, name := range expectedAddons {
 				addon, ok := status.Addons[name]
-				if !ok || !addon.Installed || !addon.Healthy {
-					return fmt.Errorf("addon %s not ready", name)
+				if !ok {
+					return fmt.Errorf("addon %s not in status (have %d addons)", name, len(status.Addons))
+				}
+				if !addon.Installed {
+					return fmt.Errorf("addon %s not installed (phase=%s)", name, addon.Phase)
+				}
+				if !addon.Healthy {
+					return fmt.Errorf("addon %s not healthy (msg=%s)", name, addon.Message)
 				}
 			}
 			// Note: Connectivity check (KubeAPI, Endpoints) is not validated here
