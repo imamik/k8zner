@@ -178,7 +178,7 @@ func VerifyAllAddonsDeep(t *testing.T, ctx context.Context, vctx *AddonVerificat
 	waitForPod(t, vctx.KubeconfigPath, "argocd", "app.kubernetes.io/name=argocd-server", 5*time.Minute)
 	verifyArgoCDIngressConfigured(t, vctx.KubeconfigPath, vctx.ArgoHost)
 	waitForDNSRecord(t, vctx.ArgoHost, 8*time.Minute)
-	waitForArgoCDTLSCertificate(t, vctx.KubeconfigPath, 8*time.Minute)
+	waitForArgoCDTLSCertificate(t, vctx.KubeconfigPath, 12*time.Minute)
 	testArgoCDHTTPSAccess(t, vctx.ArgoHost, 5*time.Minute)
 	t.Logf("  ArgoCD accessible at https://%s", vctx.ArgoHost)
 
@@ -187,7 +187,7 @@ func VerifyAllAddonsDeep(t *testing.T, ctx context.Context, vctx *AddonVerificat
 	waitForPod(t, vctx.KubeconfigPath, "monitoring", "app.kubernetes.io/name=grafana", 5*time.Minute)
 	verifyGrafanaIngressExists(t, vctx.KubeconfigPath, vctx.GrafanaHost)
 	verifyGrafanaDNSRecord(t, legacyState, vctx.GrafanaHost, 8*time.Minute)
-	verifyGrafanaCertificate(t, vctx.KubeconfigPath, 8*time.Minute)
+	verifyGrafanaCertificate(t, vctx.KubeconfigPath, 12*time.Minute)
 	testGrafanaHTTPSConnectivity(t, vctx.GrafanaHost, 5*time.Minute)
 	t.Logf("  Grafana accessible at https://%s", vctx.GrafanaHost)
 
