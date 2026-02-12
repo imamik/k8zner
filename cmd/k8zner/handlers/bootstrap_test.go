@@ -181,6 +181,7 @@ func TestPrintApplySuccess(t *testing.T) {
 		assert.Contains(t, output, "Secrets saved to")
 		assert.Contains(t, output, "Talos config saved to")
 		assert.Contains(t, output, "Kubeconfig saved to")
+		assert.Contains(t, output, "Access data saved to")
 		assert.Contains(t, output, "operator is now provisioning")
 		assert.Contains(t, output, "k8zner doctor --watch")
 		assert.Contains(t, output, "kubectl get nodes")

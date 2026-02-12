@@ -235,6 +235,10 @@ func bootstrapNewCluster(ctx context.Context, cfg *config.Config, wait bool) err
 		return applyErr
 	}
 
+	if applyErr = persistAccessData(ctx, cfg, kubeconfig, wait); applyErr != nil {
+		return applyErr
+	}
+
 	// Gather infrastructure info for CRD
 	infraInfo := buildInfraInfo(ctx, pCtx, infraClient, cfg)
 
@@ -330,6 +334,10 @@ func bootstrapNewClusterTUI(ctx context.Context, cfg *config.Config, wait bool) 
 			return applyErr
 		}
 		ch <- tui.BootstrapPhaseMsg{Phase: "operator", Done: true}
+
+		if applyErr = persistAccessData(ctx, cfg, kubeconfig, wait); applyErr != nil {
+			return applyErr
+		}
 
 		// Phase 6: CRD
 		ch <- tui.BootstrapPhaseMsg{Phase: "crd"}
