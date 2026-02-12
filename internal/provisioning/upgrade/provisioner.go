@@ -9,7 +9,13 @@ import (
 	"github.com/imamik/k8zner/internal/provisioning"
 )
 
-const phase = "Upgrade"
+const (
+	phase = "Upgrade"
+
+	// Upgrade health check configuration
+	upgradeHealthCheckRetries = 3
+	nodeUpgradeTimeout        = 10 * time.Minute
+)
 
 // ProvisionerOptions contains options for the upgrade provisioner.
 type ProvisionerOptions struct {
@@ -150,7 +156,7 @@ func (p *Provisioner) upgradeControlPlane(ctx *provisioning.Context) error {
 		// Health check after each control plane node (critical for quorum)
 		if !p.opts.SkipHealthCheck {
 			ctx.Observer.Printf("[%s] Checking cluster health after node %s...", phase, nodeIP)
-			if err := p.healthCheckWithRetry(ctx, 3); err != nil {
+			if err := p.healthCheckWithRetry(ctx, upgradeHealthCheckRetries); err != nil {
 				return fmt.Errorf("health check failed after upgrading %s: %w", nodeIP, err)
 			}
 			ctx.Observer.Printf("[%s] Cluster health check passed", phase)
@@ -161,7 +167,15 @@ func (p *Provisioner) upgradeControlPlane(ctx *provisioning.Context) error {
 	return nil
 }
 
-// upgradeWorkers upgrades worker nodes (can be parallel in future).
+// upgradeWorkers upgrades worker nodes sequentially.
+//
+// Note: Worker upgrades are performed sequentially to maintain observability and
+// prevent simultaneous drain operations that could impact cluster stability.
+// While workers don't have quorum requirements like control planes, sequential
+// upgrades provide better control over cluster capacity during the upgrade window.
+//
+// Future enhancement: Consider adding a MaxConcurrentUpgrades option for large
+// clusters where controlled parallelism would reduce total upgrade time.
 func (p *Provisioner) upgradeWorkers(ctx *provisioning.Context) error {
 	ctx.Observer.Printf("[%s] Upgrading worker nodes...", phase)
 
@@ -178,7 +192,7 @@ func (p *Provisioner) upgradeWorkers(ctx *provisioning.Context) error {
 
 	ctx.Observer.Printf("[%s] Found %d worker nodes", phase, len(workerIPs))
 
-	// Upgrade each worker node (TODO: parallelize)
+	// Upgrade each worker node sequentially
 	for i, nodeIP := range workerIPs {
 		ctx.Observer.Printf("[%s] Upgrading worker node %d/%d (%s)...", phase, i+1, len(workerIPs), nodeIP)
 
@@ -275,7 +289,7 @@ func (p *Provisioner) upgradeNode(ctx *provisioning.Context, nodeIP, _ string) e
 
 	// Wait for node to come back up
 	ctx.Observer.Printf("[%s] Waiting for node %s to reboot...", phase, nodeIP)
-	if err := ctx.Talos.WaitForNodeReady(ctx, nodeIP, 10*time.Minute); err != nil {
+	if err := ctx.Talos.WaitForNodeReady(ctx, nodeIP, nodeUpgradeTimeout); err != nil {
 		return fmt.Errorf("node failed to become ready: %w", err)
 	}
 
