@@ -23,6 +23,8 @@ type MockHCloudClient struct {
 	CreateSSHKeyFunc        func(ctx context.Context, name, publicKey string, labels map[string]string) (string, error)
 	DeleteSSHKeyFunc        func(ctx context.Context, name string) error
 	GetNetworkFunc          func(ctx context.Context, name string) (*hcloudgo.Network, error)
+	GetFirewallFunc         func(ctx context.Context, name string) (*hcloudgo.Firewall, error)
+	GetLoadBalancerFunc     func(ctx context.Context, name string) (*hcloudgo.LoadBalancer, error)
 	GetSnapshotByLabelsFunc func(ctx context.Context, labels map[string]string) (*hcloudgo.Image, error)
 
 	// Call tracking
@@ -145,6 +147,20 @@ func (m *MockHCloudClient) GetNetwork(ctx context.Context, name string) (*hcloud
 		return m.GetNetworkFunc(ctx, name)
 	}
 	return &hcloudgo.Network{ID: 1, Name: name}, nil
+}
+
+func (m *MockHCloudClient) GetFirewall(ctx context.Context, name string) (*hcloudgo.Firewall, error) {
+	if m.GetFirewallFunc != nil {
+		return m.GetFirewallFunc(ctx, name)
+	}
+	return &hcloudgo.Firewall{ID: 1, Name: name}, nil
+}
+
+func (m *MockHCloudClient) GetLoadBalancer(ctx context.Context, name string) (*hcloudgo.LoadBalancer, error) {
+	if m.GetLoadBalancerFunc != nil {
+		return m.GetLoadBalancerFunc(ctx, name)
+	}
+	return &hcloudgo.LoadBalancer{ID: 1, Name: name}, nil
 }
 
 func (m *MockHCloudClient) GetSnapshotByLabels(ctx context.Context, labels map[string]string) (*hcloudgo.Image, error) {

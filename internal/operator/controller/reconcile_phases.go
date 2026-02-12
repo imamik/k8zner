@@ -300,6 +300,7 @@ func (r *ClusterReconciler) reconcileRunningPhase(ctx context.Context, cluster *
 		return ctrl.Result{}, fmt.Errorf("health check failed: %w", err)
 	}
 
+	// Handle scaling first — health probes have network timeouts that slow the reconcile loop
 	if result, err := r.reconcileControlPlanes(ctx, cluster); err != nil || result.Requeue || result.RequeueAfter > 0 {
 		return result, err
 	}
@@ -307,6 +308,11 @@ func (r *ClusterReconciler) reconcileRunningPhase(ctx context.Context, cluster *
 	if result, err := r.reconcileWorkers(ctx, cluster); err != nil || result.Requeue || result.RequeueAfter > 0 {
 		return result, err
 	}
+
+	// Non-fatal health probes: only run when cluster is stable (no scaling in progress)
+	r.reconcileInfraHealth(ctx, cluster)
+	r.reconcileAddonHealth(ctx, cluster)
+	r.reconcileConnectivityHealth(ctx, cluster)
 
 	return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 }
@@ -360,8 +366,8 @@ func (r *ClusterReconciler) discoverInfrastructure(ctx context.Context, cluster 
 	}
 
 	if cluster.Status.Infrastructure.FirewallID == 0 {
-		fwName := naming.Firewall(cluster.Name)
-		fw, err := infraManager.GetFirewall(ctx, fwName)
+		// CLI creates firewall with cluster name directly (no suffix)
+		fw, err := infraManager.GetFirewall(ctx, cluster.Name)
 		if err == nil && fw != nil {
 			cluster.Status.Infrastructure.FirewallID = fw.ID
 		}
