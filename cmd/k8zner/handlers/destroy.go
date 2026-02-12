@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/imamik/k8zner/internal/config"
+	"github.com/imamik/k8zner/internal/platform/cloudflare"
 )
 
 const (
@@ -44,6 +45,14 @@ func Destroy(ctx context.Context, configPath string) error {
 
 	if err := destroyer.Provision(pCtx); err != nil {
 		return fmt.Errorf("destroy failed: %w", err)
+	}
+
+	// Clean up Cloudflare DNS records owned by this cluster
+	if cfg.Addons.Cloudflare.Enabled && cfg.Addons.Cloudflare.APIToken != "" && cfg.Addons.Cloudflare.Domain != "" {
+		log.Println("Cleaning up Cloudflare DNS records...")
+		if err := cleanupCloudflareDNS(ctx, cfg); err != nil {
+			log.Printf("Warning: Cloudflare DNS cleanup failed: %v", err)
+		}
 	}
 
 	// Clean up S3 buckets if talos-backup was configured
@@ -204,6 +213,40 @@ func deleteS3Bucket(ctx context.Context, client *s3.Client, bucketName string) e
 	})
 	if err != nil {
 		return fmt.Errorf("failed to delete bucket: %w", err)
+	}
+
+	return nil
+}
+
+// cleanupCloudflareDNS removes DNS records owned by this cluster from Cloudflare.
+// Records are identified via TXT ownership records created by external-dns.
+func cleanupCloudflareDNS(ctx context.Context, cfg *config.Config) error {
+	cfClient := cloudflare.NewClient(cfg.Addons.Cloudflare.APIToken)
+
+	zoneID := cfg.Addons.Cloudflare.ZoneID
+	if zoneID == "" {
+		var err error
+		zoneID, err = cfClient.GetZoneID(ctx, cfg.Addons.Cloudflare.Domain)
+		if err != nil {
+			return fmt.Errorf("failed to get zone ID for %s: %w", cfg.Addons.Cloudflare.Domain, err)
+		}
+	}
+
+	// Use TXT owner ID if configured, otherwise default to cluster name
+	ownerID := cfg.Addons.ExternalDNS.TXTOwnerID
+	if ownerID == "" {
+		ownerID = cfg.ClusterName
+	}
+
+	count, err := cfClient.CleanupClusterRecords(ctx, zoneID, ownerID)
+	if err != nil {
+		return fmt.Errorf("failed to clean up DNS records: %w", err)
+	}
+
+	if count > 0 {
+		log.Printf("Deleted %d Cloudflare DNS records owned by cluster %s", count, ownerID)
+	} else {
+		log.Println("No Cloudflare DNS records found for this cluster")
 	}
 
 	return nil
