@@ -54,7 +54,8 @@ func printWelcome() {
 	fmt.Println("====================================")
 	fmt.Println()
 	fmt.Println("This wizard creates a cluster configuration with sensible defaults.")
-	fmt.Println("Just answer 5 simple questions.")
+	fmt.Println("Just answer 6 simple questions.")
+	fmt.Println("The generated YAML is fully expanded and explicit (advanced-mode style).")
 	fmt.Println()
 }
 

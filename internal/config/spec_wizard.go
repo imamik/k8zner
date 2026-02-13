@@ -3,9 +3,11 @@ package config
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/huh"
+	"gopkg.in/yaml.v3"
 )
 
 // WizardResult holds the user's choices from the wizard.
@@ -120,7 +122,8 @@ func (r *WizardResult) ToSpec() *Spec {
 			Count: r.WorkerCount,
 			Size:  r.WorkerSize,
 		},
-		Domain: r.Domain,
+		ControlPlane: &ControlPlaneSpec{Size: r.WorkerSize},
+		Domain:       r.Domain,
 	}
 }
 
@@ -160,5 +163,19 @@ func validateDomain(s string) error {
 
 // WriteSpecYAML writes the spec config to a YAML file.
 func WriteSpecYAML(cfg *Spec, path string) error {
-	return SaveSpec(cfg, path)
+	expanded, err := ExpandSpec(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to expand config: %w", err)
+	}
+
+	data, err := yaml.Marshal(expanded)
+	if err != nil {
+		return fmt.Errorf("failed to marshal expanded config: %w", err)
+	}
+
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	return nil
 }

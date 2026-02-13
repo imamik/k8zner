@@ -13,7 +13,7 @@ func TestInit(t *testing.T) {
 	require.NotNil(t, cmd)
 	assert.Equal(t, "init", cmd.Use)
 	assert.Equal(t, "Create a cluster configuration interactively", cmd.Short)
-	assert.Contains(t, cmd.Long, "5 questions")
+	assert.Contains(t, cmd.Long, "6 questions")
 	assert.Contains(t, cmd.Long, "Talos Linux")
 	assert.Contains(t, cmd.Long, "IPv6-only")
 }
