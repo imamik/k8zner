@@ -35,7 +35,6 @@ type costSummary struct {
 }
 
 type desiredResource struct {
-	name     string
 	count    int
 	typeName string
 	location string
