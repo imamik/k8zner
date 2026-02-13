@@ -107,7 +107,7 @@ func PerformanceScale(currentPhase string, phaseElapsed time.Duration, history [
 			continue
 		}
 		expectedTotal += time.Duration(expectedSecs) * time.Second
-		actualTotal += rec.EndedAt.Time.Sub(rec.StartedAt.Time)
+		actualTotal += rec.EndedAt.Sub(rec.StartedAt.Time)
 	}
 
 	// If current phase is overrunning, fold it in immediately so ETA adapts quickly.
