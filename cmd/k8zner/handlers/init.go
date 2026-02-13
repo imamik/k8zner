@@ -60,9 +60,9 @@ func printWelcome() {
 	fmt.Println("k8zner - Kubernetes on Hetzner Cloud")
 	fmt.Println("====================================")
 	fmt.Println()
-	fmt.Println("This wizard creates a cluster configuration with sensible defaults.")
+	fmt.Println("This wizard creates a simple cluster configuration file.")
 	fmt.Println("Just answer 6 simple questions.")
-	fmt.Println("The generated YAML is fully expanded and explicit (advanced-mode style).")
+	fmt.Println("Everything else is configured automatically with best practices.")
 	fmt.Println()
 }
 

@@ -3,11 +3,9 @@ package config
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/charmbracelet/huh"
-	"gopkg.in/yaml.v3"
 )
 
 // WizardResult holds the user's choices from the wizard.
@@ -113,8 +111,9 @@ func RunWizard(ctx context.Context) (*WizardResult, error) {
 }
 
 // ToSpec converts the wizard result to a Spec.
+// Populates all fields so the output YAML is explicit and self-documenting.
 func (r *WizardResult) ToSpec() *Spec {
-	return &Spec{
+	spec := &Spec{
 		Name:   r.Name,
 		Region: r.Region,
 		Mode:   r.Mode,
@@ -125,6 +124,16 @@ func (r *WizardResult) ToSpec() *Spec {
 		ControlPlane: &ControlPlaneSpec{Size: r.WorkerSize},
 		Domain:       r.Domain,
 	}
+
+	// When a domain is set, enable all domain-dependent features with defaults
+	if r.Domain != "" {
+		spec.ArgoSubdomain = "argo"
+		spec.CertEmail = "admin@" + r.Domain
+		spec.GrafanaSubdomain = "grafana"
+		spec.Monitoring = true
+	}
+
+	return spec
 }
 
 // validateClusterName validates the cluster name.
@@ -162,20 +171,8 @@ func validateDomain(s string) error {
 }
 
 // WriteSpecYAML writes the spec config to a YAML file.
+// It writes the simplified Spec format, not the expanded Config.
+// The expansion to full Config happens at apply/cost time via ExpandSpec.
 func WriteSpecYAML(cfg *Spec, path string) error {
-	expanded, err := ExpandSpec(cfg)
-	if err != nil {
-		return fmt.Errorf("failed to expand config: %w", err)
-	}
-
-	data, err := yaml.Marshal(expanded)
-	if err != nil {
-		return fmt.Errorf("failed to marshal expanded config: %w", err)
-	}
-
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
-	}
-
-	return nil
+	return SaveSpec(cfg, path)
 }

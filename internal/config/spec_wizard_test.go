@@ -1,10 +1,7 @@
 package config
 
 import (
-	"os"
 	"testing"
-
-	"gopkg.in/yaml.v3"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -114,6 +111,27 @@ func TestWizardResult_ToSpec(t *testing.T) {
 		assert.Equal(t, "example.com", cfg.Domain)
 		assert.NotNil(t, cfg.ControlPlane)
 		assert.Equal(t, SizeCX52, cfg.ControlPlane.Size)
+		// Domain-dependent defaults
+		assert.Equal(t, "argo", cfg.ArgoSubdomain)
+		assert.Equal(t, "admin@example.com", cfg.CertEmail)
+		assert.Equal(t, "grafana", cfg.GrafanaSubdomain)
+		assert.True(t, cfg.Monitoring)
+	})
+
+	t.Run("no domain skips domain-dependent features", func(t *testing.T) {
+		result := &WizardResult{
+			Name:        "minimal",
+			Region:      RegionFalkenstein,
+			Mode:        ModeDev,
+			WorkerCount: 1,
+			WorkerSize:  SizeCX23,
+		}
+
+		cfg := result.ToSpec()
+
+		assert.Empty(t, cfg.ArgoSubdomain)
+		assert.Empty(t, cfg.GrafanaSubdomain)
+		assert.False(t, cfg.Monitoring)
 	})
 
 	t.Run("converted config reports correct counts", func(t *testing.T) {
@@ -133,7 +151,7 @@ func TestWizardResult_ToSpec(t *testing.T) {
 }
 
 func TestWriteSpecYAML(t *testing.T) {
-	t.Run("writes valid yaml", func(t *testing.T) {
+	t.Run("writes valid spec yaml", func(t *testing.T) {
 		cfg := &Spec{
 			Name:   "test-cluster",
 			Region: RegionFalkenstein,
@@ -149,16 +167,51 @@ func TestWriteSpecYAML(t *testing.T) {
 		err := WriteSpecYAML(cfg, tmpFile)
 		require.NoError(t, err)
 
-		data, err := os.ReadFile(tmpFile)
+		// Should round-trip as Spec (not expanded Config)
+		loaded, err := LoadSpec(tmpFile)
 		require.NoError(t, err)
 
-		var loadedCfg Config
-		err = yaml.Unmarshal(data, &loadedCfg)
+		assert.Equal(t, cfg.Name, loaded.Name)
+		assert.Equal(t, cfg.Region, loaded.Region)
+		assert.Equal(t, cfg.Mode, loaded.Mode)
+		assert.Equal(t, cfg.Workers.Count, loaded.Workers.Count)
+		assert.Equal(t, cfg.Workers.Size, loaded.Workers.Size)
+	})
+
+	t.Run("round-trips through LoadSpec and ExpandSpec", func(t *testing.T) {
+		t.Setenv("CF_API_TOKEN", "test-token")
+
+		cfg := &Spec{
+			Name:   "roundtrip",
+			Region: RegionNuremberg,
+			Mode:   ModeHA,
+			Workers: WorkerSpec{
+				Count: 3,
+				Size:  SizeCX43,
+			},
+			Domain:            "example.com",
+			ArgoSubdomain:     "argo",
+			GrafanaSubdomain:  "grafana",
+			Monitoring:        true,
+		}
+
+		tmpFile := t.TempDir() + "/test.yaml"
+
+		err := WriteSpecYAML(cfg, tmpFile)
 		require.NoError(t, err)
 
-		assert.Equal(t, cfg.Name, loadedCfg.ClusterName)
-		assert.Equal(t, string(cfg.Region), loadedCfg.Location)
-		require.Len(t, loadedCfg.ControlPlane.NodePools, 1)
-		assert.Equal(t, string(cfg.Workers.Size.Normalize()), loadedCfg.Workers[0].ServerType)
+		// Load as Spec
+		loaded, err := LoadSpec(tmpFile)
+		require.NoError(t, err)
+		assert.Equal(t, "example.com", loaded.Domain)
+		assert.Equal(t, "argo", loaded.ArgoSubdomain)
+		assert.True(t, loaded.Monitoring)
+
+		// Expand to full Config
+		expanded, err := ExpandSpec(loaded)
+		require.NoError(t, err)
+		assert.Equal(t, "roundtrip", expanded.ClusterName)
+		assert.Equal(t, "nbg1", expanded.Location)
+		assert.Equal(t, 3, expanded.ControlPlane.NodePools[0].Count)
 	})
 }
