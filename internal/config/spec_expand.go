@@ -287,7 +287,9 @@ func expandKubePrometheusStack(cfg *Spec) KubePrometheusStackConfig {
 
 	promCfg := KubePrometheusStackConfig{
 		Enabled: true,
-		Grafana: KubePrometheusGrafanaConfig{},
+		Grafana: KubePrometheusGrafanaConfig{
+			AdminPassword: cfg.GrafanaPassword,
+		},
 		Prometheus: KubePrometheusPrometheusConfig{
 			Persistence: KubePrometheusPersistenceConfig{
 				Enabled: true,

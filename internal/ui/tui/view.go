@@ -154,9 +154,52 @@ func renderInfrastructure(b *strings.Builder, m Model) {
 	}
 
 	for _, item := range items {
-		icon, style := statusIcon(item.ready)
+		icon, style := infraStatusIcon(item.ready, m.ProvPhase, m.SpinnerFrame)
 		fmt.Fprintf(b, "    %s %-20s\n", style(icon), style(item.name))
 	}
+}
+
+// infraStatusIcon returns a 3-state icon for infrastructure items:
+// - ready: green check
+// - not ready + infra phase active: spinner
+// - not ready + before infra phase: dim pending dot
+// - not ready + past infra phase: red cross (genuinely missing)
+func infraStatusIcon(ready bool, provPhase k8znerv1alpha1.ProvisioningPhase, spinnerFrame int) (string, styleFunc) {
+	if ready {
+		return checkMark, sf(readyStyle)
+	}
+	// Not ready — determine if pending, in-progress, or failed
+	if isPastPhase(provPhase, k8znerv1alpha1.PhaseInfrastructure) {
+		return crossMark, sf(failedStyle)
+	}
+	if provPhase == k8znerv1alpha1.PhaseInfrastructure {
+		return currentSpinner(spinnerFrame), sf(activeStyle)
+	}
+	// Before infrastructure phase or phase not set yet
+	return pending, sf(dimStyle)
+}
+
+// isPastPhase returns true if the current provisioning phase is strictly after the target phase.
+func isPastPhase(current, target k8znerv1alpha1.ProvisioningPhase) bool {
+	order := []k8znerv1alpha1.ProvisioningPhase{
+		k8znerv1alpha1.PhaseInfrastructure,
+		k8znerv1alpha1.PhaseImage,
+		k8znerv1alpha1.PhaseCompute,
+		k8znerv1alpha1.PhaseBootstrap,
+		k8znerv1alpha1.PhaseCNI,
+		k8znerv1alpha1.PhaseAddons,
+		k8znerv1alpha1.PhaseComplete,
+	}
+	currentIdx, targetIdx := -1, -1
+	for i, p := range order {
+		if p == current {
+			currentIdx = i
+		}
+		if p == target {
+			targetIdx = i
+		}
+	}
+	return currentIdx > targetIdx && targetIdx >= 0
 }
 
 func renderNodes(b *strings.Builder, m Model) {
@@ -164,8 +207,7 @@ func renderNodes(b *strings.Builder, m Model) {
 	b.WriteString("\n")
 
 	// Control planes
-	cpReady := m.ControlPlanes.Ready == m.ControlPlanes.Desired && m.ControlPlanes.Desired > 0
-	cpIcon, cpStyle := statusIcon(cpReady)
+	cpIcon, cpStyle := nodeGroupStatusIcon(m.ControlPlanes, m.ProvPhase, k8znerv1alpha1.PhaseCompute, m.SpinnerFrame)
 	fmt.Fprintf(b, "    %s %-20s %d/%d\n",
 		cpStyle(cpIcon), cpStyle("Control Planes"), m.ControlPlanes.Ready, m.ControlPlanes.Desired)
 
@@ -181,8 +223,7 @@ func renderNodes(b *strings.Builder, m Model) {
 	}
 
 	// Workers
-	wReady := m.Workers.Ready == m.Workers.Desired && m.Workers.Desired > 0
-	wIcon, wStyle := statusIcon(wReady)
+	wIcon, wStyle := nodeGroupStatusIcon(m.Workers, m.ProvPhase, k8znerv1alpha1.PhaseCompute, m.SpinnerFrame)
 	fmt.Fprintf(b, "    %s %-20s %d/%d\n",
 		wStyle(wIcon), wStyle("Workers"), m.Workers.Ready, m.Workers.Desired)
 
@@ -195,6 +236,33 @@ func renderNodes(b *strings.Builder, m Model) {
 		fmt.Fprintf(b, "      %s %-18s %-20s %s\n",
 			nodeStyle(nodeIcon), node.Name, nodeStyle(string(node.Phase)), dimStyle.Render(dur))
 	}
+}
+
+// nodeGroupStatusIcon returns a 3-state icon for node group summary (CP or Workers):
+// - all ready: green check
+// - before compute phase: dim pending dot
+// - during/after compute with desired==0: dim pending dot (CRD not yet populated)
+// - during compute: spinner
+// - after compute and not all ready: red cross
+func nodeGroupStatusIcon(group k8znerv1alpha1.NodeGroupStatus, provPhase k8znerv1alpha1.ProvisioningPhase, targetPhase k8znerv1alpha1.ProvisioningPhase, spinnerFrame int) (string, styleFunc) {
+	if group.Ready == group.Desired && group.Desired > 0 {
+		return checkMark, sf(readyStyle)
+	}
+	// If desired is 0 and we haven't passed compute, CRD isn't populated yet
+	if group.Desired == 0 && !isPastPhase(provPhase, targetPhase) {
+		return pending, sf(dimStyle)
+	}
+	if isPastPhase(provPhase, targetPhase) && group.Desired > 0 {
+		// Past compute phase but not all ready
+		if group.Ready < group.Desired {
+			return currentSpinner(spinnerFrame), sf(activeStyle)
+		}
+		return crossMark, sf(failedStyle)
+	}
+	if provPhase == targetPhase {
+		return currentSpinner(spinnerFrame), sf(activeStyle)
+	}
+	return pending, sf(dimStyle)
 }
 
 func renderAddons(b *strings.Builder, m Model) {
@@ -293,7 +361,13 @@ func renderPhaseHistory(b *strings.Builder, m Model) {
 		} else {
 			icon = currentSpinner(m.SpinnerFrame)
 			style = activeStyle.Render
-			dur = formatDuration(time.Since(rec.StartedAt.Time))
+			elapsed := time.Since(rec.StartedAt.Time)
+			if expected, ok := benchmarks.PhaseDuration(string(rec.Phase)); ok {
+				scaled := time.Duration(float64(expected) * m.PerformanceScale)
+				dur = formatDuration(elapsed) + " / ~" + formatDuration(scaled)
+			} else {
+				dur = formatDuration(elapsed)
+			}
 		}
 		if rec.Error != "" {
 			icon = crossMark

@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
+
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 
 	"github.com/imamik/k8zner/internal/config"
 )
@@ -30,6 +33,17 @@ var (
 func Init(ctx context.Context, outputPath string) error {
 	if fileExists(outputPath) {
 		fmt.Printf("Warning: %s already exists and will be overwritten.\n\n", outputPath)
+	}
+
+	// Fetch live server types from Hetzner API for the wizard
+	if token := strings.TrimSpace(os.Getenv("HCLOUD_TOKEN")); token != "" {
+		hc := hcloud.NewClient(hcloud.WithToken(token))
+		if err := config.FetchServerSizeOptions(ctx, hc); err != nil {
+			fmt.Printf("Warning: could not fetch server types from API: %v\n", err)
+			fmt.Println("Using default server type list.")
+		}
+	} else {
+		fmt.Println("Tip: set HCLOUD_TOKEN to see live server types with current pricing.")
 	}
 
 	printWelcome()

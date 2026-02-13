@@ -8,6 +8,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 
@@ -356,9 +357,21 @@ func bootstrapNewClusterTUI(ctx context.Context, cfg *config.Config, wait bool) 
 		return nil
 	}
 
+	// Redirect log output during TUI to prevent bleed-through into alt-screen
+	origLogOutput := log.Writer()
+	log.SetOutput(io.Discard)
 	err := tui.RunApplyTUI(ctx, bootstrapFn, cfg.ClusterName, cfg.Location, kubeconfig, wait)
+	log.SetOutput(origLogOutput)
 	if err != nil {
 		return err
+	}
+
+	// Re-hydrate access-data after TUI completes (addons now installed, secrets available)
+	if len(kubeconfig) > 0 {
+		if rehydrateErr := persistAccessData(ctx, cfg, kubeconfig, true); rehydrateErr != nil {
+			log.Printf("Warning: failed to re-hydrate access data: %v", rehydrateErr)
+		}
+		fmt.Println("Access credentials saved to: access-data.yaml")
 	}
 
 	printApplySuccess(cfg, wait)

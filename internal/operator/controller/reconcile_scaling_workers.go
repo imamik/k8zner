@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	"github.com/imamik/k8zner/internal/util/labels"
 	"github.com/imamik/k8zner/internal/util/naming"
 )
 
@@ -104,7 +105,7 @@ func (r *ClusterReconciler) scaleWorkers(ctx context.Context, cluster *k8znerv1a
 				logger.Error(err, "failed to scale up workers")
 			}
 		}
-		return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+		return ctrl.Result{RequeueAfter: fastRequeueAfter}, nil
 	} else if currentCount > desiredCount {
 		logger.Info("scaling down workers", "current", currentCount, "desired", desiredCount)
 		r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonScalingDown,
@@ -124,6 +125,7 @@ func (r *ClusterReconciler) scaleWorkers(ctx context.Context, cluster *k8znerv1a
 }
 
 // scaleUpWorkers creates new worker nodes to reach the desired count.
+// Servers are created in parallel for speed, then configured sequentially.
 func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, count int) error {
 	logger := log.FromContext(ctx)
 
@@ -133,30 +135,90 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 	}
 	defer cleanup()
 
-	created := 0
-	for i := 0; i < count && created < r.maxConcurrentHeals; i++ {
-		err := r.provisionAndConfigureNode(ctx, cluster, nodeProvisionParams{
-			Name:          naming.Worker(cluster.Name),
-			Role:          "worker",
-			Pool:          "workers",
-			ServerType:    normalizeServerSize(cluster.Spec.Workers.Size),
-			SnapshotID:    prereqs.SnapshotID,
-			SSHKeyName:    prereqs.SSHKeyName,
-			NetworkID:     prereqs.ClusterState.NetworkID,
-			MetricsReason: "scale-up",
-			Configure: func(serverName string, result *serverProvisionResult) error {
-				return r.configureWorkerNode(ctx, cluster, prereqs.TC, result)
-			},
-		})
-		if err != nil {
-			logger.Error(err, "failed to provision worker")
-			continue
-		}
-		created++
+	serverType := normalizeServerSize(cluster.Spec.Workers.Size)
+	serverLabels := labels.NewLabelBuilder(cluster.Name).
+		WithRole("worker").
+		WithPool("workers").
+		WithManagedBy(labels.ManagedByOperator).
+		Build()
+
+	// Phase 1: Create all servers in parallel
+	type serverResult struct {
+		name   string
+		result *serverProvisionResult
+		err    error
+	}
+	resultCh := make(chan serverResult, count)
+
+	for i := 0; i < count; i++ {
+		name := naming.Worker(cluster.Name)
+		go func() {
+			result, err := r.provisionServer(ctx, cluster, serverCreateOpts{
+				Name:       name,
+				SnapshotID: prereqs.SnapshotID,
+				ServerType: serverType,
+				Region:     cluster.Spec.Region,
+				SSHKeyName: prereqs.SSHKeyName,
+				Labels:     serverLabels,
+				NetworkID:  prereqs.ClusterState.NetworkID,
+				Role:       "worker",
+			})
+			resultCh <- serverResult{name: name, result: result, err: err}
+		}()
 	}
 
-	if created < count {
-		return fmt.Errorf("only created %d of %d requested workers", created, count)
+	// Collect results
+	var servers []serverResult
+	for range count {
+		res := <-resultCh
+		if res.err != nil {
+			logger.Error(res.err, "failed to create worker server", "name", res.name)
+			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
+				"Failed to create worker server %s: %v", res.name, res.err)
+		}
+		servers = append(servers, res)
+	}
+
+	// Persist status after all servers created
+	if err := r.persistClusterStatus(ctx, cluster); err != nil {
+		logger.Error(err, "failed to persist status after parallel server creation")
+	}
+
+	// Phase 2: Apply Talos configs sequentially
+	configured := 0
+	for _, srv := range servers {
+		if srv.err != nil {
+			continue
+		}
+
+		if err := r.updateNodePhaseAndPersist(ctx, cluster, "worker", nodeStatusUpdate{
+			Name:      srv.name,
+			ServerID:  srv.result.ServerID,
+			PublicIP:  srv.result.PublicIP,
+			PrivateIP: srv.result.PrivateIP,
+			Phase:     k8znerv1alpha1.NodePhaseWaitingForTalosAPI,
+			Reason:    fmt.Sprintf("Waiting for Talos API on %s:50000", srv.result.TalosIP),
+		}); err != nil {
+			logger.Error(err, "failed to persist node status", "name", srv.name)
+		}
+
+		if err := r.configureWorkerNode(ctx, cluster, prereqs.TC, srv.result); err != nil {
+			logger.Error(err, "failed to configure worker", "name", srv.name)
+			continue
+		}
+
+		if err := r.persistClusterStatus(ctx, cluster); err != nil {
+			logger.Error(err, "failed to persist cluster status", "name", srv.name)
+		}
+
+		r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonScalingUp,
+			"Successfully created worker %s", srv.name)
+		r.recordNodeReplacement(cluster.Name, "worker", "scale-up")
+		configured++
+	}
+
+	if configured < count {
+		return fmt.Errorf("only created %d of %d requested workers", configured, count)
 	}
 
 	return nil

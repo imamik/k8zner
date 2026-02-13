@@ -16,11 +16,21 @@ import (
 )
 
 const defaultS3StorageGB = 100.0
-const hetznerS3PerGBMonthlyEUR = 0.00499
+
+// Hetzner Object Storage pricing:
+// - €4.99/mo baseline includes 1TB storage + 1TB egress
+// - €0.00499/GB/mo for storage beyond 1TB
+const (
+	hetznerS3BaseMonthlyEUR = 4.99
+	hetznerS3PerGBExtraEUR  = 0.00499
+	hetznerS3IncludedGB     = 1000.0
+)
 
 type costLineItem struct {
 	Name         string  `json:"name"`
 	Count        int     `json:"count"`
+	UnitNet      float64 `json:"unit_net"`
+	UnitGross    float64 `json:"unit_gross"`
 	MonthlyNet   float64 `json:"monthly_net"`
 	MonthlyGross float64 `json:"monthly_gross"`
 }
@@ -63,7 +73,7 @@ func Cost(ctx context.Context, configPath string, jsonOutput bool, s3StorageGB f
 		return nil
 	}
 
-	printCostSummary(cfg.ClusterName, summary)
+	fmt.Print(renderCostSummary(cfg.ClusterName, summary))
 	return nil
 }
 
@@ -77,14 +87,7 @@ func printOverallCostHint(ctx context.Context, cfg *config.Config, source string
 		fmt.Printf("\nEstimated monthly cost (%s): unavailable (%v)\n", source, err)
 		return
 	}
-	fmt.Printf("\nEstimated monthly cost (%s): %s %.2f net (planned %s %.2f, delta %.2f)\n",
-		source,
-		summary.Currency,
-		summary.CurrentTotal.MonthlyNet,
-		summary.Currency,
-		summary.PlannedTotal.MonthlyNet,
-		summary.DiffTotal.MonthlyNet,
-	)
+	fmt.Print(renderCostHint(source, summary))
 }
 
 func buildCostSummary(ctx context.Context, cfg *config.Config, s3StorageGB float64) (*costSummary, error) {
@@ -142,10 +145,11 @@ func currentCostItems(ctx context.Context, hc *hcloud.Client, clusterName string
 		}
 		name := fmt.Sprintf("server:%s", srv.ServerType.Name)
 		net, gross := lookupServerPrice(pricing, srv.ServerType.Name, srv.Location.Name)
-		addOrMerge(&items, costLineItem{Name: name, Count: 1, MonthlyNet: net, MonthlyGross: gross})
+		addOrMerge(&items, costLineItem{Name: name, Count: 1, UnitNet: net, UnitGross: gross, MonthlyNet: net, MonthlyGross: gross})
 
 		if srv.BackupWindow != "" && backupRate > 0 {
-			addOrMerge(&items, costLineItem{Name: "server-backups", Count: 1, MonthlyNet: net * backupRate, MonthlyGross: gross * backupRate})
+			bNet, bGross := net*backupRate, gross*backupRate
+			addOrMerge(&items, costLineItem{Name: "server-backups", Count: 1, UnitNet: bNet, UnitGross: bGross, MonthlyNet: bNet, MonthlyGross: bGross})
 		}
 	}
 
@@ -155,15 +159,18 @@ func currentCostItems(ctx context.Context, hc *hcloud.Client, clusterName string
 		}
 		name := fmt.Sprintf("load-balancer:%s", lb.LoadBalancerType.Name)
 		net, gross := lookupLoadBalancerPrice(pricing, lb.LoadBalancerType.Name, lb.Location.Name)
-		addOrMerge(&items, costLineItem{Name: name, Count: 1, MonthlyNet: net, MonthlyGross: gross})
+		addOrMerge(&items, costLineItem{Name: name, Count: 1, UnitNet: net, UnitGross: gross, MonthlyNet: net, MonthlyGross: gross})
 	}
 
 	if s3StorageGB > 0 {
+		s3Cost := s3MonthlyCost(s3StorageGB)
 		addOrMerge(&items, costLineItem{
-			Name:         "object-storage-estimate",
+			Name:         "object-storage",
 			Count:        1,
-			MonthlyNet:   s3StorageGB * hetznerS3PerGBMonthlyEUR,
-			MonthlyGross: s3StorageGB * hetznerS3PerGBMonthlyEUR,
+			UnitNet:      s3Cost,
+			UnitGross:    s3Cost,
+			MonthlyNet:   s3Cost,
+			MonthlyGross: s3Cost,
 		})
 	}
 
@@ -177,31 +184,36 @@ func plannedCostItems(cfg *config.Config, pricing hcloud.Pricing, s3StorageGB fl
 
 	resources := desiredResourcesFromConfig(cfg)
 	for _, r := range resources {
+		n := float64(r.count)
 		switch r.kind {
 		case "server":
 			net, gross := lookupServerPrice(pricing, r.typeName, r.location)
 			if net == 0 && gross == 0 {
 				return nil, fmt.Errorf("missing pricing for server type %s in %s", r.typeName, r.location)
 			}
-			addOrMerge(&items, costLineItem{Name: fmt.Sprintf("server:%s", r.typeName), Count: r.count, MonthlyNet: net * float64(r.count), MonthlyGross: gross * float64(r.count)})
+			addOrMerge(&items, costLineItem{Name: fmt.Sprintf("server:%s", r.typeName), Count: r.count, UnitNet: net, UnitGross: gross, MonthlyNet: net * n, MonthlyGross: gross * n})
 			if r.backup && backupRate > 0 {
-				addOrMerge(&items, costLineItem{Name: "server-backups", Count: r.count, MonthlyNet: net * backupRate * float64(r.count), MonthlyGross: gross * backupRate * float64(r.count)})
+				bNet, bGross := net*backupRate, gross*backupRate
+				addOrMerge(&items, costLineItem{Name: "server-backups", Count: r.count, UnitNet: bNet, UnitGross: bGross, MonthlyNet: bNet * n, MonthlyGross: bGross * n})
 			}
 		case "lb":
 			net, gross := lookupLoadBalancerPrice(pricing, r.typeName, r.location)
 			if net == 0 && gross == 0 {
 				return nil, fmt.Errorf("missing pricing for load balancer type %s in %s", r.typeName, r.location)
 			}
-			addOrMerge(&items, costLineItem{Name: fmt.Sprintf("load-balancer:%s", r.typeName), Count: r.count, MonthlyNet: net * float64(r.count), MonthlyGross: gross * float64(r.count)})
+			addOrMerge(&items, costLineItem{Name: fmt.Sprintf("load-balancer:%s", r.typeName), Count: r.count, UnitNet: net, UnitGross: gross, MonthlyNet: net * n, MonthlyGross: gross * n})
 		}
 	}
 
 	if cfg.Addons.TalosBackup.Enabled && s3StorageGB > 0 {
+		s3Cost := s3MonthlyCost(s3StorageGB)
 		addOrMerge(&items, costLineItem{
-			Name:         "object-storage-estimate",
+			Name:         "object-storage",
 			Count:        1,
-			MonthlyNet:   s3StorageGB * hetznerS3PerGBMonthlyEUR,
-			MonthlyGross: s3StorageGB * hetznerS3PerGBMonthlyEUR,
+			UnitNet:      s3Cost,
+			UnitGross:    s3Cost,
+			MonthlyNet:   s3Cost,
+			MonthlyGross: s3Cost,
 		})
 	}
 
@@ -245,6 +257,10 @@ func desiredResourcesFromConfig(cfg *config.Config) []desiredResource {
 		}
 		resources = append(resources, desiredResource{kind: "lb", typeName: pool.Type, count: cnt, location: loc})
 	}
+
+	// Always include Kube API Load Balancer (created during bootstrap for kubectl/talosctl access)
+	resources = append(resources, desiredResource{kind: "lb", typeName: config.LoadBalancerType, count: 1, location: cfg.Location})
+
 	return resources
 }
 
@@ -303,24 +319,15 @@ func sumCost(name string, items []costLineItem) costLineItem {
 	return total
 }
 
-func printCostSummary(clusterName string, summary *costSummary) {
-	fmt.Println()
-	fmt.Printf("Cluster Cost Analysis: %s\n", clusterName)
-	fmt.Println(strings.Repeat("=", 40))
-	fmt.Println("Current monthly cost (real resources):")
-	for _, item := range summary.Current {
-		fmt.Printf("  - %-24s x%-2d %s %.2f net / %.2f gross\n", item.Name, item.Count, summary.Currency, item.MonthlyNet, item.MonthlyGross)
+// s3MonthlyCost calculates Hetzner Object Storage monthly cost.
+// Baseline is €4.99/mo which includes 1TB storage + 1TB egress.
+// Additional storage beyond 1TB costs €0.00499/GB/mo.
+func s3MonthlyCost(storageGB float64) float64 {
+	extra := storageGB - hetznerS3IncludedGB
+	if extra <= 0 {
+		return hetznerS3BaseMonthlyEUR
 	}
-	fmt.Printf("  Total current: %s %.2f net / %.2f gross\n", summary.Currency, summary.CurrentTotal.MonthlyNet, summary.CurrentTotal.MonthlyGross)
-	fmt.Println()
-	fmt.Println("Planned monthly cost (from YAML):")
-	for _, item := range summary.Planned {
-		fmt.Printf("  - %-24s x%-2d %s %.2f net / %.2f gross\n", item.Name, item.Count, summary.Currency, item.MonthlyNet, item.MonthlyGross)
-	}
-	fmt.Printf("  Total planned: %s %.2f net / %.2f gross\n", summary.Currency, summary.PlannedTotal.MonthlyNet, summary.PlannedTotal.MonthlyGross)
-	fmt.Printf("  Delta (planned-current): %s %.2f net / %.2f gross\n", summary.Currency, summary.DiffTotal.MonthlyNet, summary.DiffTotal.MonthlyGross)
-	fmt.Println()
-	fmt.Println("Note: object storage is an estimate based on configured/default GB.")
+	return hetznerS3BaseMonthlyEUR + extra*hetznerS3PerGBExtraEUR
 }
 
 func listClusterServers(ctx context.Context, hc *hcloud.Client, clusterName string) ([]*hcloud.Server, error) {

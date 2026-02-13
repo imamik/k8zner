@@ -142,6 +142,15 @@ func AddonExpectedDuration(addon string) (time.Duration, bool) {
 	return time.Duration(secs) * time.Second, true
 }
 
+// PhaseDuration returns the benchmark duration for a provisioning phase.
+func PhaseDuration(phase string) (time.Duration, bool) {
+	secs, ok := DefaultTimings[phase]
+	if !ok {
+		return 0, false
+	}
+	return time.Duration(secs) * time.Second, true
+}
+
 // TotalEstimate returns the total estimated provisioning time.
 func TotalEstimate() time.Duration {
 	var total time.Duration

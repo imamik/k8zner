@@ -2,11 +2,103 @@ package config
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/huh"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
+
+// serverSizeOptions are the options shown in the wizard worker size selector.
+// Populated by FetchServerSizeOptions from the Hetzner API.
+// Falls back to a static list only when no HCLOUD_TOKEN is available.
+var serverSizeOptions []huh.Option[ServerSize]
+
+// FetchServerSizeOptions queries the Hetzner API for available server types
+// and populates the wizard options. Filters to x86 architecture, shared vCPU,
+// non-deprecated types. Returns an error only if the API call itself fails;
+// an empty result set silently falls back to defaults.
+func FetchServerSizeOptions(ctx context.Context, client *hcloud.Client) error {
+	types, err := client.ServerType.All(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to fetch server types: %w", err)
+	}
+
+	var opts []huh.Option[ServerSize]
+	for _, st := range types {
+		// x86 architecture only (excludes ARM like cax*)
+		if st.Architecture != hcloud.ArchitectureX86 {
+			continue
+		}
+		// Shared vCPU only (excludes dedicated like ccx*)
+		if st.CPUType != hcloud.CPUTypeShared {
+			continue
+		}
+		// Skip deprecated types
+		if st.IsDeprecated() {
+			continue
+		}
+
+		size := ServerSize(st.Name)
+
+		// Find monthly net price (use first available location)
+		priceStr := ""
+		for _, p := range st.Pricings {
+			if p.Monthly.Net != "" {
+				priceStr = p.Monthly.Net
+				break
+			}
+		}
+
+		label := fmt.Sprintf("%s - %d vCPU, %.0fGB RAM",
+			strings.ToUpper(st.Name), st.Cores, st.Memory)
+		if priceStr != "" {
+			label += fmt.Sprintf(" (~€%s/mo)", priceStr)
+		}
+
+		opts = append(opts, huh.NewOption(label, size))
+	}
+
+	if len(opts) > 0 {
+		// Sort by CPU cores, then memory
+		sort.Slice(opts, func(i, j int) bool {
+			a, b := types[indexByName(types, string(opts[i].Value))], types[indexByName(types, string(opts[j].Value))]
+			if a.Cores != b.Cores {
+				return a.Cores < b.Cores
+			}
+			return a.Memory < b.Memory
+		})
+		serverSizeOptions = opts
+	}
+	return nil
+}
+
+// indexByName finds a server type index by name. Returns 0 if not found.
+func indexByName(types []*hcloud.ServerType, name string) int {
+	for i, st := range types {
+		if st.Name == name {
+			return i
+		}
+	}
+	return 0
+}
+
+// defaultServerSizeOptions returns a static fallback for when no API is available.
+func defaultServerSizeOptions() []huh.Option[ServerSize] {
+	return []huh.Option[ServerSize]{
+		huh.NewOption("CX23 - 2 vCPU, 4GB RAM", SizeCX23),
+		huh.NewOption("CX33 - 4 vCPU, 8GB RAM", SizeCX33),
+		huh.NewOption("CX43 - 8 vCPU, 16GB RAM", SizeCX43),
+		huh.NewOption("CX53 - 16 vCPU, 32GB RAM", SizeCX53),
+		huh.NewOption("CPX22 - 2 vCPU, 4GB RAM", SizeCPX22),
+		huh.NewOption("CPX32 - 4 vCPU, 8GB RAM", SizeCPX32),
+		huh.NewOption("CPX42 - 8 vCPU, 16GB RAM", SizeCPX42),
+		huh.NewOption("CPX52 - 16 vCPU, 32GB RAM", SizeCPX52),
+	}
+}
 
 // WizardResult holds the user's choices from the wizard.
 type WizardResult struct {
@@ -16,6 +108,7 @@ type WizardResult struct {
 	WorkerCount int
 	WorkerSize  ServerSize
 	Domain      string
+	Backup      bool
 }
 
 // RunWizard runs the simplified configuration wizard.
@@ -25,7 +118,7 @@ func RunWizard(ctx context.Context) (*WizardResult, error) {
 		Region:      RegionFalkenstein,
 		Mode:        ModeDev,
 		WorkerCount: 2,
-		WorkerSize:  SizeCX32,
+		WorkerSize:  SizeCX33,
 	}
 
 	// Build the form
@@ -82,12 +175,12 @@ func RunWizard(ctx context.Context) (*WizardResult, error) {
 			huh.NewSelect[ServerSize]().
 				Title("Worker size").
 				Description("Shared vCPU instances (cost-effective)").
-				Options(
-					huh.NewOption("CX22 - 2 vCPU, 4GB RAM (~€4.35/mo)", SizeCX22),
-					huh.NewOption("CX32 - 4 vCPU, 8GB RAM (~€8.15/mo)", SizeCX32),
-					huh.NewOption("CX42 - 8 vCPU, 16GB RAM (~€16.25/mo)", SizeCX42),
-					huh.NewOption("CX52 - 16 vCPU, 32GB RAM (~€32.45/mo)", SizeCX52),
-				).
+				OptionsFunc(func() []huh.Option[ServerSize] {
+					if len(serverSizeOptions) > 0 {
+						return serverSizeOptions
+					}
+					return defaultServerSizeOptions()
+				}, &result.WorkerSize).
 				Value(&result.WorkerSize),
 		),
 
@@ -99,6 +192,14 @@ func RunWizard(ctx context.Context) (*WizardResult, error) {
 				Placeholder("example.com").
 				Value(&result.Domain).
 				Validate(validateDomain),
+		),
+
+		// Backup
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Enable automated backups?").
+				Description("Scheduled etcd snapshots to Hetzner Object Storage (~\u20ac5/mo)").
+				Value(&result.Backup),
 		),
 	)
 
@@ -123,6 +224,7 @@ func (r *WizardResult) ToSpec() *Spec {
 		},
 		ControlPlane: &ControlPlaneSpec{Size: r.WorkerSize},
 		Domain:       r.Domain,
+		Backup:       r.Backup,
 	}
 
 	// When a domain is set, enable all domain-dependent features with defaults
@@ -131,6 +233,7 @@ func (r *WizardResult) ToSpec() *Spec {
 		spec.CertEmail = "admin@" + r.Domain
 		spec.GrafanaSubdomain = "grafana"
 		spec.Monitoring = true
+		spec.GrafanaPassword = generatePassword(16)
 	}
 
 	return spec
@@ -168,6 +271,13 @@ func validateDomain(s string) error {
 		return fmt.Errorf("invalid domain format (expected example.com)")
 	}
 	return nil
+}
+
+// generatePassword generates a URL-safe random password of the given byte length.
+func generatePassword(n int) string {
+	b := make([]byte, n)
+	_, _ = rand.Read(b)
+	return base64.RawURLEncoding.EncodeToString(b)
 }
 
 // WriteSpecYAML writes the spec config to a YAML file.
