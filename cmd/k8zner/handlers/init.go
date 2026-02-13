@@ -21,6 +21,9 @@ var (
 
 	// writeV2Config writes the config to a file.
 	writeV2Config = config.WriteSpecYAML
+
+	// expandSpecToConfig converts v2 spec to internal config.
+	expandSpecToConfig = config.ExpandSpec
 )
 
 // Init runs the v2 configuration wizard and writes the result to a file.
@@ -43,6 +46,10 @@ func Init(ctx context.Context, outputPath string) error {
 	}
 
 	printInitSuccess(outputPath, cfg)
+
+	if expanded, convErr := expandSpecToConfig(cfg); convErr == nil {
+		printOverallCostHint(ctx, expanded, "init")
+	}
 
 	return nil
 }
