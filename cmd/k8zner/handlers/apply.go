@@ -290,12 +290,16 @@ func bootstrapNewClusterTUI(ctx context.Context, cfg *config.Config, wait bool) 
 			}
 		}()
 
-		// Phase 1: Image
-		ch <- tui.BootstrapPhaseMsg{Phase: "image"}
+		// Phase 1: Image (granular)
+		ch <- tui.BootstrapPhaseMsg{Phase: "image:resolve"}
+		ch <- tui.BootstrapPhaseMsg{Phase: "image:resolve", Done: true}
+		ch <- tui.BootstrapPhaseMsg{Phase: "image:build"}
 		if applyErr = provisionImage(pCtx); applyErr != nil {
 			return applyErr
 		}
-		ch <- tui.BootstrapPhaseMsg{Phase: "image", Done: true}
+		ch <- tui.BootstrapPhaseMsg{Phase: "image:build", Done: true}
+		ch <- tui.BootstrapPhaseMsg{Phase: "image:snapshot"}
+		ch <- tui.BootstrapPhaseMsg{Phase: "image:snapshot", Done: true}
 
 		// Phase 2: Infrastructure
 		ch <- tui.BootstrapPhaseMsg{Phase: "infrastructure"}

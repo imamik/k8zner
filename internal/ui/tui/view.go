@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	"github.com/imamik/k8zner/internal/ui/benchmarks"
 )
 
 // styleFunc is a single-string styling function.
@@ -76,7 +77,7 @@ func renderHeader(b *strings.Builder, m Model) {
 	case m.ClusterPhase == k8znerv1alpha1.ClusterPhaseFailed:
 		status += failedStyle.Render("Failed")
 	case m.ProvPhase != "":
-		status += warningStyle.Render(string(m.ProvPhase))
+		status += activeStyle.Render(currentSpinner(m.SpinnerFrame)+" ") + warningStyle.Render(string(m.ProvPhase))
 	default:
 		status += dimStyle.Render("Bootstrapping...")
 	}
@@ -106,6 +107,9 @@ func renderProgressBar(b *strings.Builder, m Model) {
 	if m.EstimatedRemaining > 0 {
 		eta = fmt.Sprintf(" ETA %s", formatDuration(m.EstimatedRemaining))
 	}
+	if m.PerformanceScale != 0 && m.PerformanceScale != 1.0 {
+		eta += fmt.Sprintf("  speed x%.2f", m.PerformanceScale)
+	}
 
 	fmt.Fprintf(b, "  %s %d%%%s\n", bar, pct, eta)
 }
@@ -125,7 +129,7 @@ func renderBootstrapPhases(b *strings.Builder, m Model) {
 			icon = checkMark
 			style = sf(readyStyle)
 		case phase.Active:
-			icon = spinner
+			icon = currentSpinner(m.SpinnerFrame)
 			style = sf(activeStyle)
 		default:
 			icon = pending
@@ -217,18 +221,18 @@ func renderAddons(b *strings.Builder, m Model) {
 	printed := make(map[string]bool)
 	for _, name := range addonOrder {
 		if addon, ok := m.Addons[name]; ok {
-			renderAddonRow(b, name, addon)
+			renderAddonRow(b, m, name, addon)
 			printed[name] = true
 		}
 	}
 	for name, addon := range m.Addons {
 		if !printed[name] {
-			renderAddonRow(b, name, addon)
+			renderAddonRow(b, m, name, addon)
 		}
 	}
 }
 
-func renderAddonRow(b *strings.Builder, name string, addon k8znerv1alpha1.AddonStatus) {
+func renderAddonRow(b *strings.Builder, m Model, name string, addon k8znerv1alpha1.AddonStatus) {
 	var icon string
 	var style styleFunc
 
@@ -236,7 +240,7 @@ func renderAddonRow(b *strings.Builder, name string, addon k8znerv1alpha1.AddonS
 	case k8znerv1alpha1.AddonPhaseInstalled:
 		icon, style = statusIcon(addon.Healthy)
 	case k8znerv1alpha1.AddonPhaseInstalling:
-		icon = spinner
+		icon = currentSpinner(m.SpinnerFrame)
 		style = sf(activeStyle)
 	case k8znerv1alpha1.AddonPhaseFailed:
 		icon = crossMark
@@ -259,7 +263,21 @@ func renderAddonRow(b *strings.Builder, name string, addon k8znerv1alpha1.AddonS
 		extra = sf(warningStyle)(fmt.Sprintf("retry %d", addon.RetryCount))
 	}
 
-	fmt.Fprintf(b, "    %s %-20s %s\n", style(icon), style(name), extra)
+	bar := ""
+	if (addon.Phase == k8znerv1alpha1.AddonPhaseInstalling || addon.Phase == k8znerv1alpha1.AddonPhaseInstalled) && addon.StartedAt != nil {
+		expected := 60 * time.Second
+		if exp, ok := benchmarks.AddonExpectedDuration(name); ok {
+			expected = time.Duration(float64(exp) * m.PerformanceScale)
+		}
+		elapsed := time.Since(addon.StartedAt.Time)
+		progress := float64(elapsed) / float64(expected)
+		if addon.Phase == k8znerv1alpha1.AddonPhaseInstalled || progress > 1 {
+			progress = 1
+		}
+		bar = " " + addonMiniBar(progress)
+	}
+
+	fmt.Fprintf(b, "    %s %-20s %s%s\n", style(icon), style(name), extra, bar)
 }
 
 func renderPhaseHistory(b *strings.Builder, m Model) {
@@ -273,7 +291,7 @@ func renderPhaseHistory(b *strings.Builder, m Model) {
 		if rec.EndedAt != nil {
 			dur = rec.Duration
 		} else {
-			icon = spinner
+			icon = currentSpinner(m.SpinnerFrame)
 			style = activeStyle.Render
 			dur = formatDuration(time.Since(rec.StartedAt.Time))
 		}
@@ -311,7 +329,11 @@ func renderFooter(b *strings.Builder, m Model) {
 	if m.LastReconcile != "" {
 		parts = append(parts, fmt.Sprintf("last reconcile: %s", m.LastReconcile))
 	}
-	b.WriteString(footerStyle.Render(fmt.Sprintf("  %s  |  q: quit", strings.Join(parts, "  |  "))))
+	pulse := ""
+	if !m.Done && m.ClusterPhase != k8znerv1alpha1.ClusterPhaseRunning {
+		pulse = "  |  " + currentSpinner(m.SpinnerFrame) + " reconciling"
+	}
+	b.WriteString(footerStyle.Render(fmt.Sprintf("  %s%s  |  q: quit", strings.Join(parts, "  |  "), pulse)))
 	b.WriteString("\n")
 }
 
@@ -333,8 +355,33 @@ func nodePhaseIcon(phase k8znerv1alpha1.NodePhase) (string, styleFunc) {
 	case k8znerv1alpha1.NodePhaseUnhealthy:
 		return warnMark, sf(warningStyle)
 	default:
-		return spinner, sf(activeStyle)
+		return "◌", sf(activeStyle)
 	}
+}
+
+func currentSpinner(frame int) string {
+	if len(spinnerFrames) == 0 {
+		return spinner
+	}
+	if frame < 0 {
+		frame = -frame
+	}
+	return spinnerFrames[frame%len(spinnerFrames)]
+}
+
+func addonMiniBar(progress float64) string {
+	const width = 10
+	if progress < 0 {
+		progress = 0
+	}
+	if progress > 1 {
+		progress = 1
+	}
+	filled := int(progress * width)
+	if filled > width {
+		filled = width
+	}
+	return progressBarFull.Render(strings.Repeat("█", filled)) + progressBarEmpty.Render(strings.Repeat("░", width-filled))
 }
 
 func calculateProgress(m Model) float64 {
