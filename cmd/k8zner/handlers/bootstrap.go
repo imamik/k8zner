@@ -207,6 +207,7 @@ func printApplySuccess(cfg *config.Config, wait bool) {
 	fmt.Printf("Secrets saved to: %s\n", secretsFile)
 	fmt.Printf("Talos config saved to: %s\n", talosConfigPath)
 	fmt.Printf("Kubeconfig saved to: %s\n", kubeconfigPath)
+	fmt.Printf("Access data saved to: %s\n", accessDataPath)
 
 	if !wait {
 		fmt.Printf("\nThe operator is now provisioning:\n")
