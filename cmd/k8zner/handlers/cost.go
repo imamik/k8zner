@@ -328,7 +328,7 @@ func listClusterServers(ctx context.Context, hc *hcloud.Client, clusterName stri
 	selectors := []string{labels.SelectorForCluster(clusterName), "cluster=" + clusterName}
 	unique := map[int64]*hcloud.Server{}
 	for _, sel := range selectors {
-		servers, err := hc.Server.All(ctx, hcloud.ServerListOpts{ListOpts: hcloud.ListOpts{LabelSelector: sel}})
+		servers, err := hc.Server.AllWithOpts(ctx, hcloud.ServerListOpts{ListOpts: hcloud.ListOpts{LabelSelector: sel}})
 		if err != nil {
 			continue
 		}
@@ -347,7 +347,7 @@ func listClusterLoadBalancers(ctx context.Context, hc *hcloud.Client, clusterNam
 	selectors := []string{labels.SelectorForCluster(clusterName), "cluster=" + clusterName}
 	unique := map[int64]*hcloud.LoadBalancer{}
 	for _, sel := range selectors {
-		lbs, err := hc.LoadBalancer.All(ctx, hcloud.LoadBalancerListOpts{ListOpts: hcloud.ListOpts{LabelSelector: sel}})
+		lbs, err := hc.LoadBalancer.AllWithOpts(ctx, hcloud.LoadBalancerListOpts{ListOpts: hcloud.ListOpts{LabelSelector: sel}})
 		if err != nil {
 			continue
 		}
