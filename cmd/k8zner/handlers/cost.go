@@ -1,0 +1,363 @@
+package handlers
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+
+	"github.com/imamik/k8zner/internal/config"
+	"github.com/imamik/k8zner/internal/util/labels"
+)
+
+const defaultS3StorageGB = 100.0
+const hetznerS3PerGBMonthlyEUR = 0.00499
+
+type costLineItem struct {
+	Name         string  `json:"name"`
+	Count        int     `json:"count"`
+	MonthlyNet   float64 `json:"monthly_net"`
+	MonthlyGross float64 `json:"monthly_gross"`
+}
+
+type costSummary struct {
+	Currency     string         `json:"currency"`
+	Current      []costLineItem `json:"current"`
+	Planned      []costLineItem `json:"planned"`
+	CurrentTotal costLineItem   `json:"current_total"`
+	PlannedTotal costLineItem   `json:"planned_total"`
+	DiffTotal    costLineItem   `json:"diff_total"`
+}
+
+type desiredResource struct {
+	name     string
+	count    int
+	typeName string
+	location string
+	kind     string
+	backup   bool
+}
+
+// Cost shows detailed current vs planned cluster costs.
+func Cost(ctx context.Context, configPath string, jsonOutput bool, s3StorageGB float64) error {
+	cfg, err := loadConfig(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	summary, err := buildCostSummary(ctx, cfg, s3StorageGB)
+	if err != nil {
+		return err
+	}
+
+	if jsonOutput {
+		b, err := json.MarshalIndent(summary, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to encode JSON: %w", err)
+		}
+		fmt.Println(string(b))
+		return nil
+	}
+
+	printCostSummary(cfg.ClusterName, summary)
+	return nil
+}
+
+func printOverallCostHint(ctx context.Context, cfg *config.Config, source string) {
+	token := strings.TrimSpace(os.Getenv("HCLOUD_TOKEN"))
+	if token == "" {
+		return
+	}
+	summary, err := buildCostSummary(ctx, cfg, defaultS3StorageGB)
+	if err != nil {
+		fmt.Printf("\nEstimated monthly cost (%s): unavailable (%v)\n", source, err)
+		return
+	}
+	fmt.Printf("\nEstimated monthly cost (%s): %s %.2f net (planned %s %.2f, delta %.2f)\n",
+		source,
+		summary.Currency,
+		summary.CurrentTotal.MonthlyNet,
+		summary.Currency,
+		summary.PlannedTotal.MonthlyNet,
+		summary.DiffTotal.MonthlyNet,
+	)
+}
+
+func buildCostSummary(ctx context.Context, cfg *config.Config, s3StorageGB float64) (*costSummary, error) {
+	token := strings.TrimSpace(os.Getenv("HCLOUD_TOKEN"))
+	if token == "" {
+		return nil, fmt.Errorf("HCLOUD_TOKEN environment variable is required")
+	}
+
+	hc := hcloud.NewClient(hcloud.WithToken(token))
+	pricing, _, err := hc.Pricing.Get(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch hcloud pricing: %w", err)
+	}
+
+	current, err := currentCostItems(ctx, hc, cfg.ClusterName, pricing, s3StorageGB)
+	if err != nil {
+		return nil, err
+	}
+	planned, err := plannedCostItems(cfg, pricing, s3StorageGB)
+	if err != nil {
+		return nil, err
+	}
+
+	summary := &costSummary{
+		Currency: pricing.Currency,
+		Current:  current,
+		Planned:  planned,
+	}
+	summary.CurrentTotal = sumCost("current_total", current)
+	summary.PlannedTotal = sumCost("planned_total", planned)
+	summary.DiffTotal = costLineItem{
+		Name:         "diff_total",
+		MonthlyNet:   summary.PlannedTotal.MonthlyNet - summary.CurrentTotal.MonthlyNet,
+		MonthlyGross: summary.PlannedTotal.MonthlyGross - summary.CurrentTotal.MonthlyGross,
+	}
+	return summary, nil
+}
+
+func currentCostItems(ctx context.Context, hc *hcloud.Client, clusterName string, pricing hcloud.Pricing, s3StorageGB float64) ([]costLineItem, error) {
+	servers, err := listClusterServers(ctx, hc, clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list servers: %w", err)
+	}
+	lbs, err := listClusterLoadBalancers(ctx, hc, clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list load balancers: %w", err)
+	}
+
+	items := make([]costLineItem, 0)
+	backupRate := parseFloat(pricing.ServerBackup.Percentage) / 100
+
+	for _, srv := range servers {
+		if srv.ServerType == nil || srv.Location == nil {
+			continue
+		}
+		name := fmt.Sprintf("server:%s", srv.ServerType.Name)
+		net, gross := lookupServerPrice(pricing, srv.ServerType.Name, srv.Location.Name)
+		addOrMerge(&items, costLineItem{Name: name, Count: 1, MonthlyNet: net, MonthlyGross: gross})
+
+		if srv.BackupWindow != "" && backupRate > 0 {
+			addOrMerge(&items, costLineItem{Name: "server-backups", Count: 1, MonthlyNet: net * backupRate, MonthlyGross: gross * backupRate})
+		}
+	}
+
+	for _, lb := range lbs {
+		if lb.LoadBalancerType == nil || lb.Location == nil {
+			continue
+		}
+		name := fmt.Sprintf("load-balancer:%s", lb.LoadBalancerType.Name)
+		net, gross := lookupLoadBalancerPrice(pricing, lb.LoadBalancerType.Name, lb.Location.Name)
+		addOrMerge(&items, costLineItem{Name: name, Count: 1, MonthlyNet: net, MonthlyGross: gross})
+	}
+
+	if s3StorageGB > 0 {
+		addOrMerge(&items, costLineItem{
+			Name:         "object-storage-estimate",
+			Count:        1,
+			MonthlyNet:   s3StorageGB * hetznerS3PerGBMonthlyEUR,
+			MonthlyGross: s3StorageGB * hetznerS3PerGBMonthlyEUR,
+		})
+	}
+
+	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
+	return items, nil
+}
+
+func plannedCostItems(cfg *config.Config, pricing hcloud.Pricing, s3StorageGB float64) ([]costLineItem, error) {
+	items := make([]costLineItem, 0)
+	backupRate := parseFloat(pricing.ServerBackup.Percentage) / 100
+
+	resources := desiredResourcesFromConfig(cfg)
+	for _, r := range resources {
+		switch r.kind {
+		case "server":
+			net, gross := lookupServerPrice(pricing, r.typeName, r.location)
+			if net == 0 && gross == 0 {
+				return nil, fmt.Errorf("missing pricing for server type %s in %s", r.typeName, r.location)
+			}
+			addOrMerge(&items, costLineItem{Name: fmt.Sprintf("server:%s", r.typeName), Count: r.count, MonthlyNet: net * float64(r.count), MonthlyGross: gross * float64(r.count)})
+			if r.backup && backupRate > 0 {
+				addOrMerge(&items, costLineItem{Name: "server-backups", Count: r.count, MonthlyNet: net * backupRate * float64(r.count), MonthlyGross: gross * backupRate * float64(r.count)})
+			}
+		case "lb":
+			net, gross := lookupLoadBalancerPrice(pricing, r.typeName, r.location)
+			if net == 0 && gross == 0 {
+				return nil, fmt.Errorf("missing pricing for load balancer type %s in %s", r.typeName, r.location)
+			}
+			addOrMerge(&items, costLineItem{Name: fmt.Sprintf("load-balancer:%s", r.typeName), Count: r.count, MonthlyNet: net * float64(r.count), MonthlyGross: gross * float64(r.count)})
+		}
+	}
+
+	if cfg.Addons.TalosBackup.Enabled && s3StorageGB > 0 {
+		addOrMerge(&items, costLineItem{
+			Name:         "object-storage-estimate",
+			Count:        1,
+			MonthlyNet:   s3StorageGB * hetznerS3PerGBMonthlyEUR,
+			MonthlyGross: s3StorageGB * hetznerS3PerGBMonthlyEUR,
+		})
+	}
+
+	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
+	return items, nil
+}
+
+func desiredResourcesFromConfig(cfg *config.Config) []desiredResource {
+	resources := make([]desiredResource, 0)
+	for _, cp := range cfg.ControlPlane.NodePools {
+		if cp.Count <= 0 {
+			continue
+		}
+		loc := cp.Location
+		if loc == "" {
+			loc = cfg.Location
+		}
+		resources = append(resources, desiredResource{kind: "server", typeName: cp.ServerType, count: cp.Count, location: loc, backup: cp.Backups})
+	}
+	for _, w := range cfg.Workers {
+		if w.Count <= 0 {
+			continue
+		}
+		loc := w.Location
+		if loc == "" {
+			loc = cfg.Location
+		}
+		resources = append(resources, desiredResource{kind: "server", typeName: w.ServerType, count: w.Count, location: loc, backup: w.Backups})
+	}
+	if cfg.Ingress.Enabled {
+		resources = append(resources, desiredResource{kind: "lb", typeName: cfg.Ingress.LoadBalancerType, count: 1, location: cfg.Location})
+	}
+	for _, pool := range cfg.IngressLoadBalancerPools {
+		cnt := pool.Count
+		if cnt <= 0 {
+			cnt = 1
+		}
+		loc := pool.Location
+		if loc == "" {
+			loc = cfg.Location
+		}
+		resources = append(resources, desiredResource{kind: "lb", typeName: pool.Type, count: cnt, location: loc})
+	}
+	return resources
+}
+
+func lookupServerPrice(pricing hcloud.Pricing, serverType, location string) (float64, float64) {
+	for _, st := range pricing.ServerTypes {
+		if st.ServerType == nil || st.ServerType.Name != serverType {
+			continue
+		}
+		for _, p := range st.Pricings {
+			if p.Location != nil && p.Location.Name == location {
+				return parseFloat(p.Monthly.Net), parseFloat(p.Monthly.Gross)
+			}
+		}
+	}
+	return 0, 0
+}
+
+func lookupLoadBalancerPrice(pricing hcloud.Pricing, lbType, location string) (float64, float64) {
+	for _, lb := range pricing.LoadBalancerTypes {
+		if lb.LoadBalancerType == nil || lb.LoadBalancerType.Name != lbType {
+			continue
+		}
+		for _, p := range lb.Pricings {
+			if p.Location != nil && p.Location.Name == location {
+				return parseFloat(p.Monthly.Net), parseFloat(p.Monthly.Gross)
+			}
+		}
+	}
+	return 0, 0
+}
+
+func parseFloat(s string) float64 {
+	v, _ := strconv.ParseFloat(s, 64)
+	return v
+}
+
+func addOrMerge(items *[]costLineItem, next costLineItem) {
+	for i := range *items {
+		if (*items)[i].Name == next.Name {
+			(*items)[i].Count += next.Count
+			(*items)[i].MonthlyNet += next.MonthlyNet
+			(*items)[i].MonthlyGross += next.MonthlyGross
+			return
+		}
+	}
+	*items = append(*items, next)
+}
+
+func sumCost(name string, items []costLineItem) costLineItem {
+	total := costLineItem{Name: name}
+	for _, item := range items {
+		total.Count += item.Count
+		total.MonthlyNet += item.MonthlyNet
+		total.MonthlyGross += item.MonthlyGross
+	}
+	return total
+}
+
+func printCostSummary(clusterName string, summary *costSummary) {
+	fmt.Println()
+	fmt.Printf("Cluster Cost Analysis: %s\n", clusterName)
+	fmt.Println(strings.Repeat("=", 40))
+	fmt.Println("Current monthly cost (real resources):")
+	for _, item := range summary.Current {
+		fmt.Printf("  - %-24s x%-2d %s %.2f net / %.2f gross\n", item.Name, item.Count, summary.Currency, item.MonthlyNet, item.MonthlyGross)
+	}
+	fmt.Printf("  Total current: %s %.2f net / %.2f gross\n", summary.Currency, summary.CurrentTotal.MonthlyNet, summary.CurrentTotal.MonthlyGross)
+	fmt.Println()
+	fmt.Println("Planned monthly cost (from YAML):")
+	for _, item := range summary.Planned {
+		fmt.Printf("  - %-24s x%-2d %s %.2f net / %.2f gross\n", item.Name, item.Count, summary.Currency, item.MonthlyNet, item.MonthlyGross)
+	}
+	fmt.Printf("  Total planned: %s %.2f net / %.2f gross\n", summary.Currency, summary.PlannedTotal.MonthlyNet, summary.PlannedTotal.MonthlyGross)
+	fmt.Printf("  Delta (planned-current): %s %.2f net / %.2f gross\n", summary.Currency, summary.DiffTotal.MonthlyNet, summary.DiffTotal.MonthlyGross)
+	fmt.Println()
+	fmt.Println("Note: object storage is an estimate based on configured/default GB.")
+}
+
+func listClusterServers(ctx context.Context, hc *hcloud.Client, clusterName string) ([]*hcloud.Server, error) {
+	selectors := []string{labels.SelectorForCluster(clusterName), "cluster=" + clusterName}
+	unique := map[int64]*hcloud.Server{}
+	for _, sel := range selectors {
+		servers, err := hc.Server.All(ctx, hcloud.ServerListOpts{ListOpts: hcloud.ListOpts{LabelSelector: sel}})
+		if err != nil {
+			continue
+		}
+		for _, s := range servers {
+			unique[s.ID] = s
+		}
+	}
+	out := make([]*hcloud.Server, 0, len(unique))
+	for _, s := range unique {
+		out = append(out, s)
+	}
+	return out, nil
+}
+
+func listClusterLoadBalancers(ctx context.Context, hc *hcloud.Client, clusterName string) ([]*hcloud.LoadBalancer, error) {
+	selectors := []string{labels.SelectorForCluster(clusterName), "cluster=" + clusterName}
+	unique := map[int64]*hcloud.LoadBalancer{}
+	for _, sel := range selectors {
+		lbs, err := hc.LoadBalancer.All(ctx, hcloud.LoadBalancerListOpts{ListOpts: hcloud.ListOpts{LabelSelector: sel}})
+		if err != nil {
+			continue
+		}
+		for _, lb := range lbs {
+			unique[lb.ID] = lb
+		}
+	}
+	out := make([]*hcloud.LoadBalancer, 0, len(unique))
+	for _, lb := range unique {
+		out = append(out, lb)
+	}
+	return out, nil
+}

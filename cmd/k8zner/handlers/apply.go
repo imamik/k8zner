@@ -245,6 +245,7 @@ func bootstrapNewCluster(ctx context.Context, cfg *config.Config, wait bool) err
 	}
 
 	printApplySuccess(cfg, wait)
+	printOverallCostHint(ctx, cfg, "apply")
 
 	if wait {
 		return waitForOperatorComplete(ctx, cfg.ClusterName, kubeconfig)
@@ -349,6 +350,7 @@ func bootstrapNewClusterTUI(ctx context.Context, cfg *config.Config, wait bool) 
 	}
 
 	printApplySuccess(cfg, wait)
+	printOverallCostHint(ctx, cfg, "apply")
 	return nil
 }
 

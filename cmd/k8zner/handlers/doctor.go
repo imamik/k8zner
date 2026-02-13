@@ -111,7 +111,11 @@ func Doctor(ctx context.Context, configPath string, watch, jsonOutput bool) erro
 		return doctorShowStyled(ctx, k8sClient, cfg)
 	}
 
-	return doctorShow(ctx, k8sClient, cfg.ClusterName, jsonOutput)
+	if err := doctorShow(ctx, k8sClient, cfg.ClusterName, jsonOutput); err != nil {
+		return err
+	}
+	printOverallCostHint(ctx, cfg, "doctor")
+	return nil
 }
 
 // doctorPreCluster shows diagnostic info when no cluster exists.
@@ -169,6 +173,8 @@ func doctorPreCluster(cfg *config.Config, jsonOutput bool) error {
 	}
 	fmt.Printf("    Kubernetes:     %s\n", cfg.Kubernetes.Version)
 	fmt.Printf("    Talos:          %s\n", cfg.Talos.Version)
+
+	printOverallCostHint(context.Background(), cfg, "doctor")
 
 	fmt.Println()
 	if status.Phase == "Not Created" {
