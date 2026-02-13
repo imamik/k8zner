@@ -14,6 +14,18 @@ import (
 	hcloudgo "github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
+const (
+	// Load balancer health check configuration for Kubernetes API
+	kubeAPIHealthCheckInterval = 3 * time.Second
+	kubeAPIHealthCheckTimeout  = 2 * time.Second
+	kubeAPIHealthCheckRetries  = 2
+
+	// Load balancer health check configuration for Talos API
+	talosAPIHealthCheckInterval = 5 * time.Second
+	talosAPIHealthCheckTimeout  = 3 * time.Second
+	talosAPIHealthCheckRetries  = 2
+)
+
 // ProvisionLoadBalancers provisions API and Ingress load balancers.
 func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 	ctx.Logger.Printf("[%s] Reconciling load balancers for %s...", phase, ctx.Config.ClusterName)
@@ -48,9 +60,9 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 			HealthCheck: &hcloudgo.LoadBalancerAddServiceOptsHealthCheck{
 				Protocol: hcloudgo.LoadBalancerServiceProtocolHTTP,
 				Port:     hcloudgo.Ptr(6443),
-				Interval: hcloudgo.Ptr(time.Second * 3), // Terraform default: 3
-				Timeout:  hcloudgo.Ptr(time.Second * 2), // Terraform default: 2
-				Retries:  hcloudgo.Ptr(2),               // Terraform default: 2
+				Interval: hcloudgo.Ptr(kubeAPIHealthCheckInterval),
+				Timeout:  hcloudgo.Ptr(kubeAPIHealthCheckTimeout),
+				Retries:  hcloudgo.Ptr(kubeAPIHealthCheckRetries),
 				HTTP: &hcloudgo.LoadBalancerAddServiceOptsHealthCheckHTTP{
 					Path:        hcloudgo.Ptr("/version"),
 					StatusCodes: []string{"401"},
@@ -73,9 +85,9 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 			HealthCheck: &hcloudgo.LoadBalancerAddServiceOptsHealthCheck{
 				Protocol: hcloudgo.LoadBalancerServiceProtocolTCP,
 				Port:     hcloudgo.Ptr(50000),
-				Interval: hcloudgo.Ptr(time.Second * 5),
-				Timeout:  hcloudgo.Ptr(time.Second * 3),
-				Retries:  hcloudgo.Ptr(2),
+				Interval: hcloudgo.Ptr(talosAPIHealthCheckInterval),
+				Timeout:  hcloudgo.Ptr(talosAPIHealthCheckTimeout),
+				Retries:  hcloudgo.Ptr(talosAPIHealthCheckRetries),
 			},
 		}
 		err = ctx.Infra.ConfigureService(ctx, apiLB, talosAPIService)

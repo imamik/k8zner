@@ -99,31 +99,42 @@ func (g *Generator) UpgradeNode(ctx context.Context, endpoint, imageURL string, 
 }
 
 // UpgradeKubernetes upgrades the Kubernetes control plane.
-// Note: Kubernetes upgrade in Talos happens automatically when nodes are upgraded
-// to a new Talos version with a different Kubernetes version. The Talos machinery
-// client doesn't expose a direct K8s upgrade method - upgrades are managed by
-// upgrading the Talos OS itself with the new Kubernetes version bundled.
+//
+// Note: In Talos Linux, Kubernetes upgrades happen automatically when nodes are upgraded
+// to a new Talos version with a different Kubernetes version. The Talos machinery client
+// doesn't expose a direct K8s-only upgrade method because Kubernetes is tightly coupled
+// with the Talos OS release.
+//
+// To upgrade Kubernetes in a Talos cluster:
+// 1. Upgrade control plane nodes to a Talos version containing the desired K8s version
+// 2. Talos automatically handles the Kubernetes upgrade during the node upgrade
+// 3. Upgrade worker nodes to complete the cluster upgrade
+//
+// This method is a no-op since K8s upgrades are handled by UpgradeNode.
 func (g *Generator) UpgradeKubernetes(_ context.Context, _, _ string) error {
-	// TODO: Implement Kubernetes-only upgrade if needed
-	// For now, K8s upgrades happen via Talos node upgrades
-	// The Talos image includes the K8s version, so upgrading Talos nodes
-	// automatically upgrades K8s when using images with newer K8s versions
-
 	return nil
 }
+
+const (
+	// nodeRebootInitialWait is the initial wait time before checking node readiness after reboot.
+	nodeRebootInitialWait = 30 * time.Second
+
+	// nodeReadyCheckInterval is the interval between node readiness checks.
+	nodeReadyCheckInterval = 10 * time.Second
+)
 
 // WaitForNodeReady waits for a node to become ready after upgrade/reboot.
 func (g *Generator) WaitForNodeReady(ctx context.Context, endpoint string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 
 	// Wait a bit before first attempt (node needs time to start rebooting)
-	time.Sleep(30 * time.Second)
+	time.Sleep(nodeRebootInitialWait)
 
 	for time.Now().Before(deadline) {
 		// Try to connect and get version (simple liveness check)
 		talosClient, err := g.createClient(ctx, endpoint)
 		if err != nil {
-			time.Sleep(10 * time.Second)
+			time.Sleep(nodeReadyCheckInterval)
 			continue
 		}
 
@@ -139,13 +150,18 @@ func (g *Generator) WaitForNodeReady(ctx context.Context, endpoint string, timeo
 			return nil
 		}
 
-		time.Sleep(10 * time.Second)
+		time.Sleep(nodeReadyCheckInterval)
 	}
 
 	return fmt.Errorf("node did not become ready within %v", timeout)
 }
 
 // HealthCheck performs a basic cluster health check.
+// It verifies that the Talos API is responsive and returns version information.
+//
+// Note: This performs a basic connectivity check. For comprehensive health validation
+// including etcd cluster health, Kubernetes node status, and control plane components,
+// use the operator's health check reconciliation which has access to the Kubernetes API.
 func (g *Generator) HealthCheck(ctx context.Context, endpoint string) error {
 	talosClient, err := g.createClient(ctx, endpoint)
 	if err != nil {
@@ -165,11 +181,6 @@ func (g *Generator) HealthCheck(ctx context.Context, endpoint string) error {
 	if len(version.Messages) == 0 {
 		return fmt.Errorf("no response from Talos API")
 	}
-
-	// TODO: Add more comprehensive health checks:
-	// - Check etcd cluster health
-	// - Check node ready status in Kubernetes
-	// - Check control plane components
 
 	return nil
 }

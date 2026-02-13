@@ -8,13 +8,20 @@ import (
 	"github.com/imamik/k8zner/internal/util/rdns"
 )
 
+const (
+	// rdnsMaxRetries is the maximum number of RDNS operation retries.
+	rdnsMaxRetries = 3
+
+	// rdnsBaseDelay is the base delay for exponential backoff (2s, 4s, 8s).
+	rdnsBaseDelay = 2 * time.Second
+)
+
 // retryRDNS executes a function with exponential backoff retry logic.
 // Uses 3 retries with delays of 2s, 4s, 8s (total max ~14 seconds).
 func retryRDNS(ctx *provisioning.Context, operation func() error, resourceType string) error {
-	maxRetries := 3
 	var lastErr error
 
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := 0; attempt < rdnsMaxRetries; attempt++ {
 		err := operation()
 		if err == nil {
 			return nil
@@ -23,15 +30,15 @@ func retryRDNS(ctx *provisioning.Context, operation func() error, resourceType s
 		lastErr = err
 
 		// Don't sleep after the last attempt
-		if attempt < maxRetries-1 {
-			delay := time.Duration(2<<uint(attempt)) * time.Second
+		if attempt < rdnsMaxRetries-1 {
+			delay := rdnsBaseDelay * time.Duration(1<<uint(attempt))
 			ctx.Logger.Printf("[%s] RDNS operation failed for %s (attempt %d/%d), retrying in %v: %v",
-				phase, resourceType, attempt+1, maxRetries, delay, err)
+				phase, resourceType, attempt+1, rdnsMaxRetries, delay, err)
 			time.Sleep(delay)
 		}
 	}
 
-	return fmt.Errorf("failed after %d attempts: %w", maxRetries, lastErr)
+	return fmt.Errorf("failed after %d attempts: %w", rdnsMaxRetries, lastErr)
 }
 
 // applyServerRDNSSimple configures reverse DNS for a server using pre-resolved templates.
