@@ -89,13 +89,17 @@ func Doctor(ctx context.Context, configPath string, watch, jsonOutput bool) erro
 	// Cluster mode: kubeconfig exists
 	kubecfg, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
 	if err != nil {
-		return fmt.Errorf("failed to load kubeconfig: %w", err)
+		// Kubeconfig is corrupt or invalid — fall back to pre-cluster mode
+		return doctorPreCluster(cfg, jsonOutput)
 	}
+	// Set a short timeout so doctor doesn't hang when cluster is unreachable
+	kubecfg.Timeout = 5 * time.Second
 
 	scheme := k8znerv1alpha1.Scheme
 	k8sClient, err := client.New(kubecfg, client.Options{Scheme: scheme})
 	if err != nil {
-		return fmt.Errorf("failed to create kubernetes client: %w", err)
+		// Can't create client — fall back to pre-cluster mode
+		return doctorPreCluster(cfg, jsonOutput)
 	}
 
 	if watch {
@@ -486,7 +490,8 @@ func doctorShowStyled(ctx context.Context, k8sClient client.Client, cfg *config.
 	}
 
 	if err := k8sClient.Get(ctx, key, cluster); err != nil {
-		return fmt.Errorf("failed to get cluster: %w", err)
+		// CRD not found — fall back to pre-cluster mode
+		return doctorPreCluster(cfg, false)
 	}
 
 	lastReconcile := ""

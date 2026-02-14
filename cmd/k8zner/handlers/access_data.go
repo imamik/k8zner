@@ -71,15 +71,11 @@ func buildAccessDataFromConfig(cfg *config.Config) *clusterAccessData {
 	}
 
 	if cfg.Addons.KubePrometheusStack.Enabled {
-		grafana := &serviceAccessInfo{
-			Enabled: true,
-			URL:     buildServiceURL(cfg.Addons.KubePrometheusStack.Grafana.IngressHost),
+		data.Grafana = &serviceAccessInfo{
+			Enabled:  true,
+			URL:      buildServiceURL(cfg.Addons.KubePrometheusStack.Grafana.IngressHost),
+			Username: "admin",
 		}
-		if cfg.Addons.KubePrometheusStack.Grafana.AdminPassword != "" {
-			grafana.Username = "admin"
-			grafana.Password = cfg.Addons.KubePrometheusStack.Grafana.AdminPassword
-		}
-		data.Grafana = grafana
 	}
 
 	return data

@@ -125,7 +125,8 @@ func (r *ClusterReconciler) scaleWorkers(ctx context.Context, cluster *k8znerv1a
 }
 
 // scaleUpWorkers creates new worker nodes to reach the desired count.
-// Servers are created in parallel for speed, then configured sequentially.
+// Both server creation and Talos configuration are done in parallel for workers,
+// since workers don't have etcd constraints (unlike control planes).
 func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, count int) error {
 	logger := log.FromContext(ctx)
 
@@ -184,37 +185,54 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 		logger.Error(err, "failed to persist status after parallel server creation")
 	}
 
-	// Phase 2: Apply Talos configs sequentially
-	configured := 0
+	// Phase 2: Apply Talos configs in parallel (workers don't have etcd constraints)
+	type configResult struct {
+		name string
+		err  error
+	}
+	configCh := make(chan configResult, count)
+	validCount := 0
+
 	for _, srv := range servers {
 		if srv.err != nil {
 			continue
 		}
+		validCount++
 
-		if err := r.updateNodePhaseAndPersist(ctx, cluster, "worker", nodeStatusUpdate{
-			Name:      srv.name,
-			ServerID:  srv.result.ServerID,
-			PublicIP:  srv.result.PublicIP,
-			PrivateIP: srv.result.PrivateIP,
-			Phase:     k8znerv1alpha1.NodePhaseWaitingForTalosAPI,
-			Reason:    fmt.Sprintf("Waiting for Talos API on %s:50000", srv.result.TalosIP),
-		}); err != nil {
-			logger.Error(err, "failed to persist node status", "name", srv.name)
-		}
+		srv := srv
+		go func() {
+			r.updateNodePhase(ctx, cluster, "worker", nodeStatusUpdate{
+				Name:      srv.name,
+				ServerID:  srv.result.ServerID,
+				PublicIP:  srv.result.PublicIP,
+				PrivateIP: srv.result.PrivateIP,
+				Phase:     k8znerv1alpha1.NodePhaseWaitingForTalosAPI,
+				Reason:    fmt.Sprintf("Waiting for Talos API on %s:50000", srv.result.TalosIP),
+			})
 
-		if err := r.configureWorkerNode(ctx, cluster, prereqs.TC, srv.result); err != nil {
-			logger.Error(err, "failed to configure worker", "name", srv.name)
+			err := r.configureWorkerNode(ctx, cluster, prereqs.TC, srv.result)
+			configCh <- configResult{name: srv.name, err: err}
+		}()
+	}
+
+	// Collect configuration results
+	configured := 0
+	for range validCount {
+		res := <-configCh
+		if res.err != nil {
+			logger.Error(res.err, "failed to configure worker", "name", res.name)
 			continue
 		}
 
-		if err := r.persistClusterStatus(ctx, cluster); err != nil {
-			logger.Error(err, "failed to persist cluster status", "name", srv.name)
-		}
-
 		r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonScalingUp,
-			"Successfully created worker %s", srv.name)
+			"Successfully created worker %s", res.name)
 		r.recordNodeReplacement(cluster.Name, "worker", "scale-up")
 		configured++
+	}
+
+	// Persist final status after all workers configured
+	if err := r.persistClusterStatus(ctx, cluster); err != nil {
+		logger.Error(err, "failed to persist cluster status after worker configuration")
 	}
 
 	if configured < count {

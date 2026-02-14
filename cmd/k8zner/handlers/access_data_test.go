@@ -25,8 +25,7 @@ func TestBuildAccessDataFromConfig(t *testing.T) {
 			KubePrometheusStack: config.KubePrometheusStackConfig{
 				Enabled: true,
 				Grafana: config.KubePrometheusGrafanaConfig{
-					IngressHost:   "grafana.example.com",
-					AdminPassword: "grafana-pass",
+					IngressHost: "grafana.example.com",
 				},
 			},
 		},
@@ -43,7 +42,7 @@ func TestBuildAccessDataFromConfig(t *testing.T) {
 	require.NotNil(t, data.Grafana)
 	assert.Equal(t, "https://grafana.example.com", data.Grafana.URL)
 	assert.Equal(t, "admin", data.Grafana.Username)
-	assert.Equal(t, "grafana-pass", data.Grafana.Password)
+	assert.Empty(t, data.Grafana.Password, "password should be empty until hydrated from cluster")
 }
 
 func TestPersistAccessData(t *testing.T) {

@@ -60,10 +60,6 @@ type Spec struct {
 	// Only used when both Monitoring and Domain are set.
 	// Example: with Domain="example.com", Grafana is at grafana.example.com
 	GrafanaSubdomain string `yaml:"grafana_subdomain,omitempty"`
-
-	// GrafanaPassword is the auto-generated Grafana admin password.
-	// Set during init when monitoring is enabled.
-	GrafanaPassword string `yaml:"grafana_password,omitempty"`
 }
 
 // Region is a Hetzner datacenter location.

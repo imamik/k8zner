@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"time"
 
 	"github.com/mattn/go-isatty"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -119,8 +120,11 @@ func Apply(ctx context.Context, configPath string, wait, ci bool) error {
 
 	log.Printf("Applying configuration for cluster: %s", cfg.ClusterName)
 
-	// Check if cluster already exists with operator management
-	if isOperatorManaged, err := checkOperatorManaged(ctx, cfg.ClusterName); err == nil && isOperatorManaged {
+	// Check if cluster already exists with operator management (short timeout to avoid slow startup)
+	checkCtx, checkCancel := context.WithTimeout(ctx, 3*time.Second)
+	isOperatorManaged, _ := checkOperatorManaged(checkCtx, cfg.ClusterName)
+	checkCancel()
+	if isOperatorManaged {
 		log.Printf("Cluster %s is operator-managed, updating CRD spec", cfg.ClusterName)
 		return updateExistingCluster(ctx, cfg)
 	}

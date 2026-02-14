@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -114,6 +115,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case CRDStatusMsg:
+		if msg.NotFound {
+			m.Err = fmt.Errorf("K8znerCluster CRD not found. Run 'k8zner apply' to create the cluster")
+			return m, tea.Quit
+		}
+		if msg.FetchErr != "" {
+			m.Err = fmt.Errorf("failed to fetch cluster status: %s", msg.FetchErr)
+			return m, tea.Quit
+		}
 		m.updateCRDStatus(msg)
 		if m.ClusterPhase == k8znerv1alpha1.ClusterPhaseRunning && m.Mode == "apply" {
 			m.Done = true

@@ -2,10 +2,9 @@ package config
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/huh"
@@ -56,7 +55,11 @@ func FetchServerSizeOptions(ctx context.Context, client *hcloud.Client) error {
 		label := fmt.Sprintf("%s - %d vCPU, %.0fGB RAM",
 			strings.ToUpper(st.Name), st.Cores, st.Memory)
 		if priceStr != "" {
-			label += fmt.Sprintf(" (~€%s/mo)", priceStr)
+			if price, err := strconv.ParseFloat(priceStr, 64); err == nil {
+				label += fmt.Sprintf(" (~€%.2f/mo)", price)
+			} else {
+				label += fmt.Sprintf(" (~€%s/mo)", priceStr)
+			}
 		}
 
 		opts = append(opts, huh.NewOption(label, size))
@@ -233,7 +236,6 @@ func (r *WizardResult) ToSpec() *Spec {
 		spec.CertEmail = "admin@" + r.Domain
 		spec.GrafanaSubdomain = "grafana"
 		spec.Monitoring = true
-		spec.GrafanaPassword = generatePassword(16)
 	}
 
 	return spec
@@ -271,13 +273,6 @@ func validateDomain(s string) error {
 		return fmt.Errorf("invalid domain format (expected example.com)")
 	}
 	return nil
-}
-
-// generatePassword generates a URL-safe random password of the given byte length.
-func generatePassword(n int) string {
-	b := make([]byte, n)
-	_, _ = rand.Read(b)
-	return base64.RawURLEncoding.EncodeToString(b)
 }
 
 // WriteSpecYAML writes the spec config to a YAML file.

@@ -23,6 +23,7 @@ func Root() *cobra.Command {
 	cmd.AddCommand(Destroy())
 	cmd.AddCommand(Doctor())
 	cmd.AddCommand(Cost())
+	cmd.AddCommand(Secrets())
 
 	// Utility commands
 	cmd.AddCommand(Version())
