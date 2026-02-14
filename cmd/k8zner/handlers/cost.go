@@ -205,7 +205,7 @@ func plannedCostItems(cfg *config.Config, pricing hcloud.Pricing, s3StorageGB fl
 		}
 	}
 
-	if cfg.Addons.TalosBackup.Enabled && s3StorageGB > 0 {
+	if s3StorageGB > 0 {
 		s3Cost := s3MonthlyCost(s3StorageGB)
 		addOrMerge(&items, costLineItem{
 			Name:         "object-storage",
@@ -223,6 +223,8 @@ func plannedCostItems(cfg *config.Config, pricing hcloud.Pricing, s3StorageGB fl
 
 func desiredResourcesFromConfig(cfg *config.Config) []desiredResource {
 	resources := make([]desiredResource, 0)
+
+	// Servers: control plane pools
 	for _, cp := range cfg.ControlPlane.NodePools {
 		if cp.Count <= 0 {
 			continue
@@ -233,6 +235,8 @@ func desiredResourcesFromConfig(cfg *config.Config) []desiredResource {
 		}
 		resources = append(resources, desiredResource{kind: "server", typeName: cp.ServerType, count: cp.Count, location: loc, backup: cp.Backups})
 	}
+
+	// Servers: worker pools
 	for _, w := range cfg.Workers {
 		if w.Count <= 0 {
 			continue
@@ -243,9 +247,20 @@ func desiredResourcesFromConfig(cfg *config.Config) []desiredResource {
 		}
 		resources = append(resources, desiredResource{kind: "server", typeName: w.ServerType, count: w.Count, location: loc, backup: w.Backups})
 	}
-	if cfg.Ingress.Enabled {
-		resources = append(resources, desiredResource{kind: "lb", typeName: cfg.Ingress.LoadBalancerType, count: 1, location: cfg.Location})
+
+	// Load Balancers: Kube API (always created by CLI during bootstrap)
+	resources = append(resources, desiredResource{kind: "lb", typeName: config.LoadBalancerType, count: 1, location: cfg.Location})
+
+	// Load Balancers: Ingress (Traefik creates an LB via CCM when enabled)
+	if cfg.Addons.Traefik.Enabled {
+		lbType := config.LoadBalancerType // default lb11
+		if cfg.Ingress.LoadBalancerType != "" {
+			lbType = cfg.Ingress.LoadBalancerType
+		}
+		resources = append(resources, desiredResource{kind: "lb", typeName: lbType, count: 1, location: cfg.Location})
 	}
+
+	// Load Balancers: additional ingress pools (manually configured)
 	for _, pool := range cfg.IngressLoadBalancerPools {
 		cnt := pool.Count
 		if cnt <= 0 {
@@ -257,9 +272,6 @@ func desiredResourcesFromConfig(cfg *config.Config) []desiredResource {
 		}
 		resources = append(resources, desiredResource{kind: "lb", typeName: pool.Type, count: cnt, location: loc})
 	}
-
-	// Always include Kube API Load Balancer (created during bootstrap for kubectl/talosctl access)
-	resources = append(resources, desiredResource{kind: "lb", typeName: config.LoadBalancerType, count: 1, location: cfg.Location})
 
 	return resources
 }
