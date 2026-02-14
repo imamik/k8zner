@@ -321,8 +321,10 @@ func (p *Provisioner) createStateMarker(ctx *provisioning.Context) error {
 
 	markerName := fmt.Sprintf("%s-state", ctx.Config.ClusterName)
 	labels := map[string]string{
-		"cluster": ctx.Config.ClusterName,
-		"state":   "initialized",
+		"k8zner.io/cluster":    ctx.Config.ClusterName,
+		"k8zner.io/managed-by": "k8zner",
+		"cluster":              ctx.Config.ClusterName,
+		"state":                "initialized",
 	}
 
 	dummyCert, dummyKey, err := generateDummyCert()

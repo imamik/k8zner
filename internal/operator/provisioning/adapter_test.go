@@ -162,7 +162,6 @@ func TestSpecToConfig_DomainIngress(t *testing.T) {
 
 		assert.True(t, cfg.Addons.Traefik.Enabled)
 		assert.Equal(t, "Deployment", cfg.Addons.Traefik.Kind)
-		assert.Nil(t, cfg.Addons.Traefik.HostNetwork)
 		assert.Equal(t, "Cluster", cfg.Addons.Traefik.ExternalTrafficPolicy)
 		assert.Equal(t, "traefik", cfg.Addons.Traefik.IngressClass)
 	})

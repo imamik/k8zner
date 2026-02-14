@@ -27,7 +27,6 @@ func TestDefaultTraefik(t *testing.T) {
 		assert.Equal(t, "Deployment", tr.Kind)
 		assert.Equal(t, "Cluster", tr.ExternalTrafficPolicy)
 		assert.Equal(t, "traefik", tr.IngressClass)
-		assert.Nil(t, tr.HostNetwork)
 	})
 
 	t.Run("disabled", func(t *testing.T) {

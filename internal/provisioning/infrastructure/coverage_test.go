@@ -236,44 +236,6 @@ func TestProvisionNetwork_AutoscalerSubnetError(t *testing.T) {
 	assert.Contains(t, err.Error(), "autoscaler subnet")
 }
 
-// --- Load Balancer: ingress RDNS warning path ---
-
-func TestProvisionLoadBalancers_IngressRDNSError_IsWarningOnly(t *testing.T) {
-	t.Parallel()
-	mockInfra := &hcloud_internal.MockClient{}
-	cfg := newTestConfig(t)
-	cfg.Ingress = config.IngressConfig{
-		Enabled:  true,
-		RDNSIPv4: "{{ hostname }}.ingress.example.com",
-	}
-
-	_, ipNet, _ := net.ParseCIDR("10.0.0.0/16")
-	ctx := createTestContext(t, mockInfra, cfg)
-	ctx.State.Network = &hcloud.Network{ID: 1, IPRange: ipNet}
-
-	setupLBMock(mockInfra)
-	mockInfra.GetLoadBalancerFunc = func(_ context.Context, name string) (*hcloud.LoadBalancer, error) {
-		return &hcloud.LoadBalancer{
-			ID:   1,
-			Name: name,
-			PublicNet: hcloud.LoadBalancerPublicNet{
-				IPv4: hcloud.LoadBalancerPublicNetIPv4{IP: net.ParseIP("5.6.7.8")},
-			},
-		}, nil
-	}
-
-	// RDNS fails, but should only log warning
-	mockInfra.SetLoadBalancerRDNSFunc = func(_ context.Context, _ int64, _, _ string) error {
-		return fmt.Errorf("RDNS API error")
-	}
-
-	p := NewProvisioner()
-	err := p.ProvisionLoadBalancers(ctx)
-
-	// Should succeed despite RDNS errors (they are warnings)
-	require.NoError(t, err)
-}
-
 // --- Network: GetSubnetForRole error paths ---
 
 func TestProvisionNetwork_CPSubnetCalcError(t *testing.T) {
@@ -439,38 +401,6 @@ func TestProvisionLoadBalancers_APILBSubnetError(t *testing.T) {
 	}
 	mockInfra.ConfigureServiceFunc = func(_ context.Context, _ *hcloud.LoadBalancer, _ hcloud.LoadBalancerAddServiceOpts) error {
 		return nil
-	}
-
-	p := NewProvisioner()
-	err := p.ProvisionLoadBalancers(ctx)
-
-	require.Error(t, err)
-}
-
-func TestProvisionLoadBalancers_IngressLBSubnetError(t *testing.T) {
-	t.Parallel()
-	mockInfra := &hcloud_internal.MockClient{}
-	cfg := newTestConfig(t)
-	cfg.Ingress = config.IngressConfig{Enabled: true}
-
-	_, ipNet, _ := net.ParseCIDR("10.0.0.0/16")
-	ctx := createTestContext(t, mockInfra, cfg)
-	ctx.State.Network = &hcloud.Network{ID: 1, IPRange: ipNet}
-
-	setupLBMock(mockInfra)
-	mockInfra.GetLoadBalancerFunc = func(_ context.Context, name string) (*hcloud.LoadBalancer, error) {
-		return &hcloud.LoadBalancer{ID: 1, Name: name}, nil
-	}
-
-	lbCallCount := 0
-	origEnsureLB := mockInfra.EnsureLoadBalancerFunc
-	mockInfra.EnsureLoadBalancerFunc = func(ctxArg context.Context, name, loc, lbType string, algo hcloud.LoadBalancerAlgorithmType, labels map[string]string) (*hcloud.LoadBalancer, error) {
-		lbCallCount++
-		if lbCallCount == 2 {
-			// When ingress LB is created, corrupt CIDR so GetSubnetForRole fails
-			cfg.Network.NodeIPv4CIDR = "invalid-cidr"
-		}
-		return origEnsureLB(ctxArg, name, loc, lbType, algo, labels)
 	}
 
 	p := NewProvisioner()

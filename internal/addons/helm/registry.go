@@ -24,11 +24,6 @@ var DefaultChartSpecs = map[string]ChartSpec{
 		Name:       "cert-manager",
 		Version:    "v1.19.2",
 	},
-	"ingress-nginx": {
-		Repository: "https://kubernetes.github.io/ingress-nginx",
-		Name:       "ingress-nginx",
-		Version:    "4.11.3",
-	},
 	"traefik": {
 		Repository: "https://traefik.github.io/charts",
 		Name:       "traefik",
@@ -38,16 +33,6 @@ var DefaultChartSpecs = map[string]ChartSpec{
 		Repository: "https://kubernetes-sigs.github.io/metrics-server",
 		Name:       "metrics-server",
 		Version:    "3.12.2",
-	},
-	"cluster-autoscaler": {
-		Repository: "https://kubernetes.github.io/autoscaler",
-		Name:       "cluster-autoscaler",
-		Version:    "9.50.1",
-	},
-	"longhorn": {
-		Repository: "https://charts.longhorn.io",
-		Name:       "longhorn",
-		Version:    "1.10.1",
 	},
 	"argo-cd": {
 		Repository: "https://argoproj.github.io/argo-helm",
