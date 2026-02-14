@@ -1,19 +1,19 @@
 # Test Coverage Plan
 
-Current state: **100 test files, 142 `_test.go` files, ~6,000 lines of untested critical code**.
+Current state (updated): critical gaps called out in early versions of this document have been substantially reduced.
 
-This plan targets the biggest coverage gaps, organized by priority and risk.
+This document now serves as a **living hardening backlog** focused on the remaining high-risk areas and ongoing depth improvements.
 
 ---
 
 ## Phase 1: Operator Spec Converter (HIGH — config round-trip safety)
 
 **Package:** `internal/operator/provisioning/`
-**Gap:** `spec_converter.go` (371 lines, 0 tests) — CRD spec to internal Config conversion.
+**Status:** `spec_converter.go` now has dedicated unit coverage (`spec_converter_test.go`). Remaining work is depth/edge-case expansion, not baseline coverage.
 
-This is the single most impactful gap. Mismatches between `SpecToConfig()` and `ExpandSpec()` have caused two production regressions already (Traefik defaults, Cilium kube-proxy replacement).
+This was previously the single most impactful gap. Baseline coverage is now in place; focus should shift to regression-proofing edge cases and fuzz/property checks.
 
-### Tests to write: `spec_converter_test.go`
+### Coverage expansion targets (`spec_converter_test.go`)
 
 | Test | What it verifies |
 |------|-----------------|
@@ -42,11 +42,11 @@ This is the single most impactful gap. Mismatches between `SpecToConfig()` and `
 ## Phase 2: HCloud Generic Operations (HIGH — foundation for all resource tests)
 
 **Package:** `internal/platform/hcloud/`
-**Gap:** `operations.go` (234 lines, 0 tests) — `DeleteOperation[T]` and `EnsureOperation[T,C,U]`.
+**Status:** `operations.go` now has dedicated tests (`operations_test.go`) for generic delete/ensure behavior. Focus here is now resilience scenarios and richer failure-mode assertions.
 
-Every resource operation delegates to these generics. Testing them unlocks confidence in all resource functions.
+Every resource operation delegates to these generics; with baseline tests in place, this area is now about strengthening confidence with additional concurrency/retry edge cases.
 
-### Tests to write: `operations_test.go`
+### Coverage expansion targets (`operations_test.go`)
 
 | Test | What it verifies |
 |------|-----------------|

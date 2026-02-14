@@ -89,13 +89,17 @@ func Doctor(ctx context.Context, configPath string, watch, jsonOutput bool) erro
 	// Cluster mode: kubeconfig exists
 	kubecfg, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
 	if err != nil {
-		return fmt.Errorf("failed to load kubeconfig: %w", err)
+		// Kubeconfig is corrupt or invalid — fall back to pre-cluster mode
+		return doctorPreCluster(cfg, jsonOutput)
 	}
+	// Set a short timeout so doctor doesn't hang when cluster is unreachable
+	kubecfg.Timeout = 5 * time.Second
 
 	scheme := k8znerv1alpha1.Scheme
 	k8sClient, err := client.New(kubecfg, client.Options{Scheme: scheme})
 	if err != nil {
-		return fmt.Errorf("failed to create kubernetes client: %w", err)
+		// Can't create client — fall back to pre-cluster mode
+		return doctorPreCluster(cfg, jsonOutput)
 	}
 
 	if watch {
@@ -111,7 +115,11 @@ func Doctor(ctx context.Context, configPath string, watch, jsonOutput bool) erro
 		return doctorShowStyled(ctx, k8sClient, cfg)
 	}
 
-	return doctorShow(ctx, k8sClient, cfg.ClusterName, jsonOutput)
+	if err := doctorShow(ctx, k8sClient, cfg.ClusterName, jsonOutput); err != nil {
+		return err
+	}
+	printOverallCostHint(ctx, cfg, "doctor")
+	return nil
 }
 
 // doctorPreCluster shows diagnostic info when no cluster exists.
@@ -169,6 +177,8 @@ func doctorPreCluster(cfg *config.Config, jsonOutput bool) error {
 	}
 	fmt.Printf("    Kubernetes:     %s\n", cfg.Kubernetes.Version)
 	fmt.Printf("    Talos:          %s\n", cfg.Talos.Version)
+
+	printOverallCostHint(context.Background(), cfg, "doctor")
 
 	fmt.Println()
 	if status.Phase == "Not Created" {
@@ -480,7 +490,8 @@ func doctorShowStyled(ctx context.Context, k8sClient client.Client, cfg *config.
 	}
 
 	if err := k8sClient.Get(ctx, key, cluster); err != nil {
-		return fmt.Errorf("failed to get cluster: %w", err)
+		// CRD not found — fall back to pre-cluster mode
+		return doctorPreCluster(cfg, false)
 	}
 
 	lastReconcile := ""

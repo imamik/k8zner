@@ -51,7 +51,7 @@ func TestCalculateProgress_BootstrapPhases(t *testing.T) {
 	m.BootstrapPhases[1].Done = true
 
 	p := calculateProgress(m)
-	expected := 2.0 / 6.0 * 0.4
+	expected := 2.0 / 8.0 * 0.4
 	if p < expected-0.01 || p > expected+0.01 {
 		t.Errorf("expected ~%v, got %v", expected, p)
 	}
@@ -61,13 +61,13 @@ func TestModelUpdateBootstrapPhase(t *testing.T) {
 	m := NewApplyModel("test", "fsn1")
 
 	// Start image phase
-	m.updateBootstrapPhase(BootstrapPhaseMsg{Phase: "image"})
+	m.updateBootstrapPhase(BootstrapPhaseMsg{Phase: "image:resolve"})
 	if !m.BootstrapPhases[0].Active {
 		t.Error("expected image phase to be active")
 	}
 
 	// Complete image phase
-	m.updateBootstrapPhase(BootstrapPhaseMsg{Phase: "image", Done: true})
+	m.updateBootstrapPhase(BootstrapPhaseMsg{Phase: "image:resolve", Done: true})
 	if !m.BootstrapPhases[0].Done {
 		t.Error("expected image phase to be done")
 	}
@@ -76,15 +76,15 @@ func TestModelUpdateBootstrapPhase(t *testing.T) {
 	}
 
 	// Start infrastructure
-	m.updateBootstrapPhase(BootstrapPhaseMsg{Phase: "infrastructure"})
+	m.updateBootstrapPhase(BootstrapPhaseMsg{Phase: "image:build"})
 	if !m.BootstrapPhases[1].Active {
-		t.Error("expected infrastructure to be active")
+		t.Error("expected image build to be active")
 	}
 }
 
 func TestModelUpdateBootstrapPhase_AllDone(t *testing.T) {
 	m := NewApplyModel("test", "fsn1")
-	phases := []string{"image", "infrastructure", "compute", "bootstrap", "operator", "crd"}
+	phases := []string{"image:resolve", "image:build", "image:snapshot", "infrastructure", "compute", "bootstrap", "operator", "crd"}
 	for _, p := range phases {
 		m.updateBootstrapPhase(BootstrapPhaseMsg{Phase: p, Done: true})
 	}

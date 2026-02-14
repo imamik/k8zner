@@ -15,6 +15,14 @@ import (
 	"github.com/imamik/k8zner/internal/util/naming"
 )
 
+const (
+	// k8sNodeReadyInitialWait is the initial wait before checking if a node has registered.
+	k8sNodeReadyInitialWait = 10 * time.Second
+
+	// k8sNodeReadyCheckInterval is the interval between node readiness checks.
+	k8sNodeReadyCheckInterval = 5 * time.Second
+)
+
 // findHealthyControlPlaneIP finds the IP of a healthy control plane for API operations.
 func (r *ClusterReconciler) findHealthyControlPlaneIP(cluster *k8znerv1alpha1.K8znerCluster) string {
 	for _, node := range cluster.Status.ControlPlanes.Nodes {
@@ -170,12 +178,12 @@ func (r *ClusterReconciler) waitForServerIP(ctx context.Context, serverName stri
 func (r *ClusterReconciler) waitForK8sNodeReady(ctx context.Context, nodeName string, timeout time.Duration) error {
 	logger := log.FromContext(ctx)
 
-	time.Sleep(10 * time.Second)
+	time.Sleep(k8sNodeReadyInitialWait)
 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(k8sNodeReadyCheckInterval)
 	defer ticker.Stop()
 
 	for {

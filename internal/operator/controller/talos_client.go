@@ -14,6 +14,11 @@ import (
 	"github.com/siderolabs/talos/pkg/machinery/client/config"
 )
 
+const (
+	// talosRebootInitialWait is the initial delay before checking if a node has started rebooting.
+	talosRebootInitialWait = 5 * time.Second
+)
+
 // realTalosClient implements TalosClient using the actual Talos API.
 type realTalosClient struct {
 	// talosConfig is the client configuration for authenticated connections
@@ -148,7 +153,7 @@ func (c *realTalosClient) RemoveEtcdMember(ctx context.Context, nodeIP string, m
 // WaitForNodeReady waits for a node to become ready after configuration.
 func (c *realTalosClient) WaitForNodeReady(ctx context.Context, nodeIP string, timeoutSec int) error {
 	// Initial wait for reboot to begin
-	time.Sleep(5 * time.Second)
+	time.Sleep(talosRebootInitialWait)
 
 	// Wait for Talos API to come back up
 	if err := waitForTalosAPI(ctx, nodeIP, time.Duration(timeoutSec)*time.Second); err != nil {

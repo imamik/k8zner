@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	"github.com/imamik/k8zner/internal/ui/benchmarks"
 )
 
 // styleFunc is a single-string styling function.
@@ -76,7 +77,7 @@ func renderHeader(b *strings.Builder, m Model) {
 	case m.ClusterPhase == k8znerv1alpha1.ClusterPhaseFailed:
 		status += failedStyle.Render("Failed")
 	case m.ProvPhase != "":
-		status += warningStyle.Render(string(m.ProvPhase))
+		status += activeStyle.Render(currentSpinner(m.SpinnerFrame)+" ") + warningStyle.Render(string(m.ProvPhase))
 	default:
 		status += dimStyle.Render("Bootstrapping...")
 	}
@@ -106,6 +107,9 @@ func renderProgressBar(b *strings.Builder, m Model) {
 	if m.EstimatedRemaining > 0 {
 		eta = fmt.Sprintf(" ETA %s", formatDuration(m.EstimatedRemaining))
 	}
+	if m.PerformanceScale != 0 && m.PerformanceScale != 1.0 {
+		eta += fmt.Sprintf("  speed x%.2f", m.PerformanceScale)
+	}
 
 	fmt.Fprintf(b, "  %s %d%%%s\n", bar, pct, eta)
 }
@@ -125,7 +129,7 @@ func renderBootstrapPhases(b *strings.Builder, m Model) {
 			icon = checkMark
 			style = sf(readyStyle)
 		case phase.Active:
-			icon = spinner
+			icon = currentSpinner(m.SpinnerFrame)
 			style = sf(activeStyle)
 		default:
 			icon = pending
@@ -150,9 +154,52 @@ func renderInfrastructure(b *strings.Builder, m Model) {
 	}
 
 	for _, item := range items {
-		icon, style := statusIcon(item.ready)
+		icon, style := infraStatusIcon(item.ready, m.ProvPhase, m.SpinnerFrame)
 		fmt.Fprintf(b, "    %s %-20s\n", style(icon), style(item.name))
 	}
+}
+
+// infraStatusIcon returns a 3-state icon for infrastructure items:
+// - ready: green check
+// - not ready + infra phase active: spinner
+// - not ready + before infra phase: dim pending dot
+// - not ready + past infra phase: red cross (genuinely missing)
+func infraStatusIcon(ready bool, provPhase k8znerv1alpha1.ProvisioningPhase, spinnerFrame int) (string, styleFunc) {
+	if ready {
+		return checkMark, sf(readyStyle)
+	}
+	// Not ready — determine if pending, in-progress, or failed
+	if isPastPhase(provPhase, k8znerv1alpha1.PhaseInfrastructure) {
+		return crossMark, sf(failedStyle)
+	}
+	if provPhase == k8znerv1alpha1.PhaseInfrastructure {
+		return currentSpinner(spinnerFrame), sf(activeStyle)
+	}
+	// Before infrastructure phase or phase not set yet
+	return pending, sf(dimStyle)
+}
+
+// isPastPhase returns true if the current provisioning phase is strictly after the target phase.
+func isPastPhase(current, target k8znerv1alpha1.ProvisioningPhase) bool {
+	order := []k8znerv1alpha1.ProvisioningPhase{
+		k8znerv1alpha1.PhaseInfrastructure,
+		k8znerv1alpha1.PhaseImage,
+		k8znerv1alpha1.PhaseCompute,
+		k8znerv1alpha1.PhaseBootstrap,
+		k8znerv1alpha1.PhaseCNI,
+		k8znerv1alpha1.PhaseAddons,
+		k8znerv1alpha1.PhaseComplete,
+	}
+	currentIdx, targetIdx := -1, -1
+	for i, p := range order {
+		if p == current {
+			currentIdx = i
+		}
+		if p == target {
+			targetIdx = i
+		}
+	}
+	return currentIdx > targetIdx && targetIdx >= 0
 }
 
 func renderNodes(b *strings.Builder, m Model) {
@@ -160,8 +207,7 @@ func renderNodes(b *strings.Builder, m Model) {
 	b.WriteString("\n")
 
 	// Control planes
-	cpReady := m.ControlPlanes.Ready == m.ControlPlanes.Desired && m.ControlPlanes.Desired > 0
-	cpIcon, cpStyle := statusIcon(cpReady)
+	cpIcon, cpStyle := nodeGroupStatusIcon(m.ControlPlanes, m.ProvPhase, k8znerv1alpha1.PhaseCompute, m.SpinnerFrame)
 	fmt.Fprintf(b, "    %s %-20s %d/%d\n",
 		cpStyle(cpIcon), cpStyle("Control Planes"), m.ControlPlanes.Ready, m.ControlPlanes.Desired)
 
@@ -177,8 +223,7 @@ func renderNodes(b *strings.Builder, m Model) {
 	}
 
 	// Workers
-	wReady := m.Workers.Ready == m.Workers.Desired && m.Workers.Desired > 0
-	wIcon, wStyle := statusIcon(wReady)
+	wIcon, wStyle := nodeGroupStatusIcon(m.Workers, m.ProvPhase, k8znerv1alpha1.PhaseCompute, m.SpinnerFrame)
 	fmt.Fprintf(b, "    %s %-20s %d/%d\n",
 		wStyle(wIcon), wStyle("Workers"), m.Workers.Ready, m.Workers.Desired)
 
@@ -191,6 +236,33 @@ func renderNodes(b *strings.Builder, m Model) {
 		fmt.Fprintf(b, "      %s %-18s %-20s %s\n",
 			nodeStyle(nodeIcon), node.Name, nodeStyle(string(node.Phase)), dimStyle.Render(dur))
 	}
+}
+
+// nodeGroupStatusIcon returns a 3-state icon for node group summary (CP or Workers):
+// - all ready: green check
+// - before compute phase: dim pending dot
+// - during/after compute with desired==0: dim pending dot (CRD not yet populated)
+// - during compute: spinner
+// - after compute and not all ready: red cross
+func nodeGroupStatusIcon(group k8znerv1alpha1.NodeGroupStatus, provPhase k8znerv1alpha1.ProvisioningPhase, targetPhase k8znerv1alpha1.ProvisioningPhase, spinnerFrame int) (string, styleFunc) {
+	if group.Ready == group.Desired && group.Desired > 0 {
+		return checkMark, sf(readyStyle)
+	}
+	// If desired is 0 and we haven't passed compute, CRD isn't populated yet
+	if group.Desired == 0 && !isPastPhase(provPhase, targetPhase) {
+		return pending, sf(dimStyle)
+	}
+	if isPastPhase(provPhase, targetPhase) && group.Desired > 0 {
+		// Past compute phase but not all ready
+		if group.Ready < group.Desired {
+			return currentSpinner(spinnerFrame), sf(activeStyle)
+		}
+		return crossMark, sf(failedStyle)
+	}
+	if provPhase == targetPhase {
+		return currentSpinner(spinnerFrame), sf(activeStyle)
+	}
+	return pending, sf(dimStyle)
 }
 
 func renderAddons(b *strings.Builder, m Model) {
@@ -217,18 +289,18 @@ func renderAddons(b *strings.Builder, m Model) {
 	printed := make(map[string]bool)
 	for _, name := range addonOrder {
 		if addon, ok := m.Addons[name]; ok {
-			renderAddonRow(b, name, addon)
+			renderAddonRow(b, m, name, addon)
 			printed[name] = true
 		}
 	}
 	for name, addon := range m.Addons {
 		if !printed[name] {
-			renderAddonRow(b, name, addon)
+			renderAddonRow(b, m, name, addon)
 		}
 	}
 }
 
-func renderAddonRow(b *strings.Builder, name string, addon k8znerv1alpha1.AddonStatus) {
+func renderAddonRow(b *strings.Builder, m Model, name string, addon k8znerv1alpha1.AddonStatus) {
 	var icon string
 	var style styleFunc
 
@@ -236,7 +308,7 @@ func renderAddonRow(b *strings.Builder, name string, addon k8znerv1alpha1.AddonS
 	case k8znerv1alpha1.AddonPhaseInstalled:
 		icon, style = statusIcon(addon.Healthy)
 	case k8znerv1alpha1.AddonPhaseInstalling:
-		icon = spinner
+		icon = currentSpinner(m.SpinnerFrame)
 		style = sf(activeStyle)
 	case k8znerv1alpha1.AddonPhaseFailed:
 		icon = crossMark
@@ -259,7 +331,21 @@ func renderAddonRow(b *strings.Builder, name string, addon k8znerv1alpha1.AddonS
 		extra = sf(warningStyle)(fmt.Sprintf("retry %d", addon.RetryCount))
 	}
 
-	fmt.Fprintf(b, "    %s %-20s %s\n", style(icon), style(name), extra)
+	bar := ""
+	if (addon.Phase == k8znerv1alpha1.AddonPhaseInstalling || addon.Phase == k8znerv1alpha1.AddonPhaseInstalled) && addon.StartedAt != nil {
+		expected := 60 * time.Second
+		if exp, ok := benchmarks.AddonExpectedDuration(name); ok {
+			expected = time.Duration(float64(exp) * m.PerformanceScale)
+		}
+		elapsed := time.Since(addon.StartedAt.Time)
+		progress := float64(elapsed) / float64(expected)
+		if addon.Phase == k8znerv1alpha1.AddonPhaseInstalled || progress > 1 {
+			progress = 1
+		}
+		bar = " " + addonMiniBar(progress)
+	}
+
+	fmt.Fprintf(b, "    %s %-20s %s%s\n", style(icon), style(name), extra, bar)
 }
 
 func renderPhaseHistory(b *strings.Builder, m Model) {
@@ -273,9 +359,15 @@ func renderPhaseHistory(b *strings.Builder, m Model) {
 		if rec.EndedAt != nil {
 			dur = rec.Duration
 		} else {
-			icon = spinner
+			icon = currentSpinner(m.SpinnerFrame)
 			style = activeStyle.Render
-			dur = formatDuration(time.Since(rec.StartedAt.Time))
+			elapsed := time.Since(rec.StartedAt.Time)
+			if expected, ok := benchmarks.PhaseDuration(string(rec.Phase)); ok {
+				scaled := time.Duration(float64(expected) * m.PerformanceScale)
+				dur = formatDuration(elapsed) + " / ~" + formatDuration(scaled)
+			} else {
+				dur = formatDuration(elapsed)
+			}
 		}
 		if rec.Error != "" {
 			icon = crossMark
@@ -311,7 +403,11 @@ func renderFooter(b *strings.Builder, m Model) {
 	if m.LastReconcile != "" {
 		parts = append(parts, fmt.Sprintf("last reconcile: %s", m.LastReconcile))
 	}
-	b.WriteString(footerStyle.Render(fmt.Sprintf("  %s  |  q: quit", strings.Join(parts, "  |  "))))
+	pulse := ""
+	if !m.Done && m.ClusterPhase != k8znerv1alpha1.ClusterPhaseRunning {
+		pulse = "  |  " + currentSpinner(m.SpinnerFrame) + " reconciling"
+	}
+	b.WriteString(footerStyle.Render(fmt.Sprintf("  %s%s  |  q: quit", strings.Join(parts, "  |  "), pulse)))
 	b.WriteString("\n")
 }
 
@@ -333,8 +429,33 @@ func nodePhaseIcon(phase k8znerv1alpha1.NodePhase) (string, styleFunc) {
 	case k8znerv1alpha1.NodePhaseUnhealthy:
 		return warnMark, sf(warningStyle)
 	default:
-		return spinner, sf(activeStyle)
+		return "◌", sf(activeStyle)
 	}
+}
+
+func currentSpinner(frame int) string {
+	if len(spinnerFrames) == 0 {
+		return spinner
+	}
+	if frame < 0 {
+		frame = -frame
+	}
+	return spinnerFrames[frame%len(spinnerFrames)]
+}
+
+func addonMiniBar(progress float64) string {
+	const width = 10
+	if progress < 0 {
+		progress = 0
+	}
+	if progress > 1 {
+		progress = 1
+	}
+	filled := int(progress * width)
+	if filled > width {
+		filled = width
+	}
+	return progressBarFull.Render(strings.Repeat("█", filled)) + progressBarEmpty.Render(strings.Repeat("░", width-filled))
 }
 
 func calculateProgress(m Model) float64 {

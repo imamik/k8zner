@@ -573,8 +573,8 @@ func TestEnsureWorkersReady(t *testing.T) {
 		result, waiting := r.ensureWorkersReady(context.Background(), cluster)
 		assert.True(t, waiting)
 		assert.NotZero(t, result.RequeueAfter)
-		// maxConcurrentHeals=1 limits creation to 1 per reconcile loop
-		assert.Equal(t, 1, len(mockHCloud.CreateServerCalls))
+		// Scale-up creates all needed servers in parallel (no maxConcurrentHeals limit)
+		assert.Equal(t, 2, len(mockHCloud.CreateServerCalls))
 	})
 
 	t.Run("does not scale when worker count matches desired", func(t *testing.T) {

@@ -33,8 +33,9 @@ func TestEstimateRemaining_MidwayPhase(t *testing.T) {
 
 	remaining := EstimateRemaining("CNI", 60*time.Second, history)
 
-	// Should be: max(0, 120-60) + 300 = 360s
-	expected := 360 * time.Second
+	// Historical phases took much longer than defaults, so ETA scales up (capped at 3x):
+	// (120*3 - 60) + (300*3) = 1200s
+	expected := 1200 * time.Second
 	if remaining != expected {
 		t.Errorf("expected %v, got %v", expected, remaining)
 	}
@@ -44,10 +45,35 @@ func TestEstimateRemaining_ElapsedExceedsExpected(t *testing.T) {
 	// At Infrastructure phase, but already spent 60s (over the 30s estimate)
 	remaining := EstimateRemaining("Infrastructure", 60*time.Second, nil)
 
-	// Should be: max(0, 30-60)=0 + 120 + 60 + 180 + 120 + 300 = 780s
-	expected := 780 * time.Second
+	// Overrun scales future predictions: 60s/30s = 2x
+	// Should be: max(0, 60-60)=0 + (120 + 60 + 180 + 120 + 300) * 2 = 1560s
+	expected := 1560 * time.Second
 	if remaining != expected {
 		t.Errorf("expected %v, got %v", expected, remaining)
+	}
+}
+
+func TestPerformanceScale(t *testing.T) {
+	now := metav1.Now()
+	past := metav1.NewTime(now.Add(-45 * time.Second))
+	history := []k8znerv1alpha1.PhaseRecord{
+		{Phase: "Infrastructure", StartedAt: past, EndedAt: &now},
+	}
+
+	scale := PerformanceScale("Image", 0, history)
+	if scale < 1.49 || scale > 1.51 {
+		t.Fatalf("expected ~1.5 scale, got %f", scale)
+	}
+}
+
+func TestAddonExpectedDuration(t *testing.T) {
+	d, ok := AddonExpectedDuration("traefik")
+	if !ok || d != 30*time.Second {
+		t.Fatalf("expected traefik default 30s, got %v (ok=%v)", d, ok)
+	}
+	_, ok = AddonExpectedDuration("unknown")
+	if ok {
+		t.Fatal("expected unknown addon duration to be absent")
 	}
 }
 

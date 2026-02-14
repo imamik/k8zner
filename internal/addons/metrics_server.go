@@ -55,6 +55,13 @@ func buildMetricsServerValues(cfg *config.Config) helm.Values {
 		},
 	}
 
+	// Wire metrics-server into Prometheus when monitoring stack is enabled.
+	if cfg.Addons.KubePrometheusStack.Enabled {
+		values["serviceMonitor"] = helm.Values{
+			"enabled": true,
+		}
+	}
+
 	if scheduleOnControlPlane {
 		values["nodeSelector"] = helm.ControlPlaneNodeSelector()
 		values["tolerations"] = []helm.Values{

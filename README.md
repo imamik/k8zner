@@ -6,19 +6,21 @@
 [![Release](https://img.shields.io/github/v/release/imamik/k8zner)](https://github.com/imamik/k8zner/releases/latest)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-**k8zner** (k8s + Hetzner) — Production-ready Kubernetes on [Hetzner Cloud](https://www.hetzner.com/cloud), the cost-effective way.
+**k8zner** (k8s + Hetzner) — Operator-driven Kubernetes on [Hetzner Cloud](https://www.hetzner.com/cloud), designed for practical reliability and fast onboarding.
 
 ### Why k8zner?
 
-Running Kubernetes shouldn't require a dedicated platform team. k8zner enables engineers to deploy **production-ready, highly available clusters** on Hetzner Cloud — one of the most cost-effective cloud providers — without the complexity.
+Running Kubernetes shouldn't require a dedicated platform team. k8zner enables engineers to deploy **high-availability clusters with strong defaults** on Hetzner Cloud — one of the most cost-effective cloud providers — without heavy platform overhead.
 
-- **From zero to production cluster** in minutes, not days
-- **Day-one operations solved**: networking, storage, TLS, DNS, GitOps — all pre-configured
+- **From zero to HA-capable cluster** in minutes, not days
+- **Day-one operations covered**: networking, storage, TLS, DNS, GitOps — all pre-configured
 - **Bridge to application deployment**: built-in ArgoCD, ingress, and cert-manager get your apps running fast
 - **Single binary**: No Terraform, kubectl, or talosctl required — just download and run
-- **Opinionated defaults**: Tested version matrix, x86-64 architecture, EU regions — fewer choices, more confidence
+- **Opinionated defaults**: tested version matrix, x86-64 architecture, EU regions — fewer choices, more confidence
 
 Built on [Talos Linux](https://www.talos.dev/), the secure and immutable Kubernetes OS.
+
+> **Maturity statement:** k8zner is actively hardened with broad automated testing and operator-based reconciliation. It is suitable for serious non-trivial workloads, but we avoid claiming universal “battle-proof production” coverage until we publish longer-horizon reliability benchmarks and failure-injection evidence.
 
 ## Quick Start
 

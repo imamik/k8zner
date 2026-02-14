@@ -8,8 +8,10 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"time"
 
 	"github.com/mattn/go-isatty"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -118,8 +120,11 @@ func Apply(ctx context.Context, configPath string, wait, ci bool) error {
 
 	log.Printf("Applying configuration for cluster: %s", cfg.ClusterName)
 
-	// Check if cluster already exists with operator management
-	if isOperatorManaged, err := checkOperatorManaged(ctx, cfg.ClusterName); err == nil && isOperatorManaged {
+	// Check if cluster already exists with operator management (short timeout to avoid slow startup)
+	checkCtx, checkCancel := context.WithTimeout(ctx, 3*time.Second)
+	isOperatorManaged, _ := checkOperatorManaged(checkCtx, cfg.ClusterName)
+	checkCancel()
+	if isOperatorManaged {
 		log.Printf("Cluster %s is operator-managed, updating CRD spec", cfg.ClusterName)
 		return updateExistingCluster(ctx, cfg)
 	}
@@ -231,7 +236,15 @@ func bootstrapNewCluster(ctx context.Context, cfg *config.Config, wait bool) err
 		return applyErr
 	}
 
+	if applyErr = waitForLBHealth(ctx, infraClient, cfg.ClusterName); applyErr != nil {
+		return applyErr
+	}
+
 	if applyErr = installOperator(ctx, cfg, kubeconfig, pCtx.State.Network.ID); applyErr != nil {
+		return applyErr
+	}
+
+	if applyErr = persistAccessData(ctx, cfg, kubeconfig, wait); applyErr != nil {
 		return applyErr
 	}
 
@@ -245,6 +258,7 @@ func bootstrapNewCluster(ctx context.Context, cfg *config.Config, wait bool) err
 	}
 
 	printApplySuccess(cfg, wait)
+	printOverallCostHint(ctx, cfg, "apply")
 
 	if wait {
 		return waitForOperatorComplete(ctx, cfg.ClusterName, kubeconfig)
@@ -286,12 +300,16 @@ func bootstrapNewClusterTUI(ctx context.Context, cfg *config.Config, wait bool) 
 			}
 		}()
 
-		// Phase 1: Image
-		ch <- tui.BootstrapPhaseMsg{Phase: "image"}
+		// Phase 1: Image (granular)
+		ch <- tui.BootstrapPhaseMsg{Phase: "image:resolve"}
+		ch <- tui.BootstrapPhaseMsg{Phase: "image:resolve", Done: true}
+		ch <- tui.BootstrapPhaseMsg{Phase: "image:build"}
 		if applyErr = provisionImage(pCtx); applyErr != nil {
 			return applyErr
 		}
-		ch <- tui.BootstrapPhaseMsg{Phase: "image", Done: true}
+		ch <- tui.BootstrapPhaseMsg{Phase: "image:build", Done: true}
+		ch <- tui.BootstrapPhaseMsg{Phase: "image:snapshot"}
+		ch <- tui.BootstrapPhaseMsg{Phase: "image:snapshot", Done: true}
 
 		// Phase 2: Infrastructure
 		ch <- tui.BootstrapPhaseMsg{Phase: "infrastructure"}
@@ -324,12 +342,20 @@ func bootstrapNewClusterTUI(ctx context.Context, cfg *config.Config, wait bool) 
 			return applyErr
 		}
 
+		if applyErr = waitForLBHealth(ctx, infraClient, cfg.ClusterName); applyErr != nil {
+			return applyErr
+		}
+
 		// Phase 5: Operator
 		ch <- tui.BootstrapPhaseMsg{Phase: "operator"}
 		if applyErr = installOperator(ctx, cfg, kubeconfig, pCtx.State.Network.ID); applyErr != nil {
 			return applyErr
 		}
 		ch <- tui.BootstrapPhaseMsg{Phase: "operator", Done: true}
+
+		if applyErr = persistAccessData(ctx, cfg, kubeconfig, wait); applyErr != nil {
+			return applyErr
+		}
 
 		// Phase 6: CRD
 		ch <- tui.BootstrapPhaseMsg{Phase: "crd"}
@@ -343,12 +369,25 @@ func bootstrapNewClusterTUI(ctx context.Context, cfg *config.Config, wait bool) 
 		return nil
 	}
 
+	// Redirect log output during TUI to prevent bleed-through into alt-screen
+	origLogOutput := log.Writer()
+	log.SetOutput(io.Discard)
 	err := tui.RunApplyTUI(ctx, bootstrapFn, cfg.ClusterName, cfg.Location, kubeconfig, wait)
+	log.SetOutput(origLogOutput)
 	if err != nil {
 		return err
 	}
 
+	// Re-hydrate access-data after TUI completes (addons now installed, secrets available)
+	if len(kubeconfig) > 0 {
+		if rehydrateErr := persistAccessData(ctx, cfg, kubeconfig, true); rehydrateErr != nil {
+			log.Printf("Warning: failed to re-hydrate access data: %v", rehydrateErr)
+		}
+		fmt.Println("Access credentials saved to: access-data.yaml")
+	}
+
 	printApplySuccess(cfg, wait)
+	printOverallCostHint(ctx, cfg, "apply")
 	return nil
 }
 

@@ -32,7 +32,8 @@ func TestPrintWelcome(t *testing.T) {
 	})
 
 	assert.Contains(t, output, "k8zner - Kubernetes on Hetzner Cloud")
-	assert.Contains(t, output, "5 simple questions")
+	assert.Contains(t, output, "6 simple questions")
+	assert.Contains(t, output, "best practices")
 }
 
 func TestPrintInitSuccess(t *testing.T) {

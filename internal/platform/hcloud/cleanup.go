@@ -10,6 +10,14 @@ import (
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
+const (
+	// cleanupRetryInterval is the interval between retry attempts during resource deletion.
+	cleanupRetryInterval = 5 * time.Second
+
+	// cleanupPollInterval is the interval for polling resource deletion status.
+	cleanupPollInterval = 2 * time.Second
+)
+
 // CleanupError represents accumulated errors from cleanup operations.
 type CleanupError struct {
 	Errors []error
@@ -241,7 +249,7 @@ func (c *RealClient) deleteServersByLabel(ctx context.Context, labelSelector str
 				log.Printf("[Cleanup] All servers deleted successfully")
 				break
 			}
-			time.Sleep(5 * time.Second)
+			time.Sleep(cleanupRetryInterval)
 		}
 	}
 
@@ -349,7 +357,7 @@ func (c *RealClient) deleteFirewallsByLabel(ctx context.Context, labelSelector s
 				}
 			}
 			// Small delay to let HCloud process the removal
-			time.Sleep(2 * time.Second)
+			time.Sleep(cleanupPollInterval)
 		}
 
 		// Now delete the firewall with retry logic
@@ -370,7 +378,7 @@ func (c *RealClient) deleteFirewallsByLabel(ctx context.Context, labelSelector s
 			if hcloud.IsError(err, hcloud.ErrorCodeResourceInUse) {
 				if i < 29 {
 					log.Printf("[Cleanup] Firewall %s still in use, waiting...", fw.Name)
-					time.Sleep(5 * time.Second)
+					time.Sleep(cleanupRetryInterval)
 					continue
 				}
 			}
@@ -474,7 +482,7 @@ func (c *RealClient) deleteVolumesByLabel(ctx context.Context, labelSelector str
 			if hcloud.IsError(err, hcloud.ErrorCodeLocked) || hcloud.IsError(err, hcloud.ErrorCodeConflict) {
 				if i < 29 {
 					log.Printf("[Cleanup] Volume %s still locked/attached, waiting...", vol.Name)
-					time.Sleep(5 * time.Second)
+					time.Sleep(cleanupRetryInterval)
 					continue
 				}
 			}

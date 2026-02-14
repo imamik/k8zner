@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -21,8 +22,10 @@ func RunDoctorTUI(ctx context.Context, k8sClient client.Client, clusterName stri
 		ticker := time.NewTicker(3 * time.Second)
 		defer ticker.Stop()
 
-		// Fetch immediately
-		msg, _ := fetchDoctorStatus(ctx, k8sClient, clusterName)
+		// Fetch immediately with a short timeout to avoid hanging
+		fetchCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		msg, _ := fetchDoctorStatus(fetchCtx, k8sClient, clusterName)
+		cancel()
 		p.Send(msg)
 
 		for {
@@ -57,7 +60,10 @@ func fetchDoctorStatus(ctx context.Context, k8sClient client.Client, clusterName
 	}
 
 	if err := k8sClient.Get(ctx, key, cluster); err != nil {
-		return CRDStatusMsg{}, false
+		if apierrors.IsNotFound(err) {
+			return CRDStatusMsg{NotFound: true}, false
+		}
+		return CRDStatusMsg{FetchErr: err.Error()}, false
 	}
 
 	lastReconcile := ""

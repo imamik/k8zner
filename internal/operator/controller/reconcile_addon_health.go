@@ -152,8 +152,11 @@ func checkMonitoring(ctx context.Context, r *ClusterReconciler) (bool, string) {
 		}
 	}
 
-	if promReady && grafanaReady {
-		return true, "prometheus and grafana ready"
+	// Check Metrics APIService (served by metrics-server) to verify full metrics pipeline.
+	metricsAPIReady := r.checkMetricsAPI(ctx)
+
+	if promReady && grafanaReady && metricsAPIReady {
+		return true, "metrics-server, prometheus, and grafana ready"
 	}
-	return false, fmt.Sprintf("prometheus=%v, grafana=%v", promReady, grafanaReady)
+	return false, fmt.Sprintf("metricsAPI=%v, prometheus=%v, grafana=%v", metricsAPIReady, promReady, grafanaReady)
 }

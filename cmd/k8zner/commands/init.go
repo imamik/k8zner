@@ -22,16 +22,16 @@ func Init() *cobra.Command {
 		Short: "Create a cluster configuration interactively",
 		Long: `Create a cluster configuration file with a simple wizard.
 
-This command asks just 5 questions:
+This command asks just 6 questions:
 
   1. Cluster name     (DNS-safe identifier)
   2. Region           (fsn1, nbg1, or hel1)
   3. Mode             (dev or ha)
   4. Worker count     (1-5 workers)
-  5. Worker size      (cpx11-51 shared, cx23-53 dedicated)
+  5. Worker size      (smallest to largest dedicated vCPU)
   6. Domain           (optional, for DNS + TLS)
 
-Everything else is automatically configured with best practices:
+The output is a full, explicit configuration (advanced-mode style):
 
   - Talos Linux for immutable, secure nodes
   - IPv6-only nodes (saves cost, improves security)
