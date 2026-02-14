@@ -262,10 +262,8 @@ func countHealthyTargets(lb *hcloud.LoadBalancer, port int) int {
 					count++
 				}
 			}
-		} else {
-			if isHealthyOnPort(target.HealthStatus, port) {
-				count++
-			}
+		} else if isHealthyOnPort(target.HealthStatus, port) {
+			count++
 		}
 	}
 	return count

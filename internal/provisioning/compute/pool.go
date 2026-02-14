@@ -61,11 +61,12 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 		// Format: {cluster}-cp-{5char} or {cluster}-w-{5char}
 		var srvName string
 		idx := j - 1
-		if idx < len(existingNames) {
+		switch {
+		case idx < len(existingNames):
 			srvName = existingNames[idx]
-		} else if spec.Role == "control-plane" {
+		case spec.Role == "control-plane":
 			srvName = naming.ControlPlane(ctx.Config.ClusterName)
-		} else {
+		default:
 			srvName = naming.Worker(ctx.Config.ClusterName)
 		}
 
