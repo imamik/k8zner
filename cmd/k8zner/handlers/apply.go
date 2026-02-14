@@ -236,6 +236,10 @@ func bootstrapNewCluster(ctx context.Context, cfg *config.Config, wait bool) err
 		return applyErr
 	}
 
+	if applyErr = waitForLBHealth(ctx, infraClient, cfg.ClusterName); applyErr != nil {
+		return applyErr
+	}
+
 	if applyErr = installOperator(ctx, cfg, kubeconfig, pCtx.State.Network.ID); applyErr != nil {
 		return applyErr
 	}
@@ -335,6 +339,10 @@ func bootstrapNewClusterTUI(ctx context.Context, cfg *config.Config, wait bool) 
 			return applyErr
 		}
 		if applyErr = writeKubeconfig(kubeconfig); applyErr != nil {
+			return applyErr
+		}
+
+		if applyErr = waitForLBHealth(ctx, infraClient, cfg.ClusterName); applyErr != nil {
 			return applyErr
 		}
 

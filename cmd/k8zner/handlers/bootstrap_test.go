@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"os"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	hcloudgo "github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -255,5 +258,204 @@ func TestIsTransientError(t *testing.T) {
 		assert.False(t, isTransientError("resource not found"))
 		assert.False(t, isTransientError("invalid configuration"))
 		assert.False(t, isTransientError(""))
+	})
+}
+
+// --- waitForLBHealth tests ---
+
+// makeLB creates a LoadBalancer with a label_selector target containing the given sub-targets.
+func makeLB(subTargets []hcloudgo.LoadBalancerTarget) *hcloudgo.LoadBalancer {
+	return &hcloudgo.LoadBalancer{
+		ID: 1,
+		Targets: []hcloudgo.LoadBalancerTarget{
+			{
+				Type:    hcloudgo.LoadBalancerTargetTypeLabelSelector,
+				Targets: subTargets,
+			},
+		},
+	}
+}
+
+func TestWaitForLBHealth(t *testing.T) {
+	t.Parallel()
+
+	t.Run("healthy immediately", func(t *testing.T) {
+		t.Parallel()
+		mockClient := &hcloud.MockClient{
+			GetLoadBalancerFunc: func(_ context.Context, _ string) (*hcloudgo.LoadBalancer, error) {
+				return makeLB([]hcloudgo.LoadBalancerTarget{
+					{
+						HealthStatus: []hcloudgo.LoadBalancerTargetHealthStatus{
+							{ListenPort: 6443, Status: hcloudgo.LoadBalancerTargetHealthStatusStatusHealthy},
+						},
+					},
+				}), nil
+			},
+		}
+
+		err := waitForLBHealth(context.Background(), mockClient, "test-cluster")
+		require.NoError(t, err)
+	})
+
+	t.Run("healthy after retries", func(t *testing.T) {
+		t.Parallel()
+		var calls atomic.Int32
+		mockClient := &hcloud.MockClient{
+			GetLoadBalancerFunc: func(_ context.Context, _ string) (*hcloudgo.LoadBalancer, error) {
+				n := calls.Add(1)
+				if n < 3 {
+					// Return unhealthy/unknown targets for first 2 calls
+					return makeLB([]hcloudgo.LoadBalancerTarget{
+						{
+							HealthStatus: []hcloudgo.LoadBalancerTargetHealthStatus{
+								{ListenPort: 6443, Status: hcloudgo.LoadBalancerTargetHealthStatusStatusUnknown},
+							},
+						},
+					}), nil
+				}
+				// 3rd call: healthy
+				return makeLB([]hcloudgo.LoadBalancerTarget{
+					{
+						HealthStatus: []hcloudgo.LoadBalancerTargetHealthStatus{
+							{ListenPort: 6443, Status: hcloudgo.LoadBalancerTargetHealthStatusStatusHealthy},
+						},
+					},
+				}), nil
+			},
+		}
+
+		err := waitForLBHealth(context.Background(), mockClient, "test-cluster")
+		require.NoError(t, err)
+		assert.GreaterOrEqual(t, int(calls.Load()), 3)
+	})
+
+	t.Run("no sub-targets keeps polling", func(t *testing.T) {
+		t.Parallel()
+		var calls atomic.Int32
+		mockClient := &hcloud.MockClient{
+			GetLoadBalancerFunc: func(_ context.Context, _ string) (*hcloudgo.LoadBalancer, error) {
+				n := calls.Add(1)
+				if n < 3 {
+					// Label selector with no sub-targets yet (servers not matched)
+					return makeLB(nil), nil
+				}
+				// 3rd call: server appeared and is healthy
+				return makeLB([]hcloudgo.LoadBalancerTarget{
+					{
+						HealthStatus: []hcloudgo.LoadBalancerTargetHealthStatus{
+							{ListenPort: 6443, Status: hcloudgo.LoadBalancerTargetHealthStatusStatusHealthy},
+						},
+					},
+				}), nil
+			},
+		}
+
+		err := waitForLBHealth(context.Background(), mockClient, "test-cluster")
+		require.NoError(t, err)
+		assert.GreaterOrEqual(t, int(calls.Load()), 3)
+	})
+
+	t.Run("timeout", func(t *testing.T) {
+		t.Parallel()
+		// Use a context with a short deadline to avoid waiting the full 5 minutes
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		mockClient := &hcloud.MockClient{
+			GetLoadBalancerFunc: func(_ context.Context, _ string) (*hcloudgo.LoadBalancer, error) {
+				return makeLB([]hcloudgo.LoadBalancerTarget{
+					{
+						HealthStatus: []hcloudgo.LoadBalancerTargetHealthStatus{
+							{ListenPort: 6443, Status: hcloudgo.LoadBalancerTargetHealthStatusStatusUnhealthy},
+						},
+					},
+				}), nil
+			},
+		}
+
+		err := waitForLBHealth(ctx, mockClient, "test-cluster")
+		require.Error(t, err)
+		// Context cancellation should be returned
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+	})
+
+	t.Run("context cancelled", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // cancel immediately
+
+		mockClient := &hcloud.MockClient{
+			GetLoadBalancerFunc: func(_ context.Context, _ string) (*hcloudgo.LoadBalancer, error) {
+				return makeLB(nil), nil
+			},
+		}
+
+		err := waitForLBHealth(ctx, mockClient, "test-cluster")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, context.Canceled)
+	})
+}
+
+// --- countHealthyTargets tests ---
+
+func TestCountHealthyTargets(t *testing.T) {
+	t.Parallel()
+
+	t.Run("label selector with healthy sub-target", func(t *testing.T) {
+		t.Parallel()
+		lb := makeLB([]hcloudgo.LoadBalancerTarget{
+			{
+				HealthStatus: []hcloudgo.LoadBalancerTargetHealthStatus{
+					{ListenPort: 6443, Status: hcloudgo.LoadBalancerTargetHealthStatusStatusHealthy},
+				},
+			},
+		})
+		assert.Equal(t, 1, countHealthyTargets(lb, 6443))
+	})
+
+	t.Run("label selector with unhealthy sub-target", func(t *testing.T) {
+		t.Parallel()
+		lb := makeLB([]hcloudgo.LoadBalancerTarget{
+			{
+				HealthStatus: []hcloudgo.LoadBalancerTargetHealthStatus{
+					{ListenPort: 6443, Status: hcloudgo.LoadBalancerTargetHealthStatusStatusUnhealthy},
+				},
+			},
+		})
+		assert.Equal(t, 0, countHealthyTargets(lb, 6443))
+	})
+
+	t.Run("wrong port not counted", func(t *testing.T) {
+		t.Parallel()
+		lb := makeLB([]hcloudgo.LoadBalancerTarget{
+			{
+				HealthStatus: []hcloudgo.LoadBalancerTargetHealthStatus{
+					{ListenPort: 80, Status: hcloudgo.LoadBalancerTargetHealthStatusStatusHealthy},
+				},
+			},
+		})
+		assert.Equal(t, 0, countHealthyTargets(lb, 6443))
+	})
+
+	t.Run("server target type", func(t *testing.T) {
+		t.Parallel()
+		lb := &hcloudgo.LoadBalancer{
+			ID: 1,
+			Targets: []hcloudgo.LoadBalancerTarget{
+				{
+					Type: hcloudgo.LoadBalancerTargetTypeServer,
+					HealthStatus: []hcloudgo.LoadBalancerTargetHealthStatus{
+						{ListenPort: 6443, Status: hcloudgo.LoadBalancerTargetHealthStatusStatusHealthy},
+					},
+				},
+			},
+		}
+		assert.Equal(t, 1, countHealthyTargets(lb, 6443))
+	})
+
+	t.Run("no targets", func(t *testing.T) {
+		t.Parallel()
+		lb := &hcloudgo.LoadBalancer{ID: 1}
+		assert.Equal(t, 0, countHealthyTargets(lb, 6443))
 	})
 }
