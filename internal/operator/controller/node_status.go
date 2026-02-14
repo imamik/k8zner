@@ -7,7 +7,9 @@ import (
 	"time"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -107,14 +109,42 @@ func (r *ClusterReconciler) updateNodePhaseAndPersist(ctx context.Context, clust
 	return r.persistClusterStatus(ctx, cluster)
 }
 
-// persistClusterStatus saves the cluster status to the Kubernetes API.
+// persistClusterStatus saves the cluster status to the Kubernetes API with conflict retry.
+// On conflict, it re-fetches the latest version and merges our status changes.
 func (r *ClusterReconciler) persistClusterStatus(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) error {
 	logger := log.FromContext(ctx)
-	if err := r.Status().Update(ctx, cluster); err != nil {
-		logger.Error(err, "failed to persist cluster status")
-		return fmt.Errorf("failed to persist cluster status: %w", err)
+
+	for i := 0; i < statusUpdateRetries; i++ {
+		err := r.Status().Update(ctx, cluster)
+		if err == nil {
+			return nil
+		}
+
+		if !apierrors.IsConflict(err) {
+			logger.Error(err, "failed to persist cluster status")
+			return fmt.Errorf("failed to persist cluster status: %w", err)
+		}
+
+		// On conflict, re-fetch the latest version and re-apply our status changes
+		logger.V(1).Info("persist status conflict, retrying", "attempt", i+1)
+
+		latest := &k8znerv1alpha1.K8znerCluster{}
+		if getErr := r.Get(ctx, client.ObjectKeyFromObject(cluster), latest); getErr != nil {
+			return fmt.Errorf("failed to get latest cluster for status retry: %w", getErr)
+		}
+
+		// Preserve our status changes on the latest version
+		savedAddons := latest.Status.Addons
+		latest.Status = cluster.Status
+		if latest.Status.Addons == nil && savedAddons != nil {
+			latest.Status.Addons = savedAddons
+		}
+		cluster.ObjectMeta = latest.ObjectMeta
+
+		time.Sleep(statusRetryInterval)
 	}
-	return nil
+
+	return fmt.Errorf("failed to persist cluster status after %d retries", statusUpdateRetries)
 }
 
 // removeNodeFromStatus removes a node from the cluster status.
