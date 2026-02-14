@@ -8,6 +8,7 @@ import (
 
 	"github.com/imamik/k8zner/internal/config"
 	hcloud_internal "github.com/imamik/k8zner/internal/platform/hcloud"
+	"github.com/imamik/k8zner/internal/util/naming"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
@@ -80,9 +81,10 @@ func TestReconcileNodePool_SingleControlPlane(t *testing.T) {
 	assert.Len(t, result.IPs, 1)
 	assert.Len(t, result.ServerIDs, 1)
 
-	// Verify the server was named correctly
+	// Verify the server follows the random naming convention: {cluster}-cp-{5char}
 	for name := range result.IPs {
-		assert.Contains(t, name, "test-cluster-cp-1")
+		assert.Contains(t, name, "test-cluster-cp-")
+		assert.Len(t, name, len("test-cluster-cp-")+naming.IDLength, "should have 5-char random suffix")
 	}
 }
 
