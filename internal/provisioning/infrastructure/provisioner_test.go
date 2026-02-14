@@ -407,5 +407,3 @@ func TestProvisionNetwork_WithAutoscaler(t *testing.T) {
 	// Should create: 1 CP subnet + 1 LB subnet + 1 autoscaler subnet = 3 subnets
 	assert.Equal(t, 3, subnetCount)
 }
-
-

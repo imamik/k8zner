@@ -40,7 +40,11 @@ type nodeStatusUpdate struct {
 // updateNodePhase updates or adds a node's phase in the cluster status.
 // If the node doesn't exist in the status, it will be added.
 // This allows tracking nodes during provisioning before they become k8s nodes.
+// Safe for concurrent use from parallel provisioning goroutines.
 func (r *ClusterReconciler) updateNodePhase(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, role string, update nodeStatusUpdate) {
+	r.statusMu.Lock()
+	defer r.statusMu.Unlock()
+
 	logger := log.FromContext(ctx)
 	now := metav1.Now()
 
@@ -148,7 +152,11 @@ func (r *ClusterReconciler) persistClusterStatus(ctx context.Context, cluster *k
 }
 
 // removeNodeFromStatus removes a node from the cluster status.
+// Safe for concurrent use from parallel provisioning goroutines.
 func (r *ClusterReconciler) removeNodeFromStatus(cluster *k8znerv1alpha1.K8znerCluster, role string, nodeName string) {
+	r.statusMu.Lock()
+	defer r.statusMu.Unlock()
+
 	var nodes *[]k8znerv1alpha1.NodeStatus
 	if role == "control-plane" {
 		nodes = &cluster.Status.ControlPlanes.Nodes
