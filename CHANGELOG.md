@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.9.0] - 2026-02-15
 
-### Added
+### ✨ Added
 
 - **`secrets` command** — retrieve cluster credentials (ArgoCD, Grafana passwords, kubeconfig, talosconfig) from the running cluster (#149)
 - **`cost` command** — calculate current and planned monthly cluster costs with Hetzner pricing (#149)
@@ -16,14 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Metrics-server health** wired into monitoring stack probes and Prometheus scraping (#149)
 - **Init-to-apply pipeline tests** for end-to-end config validation (#149)
 
-### Changed
+### 🔄 Changed
 
 - **Random 5-char server IDs** — CLI names now match operator convention (`cp-n19op` not `cp-1`), label-based discovery for idempotency (#149)
 - **Dead code removal** — 805 lines stripped (pre-provisioned LB, unused addon types, dead Helm specs) (#149)
 - **Magic numbers extracted** to named constants across Talos upgrade, bootstrap, cleanup, and RDNS retry logic (#149)
 - **Init defaults** — simplified Spec format output, improved Talos image build fallback (#149)
 
-### Fixed
+### 🐛 Fixed
 
 - **Data race** in parallel node provisioning (added sync.Mutex for concurrent status updates) (#149)
 - **Cost calculation** now counts ingress LB and always includes S3 storage (#149)
@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.8.0] - 2026-02-12
 
-### Added
+### ✨ Added
 
 - **TUI dashboard** for real-time provisioning observability (#138)
   - Progress bar with ETA, node status table, addon grid with timing and retry info
@@ -44,7 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Operator addon health probes** — core addon and connectivity checks (DNS, TLS, HTTPS) reported in CRD status (#139)
 - **Cloudflare DNS cleanup** on `destroy` — removes DNS records created by external-dns (#139)
 
-### Changed
+### 🔄 Changed
 
 - **E2E test refactor** — shared addon verification functions across FullStack and HA test suites (#139)
 - **Operator hardening** — phase transition recording, addon retry with exponential backoff (10s/30s/60s), timeout detection with K8s Warning events (#138)
@@ -52,7 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.7.0] - 2026-02-11
 
-### Added
+### ✨ Added
 
 - **Operator-first architecture** — `apply` is now the single entry point for cluster lifecycle
   - New clusters: bootstraps infrastructure, deploys operator, creates CRD
@@ -71,7 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **3 Architecture Decision Records**: networking, dual-path architecture, bootstrap tolerations
 - **Comprehensive test coverage improvements** (~30k lines of tests across 142 test files)
 
-### Changed
+### 🔄 Changed
 
 - **Traefik**: always LoadBalancer service (was DaemonSet with hostNetwork) — **breaking**
 - **cert-manager**: DNS-01 via Cloudflare (was HTTP-01) for wildcard certificate support
@@ -80,7 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - E2E tests rewritten for operator-based lifecycle (24/24 passing)
 - `destroy` command config flag is now optional (auto-detects k8zner.yaml)
 
-### Removed
+### 🗑️ Removed
 
 - **7 CLI commands** removed in favor of operator-first approach:
   - `create` — absorbed into `apply`
@@ -97,7 +97,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Floating IP support** — LoadBalancer-only approach
 - **ingress-nginx support** — Traefik is the sole ingress controller
 
-### Fixed
+### 🐛 Fixed
 
 - CSI CrashLoopBackOff during bootstrap (DNS resolution timing)
 - Cilium device detection on Talos (`enp+` pattern, not `eth0`)
@@ -107,7 +107,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.0] - 2026-01-31
 
-### Added
+### ✨ Added
 
 - **Simplified Configuration (v2)** - Opinionated, production-ready defaults in ~12 lines
   - New `k8zner.yaml` format with only 5 fields: name, region, mode, workers, domain
@@ -129,7 +129,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Requires `HETZNER_S3_ACCESS_KEY` and `HETZNER_S3_SECRET_KEY` environment variables
   - Uses talos-backup with compression enabled
 
-### Changed
+### 🔄 Changed
 
 - `k8zner init` now creates `k8zner.yaml` (was `cluster.yaml`)
 - `k8zner apply` auto-detects config file in current directory
@@ -137,7 +137,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Traefik now uses DaemonSet with hostNetwork for direct port binding
 - All clusters use Traefik instead of ingress-nginx by default
 
-### Removed
+### 🗑️ Removed
 
 - Legacy complex wizard with 20+ questions
 - Server architecture/category selection (now uses standard cx22 for control planes)
@@ -145,7 +145,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.5.0] - 2025-01-27
 
-### Added
+### ✨ Added
 
 - **Cloudflare DNS Integration** - Automatic DNS record management and TLS certificates
   - **external-dns addon** - Automatically creates DNS records from Ingress annotations
@@ -160,7 +160,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Environment variable support: `CF_API_TOKEN` and `CF_DOMAIN`
   - Full E2E test coverage with real DNS validation
 
-### Changed
+### 🔄 Changed
 
 - **Ingress controllers now use LoadBalancer by default** for proper external IP allocation
   - ingress-nginx: Changed from NodePort to LoadBalancer service type
@@ -168,14 +168,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - cert-manager ingress-shim enabled for automatic Certificate creation from Ingress annotations
 - Improved E2E cleanup to wait for server deletion before removing firewalls
 
-### Fixed
+### 🐛 Fixed
 
 - cert-manager Gateway API disabled by default (requires Gateway API CRDs to be installed)
 - Firewall deletion now retries when resources are still in use
 
 ## [0.4.0] - 2025-01-26
 
-### Added
+### ✨ Added
 
 - **ArgoCD GitOps Addon** - Continuous delivery for Kubernetes (CNCF Graduated project)
   - Full ArgoCD server, application controller, and repo server deployment
@@ -189,7 +189,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.0] - 2025-01-26
 
-### Added
+### ✨ Added
 
 - **Traefik Ingress Controller** - Alternative ingress controller option
   - Full Traefik v3 support with Helm chart integration
@@ -204,7 +204,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Users can override chart versions via `helm.version` in addon config
   - Automatic chart updates without rebuilding the binary
 
-### Changed
+### 🔄 Changed
 
 - Updated addon chart versions to latest stable releases:
   - Cilium: 1.18.5
@@ -217,27 +217,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - metrics-server: 3.12.2
   - traefik: 39.0.0
 
-### Fixed
+### 🐛 Fixed
 
 - JSON schema validation for Cilium chart with slice type values
 - YAML rendering now correctly skips whitespace-only template output
 
 ## [0.2.1] - 2025-01-25
 
-### Added
+### ✨ Added
 
 - Comprehensive wizard documentation (`docs/wizard.md`)
 - Full configuration reference (`docs/configuration.md`)
 - System architecture documentation (`docs/architecture.md`)
 
-### Changed
+### 🔄 Changed
 
 - Streamlined README with focus on interactive wizard as primary setup method
 - Updated server types documentation with all Hetzner families
 
 ## [0.2.0] - 2025-01-25
 
-### Added
+### ✨ Added
 
 - **Interactive Config Builder** (`k8zner init`) - New wizard for creating cluster configurations
   - Hierarchical server selection: choose architecture (x86/ARM) first, then category (shared/dedicated/cost-optimized)
@@ -251,20 +251,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI pipeline optimization with parallel test jobs
 - Codecov integration for test coverage reporting
 
-### Changed
+### 🔄 Changed
 
 - Cluster bootstrap now uses configurable timeouts instead of hardcoded values
 - Network configuration uses improved retry logic
 
 ## [0.1.1] - 2025-01-20
 
-### Fixed
+### 🐛 Fixed
 
 - Minor bug fixes and stability improvements
 
 ## [0.1.0] - 2025-01-15
 
-### Added
+### ✨ Added
 
 - Initial public release
 - Declarative YAML configuration for cluster definition
@@ -291,7 +291,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `completion` - Generate shell completion scripts
   - `version` - Print version information
 
-### Security
+### 🔐 Security
 
 - Private network isolation for inter-node communication
 - Firewall rules for control plane and worker nodes
