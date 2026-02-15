@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-02-15
+
+### Added
+
+- **`secrets` command** — retrieve cluster credentials (ArgoCD, Grafana passwords, kubeconfig, talosconfig) from the running cluster (#149)
+- **`cost` command** — calculate current and planned monthly cluster costs with Hetzner pricing (#149)
+- **TUI granular stages** — `doctor`/`apply` shows per-stage progress with adaptive ETA (#149)
+- **Access data persistence** — ArgoCD and Grafana credentials saved to `access-data.yaml` on cluster creation (#149)
+- **Metrics-server health** wired into monitoring stack probes and Prometheus scraping (#149)
+- **Init-to-apply pipeline tests** for end-to-end config validation (#149)
+
+### Changed
+
+- **Random 5-char server IDs** — CLI names now match operator convention (`cp-n19op` not `cp-1`), label-based discovery for idempotency (#149)
+- **Dead code removal** — 805 lines stripped (pre-provisioned LB, unused addon types, dead Helm specs) (#149)
+- **Magic numbers extracted** to named constants across Talos upgrade, bootstrap, cleanup, and RDNS retry logic (#149)
+- **Init defaults** — simplified Spec format output, improved Talos image build fallback (#149)
+
+### Fixed
+
+- **Data race** in parallel node provisioning (added sync.Mutex for concurrent status updates) (#149)
+- **Cost calculation** now counts ingress LB and always includes S3 storage (#149)
+- **LB health check wait** before operator installation prevents EOF errors (#149)
+- **Doctor hang** when cluster doesn't exist (clean exit with NotFound handling) (#149)
+- **Worker scaling** now applies Talos configs in parallel (#149)
+- **Conflict retry** for `persistClusterStatus` during CP replacement (#149)
+- **hcloud-go v2** compatibility — use `AllWithOpts` for filtered API calls (#149)
+
 ## [0.8.0] - 2026-02-12
 
 ### Added
@@ -270,6 +298,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Secrets stored locally in `./secrets/` directory
 - No credentials stored in cluster state
 
+[0.9.0]: https://github.com/imamik/k8zner/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/imamik/k8zner/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/imamik/k8zner/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/imamik/k8zner/compare/v0.5.0...v0.6.0
