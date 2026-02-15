@@ -7,7 +7,7 @@ import (
 )
 
 // CIDRSubnet calculates a subnet address given a network address, a netmask size increase, and a subnet number.
-// This mimics the behavior of Terraform's cidrsubnet function.
+// Equivalent to Terraform's cidrsubnet() and OpenTofu's cidrsubnet().
 //
 // Parameters:
 //   - prefix: The network prefix (e.g., "10.0.0.0/16")
@@ -64,7 +64,7 @@ func CIDRSubnet(prefix string, newbits int, netnum int) (string, error) {
 }
 
 // CIDRHost calculates a full host IP address for a given network address and host number.
-// This mimics the behavior of Terraform's cidrhost function.
+// Equivalent to Terraform's cidrhost() and OpenTofu's cidrhost().
 //
 // Parameters:
 //   - prefix: The network prefix (e.g., "10.0.0.0/16")

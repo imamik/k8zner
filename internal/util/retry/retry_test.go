@@ -167,8 +167,7 @@ func TestWithExponentialBackoff_BackoffTiming(t *testing.T) {
 	initialDelay := 50 * time.Millisecond
 	err := WithExponentialBackoff(ctx, operation,
 		WithInitialDelay(initialDelay),
-		WithMaxDelay(200*time.Millisecond),
-		WithMultiplier(2.0))
+		WithMaxDelay(200*time.Millisecond))
 
 	if err != nil {
 		t.Errorf("Expected success after retries, got: %v", err)
@@ -368,8 +367,7 @@ func TestWithOptions(t *testing.T) {
 		ctx := context.Background()
 		_ = WithExponentialBackoff(ctx, operation,
 			WithInitialDelay(10*time.Millisecond),
-			WithMaxDelay(20*time.Millisecond),
-			WithMultiplier(2.0))
+			WithMaxDelay(20*time.Millisecond))
 
 		// Check that no delay exceeds max delay (with tolerance)
 		maxDelay := 20 * time.Millisecond
@@ -381,42 +379,4 @@ func TestWithOptions(t *testing.T) {
 		}
 	})
 
-	t.Run("WithMultiplier", func(t *testing.T) {
-		t.Parallel()
-		attempts := 0
-		var delays []time.Duration
-		lastTime := time.Now()
-
-		operation := func() error {
-			attempts++
-			now := time.Now()
-			if attempts > 1 {
-				delays = append(delays, now.Sub(lastTime))
-			}
-			lastTime = now
-			if attempts < 3 {
-				return errors.New("error")
-			}
-			return nil
-		}
-
-		ctx := context.Background()
-		_ = WithExponentialBackoff(ctx, operation,
-			WithInitialDelay(50*time.Millisecond),
-			WithMultiplier(3.0),
-			WithMaxDelay(1*time.Second))
-
-		if len(delays) != 2 {
-			t.Fatalf("Expected 2 delays, got: %d", len(delays))
-		}
-
-		// First delay should be ~50ms, second should be ~150ms (3x)
-		tolerance := 20 * time.Millisecond
-		if delays[0] < 50*time.Millisecond-tolerance || delays[0] > 50*time.Millisecond+tolerance {
-			t.Errorf("First delay expected ~50ms, got: %v", delays[0])
-		}
-		if delays[1] < 150*time.Millisecond-tolerance || delays[1] > 150*time.Millisecond+tolerance {
-			t.Errorf("Second delay expected ~150ms (3x), got: %v", delays[1])
-		}
-	})
 }

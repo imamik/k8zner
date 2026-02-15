@@ -25,7 +25,6 @@ func TestConfigureAndWaitForNewCPs_Empty(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 
@@ -43,7 +42,6 @@ func TestConfigureAndWaitForNewWorkers_Empty(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 
@@ -68,7 +66,6 @@ func TestConfigureAndWaitForNewCPs_GenerateConfigError(t *testing.T) {
 		State:    provisioning.NewState(),
 		Talos:    mockTalos,
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.ControlPlaneServerIDs = map[string]int64{"cp-new": 123}
@@ -96,7 +93,6 @@ func TestConfigureAndWaitForNewWorkers_GenerateConfigError(t *testing.T) {
 		State:    provisioning.NewState(),
 		Talos:    mockTalos,
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.WorkerServerIDs = map[string]int64{"w-new": 456}
@@ -119,7 +115,6 @@ func TestConfigureNewNodes_NoMaintenanceNodes(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	// No nodes at all
@@ -142,7 +137,6 @@ func TestDetectMaintenanceModeNodes_EmptyNodeList(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 
@@ -175,7 +169,6 @@ func TestBootstrapCluster_ApplyControlPlaneConfigsError(t *testing.T) {
 		Talos:    mockTalos,
 		Infra:    mockInfra,
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "10.0.0.1"}
@@ -199,7 +192,6 @@ func TestApplyControlPlaneConfigs_PrivateFirstViaLB_NoLB(t *testing.T) {
 		State:    provisioning.NewState(),
 		Infra:    mockInfra,
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "10.0.0.1"}
@@ -219,7 +211,6 @@ func TestWaitForControlPlaneReady_DirectPath_Empty(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	// No CP nodes → should succeed immediately
@@ -239,7 +230,6 @@ func TestRetrieveAndStoreKubeconfig_DirectPath_InvalidConfig(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "10.0.0.1"}
@@ -260,7 +250,6 @@ func TestBootstrapEtcd_DirectPath_InvalidConfig(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "10.0.0.1"}

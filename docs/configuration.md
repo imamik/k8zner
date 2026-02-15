@@ -22,7 +22,7 @@ region: fsn1
 mode: ha
 workers:
   count: 3
-  size: cx32
+  size: cx33
 domain: example.com  # optional
 ```
 

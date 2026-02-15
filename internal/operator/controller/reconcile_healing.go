@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	"github.com/imamik/k8zner/internal/config"
 	"github.com/imamik/k8zner/internal/util/naming"
 )
 
@@ -110,7 +111,7 @@ func (r *ClusterReconciler) provisionReplacementCP(ctx context.Context, cluster 
 		Name:       naming.ControlPlane(cluster.Name),
 		Role:       "control-plane",
 		Pool:       "control-plane",
-		ServerType: normalizeServerSize(cluster.Spec.ControlPlanes.Size),
+		ServerType: string(config.ServerSize(cluster.Spec.ControlPlanes.Size).Normalize()),
 		SnapshotID: prereqs.SnapshotID,
 		SSHKeyName: prereqs.SSHKeyName,
 		NetworkID:  prereqs.ClusterState.NetworkID,
@@ -173,7 +174,7 @@ func (r *ClusterReconciler) provisionReplacementWorker(ctx context.Context, clus
 		Name:       naming.Worker(cluster.Name),
 		Role:       "worker",
 		Pool:       "workers",
-		ServerType: normalizeServerSize(cluster.Spec.Workers.Size),
+		ServerType: string(config.ServerSize(cluster.Spec.Workers.Size).Normalize()),
 		SnapshotID: prereqs.SnapshotID,
 		SSHKeyName: prereqs.SSHKeyName,
 		NetworkID:  prereqs.ClusterState.NetworkID,

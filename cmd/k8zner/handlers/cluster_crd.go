@@ -154,7 +154,7 @@ func buildClusterSpec(cfg *config.Config, infraInfo *InfrastructureInfo, bootstr
 			Size:  cfg.ControlPlane.NodePools[0].ServerType,
 		},
 		Workers: k8znerv1alpha1.WorkerSpec{
-			Count: getWorkerCount(cfg),
+			Count: cfg.WorkerCount(),
 			Size:  getWorkerSize(cfg),
 		},
 		Network: k8znerv1alpha1.NetworkSpec{
@@ -207,7 +207,7 @@ func buildClusterStatus(cfg *config.Config, infraInfo *InfrastructureInfo, boots
 			},
 		},
 		Workers: k8znerv1alpha1.NodeGroupStatus{
-			Desired: getWorkerCount(cfg),
+			Desired: cfg.WorkerCount(),
 		},
 		Infrastructure: k8znerv1alpha1.InfrastructureStatus{
 			NetworkID:             infraInfo.NetworkID,
@@ -332,13 +332,6 @@ func buildInfraInfo(ctx context.Context, pCtx *provisioning.Context, infraClient
 	}
 
 	return info
-}
-
-func getWorkerCount(cfg *config.Config) int {
-	if len(cfg.Workers) == 0 {
-		return 0
-	}
-	return cfg.Workers[0].Count
 }
 
 func getWorkerSize(cfg *config.Config) string {

@@ -15,7 +15,6 @@ import (
 )
 
 // applyCSI installs the Hetzner Cloud CSI driver.
-// See: terraform/hcloud.tf (hcloud_csi)
 func applyCSI(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	// Generate encryption passphrase
 	encryptionKey, err := generateEncryptionKey(32)
@@ -28,7 +27,7 @@ func applyCSI(ctx context.Context, client k8sclient.Client, cfg *config.Config) 
 		return fmt.Errorf("failed to create CSI secret: %w", err)
 	}
 
-	// Build CSI values matching terraform configuration
+	// Build CSI values for the addon
 	values := buildCSIValues(cfg)
 
 	// Get chart spec with any config overrides
@@ -56,8 +55,7 @@ func applyCSI(ctx context.Context, client k8sclient.Client, cfg *config.Config) 
 	return nil
 }
 
-// buildCSIValues creates helm values matching terraform configuration.
-// See: terraform/hcloud.tf lines 119-156
+// buildCSIValues creates helm values for the addon.
 func buildCSIValues(cfg *config.Config) helm.Values {
 	controlPlaneCount := getControlPlaneCount(cfg)
 	defaultStorageClass := cfg.Addons.CSI.DefaultStorageClass
@@ -67,7 +65,7 @@ func buildCSIValues(cfg *config.Config) helm.Values {
 		replicas = 2
 	}
 
-	// Storage classes with encryption support (matches terraform defaults)
+	// Storage classes with encryption support (default values)
 	// Note: The Hetzner CSI chart already sets volumeBindingMode: WaitForFirstConsumer by default
 	storageClasses := []helm.Values{
 		{

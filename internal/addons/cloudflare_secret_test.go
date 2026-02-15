@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+
+	"github.com/imamik/k8zner/internal/addons/helm"
 )
 
 // Note: Uses mockK8sClient from kubectl_test.go (same package)
@@ -78,9 +80,9 @@ func TestCreateCloudflareSecret(t *testing.T) {
 	}
 }
 
-func TestCreateExternalDNSNamespace(t *testing.T) {
+func TestExternalDNSNamespace(t *testing.T) {
 	t.Parallel()
-	namespaceYAML := createExternalDNSNamespace()
+	namespaceYAML := helm.NamespaceManifest("external-dns", nil)
 
 	assert.Contains(t, namespaceYAML, "apiVersion: v1")
 	assert.Contains(t, namespaceYAML, "kind: Namespace")

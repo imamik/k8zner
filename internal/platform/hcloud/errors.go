@@ -45,7 +45,7 @@ func isHCloudErrorCode(err error, codes ...hcloud.ErrorCode) bool {
 	return false
 }
 
-// IsNotFound checks if an error indicates a resource was not found.
-func IsNotFound(err error) bool {
+// isNotFound checks if an error indicates a resource was not found.
+func isNotFound(err error) bool {
 	return isHCloudErrorCode(err, hcloud.ErrorCodeNotFound)
 }

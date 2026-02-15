@@ -11,7 +11,7 @@ import (
 
 // ProvisionNetwork provisions the private network and subnets.
 func (p *Provisioner) ProvisionNetwork(ctx *provisioning.Context) error {
-	provisioning.LogResourceCreating(ctx.Observer, "infrastructure", "network", ctx.Config.ClusterName)
+	ctx.Observer.Printf("[infrastructure] Creating network %s...", ctx.Config.ClusterName)
 
 	// Subnets are calculated during validation phase
 
@@ -23,7 +23,7 @@ func (p *Provisioner) ProvisionNetwork(ctx *provisioning.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to ensure network: %w", err)
 	}
-	provisioning.LogResourceCreated(ctx.Observer, "infrastructure", "network", ctx.Config.ClusterName, fmt.Sprintf("%d", network.ID))
+	ctx.Observer.Printf("[infrastructure] Network %s created (id=%d)", ctx.Config.ClusterName, network.ID)
 	ctx.State.Network = network
 
 	// Detect Public IP for Firewall (if needed)
@@ -71,19 +71,6 @@ func (p *Provisioner) ProvisionNetwork(ctx *provisioning.Context) error {
 		err = ctx.Infra.EnsureSubnet(ctx, network, wSubnet, ctx.Config.Network.Zone, hcloud.NetworkSubnetTypeCloud)
 		if err != nil {
 			return fmt.Errorf("failed to ensure worker subnet for pool %d: %w", i, err)
-		}
-	}
-
-	// Autoscaler Subnet (for dynamically created nodes)
-	if ctx.Config.Autoscaler.Enabled && len(ctx.Config.Autoscaler.NodePools) > 0 {
-		autoscalerSubnet, err := ctx.Config.GetSubnetForRole("autoscaler", 0)
-		if err != nil {
-			return fmt.Errorf("failed to calculate autoscaler subnet: %w", err)
-		}
-
-		err = ctx.Infra.EnsureSubnet(ctx, network, autoscalerSubnet, ctx.Config.Network.Zone, hcloud.NetworkSubnetTypeCloud)
-		if err != nil {
-			return fmt.Errorf("failed to ensure autoscaler subnet: %w", err)
 		}
 	}
 

@@ -75,7 +75,6 @@ func (g *Generator) GetSchematicID(ctx context.Context, endpoint string) (string
 
 // UpgradeNode upgrades a single node to the specified image.
 // The opts parameter allows configuring upgrade behavior (stage, force).
-// See: terraform/talos.tf talosctl_upgrade_command
 func (g *Generator) UpgradeNode(ctx context.Context, endpoint, imageURL string, opts provisioning.UpgradeOptions) error {
 	talosClient, err := g.createClient(ctx, endpoint)
 	if err != nil {

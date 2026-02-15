@@ -23,9 +23,8 @@ func createCloudflareSecrets(ctx context.Context, client k8sclient.Client, cfg *
 
 	// Create namespaces first if needed
 	if cfg.Addons.ExternalDNS.Enabled {
-		namespaceYAML := createExternalDNSNamespace()
-		if err := applyManifests(ctx, client, "external-dns-namespace", []byte(namespaceYAML)); err != nil {
-			return fmt.Errorf("failed to create external-dns namespace: %w", err)
+		if err := ensureNamespace(ctx, client, "external-dns", nil); err != nil {
+			return err
 		}
 
 		// Create secret in external-dns namespace
@@ -63,13 +62,4 @@ func createCloudflareSecret(ctx context.Context, client k8sclient.Client, namesp
 	}
 
 	return nil
-}
-
-// createExternalDNSNamespace returns the external-dns namespace manifest.
-func createExternalDNSNamespace() string {
-	return `apiVersion: v1
-kind: Namespace
-metadata:
-  name: external-dns
-`
 }

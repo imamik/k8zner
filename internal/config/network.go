@@ -6,8 +6,8 @@ import (
 )
 
 const (
-	// defaultPodSubnetMaskSize is the default pod subnet mask size used in Terraform.
-	// This value is used when calculating the node subnet mask size.
+	// defaultPodSubnetMaskSize is the default pod subnet mask size.
+	// Used when calculating the node subnet mask size.
 	defaultPodSubnetMaskSize = 24
 )
 
@@ -95,8 +95,8 @@ func (c *Config) calculatePodSubnet() error {
 }
 
 // calculateNodeSubnetMask calculates the default node subnet mask size if not already set.
-// Based on Terraform logic: 32 - (pod_subnet_mask_size - pod_cidr_prefix_length)
-// Assuming pod subnet mask is /24 (default), and pod CIDR is /17 (default): 32 - (24 - 17) = 25
+// Formula: 32 - (pod_subnet_mask_size - pod_cidr_prefix_length)
+// With defaults (/24 pod subnet, /17 pod CIDR): 32 - (24 - 17) = 25
 func (c *Config) calculateNodeSubnetMask() error {
 	if c.Network.NodeIPv4SubnetMask != 0 {
 		return nil

@@ -22,8 +22,8 @@ func TestValidationPhase_RequiredFields(t *testing.T) {
 	}
 
 	ctx := &Context{
-		Config: cfg,
-		Logger: &DefaultLogger{},
+		Config:   cfg,
+		Observer: NewConsoleObserver(),
 	}
 
 	validator := &RequiredFieldsValidator{}
@@ -74,8 +74,8 @@ func TestValidationPhase_NetworkCIDR(t *testing.T) {
 			}
 
 			ctx := &Context{
-				Config: cfg,
-				Logger: &DefaultLogger{},
+				Config:   cfg,
+				Observer: NewConsoleObserver(),
 			}
 
 			validator := &NetworkValidator{}
@@ -121,8 +121,8 @@ func TestValidationPhase_ServerTypes(t *testing.T) {
 	}
 
 	ctx := &Context{
-		Config: cfg,
-		Logger: &DefaultLogger{},
+		Config:   cfg,
+		Observer: NewConsoleObserver(),
 	}
 
 	validator := &ServerTypeValidator{}
@@ -140,8 +140,8 @@ func TestValidationPhase_SSHKeys(t *testing.T) {
 	}
 
 	ctx := &Context{
-		Config: cfg,
-		Logger: &DefaultLogger{},
+		Config:   cfg,
+		Observer: NewConsoleObserver(),
 	}
 
 	validator := &SSHKeyValidator{}
@@ -193,8 +193,8 @@ func TestValidationPhase_Versions(t *testing.T) {
 			}
 
 			ctx := &Context{
-				Config: cfg,
-				Logger: &DefaultLogger{},
+				Config:   cfg,
+				Observer: NewConsoleObserver(),
 			}
 
 			validator := &VersionValidator{}
@@ -234,8 +234,8 @@ func TestValidationPhase_Integration(t *testing.T) {
 	}
 
 	ctx := &Context{
-		Config: cfg,
-		Logger: &DefaultLogger{},
+		Config:   cfg,
+		Observer: NewConsoleObserver(),
 	}
 
 	phase := NewValidationPhase()

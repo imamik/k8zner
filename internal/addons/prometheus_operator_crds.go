@@ -9,13 +9,12 @@ import (
 	"github.com/imamik/k8zner/internal/config"
 )
 
-// Default values matching Terraform
+// Default values for the addon
 const (
 	defaultPrometheusOperatorCRDsVersion = "v0.87.1"
 )
 
 // applyPrometheusOperatorCRDs installs the Prometheus Operator Custom Resource Definitions.
-// See: terraform/talos_config.tf lines 32-34
 func applyPrometheusOperatorCRDs(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	promConfig := cfg.Addons.PrometheusOperatorCRDs
 

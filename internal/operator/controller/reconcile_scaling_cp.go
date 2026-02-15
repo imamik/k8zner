@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	"github.com/imamik/k8zner/internal/config"
 	"github.com/imamik/k8zner/internal/util/labels"
 	"github.com/imamik/k8zner/internal/util/naming"
 )
@@ -144,7 +145,7 @@ func (r *ClusterReconciler) scaleUpControlPlanes(ctx context.Context, cluster *k
 	}
 	defer cleanup()
 
-	serverType := normalizeServerSize(cluster.Spec.ControlPlanes.Size)
+	serverType := string(config.ServerSize(cluster.Spec.ControlPlanes.Size).Normalize())
 	serverLabels := labels.NewLabelBuilder(cluster.Name).
 		WithRole("control-plane").
 		WithPool("control-plane").

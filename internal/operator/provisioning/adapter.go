@@ -175,7 +175,6 @@ func (a *PhaseAdapter) BuildProvisioningContext(
 		Observer: NewOperatorObserver(ctx),
 		Timeouts: config.LoadTimeouts(),
 	}
-	pCtx.Logger = pCtx.Observer
 
 	return pCtx, nil
 }

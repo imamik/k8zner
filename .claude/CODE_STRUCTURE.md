@@ -25,7 +25,7 @@ Both paths share: `internal/addons/`, `internal/provisioning/`, `internal/platfo
   - **addons/**: Addon installation (shared by CLI and operator)
     - **addons/helm/**: Helm chart rendering, value building, and chart client
     - **addons/k8sclient/**: Kubernetes API operations (apply manifests, manage secrets)
-  - **config/**: Configuration management; **config/v2/** for YAML spec + defaults
+  - **config/**: Configuration management (YAML spec, defaults, validation)
   - **platform/**: External system integrations (hcloud, talos, ssh, s3)
   - **util/**: Reusable utilities (async, keygen, labels, naming, rdns, retry)
 - One package = one responsibility — provisioning is acceptable as a larger package when the domain is cohesive
@@ -203,12 +203,12 @@ The operator controller (`internal/operator/controller/`) uses a single struct (
 
 Three representations of cluster configuration must stay in sync:
 
-1. **v2 YAML spec** (`internal/config/v2/types.go`) — user-facing config file
+1. **YAML spec** (`internal/config/spec.go`) — user-facing config file
 2. **Internal Config** (`internal/config/types.go`) — runtime representation with expanded defaults
 3. **CRD spec** (`api/v1alpha1/types.go`) — Kubernetes-native representation
 
 The round-trip flows:
-- **CLI path**: v2 YAML → `v2.Expand()` → internal Config → provisioning/addons
+- **CLI path**: YAML spec → `Expand()` → internal Config → provisioning/addons
 - **Operator path**: CRD spec → `adapter.SpecToConfig()` → internal Config → provisioning/addons
 
 `SpecToConfig()` must replicate the same defaults that `v2.Expand()` sets. When adding CRD fields, trace the full round-trip to avoid silent mismatches.

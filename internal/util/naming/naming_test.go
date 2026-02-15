@@ -140,28 +140,6 @@ func TestFirewall(t *testing.T) {
 	}
 }
 
-func TestSSHKey(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name     string
-		cluster  string
-		expected string
-	}{
-		{"simple cluster name", "my-cluster", "my-cluster-key"},
-		{"single word", "production", "production-key"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			result := SSHKey(tt.cluster)
-			if result != tt.expected {
-				t.Errorf("SSHKey(%q) = %q, want %q", tt.cluster, result, tt.expected)
-			}
-		})
-	}
-}
-
 func TestPlacementGroup(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -305,90 +283,6 @@ func TestWorkerWithID(t *testing.T) {
 	}
 }
 
-func TestStateMarker(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name     string
-		cluster  string
-		expected string
-	}{
-		{"simple cluster name", "my-cluster", "my-cluster-state"},
-		{"single word", "production", "production-state"},
-		{"with numbers", "cluster-01", "cluster-01-state"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			result := StateMarker(tt.cluster)
-			if result != tt.expected {
-				t.Errorf("StateMarker(%q) = %q, want %q", tt.cluster, result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestParseServerName(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name        string
-		serverName  string
-		wantCluster string
-		wantRole    string
-		wantID      string
-		wantOK      bool
-	}{
-		{"control plane", "my-cluster-cp-abc12", "my-cluster", "cp", "abc12", true},
-		{"worker", "my-cluster-w-xyz99", "my-cluster", "w", "xyz99", true},
-		{"complex cluster name", "my-prod-cluster-cp-abc12", "my-prod-cluster", "cp", "abc12", true},
-		{"single word cluster", "prod-w-abc12", "prod", "w", "abc12", true},
-		{"invalid - too few parts", "cluster-abc12", "", "", "", false},
-		{"invalid - unknown role", "cluster-x-abc12", "", "", "", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			cluster, role, id, ok := ParseServerName(tt.serverName)
-			if ok != tt.wantOK {
-				t.Errorf("ParseServerName(%q) ok = %v, want %v", tt.serverName, ok, tt.wantOK)
-			}
-			if ok && cluster != tt.wantCluster {
-				t.Errorf("ParseServerName(%q) cluster = %q, want %q", tt.serverName, cluster, tt.wantCluster)
-			}
-			if ok && role != tt.wantRole {
-				t.Errorf("ParseServerName(%q) role = %q, want %q", tt.serverName, role, tt.wantRole)
-			}
-			if ok && id != tt.wantID {
-				t.Errorf("ParseServerName(%q) id = %q, want %q", tt.serverName, id, tt.wantID)
-			}
-		})
-	}
-}
-
-func TestIsControlPlane(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name     string
-		expected bool
-	}{
-		{"my-cluster-cp-abc12", true},
-		{"prod-cp-xyz99", true},
-		{"my-cluster-w-abc12", false},
-		{"invalid-name", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			result := IsControlPlane(tt.name)
-			if result != tt.expected {
-				t.Errorf("IsControlPlane(%q) = %v, want %v", tt.name, result, tt.expected)
-			}
-		})
-	}
-}
-
 func TestIsWorker(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -420,7 +314,6 @@ func TestE2ECluster(t *testing.T) {
 	}{
 		{"fullstack", E2EFullStack},
 		{"ha", E2EHA},
-		{"upgrade", E2EUpgrade},
 	}
 
 	for _, tt := range tests {
@@ -490,30 +383,30 @@ func TestNamingConsistency(t *testing.T) {
 	t.Run("ControlPlane can be parsed", func(t *testing.T) {
 		t.Parallel()
 		name := ControlPlane(cluster)
-		parsedCluster, role, _, ok := ParseServerName(name)
+		parsedCluster, role, _, ok := parseServerName(name)
 		if !ok {
-			t.Errorf("ParseServerName failed for ControlPlane name: %s", name)
+			t.Errorf("parseServerName failed for ControlPlane name: %s", name)
 		}
 		if parsedCluster != cluster {
-			t.Errorf("ParseServerName cluster = %q, want %q", parsedCluster, cluster)
+			t.Errorf("parseServerName cluster = %q, want %q", parsedCluster, cluster)
 		}
-		if role != RoleControlPlane {
-			t.Errorf("ParseServerName role = %q, want %q", role, RoleControlPlane)
+		if role != roleControlPlane {
+			t.Errorf("parseServerName role = %q, want %q", role, roleControlPlane)
 		}
 	})
 
 	t.Run("Worker can be parsed", func(t *testing.T) {
 		t.Parallel()
 		name := Worker(cluster)
-		parsedCluster, role, _, ok := ParseServerName(name)
+		parsedCluster, role, _, ok := parseServerName(name)
 		if !ok {
-			t.Errorf("ParseServerName failed for Worker name: %s", name)
+			t.Errorf("parseServerName failed for Worker name: %s", name)
 		}
 		if parsedCluster != cluster {
-			t.Errorf("ParseServerName cluster = %q, want %q", parsedCluster, cluster)
+			t.Errorf("parseServerName cluster = %q, want %q", parsedCluster, cluster)
 		}
-		if role != RoleWorker {
-			t.Errorf("ParseServerName role = %q, want %q", role, RoleWorker)
+		if role != roleWorker {
+			t.Errorf("parseServerName role = %q, want %q", role, roleWorker)
 		}
 	})
 }

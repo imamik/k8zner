@@ -15,7 +15,6 @@ import (
 )
 
 // UpgradeOptions configures the behavior of node upgrades.
-// See: terraform/variables.tf talos_upgrade_* variables
 type UpgradeOptions struct {
 	// Stage stages the upgrade to be performed on next reboot instead of immediately.
 	Stage bool
@@ -48,9 +47,6 @@ type TalosConfigProducer interface {
 	// GenerateWorkerConfig generates machine configuration for a worker node.
 	// serverID is the Hetzner server ID, used to set the nodeid label for CCM integration.
 	GenerateWorkerConfig(hostname string, serverID int64) ([]byte, error)
-
-	// GenerateAutoscalerConfig generates machine configuration for an autoscaler node pool.
-	GenerateAutoscalerConfig(poolName string, labels map[string]string, taints []string) ([]byte, error)
 
 	// GetClientConfig returns the Talos client configuration for cluster access.
 	GetClientConfig() ([]byte, error)

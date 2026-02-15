@@ -12,10 +12,8 @@ import (
 
 // applyKubePrometheusStack installs the kube-prometheus-stack (Prometheus, Grafana, Alertmanager).
 func applyKubePrometheusStack(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
-	// Create namespace first
-	namespaceYAML := createMonitoringNamespace()
-	if err := applyManifests(ctx, client, "monitoring-namespace", []byte(namespaceYAML)); err != nil {
-		return fmt.Errorf("failed to create monitoring namespace: %w", err)
+	if err := ensureNamespace(ctx, client, "monitoring", map[string]string{"name": "monitoring"}); err != nil {
+		return err
 	}
 
 	// Build values based on configuration
@@ -345,11 +343,6 @@ func buildResourceValues(resources config.KubePrometheusResourcesConfig, default
 			"memory": limitMem,
 		},
 	}
-}
-
-// createMonitoringNamespace returns the monitoring namespace manifest.
-func createMonitoringNamespace() string {
-	return helm.NamespaceManifest("monitoring", map[string]string{"name": "monitoring"})
 }
 
 // Helper functions

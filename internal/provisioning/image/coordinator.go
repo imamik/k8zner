@@ -15,7 +15,7 @@ const phase = "image"
 // EnsureAllImages pre-builds all required Talos images in parallel.
 // This is called early in reconciliation to avoid sequential image building during server creation.
 func (p *Provisioner) EnsureAllImages(ctx *provisioning.Context) error {
-	ctx.Logger.Printf("[%s] Pre-building all required Talos images...", phase)
+	ctx.Observer.Printf("[%s] Pre-building all required Talos images...", phase)
 
 	// Collect all unique server types from control plane and worker pools
 	serverTypes := make(map[string]bool)
@@ -35,7 +35,7 @@ func (p *Provisioner) EnsureAllImages(ctx *provisioning.Context) error {
 	}
 
 	if len(serverTypes) == 0 {
-		ctx.Logger.Printf("[%s] No Talos images needed (all pools use custom images)", phase)
+		ctx.Observer.Printf("[%s] No Talos images needed (all pools use custom images)", phase)
 		return nil
 	}
 
@@ -46,7 +46,7 @@ func (p *Provisioner) EnsureAllImages(ctx *provisioning.Context) error {
 		architectures[string(arch)] = true
 	}
 
-	ctx.Logger.Printf("[%s] Building images for architectures: %v", phase, getKeys(architectures))
+	ctx.Observer.Printf("[%s] Building images for architectures: %v", phase, getKeys(architectures))
 
 	// Get versions from config
 	talosVersion := ctx.Config.Talos.Version
@@ -78,7 +78,7 @@ func (p *Provisioner) EnsureAllImages(ctx *provisioning.Context) error {
 		return err
 	}
 
-	ctx.Logger.Printf("[%s] All required Talos images are ready", phase)
+	ctx.Observer.Printf("[%s] All required Talos images are ready", phase)
 	return nil
 }
 
@@ -137,7 +137,7 @@ func (p *Provisioner) ensureImageForArch(ctx *provisioning.Context, arch, talosV
 	}
 
 	if snapshot != nil {
-		ctx.Logger.Printf("[%s] Found existing Talos snapshot for %s: %s (ID: %d)", phase, arch, snapshot.Description, snapshot.ID)
+		ctx.Observer.Printf("[%s] Found existing Talos snapshot for %s: %s (ID: %d)", phase, arch, snapshot.Description, snapshot.ID)
 		return nil
 	}
 
@@ -152,7 +152,7 @@ func (p *Provisioner) ensureImageForArch(ctx *provisioning.Context, arch, talosV
 		return fmt.Errorf("failed to build image: %w", err)
 	}
 
-	ctx.Logger.Printf("[%s] Successfully built Talos snapshot for %s in %s: ID %s", phase, arch, buildLocation, snapshotID)
+	ctx.Observer.Printf("[%s] Successfully built Talos snapshot for %s in %s: ID %s", phase, arch, buildLocation, snapshotID)
 	return nil
 }
 
@@ -164,7 +164,7 @@ func (p *Provisioner) buildImageWithFallback(ctx *provisioning.Context, builder 
 	}
 
 	for _, candidateLocation := range buildLocations(preferredLocation) {
-		ctx.Logger.Printf("[%s] Building Talos image for %s/%s/%s with %s in %s...", phase, talosVersion, k8sVersion, arch, buildServerType, candidateLocation)
+		ctx.Observer.Printf("[%s] Building Talos image for %s/%s/%s with %s in %s...", phase, talosVersion, k8sVersion, arch, buildServerType, candidateLocation)
 		snapshotID, err = builder.Build(ctx, talosVersion, k8sVersion, arch, buildServerType, candidateLocation, labels)
 		if err == nil {
 			return snapshotID, candidateLocation, nil
@@ -172,7 +172,7 @@ func (p *Provisioner) buildImageWithFallback(ctx *provisioning.Context, builder 
 		if !isRegionCapacityOrAvailabilityError(err) {
 			return "", "", err
 		}
-		ctx.Logger.Printf("[%s] Build attempt in %s failed (%v), trying next region...", phase, candidateLocation, err)
+		ctx.Observer.Printf("[%s] Build attempt in %s failed (%v), trying next region...", phase, candidateLocation, err)
 	}
 
 	return "", "", err

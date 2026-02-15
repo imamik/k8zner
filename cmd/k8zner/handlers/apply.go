@@ -175,86 +175,11 @@ func updateExistingCluster(ctx context.Context, cfg *config.Config) error {
 	return nil
 }
 
-// bootstrapNewCluster creates a new cluster from scratch.
-// Flow: Image -> Infrastructure -> 1 CP -> Bootstrap -> Install operator -> Create CRD
+// bootstrapNewCluster creates a new cluster from scratch (CI/non-interactive mode).
 func bootstrapNewCluster(ctx context.Context, cfg *config.Config, wait bool) error {
-	token := os.Getenv("HCLOUD_TOKEN")
-	if token == "" {
-		return fmt.Errorf("HCLOUD_TOKEN environment variable is required")
-	}
-	infraClient := newInfraClient(token)
-
-	talosGen, err := initializeTalosGenerator(cfg)
+	kubeconfig, err := runBootstrapPipeline(ctx, cfg, wait, nil)
 	if err != nil {
-		return fmt.Errorf("failed to initialize Talos generator: %w", err)
-	}
-
-	talosGen.SetMachineConfigOptions(talos.NewMachineConfigOptions(cfg))
-
-	if err := writeTalosFiles(talosGen); err != nil {
-		return fmt.Errorf("failed to write Talos config files: %w", err)
-	}
-
-	pCtx := newProvisioningContext(ctx, cfg, infraClient, talosGen)
-
-	// Track whether cleanup is needed on failure
-	var cleanupNeeded bool
-	var applyErr error
-	defer func() {
-		if applyErr != nil && cleanupNeeded {
-			log.Println("Apply failed, cleaning up created resources...")
-			cleanupCtx := context.Background()
-			if cleanupErr := cleanupOnFailure(cleanupCtx, cfg, infraClient); cleanupErr != nil {
-				log.Printf("Warning: cleanup failed: %v", cleanupErr)
-			}
-		}
-	}()
-
-	if applyErr = provisionImage(pCtx); applyErr != nil {
-		return applyErr
-	}
-
-	if applyErr = provisionInfrastructure(pCtx); applyErr != nil {
-		return applyErr
-	}
-	cleanupNeeded = true
-
-	if applyErr = provisionFirstControlPlane(cfg, pCtx); applyErr != nil {
-		return applyErr
-	}
-
-	if applyErr = bootstrapCluster(pCtx); applyErr != nil {
-		return applyErr
-	}
-
-	kubeconfig := pCtx.State.Kubeconfig
-	if len(kubeconfig) == 0 {
-		applyErr = fmt.Errorf("kubeconfig not available after cluster bootstrap")
-		return applyErr
-	}
-	if applyErr = writeKubeconfig(kubeconfig); applyErr != nil {
-		return applyErr
-	}
-
-	if applyErr = waitForLBHealth(ctx, infraClient, cfg.ClusterName); applyErr != nil {
-		return applyErr
-	}
-
-	if applyErr = installOperator(ctx, cfg, kubeconfig, pCtx.State.Network.ID); applyErr != nil {
-		return applyErr
-	}
-
-	if applyErr = persistAccessData(ctx, cfg, kubeconfig, wait); applyErr != nil {
-		return applyErr
-	}
-
-	// Gather infrastructure info for CRD
-	infraInfo := buildInfraInfo(ctx, pCtx, infraClient, cfg)
-
-	// Phase 6: Create CRD
-	log.Println("Phase 6/6: Creating K8znerCluster CRD...")
-	if err := createClusterCRD(ctx, cfg, pCtx, infraInfo, kubeconfig, token); err != nil {
-		return fmt.Errorf("CRD creation failed: %w", err)
+		return err
 	}
 
 	printApplySuccess(cfg, wait)
@@ -263,7 +188,6 @@ func bootstrapNewCluster(ctx context.Context, cfg *config.Config, wait bool) err
 	if wait {
 		return waitForOperatorComplete(ctx, cfg.ClusterName, kubeconfig)
 	}
-
 	return nil
 }
 
@@ -272,101 +196,9 @@ func bootstrapNewClusterTUI(ctx context.Context, cfg *config.Config, wait bool) 
 	var kubeconfig []byte
 
 	bootstrapFn := func(ch chan<- tui.BootstrapPhaseMsg) error {
-		token := os.Getenv("HCLOUD_TOKEN")
-		if token == "" {
-			return fmt.Errorf("HCLOUD_TOKEN environment variable is required")
-		}
-		infraClient := newInfraClient(token)
-
-		talosGen, err := initializeTalosGenerator(cfg)
-		if err != nil {
-			return fmt.Errorf("failed to initialize Talos generator: %w", err)
-		}
-		talosGen.SetMachineConfigOptions(talos.NewMachineConfigOptions(cfg))
-
-		if err := writeTalosFiles(talosGen); err != nil {
-			return fmt.Errorf("failed to write Talos config files: %w", err)
-		}
-
-		pCtx := newProvisioningContext(ctx, cfg, infraClient, talosGen)
-
-		// Track cleanup
-		var cleanupNeeded bool
-		var applyErr error
-		defer func() {
-			if applyErr != nil && cleanupNeeded {
-				cleanupCtx := context.Background()
-				_ = cleanupOnFailure(cleanupCtx, cfg, infraClient)
-			}
-		}()
-
-		// Phase 1: Image (granular)
-		ch <- tui.BootstrapPhaseMsg{Phase: "image:resolve"}
-		ch <- tui.BootstrapPhaseMsg{Phase: "image:resolve", Done: true}
-		ch <- tui.BootstrapPhaseMsg{Phase: "image:build"}
-		if applyErr = provisionImage(pCtx); applyErr != nil {
-			return applyErr
-		}
-		ch <- tui.BootstrapPhaseMsg{Phase: "image:build", Done: true}
-		ch <- tui.BootstrapPhaseMsg{Phase: "image:snapshot"}
-		ch <- tui.BootstrapPhaseMsg{Phase: "image:snapshot", Done: true}
-
-		// Phase 2: Infrastructure
-		ch <- tui.BootstrapPhaseMsg{Phase: "infrastructure"}
-		if applyErr = provisionInfrastructure(pCtx); applyErr != nil {
-			return applyErr
-		}
-		cleanupNeeded = true
-		ch <- tui.BootstrapPhaseMsg{Phase: "infrastructure", Done: true}
-
-		// Phase 3: Compute
-		ch <- tui.BootstrapPhaseMsg{Phase: "compute"}
-		if applyErr = provisionFirstControlPlane(cfg, pCtx); applyErr != nil {
-			return applyErr
-		}
-		ch <- tui.BootstrapPhaseMsg{Phase: "compute", Done: true}
-
-		// Phase 4: Bootstrap
-		ch <- tui.BootstrapPhaseMsg{Phase: "bootstrap"}
-		if applyErr = bootstrapCluster(pCtx); applyErr != nil {
-			return applyErr
-		}
-		ch <- tui.BootstrapPhaseMsg{Phase: "bootstrap", Done: true}
-
-		kubeconfig = pCtx.State.Kubeconfig
-		if len(kubeconfig) == 0 {
-			applyErr = fmt.Errorf("kubeconfig not available after cluster bootstrap")
-			return applyErr
-		}
-		if applyErr = writeKubeconfig(kubeconfig); applyErr != nil {
-			return applyErr
-		}
-
-		if applyErr = waitForLBHealth(ctx, infraClient, cfg.ClusterName); applyErr != nil {
-			return applyErr
-		}
-
-		// Phase 5: Operator
-		ch <- tui.BootstrapPhaseMsg{Phase: "operator"}
-		if applyErr = installOperator(ctx, cfg, kubeconfig, pCtx.State.Network.ID); applyErr != nil {
-			return applyErr
-		}
-		ch <- tui.BootstrapPhaseMsg{Phase: "operator", Done: true}
-
-		if applyErr = persistAccessData(ctx, cfg, kubeconfig, wait); applyErr != nil {
-			return applyErr
-		}
-
-		// Phase 6: CRD
-		ch <- tui.BootstrapPhaseMsg{Phase: "crd"}
-		infraInfo := buildInfraInfo(ctx, pCtx, infraClient, cfg)
-		if err := createClusterCRD(ctx, cfg, pCtx, infraInfo, kubeconfig, token); err != nil {
-			applyErr = fmt.Errorf("CRD creation failed: %w", err)
-			return applyErr
-		}
-		ch <- tui.BootstrapPhaseMsg{Phase: "crd", Done: true}
-
-		return nil
+		var err error
+		kubeconfig, err = runBootstrapPipeline(ctx, cfg, wait, ch)
+		return err
 	}
 
 	// Redirect log output during TUI to prevent bleed-through into alt-screen
@@ -389,6 +221,115 @@ func bootstrapNewClusterTUI(ctx context.Context, cfg *config.Config, wait bool) 
 	printApplySuccess(cfg, wait)
 	printOverallCostHint(ctx, cfg, "apply")
 	return nil
+}
+
+// runBootstrapPipeline executes the shared bootstrap pipeline.
+// Flow: Image -> Infrastructure -> 1 CP -> Bootstrap -> Install operator -> Create CRD.
+// When ch is non-nil, phase progress messages are sent for TUI display.
+func runBootstrapPipeline(ctx context.Context, cfg *config.Config, wait bool, ch chan<- tui.BootstrapPhaseMsg) (kubeconfig []byte, err error) {
+	phase := func(name string, done bool) {
+		if ch != nil {
+			ch <- tui.BootstrapPhaseMsg{Phase: name, Done: done}
+		}
+	}
+
+	token := os.Getenv("HCLOUD_TOKEN")
+	if token == "" {
+		return nil, fmt.Errorf("HCLOUD_TOKEN environment variable is required")
+	}
+	infraClient := newInfraClient(token)
+
+	talosGen, err := initializeTalosGenerator(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize Talos generator: %w", err)
+	}
+	talosGen.SetMachineConfigOptions(talos.NewMachineConfigOptions(cfg))
+
+	if err := writeTalosFiles(talosGen); err != nil {
+		return nil, fmt.Errorf("failed to write Talos config files: %w", err)
+	}
+
+	pCtx := newProvisioningContext(ctx, cfg, infraClient, talosGen)
+
+	var cleanupNeeded bool
+	defer func() {
+		if err != nil && cleanupNeeded {
+			log.Println("Apply failed, cleaning up created resources...")
+			cleanupCtx := context.Background()
+			if cleanupErr := cleanupOnFailure(cleanupCtx, cfg, infraClient); cleanupErr != nil {
+				log.Printf("Warning: cleanup failed: %v", cleanupErr)
+			}
+		}
+	}()
+
+	// Phase 1: Image
+	phase("image:resolve", false)
+	phase("image:resolve", true)
+	phase("image:build", false)
+	if err = provisionImage(pCtx); err != nil {
+		return nil, err
+	}
+	phase("image:build", true)
+	phase("image:snapshot", false)
+	phase("image:snapshot", true)
+
+	// Phase 2: Infrastructure
+	phase("infrastructure", false)
+	if err = provisionInfrastructure(pCtx); err != nil {
+		return nil, err
+	}
+	cleanupNeeded = true
+	phase("infrastructure", true)
+
+	// Phase 3: Compute
+	phase("compute", false)
+	if err = provisionFirstControlPlane(cfg, pCtx); err != nil {
+		return nil, err
+	}
+	phase("compute", true)
+
+	// Phase 4: Bootstrap
+	phase("bootstrap", false)
+	if err = bootstrapCluster(pCtx); err != nil {
+		return nil, err
+	}
+	phase("bootstrap", true)
+
+	kubeconfig = pCtx.State.Kubeconfig
+	if len(kubeconfig) == 0 {
+		err = fmt.Errorf("kubeconfig not available after cluster bootstrap")
+		return nil, err
+	}
+	if err = writeKubeconfig(kubeconfig); err != nil {
+		return nil, err
+	}
+
+	if err = waitForLBHealth(ctx, infraClient, cfg.ClusterName); err != nil {
+		return nil, err
+	}
+
+	// Phase 5: Operator
+	phase("operator", false)
+	if err = installOperator(ctx, cfg, kubeconfig, pCtx.State.Network.ID); err != nil {
+		return nil, err
+	}
+	phase("operator", true)
+
+	if err = persistAccessData(ctx, cfg, kubeconfig, wait); err != nil {
+		return nil, err
+	}
+
+	// Phase 6: CRD
+	phase("crd", false)
+	log.Println("Phase 6/6: Creating K8znerCluster CRD...")
+	infraInfo := buildInfraInfo(ctx, pCtx, infraClient, cfg)
+	if crdErr := createClusterCRD(ctx, cfg, pCtx, infraInfo, kubeconfig, token); crdErr != nil {
+		err = fmt.Errorf("CRD creation failed: %w", crdErr)
+		return nil, err
+	}
+	phase("crd", true)
+
+	return kubeconfig, nil
 }
 
 // checkOperatorManaged checks if a cluster is managed by the operator.

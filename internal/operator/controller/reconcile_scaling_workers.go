@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	"github.com/imamik/k8zner/internal/config"
 	"github.com/imamik/k8zner/internal/util/labels"
 	"github.com/imamik/k8zner/internal/util/naming"
 )
@@ -136,7 +137,7 @@ func (r *ClusterReconciler) scaleUpWorkers(ctx context.Context, cluster *k8znerv
 	}
 	defer cleanup()
 
-	serverType := normalizeServerSize(cluster.Spec.Workers.Size)
+	serverType := string(config.ServerSize(cluster.Spec.Workers.Size).Normalize())
 	serverLabels := labels.NewLabelBuilder(cluster.Name).
 		WithRole("worker").
 		WithPool("workers").

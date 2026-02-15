@@ -2,7 +2,6 @@ package addons
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/imamik/k8zner/internal/addons/helm"
 	"github.com/imamik/k8zner/internal/addons/k8sclient"
@@ -15,10 +14,8 @@ import (
 // a Hetzner LB automatically via annotations, and external-dns
 // auto-discovers the LB IP from the Ingress status for DNS records.
 func applyTraefik(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
-	// Create namespace first
-	namespaceYAML := createTraefikNamespace()
-	if err := applyManifests(ctx, client, "traefik-namespace", []byte(namespaceYAML)); err != nil {
-		return fmt.Errorf("failed to create traefik namespace: %w", err)
+	if err := ensureNamespace(ctx, client, "traefik", baselinePodSecurityLabels); err != nil {
+		return err
 	}
 
 	// Build values matching the ingress-nginx configuration style
@@ -32,7 +29,7 @@ func applyTraefik(ctx context.Context, client k8sclient.Client, cfg *config.Conf
 // via annotations on the Service object.
 func buildTraefikValues(cfg *config.Config) helm.Values {
 	traefikCfg := cfg.Addons.Traefik
-	workerCount := getWorkerCount(cfg)
+	workerCount := cfg.WorkerCount()
 
 	// Determine replicas
 	replicas := 2
@@ -194,13 +191,4 @@ func buildTraefikService(clusterName, externalTrafficPolicy, location string) he
 			"load-balancer.hetzner.cloud/location":                location,
 		},
 	}
-}
-
-// createTraefikNamespace returns the traefik namespace manifest.
-func createTraefikNamespace() string {
-	return helm.NamespaceManifest("traefik", map[string]string{
-		"pod-security.kubernetes.io/enforce": "baseline",
-		"pod-security.kubernetes.io/audit":   "baseline",
-		"pod-security.kubernetes.io/warn":    "baseline",
-	})
 }

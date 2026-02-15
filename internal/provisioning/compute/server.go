@@ -23,10 +23,8 @@ type ServerSpec struct {
 	UserData         string
 	PlacementGroup   *int64
 	PrivateIP        string
-	RDNSIPv4         string // RDNS template for IPv4
-	RDNSIPv6         string // RDNS template for IPv6
-	EnablePublicIPv4 bool   // Enable public IPv4 (default: true for backwards compatibility)
-	EnablePublicIPv6 bool   // Enable public IPv6 (default: true)
+	EnablePublicIPv4 bool // Enable public IPv4 (default: true for backwards compatibility)
+	EnablePublicIPv6 bool // Enable public IPv6 (default: true)
 }
 
 // ServerInfo holds the result of server creation/lookup.
@@ -57,7 +55,7 @@ func (p *Provisioner) ensureServer(ctx *provisioning.Context, spec ServerSpec) (
 	}
 
 	// Create
-	ctx.Logger.Printf("[%s] Creating %s server %s...", phase, spec.Role, spec.Name)
+	ctx.Observer.Printf("[%s] Creating %s server %s...", phase, spec.Role, spec.Name)
 
 	// Labels
 	serverLabels := labels.NewLabelBuilder(ctx.Config.ClusterName).
@@ -74,7 +72,7 @@ func (p *Provisioner) ensureServer(ctx *provisioning.Context, spec ServerSpec) (
 		if err != nil {
 			return ServerInfo{}, fmt.Errorf("failed to ensure Talos image: %w", err)
 		}
-		ctx.Logger.Printf("[%s] Using Talos image: %s", phase, image)
+		ctx.Observer.Printf("[%s] Using Talos image: %s", phase, image)
 	}
 
 	// Get Network ID
@@ -141,14 +139,6 @@ func (p *Provisioner) ensureServer(ctx *provisioning.Context, spec ServerSpec) (
 		return ServerInfo{}, fmt.Errorf("failed to parse server ID: %w", err)
 	}
 
-	// Apply RDNS if configured
-	if spec.RDNSIPv4 != "" || spec.RDNSIPv6 != "" {
-		if err := p.applyServerRDNSSimple(ctx, serverID, spec.Name, ip, spec.RDNSIPv4, spec.RDNSIPv6, spec.Role, spec.Pool); err != nil {
-			// Log error but don't fail server creation
-			ctx.Logger.Printf("[%s] Warning: Failed to set RDNS for %s: %v", phase, spec.Name, err)
-		}
-	}
-
 	return ServerInfo{IP: ip, ServerID: serverID}, nil
 }
 
@@ -185,7 +175,7 @@ func (p *Provisioner) ensureImage(ctx *provisioning.Context, serverType, _ strin
 
 	if snapshot != nil {
 		snapshotID := fmt.Sprintf("%d", snapshot.ID)
-		ctx.Logger.Printf("[%s] Found existing Talos snapshot: %s (ID: %s)", phase, snapshot.Description, snapshotID)
+		ctx.Observer.Printf("[%s] Found existing Talos snapshot: %s (ID: %s)", phase, snapshot.Description, snapshotID)
 		return snapshotID, nil
 	}
 

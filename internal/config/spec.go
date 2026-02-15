@@ -28,7 +28,7 @@ type Spec struct {
 	Workers WorkerSpec `yaml:"workers"`
 
 	// ControlPlane defines optional control plane configuration.
-	// If not specified, defaults to cpx21 (3 shared vCPU, 4GB RAM).
+	// If not specified, defaults to cx23 (2 dedicated vCPU, 4GB RAM).
 	ControlPlane *ControlPlaneSpec `yaml:"control_plane,omitempty"`
 
 	// Domain enables automatic DNS and TLS via Cloudflare.
@@ -74,8 +74,8 @@ const (
 	RegionHelsinki Region = "hel1"
 )
 
-// ValidRegions returns all valid regions.
-func ValidRegions() []Region {
+// validRegions returns all valid regions.
+func validRegions() []Region {
 	return []Region{RegionNuremberg, RegionFalkenstein, RegionHelsinki}
 }
 
@@ -118,8 +118,8 @@ const (
 	ModeHA Mode = "ha"
 )
 
-// ValidModes returns all valid modes.
-func ValidModes() []Mode {
+// validModes returns all valid modes.
+func validModes() []Mode {
 	return []Mode{ModeDev, ModeHA}
 }
 
@@ -183,7 +183,7 @@ type WorkerSpec struct {
 // ControlPlaneSpec defines the optional control plane configuration.
 type ControlPlaneSpec struct {
 	// Size is the Hetzner server type for control plane nodes.
-	// Defaults to cpx21 (3 shared vCPU, 4GB RAM) if not specified.
+	// Defaults to cx23 (2 dedicated vCPU, 4GB RAM) if not specified.
 	Size ServerSize `yaml:"size,omitempty"`
 }
 
@@ -231,8 +231,8 @@ const (
 	SizeCX53 ServerSize = "cx53"
 )
 
-// ValidServerSizes returns all valid server sizes (current names only).
-func ValidServerSizes() []ServerSize {
+// validServerSizes returns all valid server sizes (current names only).
+func validServerSizes() []ServerSize {
 	return []ServerSize{
 		// CPX series (shared vCPU)
 		SizeCPX22, SizeCPX32, SizeCPX42, SizeCPX52,
@@ -257,9 +257,9 @@ func (s ServerSize) IsValid() bool {
 }
 
 // Normalize returns the current Hetzner server type name.
-// Converts old names (cx22) to new names (cx23).
+// Converts old names (cx22) to new names (cx23) and lowercases the input.
 func (s ServerSize) Normalize() ServerSize {
-	switch s {
+	switch ServerSize(strings.ToLower(string(s))) {
 	case SizeCX22:
 		return SizeCX23
 	case SizeCX32:
@@ -269,7 +269,7 @@ func (s ServerSize) Normalize() ServerSize {
 	case SizeCX52:
 		return SizeCX53
 	default:
-		return s
+		return ServerSize(strings.ToLower(string(s)))
 	}
 }
 
@@ -327,12 +327,12 @@ func (c *Spec) Validate() error {
 
 	// Region: must be valid
 	if !c.Region.IsValid() {
-		errs = append(errs, fmt.Errorf("region must be one of: %v", ValidRegions()))
+		errs = append(errs, fmt.Errorf("region must be one of: %v", validRegions()))
 	}
 
 	// Mode: must be valid
 	if !c.Mode.IsValid() {
-		errs = append(errs, fmt.Errorf("mode must be one of: %v", ValidModes()))
+		errs = append(errs, fmt.Errorf("mode must be one of: %v", validModes()))
 	}
 
 	// Workers: count 1-5, valid size
@@ -340,7 +340,7 @@ func (c *Spec) Validate() error {
 		errs = append(errs, errors.New("workers.count must be 1-5"))
 	}
 	if !c.Workers.Size.IsValid() {
-		errs = append(errs, fmt.Errorf("workers.size must be one of: %v", ValidServerSizes()))
+		errs = append(errs, fmt.Errorf("workers.size must be one of: %v", validServerSizes()))
 	}
 
 	// Domain: if set, validate and check for CF_API_TOKEN

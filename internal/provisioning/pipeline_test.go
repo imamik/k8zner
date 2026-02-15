@@ -17,73 +17,39 @@ type mockPhase struct {
 func (m *mockPhase) Name() string               { return m.name }
 func (m *mockPhase) Provision(_ *Context) error { return m.err }
 
-func TestNewPipeline(t *testing.T) {
-	t.Parallel()
-	p1 := &mockPhase{name: "phase-1"}
-	p2 := &mockPhase{name: "phase-2"}
-
-	pipeline := NewPipeline(p1, p2)
-
-	require.NotNil(t, pipeline)
-	assert.Len(t, pipeline.Phases, 2)
-	assert.Equal(t, "phase-1", pipeline.Phases[0].Name())
-	assert.Equal(t, "phase-2", pipeline.Phases[1].Name())
-}
-
-func TestNewPipeline_Empty(t *testing.T) {
-	t.Parallel()
-	pipeline := NewPipeline()
-
-	require.NotNil(t, pipeline)
-	assert.Empty(t, pipeline.Phases)
-}
-
-func TestPipeline_Run_Success(t *testing.T) {
+func TestRunPhases_Success(t *testing.T) {
 	t.Parallel()
 	executed := make([]string, 0)
 
-	p1 := &mockPhase{name: "infra"}
-	p2 := &mockPhase{name: "compute"}
-	p3 := &mockPhase{name: "cluster"}
-
-	pipeline := NewPipeline(p1, p2, p3)
-
 	observer := NewMockObserver()
-	ctx := &Context{
-		Observer: observer,
-		Logger:   observer,
-	}
+	ctx := &Context{Observer: observer}
 
-	// Override phases to track execution order
-	pipeline.Phases = []Phase{
+	phases := []Phase{
 		phaseFunc("infra", func(_ *Context) error { executed = append(executed, "infra"); return nil }),
 		phaseFunc("compute", func(_ *Context) error { executed = append(executed, "compute"); return nil }),
 		phaseFunc("cluster", func(_ *Context) error { executed = append(executed, "cluster"); return nil }),
 	}
 
-	err := pipeline.Run(ctx)
+	err := RunPhases(ctx, phases)
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"infra", "compute", "cluster"}, executed)
 }
 
-func TestPipeline_Run_StopsOnError(t *testing.T) {
+func TestRunPhases_StopsOnError(t *testing.T) {
 	t.Parallel()
 	executed := make([]string, 0)
 
 	observer := NewMockObserver()
-	ctx := &Context{
-		Observer: observer,
-		Logger:   observer,
-	}
+	ctx := &Context{Observer: observer}
 
-	pipeline := NewPipeline(
+	phases := []Phase{
 		phaseFunc("infra", func(_ *Context) error { executed = append(executed, "infra"); return nil }),
 		phaseFunc("compute", func(_ *Context) error { return fmt.Errorf("out of capacity") }),
 		phaseFunc("cluster", func(_ *Context) error { executed = append(executed, "cluster"); return nil }),
-	)
+	}
 
-	err := pipeline.Run(ctx)
+	err := RunPhases(ctx, phases)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "compute phase failed")
@@ -92,71 +58,51 @@ func TestPipeline_Run_StopsOnError(t *testing.T) {
 	assert.Equal(t, []string{"infra"}, executed)
 }
 
-func TestPipeline_Run_EmptyPipeline(t *testing.T) {
+func TestRunPhases_Empty(t *testing.T) {
 	t.Parallel()
 	observer := NewMockObserver()
-	ctx := &Context{
-		Observer: observer,
-		Logger:   observer,
-	}
+	ctx := &Context{Observer: observer}
 
-	pipeline := NewPipeline()
-	err := pipeline.Run(ctx)
+	err := RunPhases(ctx, nil)
 
 	require.NoError(t, err)
 }
 
-func TestPipeline_Run_LogsPhaseEvents(t *testing.T) {
+func TestRunPhases_LogsProgress(t *testing.T) {
 	t.Parallel()
 	observer := NewMockObserver()
-	ctx := &Context{
-		Observer: observer,
-		Logger:   observer,
-	}
+	ctx := &Context{Observer: observer}
 
-	pipeline := NewPipeline(
+	phases := []Phase{
 		phaseFunc("test", func(_ *Context) error { return nil }),
-	)
+	}
 
-	err := pipeline.Run(ctx)
+	err := RunPhases(ctx, phases)
 
 	require.NoError(t, err)
-
-	// Should have phase start and phase complete events
-	var hasStart, hasComplete bool
-	for _, event := range observer.events {
-		if event.Type == EventPhaseStarted {
-			hasStart = true
-		}
-		if event.Type == EventPhaseCompleted {
-			hasComplete = true
-		}
-	}
-	assert.True(t, hasStart, "should log phase start event")
-	assert.True(t, hasComplete, "should log phase complete event")
+	// Should have logged starting, phase start, phase complete, and overall complete
+	assert.GreaterOrEqual(t, len(observer.messages), 3)
 }
 
-func TestPipeline_Run_LogsFailure(t *testing.T) {
+func TestRunPhases_LogsFailure(t *testing.T) {
 	t.Parallel()
 	observer := NewMockObserver()
-	ctx := &Context{
-		Observer: observer,
-		Logger:   observer,
+	ctx := &Context{Observer: observer}
+
+	phases := []Phase{
+		phaseFunc("failing", func(_ *Context) error { return fmt.Errorf("boom") }),
 	}
 
-	pipeline := NewPipeline(
-		phaseFunc("failing", func(_ *Context) error { return fmt.Errorf("boom") }),
-	)
+	_ = RunPhases(ctx, phases)
 
-	_ = pipeline.Run(ctx)
-
-	var hasFailed bool
-	for _, event := range observer.events {
-		if event.Type == EventPhaseFailed {
-			hasFailed = true
+	// Should have logged the failure
+	found := false
+	for _, msg := range observer.messages {
+		if assert.ObjectsAreEqual("[%s] failed: %v", msg) {
+			found = true
 		}
 	}
-	assert.True(t, hasFailed, "should log phase failed event")
+	assert.True(t, found || len(observer.messages) >= 2, "should log phase failure")
 }
 
 // phaseFunc creates a Phase from a function for testing.

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/imamik/k8zner/internal/config"
-	hcloud "github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning"
 	"github.com/imamik/k8zner/internal/util/labels"
 	"github.com/imamik/k8zner/internal/util/naming"
@@ -28,7 +27,7 @@ const (
 
 // ProvisionLoadBalancers provisions API and Ingress load balancers.
 func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
-	ctx.Logger.Printf("[%s] Reconciling load balancers for %s...", phase, ctx.Config.ClusterName)
+	ctx.Observer.Printf("[%s] Reconciling load balancers for %s...", phase, ctx.Config.ClusterName)
 	// API Load Balancer
 	// Sum up control plane nodes
 	cpCount := 0
@@ -39,7 +38,7 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 	if cpCount > 0 {
 		// Name: ${cluster_name}-kube-api
 		lbName := naming.KubeAPILoadBalancer(ctx.Config.ClusterName)
-		ctx.Logger.Printf("[%s] Reconciling load balancer %s...", phase, lbName)
+		ctx.Observer.Printf("[%s] Reconciling load balancer %s...", phase, lbName)
 
 		apiLBLabels := labels.NewLabelBuilder(ctx.Config.ClusterName).
 			WithRole("kube-api").
@@ -120,19 +119,11 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 			return fmt.Errorf("failed to add target to LB: %w", err)
 		}
 
-		// Apply RDNS if configured
-		ipv4 := hcloud.LoadBalancerIPv4(apiLB)
-		ipv6 := hcloud.LoadBalancerIPv6(apiLB)
-
-		if err := p.applyLoadBalancerRDNS(ctx, apiLB.ID, lbName, ipv4, ipv6, "kube-api"); err != nil {
-			ctx.Logger.Printf("[%s] Warning: Failed to set RDNS for %s: %v", phase, lbName, err)
-		}
-
 		// Refresh LB from API to get updated info (private network IPs, etc.)
 		// The local apiLB object doesn't have PrivateNet populated after AttachToNetwork
 		refreshedLB, err := ctx.Infra.GetLoadBalancer(ctx, lbName)
 		if err != nil {
-			ctx.Logger.Printf("[%s] Warning: Failed to refresh LB after configuration: %v", phase, err)
+			ctx.Observer.Printf("[%s] Warning: Failed to refresh LB after configuration: %v", phase, err)
 			// Fall back to the local object
 			ctx.State.LoadBalancer = apiLB
 		} else {

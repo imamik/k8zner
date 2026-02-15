@@ -69,9 +69,6 @@ func (m *mockTalosProducer) GenerateControlPlaneConfig(_ []string, _ string, _ i
 	return nil, nil
 }
 func (m *mockTalosProducer) GenerateWorkerConfig(_ string, _ int64) ([]byte, error) { return nil, nil }
-func (m *mockTalosProducer) GenerateAutoscalerConfig(_ string, _ map[string]string, _ []string) ([]byte, error) {
-	return nil, nil
-}
 func (m *mockTalosProducer) GetClientConfig() ([]byte, error) {
 	return m.clientConfig, m.clientConfigErr
 }

@@ -148,7 +148,6 @@ func TestIsAlreadyBootstrapped(t *testing.T) {
 			State:    provisioning.NewState(),
 			Infra:    mockInfra,
 			Observer: observer,
-			Logger:   observer,
 		}
 
 		assert.True(t, p.isAlreadyBootstrapped(ctx))
@@ -169,7 +168,6 @@ func TestIsAlreadyBootstrapped(t *testing.T) {
 			State:    provisioning.NewState(),
 			Infra:    mockInfra,
 			Observer: observer,
-			Logger:   observer,
 		}
 
 		assert.False(t, p.isAlreadyBootstrapped(ctx))
@@ -216,7 +214,6 @@ func TestBootstrap_StateMarkerPresent(t *testing.T) {
 		State:    provisioning.NewState(),
 		Infra:    mockInfra,
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{
@@ -249,7 +246,6 @@ func TestProvision(t *testing.T) {
 		State:    provisioning.NewState(),
 		Infra:    mockInfra,
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.TalosConfig = []byte("talos-config")
@@ -269,7 +265,6 @@ func TestApplyWorkerConfigs_NoWorkers(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 	}
 	// No workers in state
 	pCtx.State.WorkerIPs = map[string]string{}
@@ -302,7 +297,6 @@ func TestCreateStateMarker(t *testing.T) {
 			State:    provisioning.NewState(),
 			Infra:    mockInfra,
 			Observer: observer,
-			Logger:   observer,
 		}
 
 		err := p.createStateMarker(pCtx)
@@ -327,7 +321,6 @@ func TestCreateStateMarker(t *testing.T) {
 			State:    provisioning.NewState(),
 			Infra:    mockInfra,
 			Observer: observer,
-			Logger:   observer,
 		}
 
 		err := p.createStateMarker(pCtx)
@@ -348,7 +341,6 @@ func TestTryRetrieveExistingKubeconfig(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{"node1": "127.0.0.1"}
@@ -371,7 +363,6 @@ func TestRetrieveAndStoreKubeconfig_Error(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{"node1": "127.0.0.1"}
@@ -404,9 +395,6 @@ func (m *mockTalosConfigProducer) WaitForNodeReady(_ context.Context, _ string, 
 	return nil
 }
 func (m *mockTalosConfigProducer) HealthCheck(_ context.Context, _ string) error { return nil }
-func (m *mockTalosConfigProducer) GenerateAutoscalerConfig(_ string, _ map[string]string, _ []string) ([]byte, error) {
-	return nil, nil
-}
 func (m *mockTalosConfigProducer) GetClientConfig() ([]byte, error) {
 	if m.getClientConfigFunc != nil {
 		return m.getClientConfigFunc()
@@ -484,7 +472,6 @@ func TestBootstrapCluster_FailsWhenTalosConfigMissing(t *testing.T) {
 		State:    provisioning.NewState(),
 		Talos:    mockTalos,
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 
@@ -510,7 +497,6 @@ func TestApplyControlPlaneConfigs_GenerateConfigError(t *testing.T) {
 		State:    provisioning.NewState(),
 		Talos:    mockTalos,
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "10.0.0.1"}
@@ -538,7 +524,6 @@ func TestApplyWorkerConfigs_GenerateConfigError(t *testing.T) {
 		State:    provisioning.NewState(),
 		Talos:    mockTalos,
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.WorkerIPs = map[string]string{"worker-1": "10.0.0.10"}
@@ -561,7 +546,6 @@ func TestGetLBEndpoint(t *testing.T) {
 			Config:   &config.Config{ClusterName: "test-cluster"},
 			State:    provisioning.NewState(),
 			Observer: observer,
-			Logger:   observer,
 		}
 		pCtx.State.LoadBalancer = &hcloud.LoadBalancer{
 			PublicNet: hcloud.LoadBalancerPublicNet{
@@ -599,7 +583,6 @@ func TestGetLBEndpoint(t *testing.T) {
 			State:    provisioning.NewState(),
 			Infra:    mockInfra,
 			Observer: observer,
-			Logger:   observer,
 		}
 
 		ip := p.getLBEndpoint(pCtx)
@@ -623,7 +606,6 @@ func TestGetLBEndpoint(t *testing.T) {
 			State:    provisioning.NewState(),
 			Infra:    mockInfra,
 			Observer: observer,
-			Logger:   observer,
 		}
 
 		ip := p.getLBEndpoint(pCtx)
@@ -645,7 +627,6 @@ func TestGetLBEndpoint(t *testing.T) {
 			State:    provisioning.NewState(),
 			Infra:    mockInfra,
 			Observer: observer,
-			Logger:   observer,
 		}
 
 		ip := p.getLBEndpoint(pCtx)
@@ -670,7 +651,6 @@ func TestIsAlreadyBootstrapped_Error(t *testing.T) {
 		State:    provisioning.NewState(),
 		Infra:    mockInfra,
 		Observer: observer,
-		Logger:   observer,
 	}
 
 	// API error should be treated as "not bootstrapped" (returns false, not error)
@@ -687,7 +667,6 @@ func TestBootstrapEtcd_InvalidTalosConfig(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "10.0.0.1"}
@@ -708,7 +687,6 @@ func TestWaitForControlPlaneReady_InvalidTalosConfig(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster", ClusterAccess: "private"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "10.0.0.1"}
@@ -743,7 +721,6 @@ func TestRetrieveAndStoreKubeconfig_PrivateFirstNoLB(t *testing.T) {
 		State:    provisioning.NewState(),
 		Infra:    mockInfra,
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 
@@ -769,7 +746,6 @@ func TestBootstrapEtcd_PrivateFirstNoLB(t *testing.T) {
 		State:    provisioning.NewState(),
 		Infra:    mockInfra,
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 
@@ -795,7 +771,6 @@ func TestApplyControlPlaneConfigsViaLB_NoLB(t *testing.T) {
 		State:    provisioning.NewState(),
 		Infra:    mockInfra,
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 

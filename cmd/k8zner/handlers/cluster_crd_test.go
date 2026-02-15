@@ -323,7 +323,7 @@ func TestGetWorkerCount(t *testing.T) {
 	t.Run("returns zero for no workers", func(t *testing.T) {
 		t.Parallel()
 		cfg := &config.Config{}
-		assert.Equal(t, 0, getWorkerCount(cfg))
+		assert.Equal(t, 0, cfg.WorkerCount())
 	})
 
 	t.Run("returns first pool count", func(t *testing.T) {
@@ -333,7 +333,7 @@ func TestGetWorkerCount(t *testing.T) {
 				{Name: "pool1", Count: 3},
 			},
 		}
-		assert.Equal(t, 3, getWorkerCount(cfg))
+		assert.Equal(t, 3, cfg.WorkerCount())
 	})
 }
 

@@ -47,7 +47,6 @@ func TestNewContext(t *testing.T) {
 	assert.Equal(t, mockInfra, ctx.Infra)
 	assert.NotNil(t, ctx.State)
 	assert.NotNil(t, ctx.Observer)
-	assert.NotNil(t, ctx.Logger)
 	assert.NotNil(t, ctx.Timeouts)
 
 	// State should be initialized with empty maps
@@ -55,19 +54,10 @@ func TestNewContext(t *testing.T) {
 	assert.NotNil(t, ctx.State.WorkerIPs)
 }
 
-func TestNewContext_ObserverImplementsLogger(t *testing.T) {
+func TestConsoleObserver_Printf(t *testing.T) {
 	t.Parallel()
-	cfg := &config.Config{}
-	ctx := NewContext(context.Background(), cfg, &hcloud_internal.MockClient{}, nil)
-
-	// Observer and Logger should point to the same object
-	assert.Equal(t, ctx.Observer, ctx.Logger)
-}
-
-func TestDefaultLogger(t *testing.T) {
-	t.Parallel()
-	logger := &DefaultLogger{}
+	observer := NewConsoleObserver()
 
 	// Should not panic
-	logger.Printf("test message: %s %d", "hello", 42)
+	observer.Printf("test message: %s %d", "hello", 42)
 }

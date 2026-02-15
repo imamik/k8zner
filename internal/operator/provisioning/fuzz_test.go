@@ -6,6 +6,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	"github.com/imamik/k8zner/internal/config"
 )
 
 // FuzzSpecToConfig ensures SpecToConfig never panics on arbitrary CRD field values.
@@ -85,7 +86,7 @@ func FuzzSpecToConfig(f *testing.F) {
 	})
 }
 
-// FuzzNormalizeServerSize ensures the internal normalizeServerSize never panics.
+// FuzzNormalizeServerSize ensures config.ServerSize.Normalize never panics.
 func FuzzNormalizeServerSize(f *testing.F) {
 	f.Add("cx22")
 	f.Add("cx32")
@@ -96,10 +97,10 @@ func FuzzNormalizeServerSize(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, s string) {
 		// Must not panic
-		result := normalizeServerSize(s)
+		result := string(config.ServerSize(s).Normalize())
 		// Result must not be empty if input was non-empty (passthrough behavior)
 		if s != "" && result == "" {
-			t.Errorf("normalizeServerSize(%q) returned empty string", s)
+			t.Errorf("config.ServerSize(%q).Normalize() returned empty string", s)
 		}
 	})
 }

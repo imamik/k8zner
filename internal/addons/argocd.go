@@ -2,7 +2,6 @@ package addons
 
 import (
 	"context"
-	"fmt"
 	"log"
 
 	"github.com/imamik/k8zner/internal/addons/helm"
@@ -29,10 +28,8 @@ func applyArgoCD(ctx context.Context, client k8sclient.Client, cfg *config.Confi
 		}
 	}
 
-	// Create namespace first
-	namespaceYAML := createArgoCDNamespace()
-	if err := applyManifests(ctx, client, "argocd-namespace", []byte(namespaceYAML)); err != nil {
-		return fmt.Errorf("failed to create argocd namespace: %w", err)
+	if err := ensureNamespace(ctx, client, "argocd", map[string]string{"name": "argocd"}); err != nil {
+		return err
 	}
 
 	// Build values based on configuration
@@ -241,9 +238,4 @@ func buildArgoCDIngress(cfg *config.Config) helm.Values {
 	}
 
 	return ingress
-}
-
-// createArgoCDNamespace returns the argocd namespace manifest.
-func createArgoCDNamespace() string {
-	return helm.NamespaceManifest("argocd", map[string]string{"name": "argocd"})
 }

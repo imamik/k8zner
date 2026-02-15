@@ -15,7 +15,6 @@ import (
 )
 
 // applyCilium installs the Cilium CNI network plugin.
-// See: terraform/cilium.tf
 func applyCilium(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	if !cfg.Addons.Cilium.Enabled {
 		return nil
@@ -52,8 +51,7 @@ metadata:
 	return installHelmAddon(ctx, client, "cilium", "kube-system", cfg.Addons.Cilium.Helm, values)
 }
 
-// buildCiliumValues creates helm values matching terraform configuration.
-// See: terraform/cilium.tf lines 45-207
+// buildCiliumValues creates helm values for the addon.
 func buildCiliumValues(cfg *config.Config) helm.Values {
 	controlPlaneCount := getControlPlaneCount(cfg)
 	ciliumCfg := cfg.Addons.Cilium
@@ -160,7 +158,6 @@ func buildCiliumValues(cfg *config.Config) helm.Values {
 }
 
 // buildCiliumGatewayAPIConfig creates Gateway API configuration.
-// See: terraform/cilium.tf lines 101-110
 func buildCiliumGatewayAPIConfig(ciliumCfg config.CiliumConfig) helm.Values {
 	// Gateway API proxy protocol - default to true
 	proxyProtocolEnabled := true
@@ -187,7 +184,6 @@ func buildCiliumGatewayAPIConfig(ciliumCfg config.CiliumConfig) helm.Values {
 }
 
 // buildCiliumPrometheusConfig creates Prometheus integration configuration.
-// See: terraform/cilium.tf lines 119-126
 func buildCiliumPrometheusConfig(ciliumCfg config.CiliumConfig) helm.Values {
 	prometheusConfig := helm.Values{
 		"enabled": true,
@@ -203,7 +199,6 @@ func buildCiliumPrometheusConfig(ciliumCfg config.CiliumConfig) helm.Values {
 }
 
 // buildCiliumOperatorConfig creates operator configuration.
-// See: terraform/cilium.tf lines 139-177
 func buildCiliumOperatorConfig(controlPlaneCount int) helm.Values {
 	replicas := 1
 	if controlPlaneCount > 1 {
@@ -257,7 +252,6 @@ func buildCiliumOperatorConfig(controlPlaneCount int) helm.Values {
 }
 
 // buildCiliumHubbleConfig creates Hubble observability configuration.
-// See: terraform/cilium.tf lines 179-207
 func buildCiliumHubbleConfig(cfg *config.Config) helm.Values {
 	hubbleConfig := helm.Values{
 		"enabled": true,
@@ -280,7 +274,6 @@ func buildCiliumHubbleConfig(cfg *config.Config) helm.Values {
 }
 
 // buildCiliumIPSecSecret generates the IPSec keys secret.
-// See: terraform/cilium.tf lines 11-31
 func buildCiliumIPSecSecret(cfg *config.Config) (string, error) {
 	keySize := cfg.Addons.Cilium.IPSecKeySize
 	if keySize == 0 {
@@ -334,7 +327,6 @@ func buildCiliumIPSecSecret(cfg *config.Config) (string, error) {
 }
 
 // generateIPSecKey generates a random IPSec key.
-// See: terraform/cilium.tf lines 34-43
 func generateIPSecKey(keySize int) (string, error) {
 	// Key size in bytes + 4 bytes salt
 	length := (keySize / 8) + 4

@@ -10,7 +10,7 @@ import (
 
 func TestEstimateRemaining_NoHistory(t *testing.T) {
 	// At Infrastructure phase, 10s elapsed, no history
-	remaining := EstimateRemaining("Infrastructure", 10*time.Second, nil)
+	remaining := estimateRemaining("Infrastructure", 10*time.Second, nil)
 
 	// Should be: (30-10) + 120 + 60 + 180 + 120 + 300 = 800s
 	expected := 800 * time.Second
@@ -31,7 +31,7 @@ func TestEstimateRemaining_MidwayPhase(t *testing.T) {
 		{Phase: "CNI", StartedAt: now},
 	}
 
-	remaining := EstimateRemaining("CNI", 60*time.Second, history)
+	remaining := estimateRemaining("CNI", 60*time.Second, history)
 
 	// Historical phases took much longer than defaults, so ETA scales up (capped at 3x):
 	// (120*3 - 60) + (300*3) = 1200s
@@ -43,7 +43,7 @@ func TestEstimateRemaining_MidwayPhase(t *testing.T) {
 
 func TestEstimateRemaining_ElapsedExceedsExpected(t *testing.T) {
 	// At Infrastructure phase, but already spent 60s (over the 30s estimate)
-	remaining := EstimateRemaining("Infrastructure", 60*time.Second, nil)
+	remaining := estimateRemaining("Infrastructure", 60*time.Second, nil)
 
 	// Overrun scales future predictions: 60s/30s = 2x
 	// Should be: max(0, 60-60)=0 + (120 + 60 + 180 + 120 + 300) * 2 = 1560s
@@ -78,14 +78,14 @@ func TestAddonExpectedDuration(t *testing.T) {
 }
 
 func TestEstimateRemaining_CompletePhase(t *testing.T) {
-	remaining := EstimateRemaining("Complete", 0, nil)
+	remaining := estimateRemaining("Complete", 0, nil)
 	if remaining != 0 {
 		t.Errorf("expected 0, got %v", remaining)
 	}
 }
 
 func TestEstimateRemaining_UnknownPhase(t *testing.T) {
-	remaining := EstimateRemaining("Unknown", 0, nil)
+	remaining := estimateRemaining("Unknown", 0, nil)
 	if remaining != 0 {
 		t.Errorf("expected 0 for unknown phase, got %v", remaining)
 	}
@@ -93,7 +93,7 @@ func TestEstimateRemaining_UnknownPhase(t *testing.T) {
 
 func TestEstimateRemaining_LastPhase(t *testing.T) {
 	// At Addons phase, 100s elapsed
-	remaining := EstimateRemaining("Addons", 100*time.Second, nil)
+	remaining := estimateRemaining("Addons", 100*time.Second, nil)
 
 	// Should be: max(0, 300-100) = 200s (no future phases)
 	expected := 200 * time.Second
@@ -103,7 +103,7 @@ func TestEstimateRemaining_LastPhase(t *testing.T) {
 }
 
 func TestTotalEstimate(t *testing.T) {
-	total := TotalEstimate()
+	total := totalEstimate()
 
 	// Sum of all phase timings: 30 + 120 + 60 + 180 + 120 + 300 = 810s
 	expected := 810 * time.Second

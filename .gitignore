@@ -25,6 +25,15 @@ e2e.test
 run-e2e-test.sh
 tests/e2e/*.old
 
+# Cluster credentials and secrets
+kubeconfig
+talosconfig
+jam/
+tests/e2e/kubeconfig
+tests/e2e/talosconfig
+tests/e2e/secrets.yaml
+tests/e2e/access-data.yaml
+
 # Downloaded tools (at root only)
 /hcloud
 /hcloud-*.tar.gz

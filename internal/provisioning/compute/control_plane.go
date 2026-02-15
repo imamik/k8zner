@@ -10,7 +10,6 @@ import (
 	"github.com/imamik/k8zner/internal/provisioning"
 	"github.com/imamik/k8zner/internal/util/labels"
 	"github.com/imamik/k8zner/internal/util/naming"
-	"github.com/imamik/k8zner/internal/util/rdns"
 )
 
 const phase = "compute"
@@ -19,7 +18,7 @@ const phase = "compute"
 // Note: When called from Provision(), the endpoint is already set up via prepareControlPlaneEndpoint().
 // This method is kept for backward compatibility and direct invocation in tests.
 func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
-	ctx.Logger.Printf("[%s] Reconciling control plane...", phase)
+	ctx.Observer.Printf("[%s] Reconciling control plane...", phase)
 
 	// Setup endpoint if not already done (for backward compatibility when called directly)
 	if len(ctx.State.SANs) == 0 {
@@ -33,7 +32,7 @@ func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
 			if lbIP := hcloud.LoadBalancerIPv4(lb); lbIP != "" {
 				sans = append(sans, lbIP)
 				endpoint := fmt.Sprintf("https://%s:%d", lbIP, config.KubeAPIPort)
-				ctx.Logger.Printf("[%s] Setting Talos endpoint to: %s", phase, endpoint)
+				ctx.Observer.Printf("[%s] Setting Talos endpoint to: %s", phase, endpoint)
 				ctx.Talos.SetEndpoint(endpoint)
 			}
 
@@ -57,10 +56,6 @@ func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
 			return fmt.Errorf("failed to ensure placement group for pool %s: %w", pool.Name, err)
 		}
 
-		// Resolve RDNS templates with fallback to cluster defaults
-		rdnsIPv4 := rdns.ResolveTemplate(pool.RDNSIPv4, ctx.Config.RDNS.ClusterRDNSIPv4, ctx.Config.RDNS.ClusterRDNS)
-		rdnsIPv6 := rdns.ResolveTemplate(pool.RDNSIPv6, ctx.Config.RDNS.ClusterRDNSIPv6, ctx.Config.RDNS.ClusterRDNS)
-
 		poolResult, err := p.reconcileNodePool(ctx, NodePoolSpec{
 			Name:             pool.Name,
 			Count:            pool.Count,
@@ -69,11 +64,8 @@ func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
 			Image:            pool.Image,
 			Role:             "control-plane",
 			ExtraLabels:      pool.Labels,
-			UserData:         "",
 			PlacementGroupID: &pg.ID,
 			PoolIndex:        i,
-			RDNSIPv4:         rdnsIPv4,
-			RDNSIPv6:         rdnsIPv6,
 			EnablePublicIPv4: ctx.Config.ShouldEnablePublicIPv4(),
 			EnablePublicIPv6: ctx.Config.ShouldEnablePublicIPv6(),
 		})
