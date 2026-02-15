@@ -384,9 +384,9 @@ func TestBuildArgoCDRedis(t *testing.T) {
 	}
 }
 
-func TestCreateArgoCDNamespace(t *testing.T) {
+func TestArgoCDNamespace(t *testing.T) {
 	t.Parallel()
-	ns := createArgoCDNamespace()
+	ns := helm.NamespaceManifest("argocd", map[string]string{"name": "argocd"})
 
 	assert.Contains(t, ns, "apiVersion: v1")
 	assert.Contains(t, ns, "kind: Namespace")

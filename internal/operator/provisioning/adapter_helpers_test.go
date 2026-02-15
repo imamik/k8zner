@@ -717,7 +717,7 @@ func TestBuildProvisioningContext_NilCredentials(t *testing.T) {
 	assert.Empty(t, pCtx.Config.HCloudToken)
 }
 
-func TestBuildProvisioningContext_LoggerSetToObserver(t *testing.T) {
+func TestBuildProvisioningContext_ObserverSet(t *testing.T) {
 	t.Parallel()
 	cluster := newTestCluster("test-cluster", "", nil)
 	creds := baseCreds()
@@ -725,9 +725,8 @@ func TestBuildProvisioningContext_LoggerSetToObserver(t *testing.T) {
 	adapter := &PhaseAdapter{}
 	pCtx, err := adapter.BuildProvisioningContext(context.Background(), cluster, creds, nil, nil)
 	require.NoError(t, err)
-	// Logger should be set to the same Observer
-	assert.NotNil(t, pCtx.Logger)
-	assert.Equal(t, pCtx.Observer, pCtx.Logger)
+	// Observer should be set
+	assert.NotNil(t, pCtx.Observer)
 }
 
 // --- NewPhaseAdapter test ---

@@ -33,7 +33,7 @@ func BenchmarkDeepMerge_SmallMaps(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		benchResultValues = DeepMerge(base, override)
+		benchResultValues = deepMerge(base, override)
 	}
 }
 
@@ -44,7 +44,7 @@ func BenchmarkDeepMerge_LargeNestedMaps(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		benchResultValues = DeepMerge(base, override)
+		benchResultValues = deepMerge(base, override)
 	}
 }
 
@@ -55,7 +55,7 @@ func BenchmarkDeepMerge_DeeplyNested(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		benchResultValues = DeepMerge(base, override)
+		benchResultValues = deepMerge(base, override)
 	}
 }
 
@@ -67,7 +67,7 @@ func BenchmarkDeepMerge_ThreeMaps(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		benchResultValues = DeepMerge(m1, m2, m3)
+		benchResultValues = deepMerge(m1, m2, m3)
 	}
 }
 
@@ -79,7 +79,7 @@ func BenchmarkDeepMerge_Parallel(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_ = DeepMerge(base, override)
+			_ = deepMerge(base, override)
 		}
 	})
 }
@@ -98,7 +98,7 @@ func BenchmarkMerge_SmallMaps(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		benchResultValues = Merge(base, override)
+		benchResultValues = deepMerge(base, override)
 	}
 }
 
@@ -109,7 +109,7 @@ func BenchmarkMerge_LargeMaps(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		benchResultValues = Merge(base, override)
+		benchResultValues = deepMerge(base, override)
 	}
 }
 
@@ -127,7 +127,7 @@ func BenchmarkToYAML_SmallValues(b *testing.B) {
 	b.ResetTimer()
 	var err error
 	for b.Loop() {
-		benchResultBytes, err = values.ToYAML()
+		benchResultBytes, err = values.toYAML()
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -141,7 +141,7 @@ func BenchmarkToYAML_LargeValues(b *testing.B) {
 	b.ResetTimer()
 	var err error
 	for b.Loop() {
-		benchResultBytes, err = values.ToYAML()
+		benchResultBytes, err = values.toYAML()
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -160,7 +160,7 @@ nested:
 	b.ResetTimer()
 	var err error
 	for b.Loop() {
-		benchResultValues, err = FromYAML(yamlData)
+		benchResultValues, err = fromYAML(yamlData)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -169,7 +169,7 @@ nested:
 
 func BenchmarkFromYAML_LargeInput(b *testing.B) {
 	values := buildLargeValues(50, 3)
-	yamlData, err := values.ToYAML()
+	yamlData, err := values.toYAML()
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -177,7 +177,7 @@ func BenchmarkFromYAML_LargeInput(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		benchResultValues, err = FromYAML(yamlData)
+		benchResultValues, err = fromYAML(yamlData)
 		if err != nil {
 			b.Fatal(err)
 		}

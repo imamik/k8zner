@@ -1,5 +1,5 @@
 .PHONY: fmt lint test test-coverage test-unit test-integration test-kind build install check e2e e2e-fast e2e-snapshot-only clean help \
-       setup-hooks scan-secrets setup-envtest setup-kind
+       setup-hooks scan-secrets setup-envtest setup-kind sync-crds check-crds
 
 # Default target
 .DEFAULT_GOAL := help
@@ -96,6 +96,21 @@ e2e-fast:
 # Useful for verifying image builder changes
 e2e-snapshot-only:
 	go test -v -timeout=30m -tags=e2e -run TestSnapshotCreation ./tests/e2e/...
+
+# Sync CRD from canonical source to deploy/ and operator-chart/
+sync-crds:
+	@echo "Syncing CRDs from config/crd/bases/ ..."
+	cp config/crd/bases/k8zner.io_k8znerclusters.yaml deploy/crds/k8zner.io_k8znerclusters.yaml
+	cp config/crd/bases/k8zner.io_k8znerclusters.yaml internal/addons/operator-chart/crds/k8zner.io_k8znerclusters.yaml
+	@echo "CRDs synced."
+
+# Check that CRD copies are in sync (for CI)
+check-crds:
+	@diff -q config/crd/bases/k8zner.io_k8znerclusters.yaml deploy/crds/k8zner.io_k8znerclusters.yaml || \
+		(echo "ERROR: deploy/crds/ CRD out of sync. Run 'make sync-crds'" && exit 1)
+	@diff -q config/crd/bases/k8zner.io_k8znerclusters.yaml internal/addons/operator-chart/crds/k8zner.io_k8znerclusters.yaml || \
+		(echo "ERROR: operator-chart/crds/ CRD out of sync. Run 'make sync-crds'" && exit 1)
+	@echo "CRDs in sync."
 
 clean:
 	rm -rf bin/ coverage.out coverage.html

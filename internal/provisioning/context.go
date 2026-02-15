@@ -2,26 +2,12 @@ package provisioning
 
 import (
 	"context"
-	"log"
 
 	"github.com/imamik/k8zner/internal/config"
 	hcloud_internal "github.com/imamik/k8zner/internal/platform/hcloud"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
-
-// Logger defines a simple logging interface for provisioning phases.
-type Logger interface {
-	Printf(format string, v ...interface{})
-}
-
-// DefaultLogger is a logger that uses the standard log package.
-type DefaultLogger struct{}
-
-// Printf implements Logger interface for DefaultLogger.
-func (l *DefaultLogger) Printf(format string, v ...interface{}) {
-	log.Printf(format, v...)
-}
 
 // State holds the shared results of provisioning phases.
 // It is progressively populated as each phase completes and is passed
@@ -63,8 +49,7 @@ type Context struct {
 	State    *State
 	Infra    hcloud_internal.InfrastructureManager
 	Talos    TalosConfigProducer
-	Observer Observer // Replaced Logger with Observer for structured logging
-	Logger   Logger   // Keep for backward compatibility (points to same Observer)
+	Observer Observer
 	Timeouts *config.Timeouts
 }
 
@@ -83,7 +68,6 @@ func NewContext(
 		Infra:    infra,
 		Talos:    talos,
 		Observer: observer,
-		Logger:   observer, // Observer implements Logger interface
 		Timeouts: config.LoadTimeouts(),
 	}
 }

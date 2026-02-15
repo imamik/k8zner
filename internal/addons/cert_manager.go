@@ -2,7 +2,6 @@ package addons
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/imamik/k8zner/internal/addons/helm"
 	"github.com/imamik/k8zner/internal/addons/k8sclient"
@@ -10,22 +9,18 @@ import (
 )
 
 // applyCertManager installs cert-manager for TLS certificate management.
-// See: terraform/cert_manager.tf
 func applyCertManager(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
-	// Create namespace first
-	namespaceYAML := createCertManagerNamespace()
-	if err := applyManifests(ctx, client, "cert-manager-namespace", []byte(namespaceYAML)); err != nil {
-		return fmt.Errorf("failed to create cert-manager namespace: %w", err)
+	if err := ensureNamespace(ctx, client, "cert-manager", nil); err != nil {
+		return err
 	}
 
-	// Build values matching terraform configuration
+	// Build values for the addon
 	values := buildCertManagerValues(cfg)
 
 	return installHelmAddon(ctx, client, "cert-manager", "cert-manager", cfg.Addons.CertManager.Helm, values)
 }
 
-// buildCertManagerValues creates helm values matching terraform configuration.
-// See: terraform/cert_manager.tf lines 10-112
+// buildCertManagerValues creates helm values for the addon.
 func buildCertManagerValues(cfg *config.Config) helm.Values {
 	controlPlaneCount := getControlPlaneCount(cfg)
 	replicas := 1
@@ -119,9 +114,4 @@ func buildCertManagerConfig(cfg *config.Config) helm.Values {
 			"ACMEHTTP01IngressPathTypeExact": !cfg.Addons.Traefik.Enabled,
 		},
 	}
-}
-
-// createCertManagerNamespace returns the cert-manager namespace manifest.
-func createCertManagerNamespace() string {
-	return helm.NamespaceManifest("cert-manager", nil)
 }

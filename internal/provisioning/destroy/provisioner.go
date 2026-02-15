@@ -38,7 +38,7 @@ func (p *Provisioner) Provision(ctx *provisioning.Context) error {
 		clusterLabels[labels.LegacyKeyTestID] = ctx.Config.TestID
 	}
 
-	provisioning.LogResourceDeleting(ctx.Observer, "destroy", "cluster", ctx.Config.ClusterName)
+	ctx.Observer.Printf("[Destroy] Deleting cluster resources for %s...", ctx.Config.ClusterName)
 
 	// Delete all cluster resources by label
 	// This includes: servers, load balancers, firewalls, networks,
@@ -47,7 +47,6 @@ func (p *Provisioner) Provision(ctx *provisioning.Context) error {
 		return fmt.Errorf("failed to cleanup cluster resources: %w", err)
 	}
 
-	provisioning.LogResourceDeleted(ctx.Observer, "destroy", "cluster", ctx.Config.ClusterName)
 	ctx.Observer.Printf("[Destroy] Cluster %s destroyed successfully", ctx.Config.ClusterName)
 
 	return nil

@@ -1,6 +1,10 @@
 package config
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/imamik/k8zner/internal/util/ptr"
+)
 
 func TestIsPrivateFirst(t *testing.T) {
 	t.Parallel()
@@ -34,10 +38,10 @@ func TestShouldEnablePublicIPv4(t *testing.T) {
 		ipv4Enabled   *bool
 		want          bool
 	}{
-		{"explicit true overrides public access", "public", boolPtr(true), true},
-		{"explicit true overrides private access", "private", boolPtr(true), true},
-		{"explicit false overrides public access", "public", boolPtr(false), false},
-		{"explicit false overrides private access", "private", boolPtr(false), false},
+		{"explicit true overrides public access", "public", ptr.Bool(true), true},
+		{"explicit true overrides private access", "private", ptr.Bool(true), true},
+		{"explicit false overrides public access", "public", ptr.Bool(false), false},
+		{"explicit false overrides private access", "private", ptr.Bool(false), false},
 		{"nil with public access defaults to true", "public", nil, true},
 		{"nil with private access defaults to false", "private", nil, false},
 	}
@@ -68,8 +72,8 @@ func TestShouldEnablePublicIPv6(t *testing.T) {
 		ipv6Enabled *bool
 		want        bool
 	}{
-		{"explicit true returns true", boolPtr(true), true},
-		{"explicit false returns false", boolPtr(false), false},
+		{"explicit true returns true", ptr.Bool(true), true},
+		{"explicit false returns false", ptr.Bool(false), false},
 		{"nil defaults to true", nil, true},
 	}
 

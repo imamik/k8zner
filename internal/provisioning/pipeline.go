@@ -5,37 +5,25 @@ import (
 	"time"
 )
 
-// Pipeline manages the execution of provisioning phases.
-type Pipeline struct {
-	Phases []Phase
-}
+// RunPhases executes all provisioning phases sequentially.
+func RunPhases(ctx *Context, phases []Phase) error {
+	start := time.Now()
+	ctx.Observer.Printf("Starting provisioning with %d phases...", len(phases))
 
-// NewPipeline creates a new provisioning pipeline.
-func NewPipeline(phases ...Phase) *Pipeline {
-	return &Pipeline{
-		Phases: phases,
-	}
-}
+	for i, phase := range phases {
+		phaseStart := time.Now()
+		name := fmt.Sprintf("%s (%d/%d)", phase.Name(), i+1, len(phases))
 
-// Run executes all phases in the pipeline sequentially.
-func (p *Pipeline) Run(ctx *Context) error {
-	startTotal := time.Now()
-	ctx.Observer.Printf("Starting provisioning pipeline with %d phases...", len(p.Phases))
-
-	for i, phase := range p.Phases {
-		startPhase := time.Now()
-		phaseName := fmt.Sprintf("%s (%d/%d)", phase.Name(), i+1, len(p.Phases))
-
-		LogPhaseStart(ctx.Observer, phaseName)
+		ctx.Observer.Printf("[%s] starting", name)
 
 		if err := phase.Provision(ctx); err != nil {
-			LogPhaseFailed(ctx.Observer, phaseName, err)
+			ctx.Observer.Printf("[%s] failed: %v", name, err)
 			return fmt.Errorf("%s phase failed: %w", phase.Name(), err)
 		}
 
-		LogPhaseComplete(ctx.Observer, phaseName, time.Since(startPhase))
+		ctx.Observer.Printf("[%s] completed in %v", name, time.Since(phaseStart).Round(time.Millisecond))
 	}
 
-	ctx.Observer.Printf("Provisioning pipeline completed successfully in %v", time.Since(startTotal).Round(time.Millisecond))
+	ctx.Observer.Printf("Provisioning completed in %v", time.Since(start).Round(time.Millisecond))
 	return nil
 }

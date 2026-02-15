@@ -2,10 +2,9 @@ package config
 
 import (
 	"os"
-)
 
-// boolPtr returns a pointer to a boolean value.
-func boolPtr(b bool) *bool { return &b }
+	"github.com/imamik/k8zner/internal/util/ptr"
+)
 
 // ExpandSpec converts a simplified Spec to the full internal Config
 // that the provisioning layer expects.
@@ -28,7 +27,7 @@ func ExpandSpec(cfg *Spec) (*Config, error) {
 		// Access configuration
 		ClusterAccess:      "public", // LB is public, nodes are IPv6-only
 		GracefulDestroy:    true,
-		HealthcheckEnabled: boolPtr(true),
+		HealthcheckEnabled: ptr.Bool(true),
 		DeleteProtection:   false,
 
 		// Config output paths
@@ -36,7 +35,7 @@ func ExpandSpec(cfg *Spec) (*Config, error) {
 		TalosconfigPath: "./secrets/talosconfig",
 
 		// Talosctl settings
-		TalosctlVersionCheckEnabled: boolPtr(true),
+		TalosctlVersionCheckEnabled: ptr.Bool(true),
 		TalosctlRetryCount:          5,
 
 		// Network configuration
@@ -78,8 +77,8 @@ func expandNetwork(cfg *Spec) NetworkConfig {
 func expandFirewall(cfg *Spec) FirewallConfig {
 	return FirewallConfig{
 		// Auto-detect current IP for API access
-		UseCurrentIPv4: boolPtr(true),
-		UseCurrentIPv6: boolPtr(true),
+		UseCurrentIPv4: ptr.Bool(true),
+		UseCurrentIPv6: ptr.Bool(true),
 		// No ExtraRules needed: Traefik uses LoadBalancer service,
 		// so the Hetzner LB handles ingress traffic (not node ports 80/443).
 	}
@@ -123,20 +122,20 @@ func expandTalos(cfg *Spec, vm VersionMatrix) TalosConfig {
 		Version: vm.Talos,
 		Machine: TalosMachineConfig{
 			// IPv6-only configuration
-			IPv6Enabled:       boolPtr(true),
-			PublicIPv4Enabled: boolPtr(false), // No public IPv4!
-			PublicIPv6Enabled: boolPtr(true),
+			IPv6Enabled:       ptr.Bool(true),
+			PublicIPv4Enabled: ptr.Bool(false), // No public IPv4!
+			PublicIPv6Enabled: ptr.Bool(true),
 
 			// Disk encryption
-			StateEncryption:     boolPtr(true),
-			EphemeralEncryption: boolPtr(true),
+			StateEncryption:     ptr.Bool(true),
+			EphemeralEncryption: ptr.Bool(true),
 
 			// CoreDNS
-			CoreDNSEnabled: boolPtr(true),
+			CoreDNSEnabled: ptr.Bool(true),
 
 			// Discovery
-			DiscoveryKubernetesEnabled: boolPtr(true),
-			DiscoveryServiceEnabled:    boolPtr(true),
+			DiscoveryKubernetesEnabled: ptr.Bool(true),
+			DiscoveryServiceEnabled:    ptr.Bool(true),
 
 			// Config apply mode
 			ConfigApplyMode: "auto",
@@ -151,10 +150,10 @@ func expandKubernetes(cfg *Spec, vm VersionMatrix) KubernetesConfig {
 
 		// Enable API load balancer for HA mode
 		APILoadBalancerEnabled:       cfg.Mode == ModeHA,
-		APILoadBalancerPublicNetwork: boolPtr(true),
+		APILoadBalancerPublicNetwork: ptr.Bool(true),
 
 		// Allow scheduling on control plane only in dev mode
-		AllowSchedulingOnCP: boolPtr(cfg.Mode == ModeDev),
+		AllowSchedulingOnCP: ptr.Bool(cfg.Mode == ModeDev),
 	}
 }
 

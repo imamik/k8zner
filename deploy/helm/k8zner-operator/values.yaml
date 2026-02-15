@@ -63,6 +63,19 @@ tolerations:
   - key: node-role.kubernetes.io/control-plane
     operator: Exists
     effect: NoSchedule
+  # Tolerate uninitialized taint so operator can run before CCM initializes the node
+  - key: node.cloudprovider.kubernetes.io/uninitialized
+    operator: Exists
+    effect: NoSchedule
+  # Tolerate not-ready taint so operator can run before CNI makes node ready
+  - key: node.kubernetes.io/not-ready
+    operator: Exists
+    effect: NoSchedule
+  # Tolerate Cilium agent not-ready taint so operator can run before CNI is installed
+  # The operator installs Cilium, so it must be schedulable without Cilium running
+  - key: node.cilium.io/agent-not-ready
+    operator: Exists
+    effect: NoSchedule
 
 # Spread across control plane nodes
 affinity:

@@ -53,7 +53,7 @@ func (vp *ValidationPhase) Name() string {
 
 // Provision implements the Phase interface.
 func (vp *ValidationPhase) Provision(ctx *Context) error {
-	ctx.Logger.Printf("[Validation] Running pre-flight validation...")
+	ctx.Observer.Printf("[Validation] Running pre-flight validation...")
 
 	var allErrors []ValidationError
 	for _, validator := range vp.validators {
@@ -74,7 +74,7 @@ func (vp *ValidationPhase) Provision(ctx *Context) error {
 
 	// Log warnings
 	for _, warning := range warnings {
-		ctx.Logger.Printf("[Validation] WARNING: %s", warning.Message)
+		ctx.Observer.Printf("[Validation] WARNING: %s", warning.Message)
 	}
 
 	// Calculate subnets if not already set (v2 configs have them pre-set)
@@ -91,7 +91,7 @@ func (vp *ValidationPhase) Provision(ctx *Context) error {
 		return fmt.Errorf("configuration validation failed:\n  %s", strings.Join(errMsgs, "\n  "))
 	}
 
-	ctx.Logger.Printf("[Validation] Validation passed")
+	ctx.Observer.Printf("[Validation] Validation passed")
 	return nil
 }
 

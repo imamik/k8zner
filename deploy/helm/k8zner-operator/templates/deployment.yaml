@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "k8zner-operator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "k8zner-operator.labels" . | nindent 4 }}
 spec:
@@ -26,6 +27,12 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "k8zner-operator.serviceAccountName" . }}
+      {{- if .Values.hostNetwork }}
+      hostNetwork: true
+      {{- end }}
+      {{- if .Values.dnsPolicy }}
+      dnsPolicy: {{ .Values.dnsPolicy }}
+      {{- end }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
@@ -53,6 +60,12 @@ spec:
             - name: DEBUG
               value: "true"
             {{- end }}
+            {{- if .Values.hostNetwork }}
+            - name: KUBERNETES_SERVICE_HOST
+              value: "localhost"
+            - name: KUBERNETES_SERVICE_PORT
+              value: "6443"
+            {{- end }}
           ports:
             - name: metrics
               containerPort: {{ .Values.metrics.port }}
@@ -74,6 +87,20 @@ spec:
             periodSeconds: 10
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: helm-cache
+              mountPath: /home/nonroot/.cache
+            - name: helm-config
+              mountPath: /home/nonroot/.config
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: helm-cache
+          emptyDir: {}
+        - name: helm-config
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

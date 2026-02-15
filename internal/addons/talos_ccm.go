@@ -12,8 +12,6 @@ import (
 // applyTalosCCM installs the Talos Cloud Controller Manager.
 // This is separate from the Hetzner CCM - it's the Siderolabs Talos CCM
 // which provides node lifecycle management features.
-// See: terraform/variables.tf talos_ccm_* variables
-// See: terraform/talos_config.tf lines 29-31
 // Note: Default version is set in load.go during config loading.
 func applyTalosCCM(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	version := cfg.Addons.TalosCCM.Version

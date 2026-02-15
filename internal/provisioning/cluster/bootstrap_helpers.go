@@ -23,14 +23,14 @@ import (
 // configureNewNodes detects and configures any new nodes that are still in maintenance mode.
 // This is called during scaling operations when the cluster is already bootstrapped.
 func (p *Provisioner) configureNewNodes(ctx *provisioning.Context) error {
-	ctx.Logger.Printf("[%s] Checking %d control plane IPs and %d worker IPs for new nodes...",
+	ctx.Observer.Printf("[%s] Checking %d control plane IPs and %d worker IPs for new nodes...",
 		phase, len(ctx.State.ControlPlaneIPs), len(ctx.State.WorkerIPs))
 
 	newCPNodes := p.detectMaintenanceModeNodes(ctx, ctx.State.ControlPlaneIPs, "control plane")
 	newWorkerNodes := p.detectMaintenanceModeNodes(ctx, ctx.State.WorkerIPs, "worker")
 
 	if len(newCPNodes) == 0 && len(newWorkerNodes) == 0 {
-		ctx.Logger.Printf("[%s] No new nodes detected, cluster is up to date", phase)
+		ctx.Observer.Printf("[%s] No new nodes detected, cluster is up to date", phase)
 		return nil
 	}
 
@@ -41,7 +41,7 @@ func (p *Provisioner) configureNewNodes(ctx *provisioning.Context) error {
 		return err
 	}
 
-	ctx.Logger.Printf("[%s] Successfully configured %d new control plane nodes and %d new worker nodes",
+	ctx.Observer.Printf("[%s] Successfully configured %d new control plane nodes and %d new worker nodes",
 		phase, len(newCPNodes), len(newWorkerNodes))
 	return nil
 }
@@ -50,12 +50,12 @@ func (p *Provisioner) configureNewNodes(ctx *provisioning.Context) error {
 func (p *Provisioner) detectMaintenanceModeNodes(ctx *provisioning.Context, nodeIPs map[string]string, role string) map[string]string {
 	newNodes := make(map[string]string)
 	for nodeName, nodeIP := range nodeIPs {
-		ctx.Logger.Printf("[%s] Checking %s node %s (%s)...", phase, role, nodeName, nodeIP)
+		ctx.Observer.Printf("[%s] Checking %s node %s (%s)...", phase, role, nodeName, nodeIP)
 		if p.isNodeInMaintenanceMode(ctx, nodeIP) {
-			ctx.Logger.Printf("[%s] Node %s is in maintenance mode (new node)", phase, nodeName)
+			ctx.Observer.Printf("[%s] Node %s is in maintenance mode (new node)", phase, nodeName)
 			newNodes[nodeName] = nodeIP
 		} else {
-			ctx.Logger.Printf("[%s] Node %s is already configured", phase, nodeName)
+			ctx.Observer.Printf("[%s] Node %s is already configured", phase, nodeName)
 		}
 	}
 	return newNodes
@@ -67,25 +67,25 @@ func (p *Provisioner) configureAndWaitForNewCPs(ctx *provisioning.Context, newCP
 		return nil
 	}
 
-	ctx.Logger.Printf("[%s] Found %d new control plane nodes to configure", phase, len(newCPNodes))
+	ctx.Observer.Printf("[%s] Found %d new control plane nodes to configure", phase, len(newCPNodes))
 	for nodeName, nodeIP := range newCPNodes {
 		serverID := ctx.State.ControlPlaneServerIDs[nodeName]
 		machineConfig, err := ctx.Talos.GenerateControlPlaneConfig(ctx.State.SANs, nodeName, serverID)
 		if err != nil {
 			return fmt.Errorf("failed to generate machine config for new CP node %s: %w", nodeName, err)
 		}
-		ctx.Logger.Printf("[%s] Applying config to new control plane node %s (%s)...", phase, nodeName, nodeIP)
+		ctx.Observer.Printf("[%s] Applying config to new control plane node %s (%s)...", phase, nodeName, nodeIP)
 		if err := p.applyMachineConfig(ctx, nodeIP, machineConfig); err != nil {
 			return fmt.Errorf("failed to apply config to new CP node %s: %w", nodeName, err)
 		}
 	}
 
 	for nodeName, nodeIP := range newCPNodes {
-		ctx.Logger.Printf("[%s] Waiting for new control plane node %s (%s) to be ready...", phase, nodeName, nodeIP)
-		if err := p.waitForNodeReady(ctx, nodeIP, ctx.State.TalosConfig, ctx.Logger); err != nil {
+		ctx.Observer.Printf("[%s] Waiting for new control plane node %s (%s) to be ready...", phase, nodeName, nodeIP)
+		if err := p.waitForNodeReady(ctx, nodeIP, ctx.State.TalosConfig, ctx.Observer); err != nil {
 			return fmt.Errorf("new control plane node %s failed to become ready: %w", nodeName, err)
 		}
-		ctx.Logger.Printf("[%s] New control plane node %s is ready", phase, nodeName)
+		ctx.Observer.Printf("[%s] New control plane node %s is ready", phase, nodeName)
 	}
 	return nil
 }
@@ -96,25 +96,25 @@ func (p *Provisioner) configureAndWaitForNewWorkers(ctx *provisioning.Context, n
 		return nil
 	}
 
-	ctx.Logger.Printf("[%s] Found %d new worker nodes to configure", phase, len(newWorkerNodes))
+	ctx.Observer.Printf("[%s] Found %d new worker nodes to configure", phase, len(newWorkerNodes))
 	for nodeName, nodeIP := range newWorkerNodes {
 		serverID := ctx.State.WorkerServerIDs[nodeName]
 		nodeConfig, err := ctx.Talos.GenerateWorkerConfig(nodeName, serverID)
 		if err != nil {
 			return fmt.Errorf("failed to generate worker config for new node %s: %w", nodeName, err)
 		}
-		ctx.Logger.Printf("[%s] Applying config to new worker node %s (%s)...", phase, nodeName, nodeIP)
+		ctx.Observer.Printf("[%s] Applying config to new worker node %s (%s)...", phase, nodeName, nodeIP)
 		if err := p.applyMachineConfig(ctx, nodeIP, nodeConfig); err != nil {
 			return fmt.Errorf("failed to apply config to new worker node %s: %w", nodeName, err)
 		}
 	}
 
 	for nodeName, nodeIP := range newWorkerNodes {
-		ctx.Logger.Printf("[%s] Waiting for new worker node %s (%s) to be ready...", phase, nodeName, nodeIP)
-		if err := p.waitForNodeReady(ctx, nodeIP, ctx.State.TalosConfig, ctx.Logger); err != nil {
+		ctx.Observer.Printf("[%s] Waiting for new worker node %s (%s) to be ready...", phase, nodeName, nodeIP)
+		if err := p.waitForNodeReady(ctx, nodeIP, ctx.State.TalosConfig, ctx.Observer); err != nil {
 			return fmt.Errorf("new worker node %s failed to become ready: %w", nodeName, err)
 		}
-		ctx.Logger.Printf("[%s] New worker node %s is ready", phase, nodeName)
+		ctx.Observer.Printf("[%s] New worker node %s is ready", phase, nodeName)
 	}
 	return nil
 }
@@ -124,17 +124,17 @@ func (p *Provisioner) configureAndWaitForNewWorkers(ctx *provisioning.Context, n
 // to authenticated requests with the cluster's Talos config.
 func (p *Provisioner) isNodeInMaintenanceMode(ctx *provisioning.Context, nodeIP string) bool {
 	portWaitTimeout := ctx.Timeouts.PortWait
-	ctx.Logger.Printf("[%s] Waiting for Talos API on %s:50000...", phase, nodeIP)
+	ctx.Observer.Printf("[%s] Waiting for Talos API on %s:50000...", phase, nodeIP)
 	portCtx, cancel := context.WithTimeout(ctx, portWaitTimeout)
 	defer cancel()
 	if err := waitForPort(portCtx, nodeIP, 50000, portWaitTimeout, ctx.Timeouts.PortPoll, ctx.Timeouts.DialTimeout); err != nil {
-		ctx.Logger.Printf("[%s] Node %s port 50000 not reachable, skipping", phase, nodeIP)
+		ctx.Observer.Printf("[%s] Node %s port 50000 not reachable, skipping", phase, nodeIP)
 		return false
 	}
-	ctx.Logger.Printf("[%s] Node %s port 50000 is reachable", phase, nodeIP)
+	ctx.Observer.Printf("[%s] Node %s port 50000 is reachable", phase, nodeIP)
 
 	if len(ctx.State.TalosConfig) == 0 {
-		ctx.Logger.Printf("[%s] Warning: TalosConfig is empty, cannot check auth", phase)
+		ctx.Observer.Printf("[%s] Warning: TalosConfig is empty, cannot check auth", phase)
 		return false
 	}
 
@@ -150,7 +150,7 @@ func (p *Provisioner) isNodeInMaintenanceMode(ctx *provisioning.Context, nodeIP 
 func (p *Provisioner) isAuthenticatedConnectionWorking(ctx *provisioning.Context, nodeIP string) bool {
 	cfg, err := config.FromString(string(ctx.State.TalosConfig))
 	if err != nil {
-		ctx.Logger.Printf("[%s] Warning: Failed to parse TalosConfig: %v", phase, err)
+		ctx.Observer.Printf("[%s] Warning: Failed to parse TalosConfig: %v", phase, err)
 		return false
 	}
 
@@ -159,17 +159,17 @@ func (p *Provisioner) isAuthenticatedConnectionWorking(ctx *provisioning.Context
 
 	authClient, err := client.New(checkCtx, client.WithConfig(cfg), client.WithEndpoints(nodeIP))
 	if err != nil {
-		ctx.Logger.Printf("[%s] Cannot create auth client for %s: %v - assuming maintenance mode", phase, nodeIP, err)
+		ctx.Observer.Printf("[%s] Cannot create auth client for %s: %v - assuming maintenance mode", phase, nodeIP, err)
 		return false
 	}
 	defer func() { _ = authClient.Close() }()
 
 	_, err = authClient.Version(checkCtx)
 	if err == nil {
-		ctx.Logger.Printf("[%s] Node %s: authenticated connection succeeded - already configured", phase, nodeIP)
+		ctx.Observer.Printf("[%s] Node %s: authenticated connection succeeded - already configured", phase, nodeIP)
 		return true
 	}
-	ctx.Logger.Printf("[%s] Node %s: authenticated connection failed: %v - trying insecure", phase, nodeIP, err)
+	ctx.Observer.Printf("[%s] Node %s: authenticated connection failed: %v - trying insecure", phase, nodeIP, err)
 	return false
 }
 
@@ -185,14 +185,14 @@ func (p *Provisioner) isInsecureMaintenanceMode(ctx *provisioning.Context, nodeI
 		client.WithTLSConfig(&tls.Config{InsecureSkipVerify: true}),
 	)
 	if err != nil {
-		ctx.Logger.Printf("[%s] Cannot create insecure client for %s: %v", phase, nodeIP, err)
+		ctx.Observer.Printf("[%s] Cannot create insecure client for %s: %v", phase, nodeIP, err)
 		return false
 	}
 	defer func() { _ = insecureClient.Close() }()
 
 	_, err = insecureClient.Version(insecureCtx)
 	if err == nil {
-		ctx.Logger.Printf("[%s] Node %s is in maintenance mode (insecure works, auth fails)", phase, nodeIP)
+		ctx.Observer.Printf("[%s] Node %s is in maintenance mode (insecure works, auth fails)", phase, nodeIP)
 		return true
 	}
 
@@ -200,11 +200,11 @@ func (p *Provisioner) isInsecureMaintenanceMode(ctx *provisioning.Context, nodeI
 	errStr := err.Error()
 	if strings.Contains(errStr, "not implemented in maintenance mode") ||
 		strings.Contains(errStr, "maintenance mode") {
-		ctx.Logger.Printf("[%s] Node %s is in maintenance mode (detected via error message)", phase, nodeIP)
+		ctx.Observer.Printf("[%s] Node %s is in maintenance mode (detected via error message)", phase, nodeIP)
 		return true
 	}
 
-	ctx.Logger.Printf("[%s] Node %s: both auth and insecure failed: %v", phase, nodeIP, err)
+	ctx.Observer.Printf("[%s] Node %s: both auth and insecure failed: %v", phase, nodeIP, err)
 	return false
 }
 
@@ -240,16 +240,16 @@ func (p *Provisioner) applyMachineConfig(ctx *provisioning.Context, nodeIP strin
 }
 
 // waitForNodeReady waits for a node to reboot and become ready after applying configuration.
-func (p *Provisioner) waitForNodeReady(ctx *provisioning.Context, nodeIP string, clientConfigBytes []byte, logger provisioning.Logger) error {
+func (p *Provisioner) waitForNodeReady(ctx *provisioning.Context, nodeIP string, clientConfigBytes []byte, observer provisioning.Observer) error {
 	cfg, err := config.FromString(string(clientConfigBytes))
 	if err != nil {
 		return fmt.Errorf("failed to parse client config: %w", err)
 	}
 
-	logger.Printf("[%s] Waiting for node %s to begin reboot...", phase, nodeIP)
+	observer.Printf("[%s] Waiting for node %s to begin reboot...", phase, nodeIP)
 	time.Sleep(defaultRebootInitialWait)
 
-	logger.Printf("[%s] Waiting for node %s to come back online...", phase, nodeIP)
+	observer.Printf("[%s] Waiting for node %s to come back online...", phase, nodeIP)
 	if err := waitForPort(ctx, nodeIP, 50000, ctx.Timeouts.TalosAPI, ctx.Timeouts.PortPoll, ctx.Timeouts.DialTimeout); err != nil {
 		return fmt.Errorf("failed to wait for node to come back: %w", err)
 	}
@@ -277,23 +277,23 @@ func (p *Provisioner) waitForNodeReady(ctx *provisioning.Context, nodeIP string,
 			if err == nil {
 				return nil
 			}
-			logger.Printf("[%s] Node %s not yet ready, waiting... (error: %v)", phase, nodeIP, err)
+			observer.Printf("[%s] Node %s not yet ready, waiting... (error: %v)", phase, nodeIP, err)
 		}
 	}
 }
 
 // retrieveKubeconfig retrieves the kubeconfig from the cluster using the first control plane IP.
-func (p *Provisioner) retrieveKubeconfig(ctx *provisioning.Context, controlPlaneNodes map[string]string, clientConfigBytes []byte, logger provisioning.Logger) ([]byte, error) {
+func (p *Provisioner) retrieveKubeconfig(ctx *provisioning.Context, controlPlaneNodes map[string]string, clientConfigBytes []byte, observer provisioning.Observer) ([]byte, error) {
 	var firstCPIP string
 	for _, ip := range controlPlaneNodes {
 		firstCPIP = ip
 		break
 	}
-	return p.retrieveKubeconfigFromEndpoint(ctx, firstCPIP, clientConfigBytes, logger)
+	return p.retrieveKubeconfigFromEndpoint(ctx, firstCPIP, clientConfigBytes, observer)
 }
 
 // retrieveKubeconfigFromEndpoint retrieves the kubeconfig from a specific endpoint.
-func (p *Provisioner) retrieveKubeconfigFromEndpoint(ctx *provisioning.Context, endpoint string, clientConfigBytes []byte, logger provisioning.Logger) ([]byte, error) {
+func (p *Provisioner) retrieveKubeconfigFromEndpoint(ctx *provisioning.Context, endpoint string, clientConfigBytes []byte, observer provisioning.Observer) ([]byte, error) {
 	cfg, err := config.FromString(string(clientConfigBytes))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse client config: %w", err)
@@ -305,7 +305,7 @@ func (p *Provisioner) retrieveKubeconfigFromEndpoint(ctx *provisioning.Context, 
 	}
 	defer func() { _ = clientCtx.Close() }()
 
-	logger.Printf("[%s] Waiting for Kubernetes API to become ready via %s...", phase, endpoint)
+	observer.Printf("[%s] Waiting for Kubernetes API to become ready via %s...", phase, endpoint)
 	ticker := time.NewTicker(ctx.Timeouts.NodeReadyPoll)
 	defer ticker.Stop()
 
@@ -318,10 +318,10 @@ func (p *Provisioner) retrieveKubeconfigFromEndpoint(ctx *provisioning.Context, 
 		case <-ticker.C:
 			kubeconfigBytes, err := clientCtx.Kubeconfig(ctx)
 			if err == nil && len(kubeconfigBytes) > 0 {
-				logger.Printf("[%s] Kubernetes API is ready!", phase)
+				observer.Printf("[%s] Kubernetes API is ready!", phase)
 				return kubeconfigBytes, nil
 			}
-			logger.Printf("[%s] Kubernetes API not yet ready, waiting... (error: %v)", phase, err)
+			observer.Printf("[%s] Kubernetes API not yet ready, waiting... (error: %v)", phase, err)
 		}
 	}
 }

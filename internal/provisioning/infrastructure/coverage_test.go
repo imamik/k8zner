@@ -195,47 +195,6 @@ func TestProvisionNetwork_LBSubnetCalcError(t *testing.T) {
 	assert.Contains(t, err.Error(), "load-balancer subnet")
 }
 
-func TestProvisionNetwork_AutoscalerSubnetError(t *testing.T) {
-	t.Parallel()
-	mockInfra := &hcloud_internal.MockClient{}
-	cfg := &config.Config{
-		ClusterName: "test-cluster",
-		Location:    "nbg1",
-		Network: config.NetworkConfig{
-			IPv4CIDR: "10.0.0.0/16",
-			Zone:     "eu-central",
-		},
-		Autoscaler: config.AutoscalerConfig{
-			Enabled: true,
-			NodePools: []config.AutoscalerNodePool{
-				{Name: "pool", Type: "cx21", Min: 0, Max: 5},
-			},
-		},
-	}
-	require.NoError(t, cfg.CalculateSubnets())
-
-	_, ipNet, _ := net.ParseCIDR("10.0.0.0/16")
-	subnetCallCount := 0
-	mockInfra.EnsureNetworkFunc = func(_ context.Context, name, _, _ string, _ map[string]string) (*hcloud.Network, error) {
-		return &hcloud.Network{ID: 1, Name: name, IPRange: ipNet}, nil
-	}
-	mockInfra.EnsureSubnetFunc = func(_ context.Context, _ *hcloud.Network, _, _ string, _ hcloud.NetworkSubnetType) error {
-		subnetCallCount++
-		if subnetCallCount == 3 {
-			// Fail on autoscaler subnet (3rd call: CP, LB, autoscaler)
-			return fmt.Errorf("autoscaler subnet error")
-		}
-		return nil
-	}
-
-	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err := p.ProvisionNetwork(ctx)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "autoscaler subnet")
-}
-
 // --- Network: GetSubnetForRole error paths ---
 
 func TestProvisionNetwork_CPSubnetCalcError(t *testing.T) {
@@ -337,46 +296,6 @@ func TestProvisionNetwork_WorkerSubnetCalcError(t *testing.T) {
 	assert.Contains(t, err.Error(), "worker subnet")
 }
 
-func TestProvisionNetwork_AutoscalerSubnetCalcError(t *testing.T) {
-	t.Parallel()
-	mockInfra := &hcloud_internal.MockClient{}
-	cfg := &config.Config{
-		ClusterName: "test-cluster",
-		Network: config.NetworkConfig{
-			IPv4CIDR: "10.0.0.0/16",
-			Zone:     "eu-central",
-		},
-		Autoscaler: config.AutoscalerConfig{
-			Enabled: true,
-			NodePools: []config.AutoscalerNodePool{
-				{Name: "pool", Type: "cx21", Min: 0, Max: 5},
-			},
-		},
-	}
-	require.NoError(t, cfg.CalculateSubnets())
-
-	_, ipNet, _ := net.ParseCIDR("10.0.0.0/16")
-	subnetCount := 0
-	mockInfra.EnsureNetworkFunc = func(_ context.Context, name, _, _ string, _ map[string]string) (*hcloud.Network, error) {
-		return &hcloud.Network{ID: 1, Name: name, IPRange: ipNet}, nil
-	}
-	mockInfra.EnsureSubnetFunc = func(_ context.Context, _ *hcloud.Network, _, _ string, _ hcloud.NetworkSubnetType) error {
-		subnetCount++
-		if subnetCount == 2 {
-			// After LB subnet succeeds, corrupt CIDR so autoscaler calc fails
-			cfg.Network.NodeIPv4CIDR = "invalid-cidr"
-		}
-		return nil
-	}
-
-	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err := p.ProvisionNetwork(ctx)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "autoscaler subnet")
-}
-
 // --- Load Balancer: GetSubnetForRole error paths ---
 
 func TestProvisionLoadBalancers_APILBSubnetError(t *testing.T) {
@@ -407,39 +326,6 @@ func TestProvisionLoadBalancers_APILBSubnetError(t *testing.T) {
 	err := p.ProvisionLoadBalancers(ctx)
 
 	require.Error(t, err)
-}
-
-// --- Load Balancer: RDNS warning path ---
-
-func TestProvisionLoadBalancers_APILBRDNSWarning(t *testing.T) {
-	t.Parallel()
-	mockInfra := &hcloud_internal.MockClient{}
-	cfg := newTestConfig(t)
-	cfg.RDNS = config.RDNSConfig{
-		// Use an invalid template to cause RDNS error
-		ClusterRDNSIPv4: "{{ unknown-var }}.example.com",
-	}
-
-	_, ipNet, _ := net.ParseCIDR("10.0.0.0/16")
-	ctx := createTestContext(t, mockInfra, cfg)
-	ctx.State.Network = &hcloud.Network{ID: 1, IPRange: ipNet}
-
-	setupLBMock(mockInfra)
-	mockInfra.GetLoadBalancerFunc = func(_ context.Context, name string) (*hcloud.LoadBalancer, error) {
-		return &hcloud.LoadBalancer{
-			ID:   1,
-			Name: name,
-			PublicNet: hcloud.LoadBalancerPublicNet{
-				IPv4: hcloud.LoadBalancerPublicNetIPv4{IP: net.ParseIP("5.6.7.8")},
-			},
-		}, nil
-	}
-
-	p := NewProvisioner()
-	err := p.ProvisionLoadBalancers(ctx)
-
-	// RDNS error is a warning, should not fail provisioning
-	require.NoError(t, err)
 }
 
 // --- Load Balancer: full success path with refresh ---

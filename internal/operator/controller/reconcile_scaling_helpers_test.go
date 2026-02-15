@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	"github.com/imamik/k8zner/internal/config"
 )
 
 func TestFindUnhealthyNodes(t *testing.T) {
@@ -778,7 +779,7 @@ func TestNormalizeServerSize(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := normalizeServerSize(tt.input)
+			got := string(config.ServerSize(tt.input).Normalize())
 			assert.Equal(t, tt.want, got)
 		})
 	}

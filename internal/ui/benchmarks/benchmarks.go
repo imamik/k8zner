@@ -7,8 +7,8 @@ import (
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 )
 
-// DefaultTimings are median durations from E2E test runs (seconds).
-var DefaultTimings = map[string]int{
+// defaultTimings are median durations from E2E test runs (seconds).
+var defaultTimings = map[string]int{
 	"Infrastructure": 30,
 	"Image":          120,
 	"Compute":        60,
@@ -27,8 +27,8 @@ var DefaultTimings = map[string]int{
 	"addon:talos-backup":   15,
 }
 
-// PhaseOrder defines the sequence of provisioning phases for ETA calculation.
-var PhaseOrder = []string{
+// phaseOrder defines the sequence of provisioning phases for ETA calculation.
+var phaseOrder = []string{
 	"Infrastructure",
 	"Image",
 	"Compute",
@@ -37,9 +37,9 @@ var PhaseOrder = []string{
 	"Addons",
 }
 
-// EstimateRemaining calculates the estimated time remaining based on
+// estimateRemaining calculates the estimated time remaining based on
 // current phase, elapsed time, and historical phase records.
-func EstimateRemaining(currentPhase string, phaseElapsed time.Duration, history []k8znerv1alpha1.PhaseRecord) time.Duration {
+func estimateRemaining(currentPhase string, phaseElapsed time.Duration, history []k8znerv1alpha1.PhaseRecord) time.Duration {
 	return EstimateRemainingWithScale(currentPhase, phaseElapsed, history, PerformanceScale(currentPhase, phaseElapsed, history))
 }
 
@@ -54,7 +54,7 @@ func EstimateRemainingWithScale(
 
 	// Find the index of the current phase
 	currentIdx := -1
-	for i, p := range PhaseOrder {
+	for i, p := range phaseOrder {
 		if p == currentPhase {
 			currentIdx = i
 			break
@@ -65,7 +65,7 @@ func EstimateRemainingWithScale(
 	}
 
 	// For the current phase: max(0, expected - elapsed)
-	if expected, ok := DefaultTimings[currentPhase]; ok {
+	if expected, ok := defaultTimings[currentPhase]; ok {
 		expectedDur := time.Duration(expected) * time.Second
 		expectedDur = time.Duration(float64(expectedDur) * scale)
 		if expectedDur > phaseElapsed {
@@ -73,7 +73,7 @@ func EstimateRemainingWithScale(
 		}
 	}
 
-	// For future phases: use DefaultTimings (or actual durations from history if available)
+	// For future phases: use defaultTimings (or actual durations from history if available)
 	completedPhases := make(map[string]bool)
 	for _, rec := range history {
 		if rec.EndedAt != nil {
@@ -81,12 +81,12 @@ func EstimateRemainingWithScale(
 		}
 	}
 
-	for i := currentIdx + 1; i < len(PhaseOrder); i++ {
-		phase := PhaseOrder[i]
+	for i := currentIdx + 1; i < len(phaseOrder); i++ {
+		phase := phaseOrder[i]
 		if completedPhases[phase] {
 			continue
 		}
-		if expected, ok := DefaultTimings[phase]; ok {
+		if expected, ok := defaultTimings[phase]; ok {
 			expectedDur := time.Duration(expected) * time.Second
 			remaining += time.Duration(float64(expectedDur) * scale)
 		}
@@ -102,7 +102,7 @@ func PerformanceScale(currentPhase string, phaseElapsed time.Duration, history [
 	var actualTotal time.Duration
 
 	for _, rec := range history {
-		expectedSecs, ok := DefaultTimings[string(rec.Phase)]
+		expectedSecs, ok := defaultTimings[string(rec.Phase)]
 		if !ok || rec.EndedAt == nil {
 			continue
 		}
@@ -111,7 +111,7 @@ func PerformanceScale(currentPhase string, phaseElapsed time.Duration, history [
 	}
 
 	// If current phase is overrunning, fold it in immediately so ETA adapts quickly.
-	if expectedSecs, ok := DefaultTimings[currentPhase]; ok && phaseElapsed > 0 {
+	if expectedSecs, ok := defaultTimings[currentPhase]; ok && phaseElapsed > 0 {
 		expectedCurrent := time.Duration(expectedSecs) * time.Second
 		if phaseElapsed > expectedCurrent {
 			expectedTotal += expectedCurrent
@@ -135,7 +135,7 @@ func PerformanceScale(currentPhase string, phaseElapsed time.Duration, history [
 
 // AddonExpectedDuration returns the benchmark duration for an addon.
 func AddonExpectedDuration(addon string) (time.Duration, bool) {
-	secs, ok := DefaultTimings["addon:"+addon]
+	secs, ok := defaultTimings["addon:"+addon]
 	if !ok {
 		return 0, false
 	}
@@ -144,18 +144,18 @@ func AddonExpectedDuration(addon string) (time.Duration, bool) {
 
 // PhaseDuration returns the benchmark duration for a provisioning phase.
 func PhaseDuration(phase string) (time.Duration, bool) {
-	secs, ok := DefaultTimings[phase]
+	secs, ok := defaultTimings[phase]
 	if !ok {
 		return 0, false
 	}
 	return time.Duration(secs) * time.Second, true
 }
 
-// TotalEstimate returns the total estimated provisioning time.
-func TotalEstimate() time.Duration {
+// totalEstimate returns the total estimated provisioning time.
+func totalEstimate() time.Duration {
 	var total time.Duration
-	for _, phase := range PhaseOrder {
-		if secs, ok := DefaultTimings[phase]; ok {
+	for _, phase := range phaseOrder {
+		if secs, ok := defaultTimings[phase]; ok {
 			total += time.Duration(secs) * time.Second
 		}
 	}

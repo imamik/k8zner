@@ -11,20 +11,18 @@ import (
 )
 
 // applyCCM installs the Hetzner Cloud Controller Manager.
-// See: terraform/hcloud.tf (hcloud_ccm)
 func applyCCM(ctx context.Context, client k8sclient.Client, cfg *config.Config, networkID int64) error {
 	if !cfg.Addons.CCM.Enabled {
 		return nil
 	}
 
-	// Build CCM values matching terraform configuration
+	// Build CCM values for the addon
 	values := buildCCMValues(cfg)
 
 	return installHelmAddon(ctx, client, "hcloud-ccm", "kube-system", cfg.Addons.CCM.Helm, values)
 }
 
-// buildCCMValues creates helm values matching terraform configuration.
-// See: terraform/hcloud.tf lines 31-57
+// buildCCMValues creates helm values for the addon.
 func buildCCMValues(cfg *config.Config) helm.Values {
 	ccm := &cfg.Addons.CCM
 	lb := &ccm.LoadBalancers
@@ -49,7 +47,6 @@ func buildCCMValues(cfg *config.Config) helm.Values {
 	}
 
 	// Build environment variables for load balancer configuration
-	// See: terraform/hcloud.tf lines 39-54
 	env := buildCCMEnvVars(cfg, lb)
 
 	// CCM runs on control plane nodes with hostNetwork:true.

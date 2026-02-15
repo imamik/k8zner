@@ -18,8 +18,8 @@ type Renderer struct {
 	namespace string
 }
 
-// NewRenderer creates a renderer for the specified chart.
-func NewRenderer(chartName, namespace string) *Renderer {
+// newRenderer creates a renderer for the specified chart.
+func newRenderer(chartName, namespace string) *Renderer {
 	return &Renderer{
 		chartName: chartName,
 		namespace: namespace,
@@ -83,7 +83,7 @@ func (r *Renderer) renderChart(ch *chart.Chart, values Values) ([]byte, error) {
 
 	// Deep merge provided values with chart defaults
 	// This ensures nested objects (like controller.podSecurityContext) are preserved
-	mergedValues := DeepMerge(chartDefaults, values)
+	mergedValues := deepMerge(chartDefaults, values)
 
 	// Convert to plain map[string]interface{} recursively
 	// This ensures nested Values types are converted to plain maps for Helm

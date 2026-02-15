@@ -7,46 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMerge(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name     string
-		input    []Values
-		expected Values
-	}{
-		{
-			name: "merge two maps",
-			input: []Values{
-				{"key1": "value1", "key2": "value2"},
-				{"key2": "override", "key3": "value3"},
-			},
-			expected: Values{"key1": "value1", "key2": "override", "key3": "value3"},
-		},
-		{
-			name:     "merge empty maps",
-			input:    []Values{{}, {}},
-			expected: Values{},
-		},
-		{
-			name: "later maps take precedence",
-			input: []Values{
-				{"replicas": 1},
-				{"replicas": 2},
-				{"replicas": 3},
-			},
-			expected: Values{"replicas": 3},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			result := Merge(tt.input...)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 func TestToYAML(t *testing.T) {
 	t.Parallel()
 	values := Values{
@@ -57,7 +17,7 @@ func TestToYAML(t *testing.T) {
 		},
 	}
 
-	yaml, err := values.ToYAML()
+	yaml, err := values.toYAML()
 	require.NoError(t, err)
 	assert.Contains(t, string(yaml), "replicas: 2")
 	assert.Contains(t, string(yaml), "repository: metrics-server")
@@ -72,7 +32,7 @@ nodeSelector:
   node-role.kubernetes.io/control-plane: ""
 `)
 
-	values, err := FromYAML(yamlData)
+	values, err := fromYAML(yamlData)
 	require.NoError(t, err)
 	assert.Equal(t, 2, values["replicas"])
 	assert.NotNil(t, values["nodeSelector"])
@@ -82,7 +42,7 @@ func TestDeepMerge(t *testing.T) {
 	t.Parallel()
 	t.Run("shallow merge - same as Merge", func(t *testing.T) {
 		t.Parallel()
-		result := DeepMerge(
+		result := deepMerge(
 			Values{"key1": "value1", "key2": "value2"},
 			Values{"key2": "override", "key3": "value3"},
 		)
@@ -93,7 +53,7 @@ func TestDeepMerge(t *testing.T) {
 
 	t.Run("deep merge - nested maps", func(t *testing.T) {
 		t.Parallel()
-		result := DeepMerge(
+		result := deepMerge(
 			Values{
 				"controller": map[string]any{
 					"replicas": 1,
@@ -129,7 +89,7 @@ func TestDeepMerge(t *testing.T) {
 
 	t.Run("deep merge - three levels deep", func(t *testing.T) {
 		t.Parallel()
-		result := DeepMerge(
+		result := deepMerge(
 			Values{
 				"controller": map[string]any{
 					"image": map[string]any{
@@ -165,7 +125,7 @@ func TestDeepMerge(t *testing.T) {
 
 	t.Run("arrays are replaced not merged", func(t *testing.T) {
 		t.Parallel()
-		result := DeepMerge(
+		result := deepMerge(
 			Values{"args": []string{"--flag1", "--flag2"}},
 			Values{"args": []string{"--flag3"}},
 		)
@@ -174,7 +134,7 @@ func TestDeepMerge(t *testing.T) {
 
 	t.Run("non-map values override maps", func(t *testing.T) {
 		t.Parallel()
-		result := DeepMerge(
+		result := deepMerge(
 			Values{"config": map[string]any{"key": "value"}},
 			Values{"config": "simple string"},
 		)
@@ -183,7 +143,7 @@ func TestDeepMerge(t *testing.T) {
 
 	t.Run("multiple merges", func(t *testing.T) {
 		t.Parallel()
-		result := DeepMerge(
+		result := deepMerge(
 			Values{"a": map[string]any{"x": 1}},
 			Values{"a": map[string]any{"y": 2}},
 			Values{"a": map[string]any{"z": 3}},
@@ -198,7 +158,7 @@ func TestDeepMerge(t *testing.T) {
 
 	t.Run("empty maps", func(t *testing.T) {
 		t.Parallel()
-		result := DeepMerge(Values{}, Values{}, Values{})
+		result := deepMerge(Values{}, Values{}, Values{})
 		assert.Empty(t, result)
 	})
 }
@@ -234,7 +194,7 @@ func TestDeepMerge_RealWorldCSICase(t *testing.T) {
 		},
 	}
 
-	result := DeepMerge(chartDefaults, customValues)
+	result := deepMerge(chartDefaults, customValues)
 
 	// Check that replicas was overridden
 	controller := toValuesMap(result["controller"])
@@ -383,7 +343,7 @@ func TestFromYAML_Errors(t *testing.T) {
 		// YAML doesn't allow tabs for indentation - this should fail
 
 		invalidYAML := []byte("key:\n\t- invalid")
-		_, err := FromYAML(invalidYAML)
+		_, err := fromYAML(invalidYAML)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to parse YAML")
 	})
@@ -391,7 +351,7 @@ func TestFromYAML_Errors(t *testing.T) {
 	t.Run("invalid yaml - unclosed bracket", func(t *testing.T) {
 		t.Parallel()
 		invalidYAML := []byte("key: [unclosed")
-		_, err := FromYAML(invalidYAML)
+		_, err := fromYAML(invalidYAML)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to parse YAML")
 	})
@@ -599,7 +559,7 @@ func TestToYAML_Error(t *testing.T) {
 	// ToYAML is only reachable if the YAML library changes behavior.
 	v := Values{"fn": func() {}}
 	assert.Panics(t, func() {
-		_, _ = v.ToYAML()
+		_, _ = v.toYAML()
 	})
 }
 

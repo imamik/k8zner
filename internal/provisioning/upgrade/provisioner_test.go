@@ -75,10 +75,6 @@ func (m *mockTalosClient) GetClientConfig() ([]byte, error) {
 func (m *mockTalosClient) SetEndpoint(_ string) {
 }
 
-func (m *mockTalosClient) GenerateAutoscalerConfig(_ string, _ map[string]string, _ []string) ([]byte, error) {
-	return nil, nil
-}
-
 func (m *mockTalosClient) SetMachineConfigOptions(_ interface{}) {
 }
 

@@ -10,22 +10,10 @@ import (
 // Values represents helm chart values as a map.
 type Values map[string]any
 
-// Merge combines multiple Values maps with later maps taking precedence.
-// This performs a shallow merge - top-level keys are replaced entirely.
-func Merge(valueMaps ...Values) Values {
-	result := make(Values)
-	for _, m := range valueMaps {
-		for k, v := range m {
-			result[k] = v
-		}
-	}
-	return result
-}
-
-// DeepMerge recursively merges multiple Values maps with later maps taking precedence.
+// deepMerge recursively merges multiple Values maps with later maps taking precedence.
 // Unlike Merge, this preserves nested structures by recursively merging maps.
 // Non-map values and arrays are replaced (not merged).
-func DeepMerge(valueMaps ...Values) Values {
+func deepMerge(valueMaps ...Values) Values {
 	result := make(Values)
 	for _, m := range valueMaps {
 		result = deepMergeTwoMaps(result, m)
@@ -75,8 +63,8 @@ func toValuesMap(v any) Values {
 	}
 }
 
-// ToYAML converts values to YAML bytes.
-func (v Values) ToYAML() ([]byte, error) {
+// toYAML converts values to YAML bytes.
+func (v Values) toYAML() ([]byte, error) {
 	var buf bytes.Buffer
 	encoder := yaml.NewEncoder(&buf)
 	encoder.SetIndent(2)
@@ -88,8 +76,8 @@ func (v Values) ToYAML() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// FromYAML parses YAML bytes into Values.
-func FromYAML(data []byte) (Values, error) {
+// fromYAML parses YAML bytes into Values.
+func fromYAML(data []byte) (Values, error) {
 	var values Values
 	if err := yaml.Unmarshal(data, &values); err != nil {
 		return nil, fmt.Errorf("failed to parse YAML values: %w", err)
@@ -160,5 +148,5 @@ func MergeCustomValues(base Values, customValues map[string]any) Values {
 	if len(customValues) == 0 {
 		return base
 	}
-	return DeepMerge(base, Values(customValues))
+	return deepMerge(base, Values(customValues))
 }

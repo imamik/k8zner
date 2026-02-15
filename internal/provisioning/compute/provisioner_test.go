@@ -38,10 +38,6 @@ func (m *mockTalosProducer) SetEndpoint(endpoint string) {
 	m.endpoint = endpoint
 }
 
-func (m *mockTalosProducer) GenerateAutoscalerConfig(_ string, _ map[string]string, _ []string) ([]byte, error) {
-	return []byte("autoscaler-config"), nil
-}
-
 func (m *mockTalosProducer) GetNodeVersion(_ context.Context, _ string) (string, error) {
 	return "v1.8.2", nil
 }
@@ -531,111 +527,6 @@ func TestProvision_DeleteSSHKeyFailure(t *testing.T) {
 	// (delete failure is only logged)
 	err := p.Provision(ctx)
 	assert.NoError(t, err)
-}
-
-// TestApplyServerRDNSSimple_InvalidTemplate tests RDNS with an invalid template
-func TestApplyServerRDNSSimple_InvalidTemplate(t *testing.T) {
-	t.Parallel()
-	mockInfra := &hcloud_internal.MockClient{}
-	cfg := testConfigWithSubnets(t)
-
-	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	// Use a template with an unresolved variable
-	err := p.applyServerRDNSSimple(ctx, 42, "my-server", "10.0.0.1",
-		"{{ unknown-var }}.example.com", "", "control-plane", "cp-pool")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to render IPv4 RDNS template")
-}
-
-// TestApplyServerRDNSSimple_SetServerRDNSFailure tests RDNS when SetServerRDNS fails (triggers retry).
-func TestApplyServerRDNSSimple_SetServerRDNSFailure(t *testing.T) {
-	t.Parallel()
-	mockInfra := &hcloud_internal.MockClient{}
-	cfg := testConfigWithSubnets(t)
-
-	callCount := 0
-	mockInfra.SetServerRDNSFunc = func(_ context.Context, _ int64, _, _ string) error {
-		callCount++
-		return fmt.Errorf("RDNS API error")
-	}
-
-	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	// Use a valid template
-	err := p.applyServerRDNSSimple(ctx, 42, "my-server", "10.0.0.1",
-		"{{ hostname }}.example.com", "", "control-plane", "cp-pool")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to set IPv4 RDNS")
-	// retryRDNS retries 3 times
-	assert.Equal(t, 3, callCount, "should have retried 3 times")
-}
-
-// TestApplyServerRDNSSimple_EmptyIPv4 tests that RDNS is skipped when IPv4 is empty.
-func TestApplyServerRDNSSimple_EmptyIPv4(t *testing.T) {
-	t.Parallel()
-	mockInfra := &hcloud_internal.MockClient{}
-	cfg := testConfigWithSubnets(t)
-
-	mockInfra.SetServerRDNSFunc = func(_ context.Context, _ int64, _, _ string) error {
-		t.Fatal("SetServerRDNS should not be called when IP is empty")
-		return nil
-	}
-
-	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	// RDNS template set but IP is empty - should be skipped
-	err := p.applyServerRDNSSimple(ctx, 42, "my-server", "",
-		"{{ hostname }}.example.com", "", "control-plane", "cp-pool")
-
-	require.NoError(t, err)
-}
-
-// TestApplyServerRDNSSimple_IPv6OnlyConfig tests that IPv6 RDNS is logged but not applied.
-func TestApplyServerRDNSSimple_IPv6OnlyConfig(t *testing.T) {
-	t.Parallel()
-	mockInfra := &hcloud_internal.MockClient{}
-	cfg := testConfigWithSubnets(t)
-
-	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	// Only IPv6 template, no IPv4 template
-	err := p.applyServerRDNSSimple(ctx, 42, "my-server", "10.0.0.1",
-		"", "{{ hostname }}.v6.example.com", "control-plane", "cp-pool")
-
-	// Should succeed - IPv6 is logged but not applied
-	require.NoError(t, err)
-}
-
-// TestApplyServerRDNSSimple_SuccessfulApply tests successful RDNS application.
-func TestApplyServerRDNSSimple_SuccessfulApply(t *testing.T) {
-	t.Parallel()
-	mockInfra := &hcloud_internal.MockClient{}
-	cfg := testConfigWithSubnets(t)
-
-	var capturedDNSPtr string
-	var capturedIP string
-	mockInfra.SetServerRDNSFunc = func(_ context.Context, _ int64, ipAddress, dnsPtr string) error {
-		capturedIP = ipAddress
-		capturedDNSPtr = dnsPtr
-		return nil
-	}
-
-	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err := p.applyServerRDNSSimple(ctx, 42, "my-server", "10.0.0.1",
-		"{{ hostname }}.example.com", "", "control-plane", "cp-pool")
-
-	require.NoError(t, err)
-	assert.Equal(t, "10.0.0.1", capturedIP)
-	assert.Equal(t, "my-server.example.com", capturedDNSPtr)
 }
 
 func TestProvisionControlPlane_ExistingServer(t *testing.T) {

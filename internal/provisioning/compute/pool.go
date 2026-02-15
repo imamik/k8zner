@@ -25,10 +25,8 @@ type NodePoolSpec struct {
 	UserData         string
 	PlacementGroupID *int64
 	PoolIndex        int
-	RDNSIPv4         string // RDNS template for IPv4
-	RDNSIPv6         string // RDNS template for IPv6
-	EnablePublicIPv4 bool   // Enable public IPv4 (set from config.ShouldEnablePublicIPv4())
-	EnablePublicIPv6 bool   // Enable public IPv6 (set from config.ShouldEnablePublicIPv6())
+	EnablePublicIPv4 bool // Enable public IPv4 (set from config.ShouldEnablePublicIPv4())
+	EnablePublicIPv6 bool // Enable public IPv6 (set from config.ShouldEnablePublicIPv6())
 }
 
 // NodePoolResult holds the results of provisioning a node pool.
@@ -78,20 +76,16 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 		var err error
 
 		if spec.Role == "control-plane" {
-			// Terraform: ipv4_private = cidrhost(subnet, np_index * 10 + cp_index + 1)
-			// Note: Hetzner Cloud reserves .1 for the gateway, so we start at .2
-			// hostNum offset is +2 instead of +1 to skip the gateway
+			// IP allocation: host = pool_index * 10 + node_index + 2
+			// Hetzner Cloud reserves .1 for the gateway, so we start at .2
 			subnet, err = ctx.Config.GetSubnetForRole("control-plane", 0)
 			if err != nil {
 				return NodePoolResult{}, err
 			}
 			hostNum = spec.PoolIndex*10 + (j - 1) + 2
 		} else {
-			// Terraform: ipv4_private = cidrhost(subnet, wkr_index + 1)
-			// Note: Terraform iterates worker nodepools and uses separate subnets for each
-			// hcloud_network_subnet.worker[np.name]
-			// The config.GetSubnetForRole("worker", i) handles the subnet iteration.
-			// Note: Hetzner Cloud reserves .1 for the gateway, so we start at .2
+			// IP allocation: host = node_index + 2 (each worker pool has its own subnet)
+			// Hetzner Cloud reserves .1 for the gateway, so we start at .2
 			subnet, err = ctx.Config.GetSubnetForRole("worker", spec.PoolIndex)
 			if err != nil {
 				return NodePoolResult{}, err
@@ -105,7 +99,7 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 		}
 
 		// Placement Group Sharding for Workers
-		// Terraform: ${cluster}-${pool}-pg-${ceil((index+1)/10)}
+		// Name pattern: {cluster}-{pool}-pg-{ceil((index+1)/10)}
 		var currentPGID *int64
 		if spec.Role == "worker" && spec.PlacementGroupID == nil { // Workers manage their own PGs if enabled
 			// Check if enabled in config for this pool
@@ -144,7 +138,7 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 	}
 
 	// Create all servers in parallel
-	ctx.Logger.Printf("[%s] Creating %d servers for pool %s...", phase, spec.Count, spec.Name)
+	ctx.Observer.Printf("[%s] Creating %d servers for pool %s...", phase, spec.Count, spec.Name)
 
 	// Collect IPs and server IDs in a thread-safe way
 	var mu sync.Mutex
@@ -170,8 +164,6 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 					UserData:         spec.UserData,
 					PlacementGroup:   cfg.pgID,
 					PrivateIP:        cfg.privateIP,
-					RDNSIPv4:         spec.RDNSIPv4,
-					RDNSIPv6:         spec.RDNSIPv6,
 					EnablePublicIPv4: spec.EnablePublicIPv4,
 					EnablePublicIPv6: spec.EnablePublicIPv6,
 				})
@@ -191,7 +183,7 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 		return NodePoolResult{}, fmt.Errorf("failed to provision pool %s: %w", spec.Name, err)
 	}
 
-	ctx.Logger.Printf("[%s] Successfully created %d servers for pool %s", phase, spec.Count, spec.Name)
+	ctx.Observer.Printf("[%s] Successfully created %d servers for pool %s", phase, spec.Count, spec.Name)
 	return result, nil
 }
 

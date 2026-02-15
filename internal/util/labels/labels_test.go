@@ -65,8 +65,8 @@ func TestWithRole(t *testing.T) {
 			}
 
 			// Check legacy key for backward compat
-			if labels[LegacyKeyRole] != tt.role {
-				t.Errorf("expected %s=%q, got %q", LegacyKeyRole, tt.role, labels[LegacyKeyRole])
+			if labels[legacyKeyRole] != tt.role {
+				t.Errorf("expected %s=%q, got %q", legacyKeyRole, tt.role, labels[legacyKeyRole])
 			}
 
 			if labels[KeyCluster] != "test-cluster" {
@@ -99,20 +99,10 @@ func TestWithPool(t *testing.T) {
 			}
 
 			// Check legacy key for backward compat
-			if labels[LegacyKeyPool] != tt.pool {
-				t.Errorf("expected %s=%q, got %q", LegacyKeyPool, tt.pool, labels[LegacyKeyPool])
+			if labels[legacyKeyPool] != tt.pool {
+				t.Errorf("expected %s=%q, got %q", legacyKeyPool, tt.pool, labels[legacyKeyPool])
 			}
 		})
-	}
-}
-
-func TestWithServerID(t *testing.T) {
-	t.Parallel()
-	lb := NewLabelBuilder("test-cluster").WithServerID("abc12")
-	labels := lb.Build()
-
-	if labels[KeyServerID] != "abc12" {
-		t.Errorf("expected %s=%q, got %q", KeyServerID, "abc12", labels[KeyServerID])
 	}
 }
 
@@ -133,32 +123,8 @@ func TestWithNodePool(t *testing.T) {
 			lb := NewLabelBuilder("test-cluster").WithNodePool(tt.nodepool)
 			labels := lb.Build()
 
-			if labels[LegacyKeyNodePool] != tt.nodepool {
-				t.Errorf("expected %s=%q, got %q", LegacyKeyNodePool, tt.nodepool, labels[LegacyKeyNodePool])
-			}
-		})
-	}
-}
-
-func TestWithState(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name  string
-		state string
-	}{
-		{"ready state", "ready"},
-		{"provisioning state", "provisioning"},
-		{"empty", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			lb := NewLabelBuilder("test-cluster").WithState(tt.state)
-			labels := lb.Build()
-
-			if labels[LegacyKeyState] != tt.state {
-				t.Errorf("expected %s=%q, got %q", LegacyKeyState, tt.state, labels[LegacyKeyState])
+			if labels[legacyKeyNodePool] != tt.nodepool {
+				t.Errorf("expected %s=%q, got %q", legacyKeyNodePool, tt.nodepool, labels[legacyKeyNodePool])
 			}
 		})
 	}
@@ -171,32 +137,6 @@ func TestWithManagedBy(t *testing.T) {
 
 	if labels[KeyManagedBy] != ManagedByOperator {
 		t.Errorf("expected %s=%q, got %q", KeyManagedBy, ManagedByOperator, labels[KeyManagedBy])
-	}
-}
-
-func TestWithCustom(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name  string
-		key   string
-		value string
-	}{
-		{"environment label", "env", "production"},
-		{"team label", "team", "platform"},
-		{"empty key", "", "value"},
-		{"empty value", "key", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			lb := NewLabelBuilder("test-cluster").WithCustom(tt.key, tt.value)
-			labels := lb.Build()
-
-			if labels[tt.key] != tt.value {
-				t.Errorf("expected %s=%q, got %q", tt.key, tt.value, labels[tt.key])
-			}
-		})
 	}
 }
 
@@ -287,18 +227,14 @@ func TestFluentChaining(t *testing.T) {
 		labels := NewLabelBuilder("test-cluster").
 			WithRole(RoleWorker).
 			WithPool("workers").
-			WithServerID("abc12").
 			WithNodePool("workers").
-			WithState("ready").
-			WithCustom("env", "production").
+			WithTestIDIfSet("e2e-123").
 			Build()
 
-		// Check new keys
 		expected := map[string]string{
 			KeyCluster:   "test-cluster",
 			KeyRole:      RoleWorker,
 			KeyPool:      "workers",
-			KeyServerID:  "abc12",
 			KeyManagedBy: ManagedByK8zner,
 		}
 
@@ -308,11 +244,10 @@ func TestFluentChaining(t *testing.T) {
 			}
 		}
 
-		// Check legacy keys
 		if labels[LegacyKeyCluster] != "test-cluster" {
 			t.Errorf("expected legacy cluster label")
 		}
-		if labels[LegacyKeyRole] != RoleWorker {
+		if labels[legacyKeyRole] != RoleWorker {
 			t.Errorf("expected legacy role label")
 		}
 	})
@@ -413,47 +348,11 @@ func TestWithTestIDIfSetChaining(t *testing.T) {
 	}
 }
 
-func TestWithTestID(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name   string
-		testID string
-	}{
-		{"non-empty test ID", "e2e-12345"},
-		{"empty test ID", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			lb := NewLabelBuilder("test-cluster").WithTestID(tt.testID)
-			labels := lb.Build()
-
-			val, exists := labels[LegacyKeyTestID]
-			if !exists {
-				t.Errorf("WithTestID(%q): expected label %s to exist", tt.testID, LegacyKeyTestID)
-			}
-			if val != tt.testID {
-				t.Errorf("WithTestID(%q): expected %s=%q, got %q", tt.testID, LegacyKeyTestID, tt.testID, val)
-			}
-		})
-	}
-}
-
 func TestSelectorForCluster(t *testing.T) {
 	t.Parallel()
 	selector := SelectorForCluster("my-cluster")
 	expected := "k8zner.io/cluster=my-cluster"
 	if selector != expected {
 		t.Errorf("SelectorForCluster() = %q, want %q", selector, expected)
-	}
-}
-
-func TestSelectorForClusterRole(t *testing.T) {
-	t.Parallel()
-	selector := SelectorForClusterRole("my-cluster", RoleControlPlane)
-	expected := "k8zner.io/cluster=my-cluster,k8zner.io/role=control-plane"
-	if selector != expected {
-		t.Errorf("SelectorForClusterRole() = %q, want %q", selector, expected)
 	}
 }

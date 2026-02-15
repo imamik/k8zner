@@ -207,9 +207,9 @@ func TestBuildCertManagerValues_GatewayAPI(t *testing.T) {
 		"Gateway API should be disabled by default (requires separate CRD install)")
 }
 
-func TestCreateCertManagerNamespace(t *testing.T) {
+func TestCertManagerNamespace(t *testing.T) {
 	t.Parallel()
-	ns := createCertManagerNamespace()
+	ns := helm.NamespaceManifest("cert-manager", nil)
 
 	assert.Contains(t, ns, "apiVersion: v1")
 	assert.Contains(t, ns, "kind: Namespace")
