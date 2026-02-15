@@ -202,18 +202,11 @@ type AutoscalerNodePool struct {
 	Taints      []string          `mapstructure:"taints" yaml:"taints"`
 }
 
-// IngressConfig defines the ingress (load balancer) configuration.
+// IngressConfig defines the ingress load balancer configuration.
+// The ingress LB is created automatically by Traefik's LoadBalancer Service via CCM.
+// This config only controls the LB type used for cost estimation.
 type IngressConfig struct {
-	Enabled            bool   `mapstructure:"enabled" yaml:"enabled"`
-	LoadBalancerType   string `mapstructure:"load_balancer_type" yaml:"load_balancer_type"`
-	PublicNetwork      bool   `mapstructure:"public_network_enabled" yaml:"public_network_enabled"`
-	Algorithm          string `mapstructure:"algorithm" yaml:"algorithm"`
-	HealthCheckInt     int    `mapstructure:"health_check_interval" yaml:"health_check_interval"`
-	HealthCheckRetry   int    `mapstructure:"health_check_retries" yaml:"health_check_retries"`
-	HealthCheckTimeout int    `mapstructure:"health_check_timeout" yaml:"health_check_timeout"`
-	RDNS               string `mapstructure:"rdns" yaml:"rdns"`
-	RDNSIPv4           string `mapstructure:"rdns_ipv4" yaml:"rdns_ipv4"`
-	RDNSIPv6           string `mapstructure:"rdns_ipv6" yaml:"rdns_ipv6"`
+	LoadBalancerType string `mapstructure:"load_balancer_type" yaml:"load_balancer_type"`
 }
 
 // IngressLoadBalancerPool defines a load balancer pool for ingress.

@@ -330,37 +330,6 @@ func TestBuildFirewallRule(t *testing.T) {
 	})
 }
 
-func TestNewIngressService(t *testing.T) {
-	t.Parallel()
-	t.Run("default health check values", func(t *testing.T) {
-		t.Parallel()
-		cfg := config.IngressConfig{}
-		result := newIngressService(80, cfg)
-
-		assert.Equal(t, 80, *result.ListenPort)
-		assert.Equal(t, 80, *result.DestinationPort)
-		assert.True(t, *result.Proxyprotocol)
-		assert.Equal(t, 15, int(result.HealthCheck.Interval.Seconds()))
-		assert.Equal(t, 10, int(result.HealthCheck.Timeout.Seconds()))
-		assert.Equal(t, 3, *result.HealthCheck.Retries)
-	})
-
-	t.Run("custom health check values", func(t *testing.T) {
-		t.Parallel()
-		cfg := config.IngressConfig{
-			HealthCheckInt:     30,
-			HealthCheckTimeout: 20,
-			HealthCheckRetry:   5,
-		}
-		result := newIngressService(443, cfg)
-
-		assert.Equal(t, 443, *result.ListenPort)
-		assert.Equal(t, 30, int(result.HealthCheck.Interval.Seconds()))
-		assert.Equal(t, 20, int(result.HealthCheck.Timeout.Seconds()))
-		assert.Equal(t, 5, *result.HealthCheck.Retries)
-	})
-}
-
 func TestProvisionNetwork_WithWorkers(t *testing.T) {
 	t.Parallel()
 	mockInfra := &hcloud_internal.MockClient{}
@@ -437,65 +406,4 @@ func TestProvisionNetwork_WithAutoscaler(t *testing.T) {
 	assert.NoError(t, err)
 	// Should create: 1 CP subnet + 1 LB subnet + 1 autoscaler subnet = 3 subnets
 	assert.Equal(t, 3, subnetCount)
-}
-
-func TestProvisionLoadBalancers_WithIngress(t *testing.T) {
-	t.Parallel()
-	mockInfra := &hcloud_internal.MockClient{}
-	cfg := &config.Config{
-		ClusterName: "test-cluster",
-		Location:    "nbg1",
-		Network: config.NetworkConfig{
-			IPv4CIDR: "10.0.0.0/16",
-			Zone:     "eu-central",
-		},
-		ControlPlane: config.ControlPlaneConfig{
-			NodePools: []config.ControlPlaneNodePool{{Name: "cp", Count: 3, ServerType: "cx21"}},
-		},
-		Ingress: config.IngressConfig{
-			Enabled:          true,
-			LoadBalancerType: "lb21",
-			Algorithm:        "least_connections",
-		},
-	}
-	require.NoError(t, cfg.CalculateSubnets())
-
-	_, ipNet, _ := net.ParseCIDR("10.0.0.0/16")
-	ctx := createTestContext(t, mockInfra, cfg)
-	ctx.State.Network = &hcloud.Network{ID: 1, IPRange: ipNet}
-
-	var lbNames []string
-	var capturedAlgorithm hcloud.LoadBalancerAlgorithmType
-	mockInfra.EnsureLoadBalancerFunc = func(_ context.Context, name, _ string, _ string, algorithm hcloud.LoadBalancerAlgorithmType, _ map[string]string) (*hcloud.LoadBalancer, error) {
-		lbNames = append(lbNames, name)
-		// New naming: {cluster}-ingress
-		if name == "test-cluster-ingress" {
-			capturedAlgorithm = algorithm
-		}
-		return &hcloud.LoadBalancer{
-			ID:   int64(len(lbNames)),
-			Name: name,
-			PublicNet: hcloud.LoadBalancerPublicNet{
-				IPv4: hcloud.LoadBalancerPublicNetIPv4{IP: net.ParseIP("5.6.7.8")},
-			},
-		}, nil
-	}
-	mockInfra.AttachToNetworkFunc = func(_ context.Context, _ *hcloud.LoadBalancer, _ *hcloud.Network, _ net.IP) error {
-		return nil
-	}
-	mockInfra.ConfigureServiceFunc = func(_ context.Context, _ *hcloud.LoadBalancer, _ hcloud.LoadBalancerAddServiceOpts) error {
-		return nil
-	}
-	mockInfra.AddTargetFunc = func(_ context.Context, _ *hcloud.LoadBalancer, _ hcloud.LoadBalancerTargetType, _ string) error {
-		return nil
-	}
-
-	p := NewProvisioner()
-	err := p.ProvisionLoadBalancers(ctx)
-
-	assert.NoError(t, err)
-	// New naming: {cluster}-kube and {cluster}-ingress
-	assert.Contains(t, lbNames, "test-cluster-kube")
-	assert.Contains(t, lbNames, "test-cluster-ingress")
-	assert.Equal(t, hcloud.LoadBalancerAlgorithmTypeLeastConnections, capturedAlgorithm)
 }

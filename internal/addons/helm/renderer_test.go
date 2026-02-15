@@ -124,11 +124,8 @@ func TestDefaultChartSpecsComplete(t *testing.T) {
 		"hcloud-csi",
 		"cilium",
 		"cert-manager",
-		"ingress-nginx",
 		"traefik",
 		"metrics-server",
-		"cluster-autoscaler",
-		"longhorn",
 	}
 
 	for _, addon := range expectedAddons {

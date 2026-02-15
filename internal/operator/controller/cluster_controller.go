@@ -4,6 +4,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -119,6 +120,9 @@ type ClusterReconciler struct {
 
 	// Provisioning adapter for operator-driven provisioning.
 	phaseAdapter *operatorprov.PhaseAdapter
+
+	// statusMu protects concurrent access to cluster status during parallel provisioning.
+	statusMu sync.Mutex
 }
 
 // Option configures a ClusterReconciler.

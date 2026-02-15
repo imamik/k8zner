@@ -554,10 +554,10 @@ func TestScaleUpWorkers(t *testing.T) {
 		)
 
 		err := r.scaleUpWorkers(context.Background(), cluster, 5)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "only created 1 of 5")
+		// All 5 servers are created in parallel (no maxConcurrentHeals limit for scale-up)
+		require.NoError(t, err)
 
-		assert.Len(t, mockHCloud.CreateServerCalls, 1)
+		assert.Len(t, mockHCloud.CreateServerCalls, 5)
 	})
 
 	t.Run("handles missing snapshot", func(t *testing.T) {

@@ -3,6 +3,7 @@ package image
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning"
@@ -140,20 +141,64 @@ func (p *Provisioner) ensureImageForArch(ctx *provisioning.Context, arch, talosV
 		return nil
 	}
 
-	// Build image
-	ctx.Logger.Printf("[%s] Building Talos image for %s/%s/%s in location %s...", phase, talosVersion, k8sVersion, arch, location)
+	// Build image, trying smallest/default server type and cross-region fallback.
 	builder := p.createImageBuilder(ctx)
 	if builder == nil {
 		return fmt.Errorf("image builder not available")
 	}
 
-	snapshotID, err := builder.Build(ctx, talosVersion, k8sVersion, arch, serverType, location, labels)
+	snapshotID, buildLocation, err := p.buildImageWithFallback(ctx, builder, arch, talosVersion, k8sVersion, serverType, location, labels)
 	if err != nil {
 		return fmt.Errorf("failed to build image: %w", err)
 	}
 
-	ctx.Logger.Printf("[%s] Successfully built Talos snapshot for %s: ID %s", phase, arch, snapshotID)
+	ctx.Logger.Printf("[%s] Successfully built Talos snapshot for %s in %s: ID %s", phase, arch, buildLocation, snapshotID)
 	return nil
+}
+
+func (p *Provisioner) buildImageWithFallback(ctx *provisioning.Context, builder *Builder, arch, talosVersion, k8sVersion, serverType, preferredLocation string, labels map[string]string) (snapshotID, location string, err error) {
+	// Always prefer the smallest default build machine when not explicitly configured.
+	buildServerType := serverType
+	if buildServerType == "" {
+		buildServerType = hcloud.GetDefaultServerType(hcloud.Architecture(arch))
+	}
+
+	for _, candidateLocation := range buildLocations(preferredLocation) {
+		ctx.Logger.Printf("[%s] Building Talos image for %s/%s/%s with %s in %s...", phase, talosVersion, k8sVersion, arch, buildServerType, candidateLocation)
+		snapshotID, err = builder.Build(ctx, talosVersion, k8sVersion, arch, buildServerType, candidateLocation, labels)
+		if err == nil {
+			return snapshotID, candidateLocation, nil
+		}
+		if !isRegionCapacityOrAvailabilityError(err) {
+			return "", "", err
+		}
+		ctx.Logger.Printf("[%s] Build attempt in %s failed (%v), trying next region...", phase, candidateLocation, err)
+	}
+
+	return "", "", err
+}
+
+func buildLocations(preferred string) []string {
+	base := []string{"nbg1", "fsn1", "hel1"}
+	if preferred == "" {
+		return base
+	}
+
+	locations := []string{preferred}
+	for _, loc := range base {
+		if loc != preferred {
+			locations = append(locations, loc)
+		}
+	}
+	return locations
+}
+
+func isRegionCapacityOrAvailabilityError(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "resource unavailable") ||
+		strings.Contains(msg, "out of stock") ||
+		strings.Contains(msg, "no server available") ||
+		strings.Contains(msg, "capacity")
 }
 
 // createImageBuilder creates an image builder instance.

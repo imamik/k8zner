@@ -47,16 +47,27 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 		pgID      *int64
 	}
 
+	// Discover existing servers for this pool to support idempotent re-runs.
+	// Random names (cp-{5char}, w-{5char}) require label-based discovery.
+	existingNames, err := p.getExistingServerNames(ctx, spec.Role, spec.Name)
+	if err != nil {
+		return NodePoolResult{}, fmt.Errorf("failed to discover existing servers: %w", err)
+	}
+
 	configs := make([]serverConfig, spec.Count)
 
 	for j := 1; j <= spec.Count; j++ {
-		// Name: <cluster>-<role>-<index> (e.g. cluster-cp-1 or cluster-w-1)
-		// Uses deterministic naming for idempotency during initial provisioning
+		// Reuse existing server names for idempotency, generate random names for new servers.
+		// Format: {cluster}-cp-{5char} or {cluster}-w-{5char}
 		var srvName string
-		if spec.Role == "control-plane" {
-			srvName = naming.ControlPlaneWithID(ctx.Config.ClusterName, fmt.Sprintf("%d", j))
-		} else {
-			srvName = naming.WorkerWithID(ctx.Config.ClusterName, fmt.Sprintf("%d", j))
+		idx := j - 1
+		switch {
+		case idx < len(existingNames):
+			srvName = existingNames[idx]
+		case spec.Role == "control-plane":
+			srvName = naming.ControlPlane(ctx.Config.ClusterName)
+		default:
+			srvName = naming.Worker(ctx.Config.ClusterName)
 		}
 
 		// Calculate global index for subnet calculations
@@ -182,4 +193,23 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 
 	ctx.Logger.Printf("[%s] Successfully created %d servers for pool %s", phase, spec.Count, spec.Name)
 	return result, nil
+}
+
+// getExistingServerNames returns names of servers already provisioned for this pool.
+// Used to maintain idempotency with random server names across re-runs.
+func (p *Provisioner) getExistingServerNames(ctx *provisioning.Context, role, pool string) ([]string, error) {
+	servers, err := ctx.Infra.GetServersByLabel(ctx, map[string]string{
+		labels.KeyCluster: ctx.Config.ClusterName,
+		labels.KeyRole:    role,
+		labels.KeyPool:    pool,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	names := make([]string, 0, len(servers))
+	for _, s := range servers {
+		names = append(names, s.Name)
+	}
+	return names, nil
 }

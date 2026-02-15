@@ -22,6 +22,8 @@ type CRDStatusMsg struct {
 	LastErrors     []k8znerv1alpha1.ErrorRecord
 	LastReconcile  string
 	PhaseStartedAt string
+	NotFound       bool   // True when the K8znerCluster CRD was not found
+	FetchErr       string // Non-empty when the CRD fetch failed for a reason other than not-found
 }
 
 // TickMsg is sent periodically to refresh the display.

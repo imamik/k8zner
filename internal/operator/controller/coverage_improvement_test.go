@@ -3279,7 +3279,7 @@ func TestHandleCPScaleUp_NilHCloudClient(t *testing.T) {
 
 	result, err := r.handleCPScaleUp(context.Background(), cluster, 1, 3)
 	require.NoError(t, err)
-	assert.Equal(t, defaultRequeueAfter, result.RequeueAfter)
+	assert.Equal(t, fastRequeueAfter, result.RequeueAfter)
 	// When hcloudClient is nil, the scaling block is skipped, so phase remains empty
 	assert.Equal(t, k8znerv1alpha1.ClusterPhase(""), cluster.Status.Phase)
 }
@@ -4270,8 +4270,8 @@ func TestReconcileWorkers_UnhealthyTriggersRequeue(t *testing.T) {
 
 	result, err := r.reconcileWorkers(context.Background(), cluster)
 	require.NoError(t, err)
-	// Should requeue because there are unhealthy workers (even if replacement failed)
-	assert.Equal(t, defaultRequeueAfter, result.RequeueAfter)
+	// Should requeue: unhealthy worker triggers replacement + potential scale-up (fast requeue)
+	assert.NotZero(t, result.RequeueAfter)
 }
 
 // --- getSnapshot tests ---

@@ -9,7 +9,9 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -129,6 +131,71 @@ func TestReconcileAddonHealth(t *testing.T) {
 
 		backup := cluster.Status.Addons[k8znerv1alpha1.AddonNameTalosBackup]
 		assert.True(t, backup.Healthy)
+	})
+
+	t.Run("monitoring requires metrics api plus prometheus and grafana", func(t *testing.T) {
+		t.Parallel()
+
+		prom := &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "monitoring", Name: "kube-prometheus-stack-prometheus"},
+			Status:     appsv1.StatefulSetStatus{ReadyReplicas: 1},
+		}
+		grafana := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "monitoring", Name: "kube-prometheus-stack-grafana", Labels: map[string]string{"app.kubernetes.io/name": "grafana"}},
+			Status:     appsv1.DeploymentStatus{ReadyReplicas: 1},
+		}
+		// add prometheus label selector expected by checkMonitoring
+		prom.Labels = map[string]string{"app.kubernetes.io/name": "prometheus"}
+
+		metricsAPI := &unstructured.Unstructured{}
+		metricsAPI.SetGroupVersionKind(schema.GroupVersionKind{Group: "apiregistration.k8s.io", Version: "v1", Kind: "APIService"})
+		metricsAPI.SetName("v1beta1.metrics.k8s.io")
+		metricsAPI.Object["status"] = map[string]interface{}{
+			"conditions": []interface{}{
+				map[string]interface{}{"type": "Available", "status": "True"},
+			},
+		}
+
+		k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(prom, grafana, metricsAPI).Build()
+		recorder := record.NewFakeRecorder(10)
+		r := NewClusterReconciler(k8sClient, scheme, recorder)
+
+		cluster := &k8znerv1alpha1.K8znerCluster{Status: k8znerv1alpha1.K8znerClusterStatus{Addons: map[string]k8znerv1alpha1.AddonStatus{
+			k8znerv1alpha1.AddonNameMonitoring: {Installed: true},
+		}}}
+
+		r.reconcileAddonHealth(context.Background(), cluster)
+
+		mon := cluster.Status.Addons[k8znerv1alpha1.AddonNameMonitoring]
+		assert.True(t, mon.Healthy)
+		assert.Contains(t, mon.Message, "metrics-server, prometheus, and grafana ready")
+	})
+
+	t.Run("monitoring unhealthy when metrics api missing", func(t *testing.T) {
+		t.Parallel()
+
+		prom := &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "monitoring", Name: "kube-prometheus-stack-prometheus", Labels: map[string]string{"app.kubernetes.io/name": "prometheus"}},
+			Status:     appsv1.StatefulSetStatus{ReadyReplicas: 1},
+		}
+		grafana := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "monitoring", Name: "kube-prometheus-stack-grafana", Labels: map[string]string{"app.kubernetes.io/name": "grafana"}},
+			Status:     appsv1.DeploymentStatus{ReadyReplicas: 1},
+		}
+
+		k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(prom, grafana).Build()
+		recorder := record.NewFakeRecorder(10)
+		r := NewClusterReconciler(k8sClient, scheme, recorder)
+
+		cluster := &k8znerv1alpha1.K8znerCluster{Status: k8znerv1alpha1.K8znerClusterStatus{Addons: map[string]k8znerv1alpha1.AddonStatus{
+			k8znerv1alpha1.AddonNameMonitoring: {Installed: true},
+		}}}
+
+		r.reconcileAddonHealth(context.Background(), cluster)
+
+		mon := cluster.Status.Addons[k8znerv1alpha1.AddonNameMonitoring]
+		assert.False(t, mon.Healthy)
+		assert.Contains(t, mon.Message, "metricsAPI=false")
 	})
 
 	t.Run("skips uninstalled addons", func(t *testing.T) {

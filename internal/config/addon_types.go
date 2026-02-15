@@ -23,13 +23,8 @@ type AddonsConfig struct {
 	CSI                    CSIConfig                    `mapstructure:"csi" yaml:"csi"`
 	MetricsServer          MetricsServerConfig          `mapstructure:"metrics_server" yaml:"metrics_server"`
 	CertManager            CertManagerConfig            `mapstructure:"cert_manager" yaml:"cert_manager"`
-	IngressNginx           IngressNginxConfig           `mapstructure:"ingress_nginx" yaml:"ingress_nginx"`
 	Traefik                TraefikConfig                `mapstructure:"traefik" yaml:"traefik"`
-	Longhorn               LonghornConfig               `mapstructure:"longhorn" yaml:"longhorn"`
 	ArgoCD                 ArgoCDConfig                 `mapstructure:"argocd" yaml:"argocd"`
-	ClusterAutoscaler      ClusterAutoscalerConfig      `mapstructure:"cluster_autoscaler" yaml:"cluster_autoscaler"`
-	RBAC                   RBACConfig                   `mapstructure:"rbac" yaml:"rbac"`
-	OIDCRBAC               OIDCRBACConfig               `mapstructure:"oidc_rbac" yaml:"oidc_rbac"`
 	TalosBackup            TalosBackupConfig            `mapstructure:"talos_backup" yaml:"talos_backup"`
 	GatewayAPICRDs         GatewayAPICRDsConfig         `mapstructure:"gateway_api_crds" yaml:"gateway_api_crds"`
 	PrometheusOperatorCRDs PrometheusOperatorCRDsConfig `mapstructure:"prometheus_operator_crds" yaml:"prometheus_operator_crds"`
@@ -178,38 +173,6 @@ type CertManagerCloudflareConfig struct {
 	Production bool `mapstructure:"production" yaml:"production"`
 }
 
-// IngressNginxConfig defines the ingress-nginx configuration.
-// See: terraform/variables.tf ingress_nginx_* variables
-type IngressNginxConfig struct {
-	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
-
-	// Helm allows customizing the Helm chart repository, version, and values.
-	Helm HelmChartConfig `mapstructure:"helm" yaml:"helm"`
-
-	// Kind specifies the Kubernetes controller type: "Deployment" or "DaemonSet".
-	// Default: "Deployment"
-	Kind string `mapstructure:"kind" yaml:"kind"`
-
-	// Replicas specifies the number of controller replicas.
-	// If nil, auto-calculated: 2 for <3 workers, 3 for >=3 workers.
-	// Must be nil when Kind is "DaemonSet".
-	Replicas *int `mapstructure:"replicas" yaml:"replicas"`
-
-	// TopologyAwareRouting enables topology-aware traffic routing.
-	// Sets service.kubernetes.io/topology-mode annotation.
-	// Default: false
-	TopologyAwareRouting bool `mapstructure:"topology_aware_routing" yaml:"topology_aware_routing"`
-
-	// ExternalTrafficPolicy controls how external traffic is routed.
-	// Valid values: "Cluster" (cluster-wide) or "Local" (node-local).
-	// Default: "Cluster"
-	ExternalTrafficPolicy string `mapstructure:"external_traffic_policy" yaml:"external_traffic_policy"`
-
-	// Config provides global nginx configuration via ConfigMap.
-	// Reference: https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/configmap/
-	Config map[string]string `mapstructure:"config" yaml:"config"`
-}
-
 // TraefikConfig defines the Traefik Proxy ingress controller configuration.
 // Traefik is an alternative to ingress-nginx with built-in support for
 // modern protocols and automatic service discovery.
@@ -227,12 +190,6 @@ type TraefikConfig struct {
 	// If nil, auto-calculated: 2 for <3 workers, 3 for >=3 workers.
 	// Must be nil when Kind is "DaemonSet".
 	Replicas *int `mapstructure:"replicas" yaml:"replicas"`
-
-	// HostNetwork enables hostNetwork mode for Traefik pods.
-	// When enabled, Traefik binds directly to host ports 80/443 instead of
-	// using a LoadBalancer service. Useful for dev mode to avoid LB costs.
-	// Default: false
-	HostNetwork *bool `mapstructure:"host_network" yaml:"host_network"`
 
 	// ExternalTrafficPolicy controls how external traffic is routed.
 	// Valid values: "Cluster" (cluster-wide) or "Local" (node-local).
@@ -257,16 +214,6 @@ type TraefikDashboardConfig struct {
 	// Only applicable when Enabled is true.
 	// Default: false
 	IngressRoute bool `mapstructure:"ingress_route" yaml:"ingress_route"`
-}
-
-// LonghornConfig defines the Longhorn storage configuration.
-type LonghornConfig struct {
-	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
-
-	// Helm allows customizing the Helm chart repository, version, and values.
-	Helm HelmChartConfig `mapstructure:"helm" yaml:"helm"`
-
-	DefaultStorageClass bool `mapstructure:"default_storage_class" yaml:"default_storage_class"`
 }
 
 // ArgoCDConfig defines the ArgoCD GitOps configuration.
@@ -319,53 +266,6 @@ type StorageClass struct {
 	ReclaimPolicy       string            `mapstructure:"reclaim_policy" yaml:"reclaim_policy"`
 	DefaultStorageClass bool              `mapstructure:"default_storage_class" yaml:"default_storage_class"`
 	ExtraParameters     map[string]string `mapstructure:"extra_parameters" yaml:"extra_parameters"`
-}
-
-// RBACConfig defines RBAC roles and cluster roles.
-type RBACConfig struct {
-	Enabled      bool                `mapstructure:"enabled" yaml:"enabled"`
-	Roles        []RoleConfig        `mapstructure:"roles" yaml:"roles"`
-	ClusterRoles []ClusterRoleConfig `mapstructure:"cluster_roles" yaml:"cluster_roles"`
-}
-
-// RoleConfig defines a namespaced Role.
-type RoleConfig struct {
-	Name      string           `mapstructure:"name" yaml:"name"`
-	Namespace string           `mapstructure:"namespace" yaml:"namespace"`
-	Rules     []RBACRuleConfig `mapstructure:"rules" yaml:"rules"`
-}
-
-// ClusterRoleConfig defines a ClusterRole.
-type ClusterRoleConfig struct {
-	Name  string           `mapstructure:"name" yaml:"name"`
-	Rules []RBACRuleConfig `mapstructure:"rules" yaml:"rules"`
-}
-
-// RBACRuleConfig defines a policy rule for RBAC.
-type RBACRuleConfig struct {
-	APIGroups []string `mapstructure:"api_groups" yaml:"api_groups"`
-	Resources []string `mapstructure:"resources" yaml:"resources"`
-	Verbs     []string `mapstructure:"verbs" yaml:"verbs"`
-}
-
-// OIDCRBACConfig defines OIDC group mappings to Kubernetes roles.
-type OIDCRBACConfig struct {
-	Enabled       bool                   `mapstructure:"enabled" yaml:"enabled"`
-	GroupsPrefix  string                 `mapstructure:"groups_prefix" yaml:"groups_prefix"`
-	GroupMappings []OIDCRBACGroupMapping `mapstructure:"group_mappings" yaml:"group_mappings"`
-}
-
-// OIDCRBACGroupMapping maps an OIDC group to Kubernetes roles and cluster roles.
-type OIDCRBACGroupMapping struct {
-	Group        string         `mapstructure:"group" yaml:"group"`
-	ClusterRoles []string       `mapstructure:"cluster_roles" yaml:"cluster_roles"`
-	Roles        []OIDCRBACRole `mapstructure:"roles" yaml:"roles"`
-}
-
-// OIDCRBACRole defines a namespaced role for OIDC mapping.
-type OIDCRBACRole struct {
-	Name      string `mapstructure:"name" yaml:"name"`
-	Namespace string `mapstructure:"namespace" yaml:"namespace"`
 }
 
 // CiliumConfig defines the Cilium CNI configuration.
@@ -430,24 +330,6 @@ type CiliumConfig struct {
 	// Requires Prometheus Operator CRDs to be installed.
 	// Default: false
 	ServiceMonitorEnabled bool `mapstructure:"service_monitor_enabled" yaml:"service_monitor_enabled"`
-}
-
-// ClusterAutoscalerConfig defines the Cluster Autoscaler addon configuration.
-type ClusterAutoscalerConfig struct {
-	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
-
-	// Helm allows customizing the Helm chart repository, version, and values.
-	Helm HelmChartConfig `mapstructure:"helm" yaml:"helm"`
-
-	// DiscoveryEnabled enables cluster-api based node discovery.
-	// See: terraform/variables.tf cluster_autoscaler_discovery_enabled
-	// Default: false
-	DiscoveryEnabled bool `mapstructure:"discovery_enabled" yaml:"discovery_enabled"`
-
-	// ImageTag specifies the cluster-autoscaler image tag.
-	// See: terraform/variables.tf cluster_autoscaler_image_tag
-	// Default: uses latest compatible version
-	ImageTag string `mapstructure:"image_tag" yaml:"image_tag"`
 }
 
 // TalosBackupConfig defines the Talos etcd backup configuration.
@@ -728,8 +610,4 @@ type RDNSConfig struct {
 	ClusterRDNS     string `mapstructure:"cluster" yaml:"cluster"`
 	ClusterRDNSIPv4 string `mapstructure:"cluster_ipv4" yaml:"cluster_ipv4"`
 	ClusterRDNSIPv6 string `mapstructure:"cluster_ipv6" yaml:"cluster_ipv6"`
-	// Ingress load balancer RDNS (generic, without IP version suffix)
-	IngressRDNS     string `mapstructure:"ingress" yaml:"ingress"`
-	IngressRDNSIPv4 string `mapstructure:"ingress_ipv4" yaml:"ingress_ipv4"`
-	IngressRDNSIPv6 string `mapstructure:"ingress_ipv6" yaml:"ingress_ipv6"`
 }

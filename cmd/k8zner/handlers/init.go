@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
+
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 
 	"github.com/imamik/k8zner/internal/config"
 )
@@ -21,12 +24,26 @@ var (
 
 	// writeV2Config writes the config to a file.
 	writeV2Config = config.WriteSpecYAML
+
+	// expandSpecToConfig converts v2 spec to internal config.
+	expandSpecToConfig = config.ExpandSpec
 )
 
 // Init runs the v2 configuration wizard and writes the result to a file.
 func Init(ctx context.Context, outputPath string) error {
 	if fileExists(outputPath) {
 		fmt.Printf("Warning: %s already exists and will be overwritten.\n\n", outputPath)
+	}
+
+	// Fetch live server types from Hetzner API for the wizard
+	if token := strings.TrimSpace(os.Getenv("HCLOUD_TOKEN")); token != "" {
+		hc := hcloud.NewClient(hcloud.WithToken(token))
+		if err := config.FetchServerSizeOptions(ctx, hc); err != nil {
+			fmt.Printf("Warning: could not fetch server types from API: %v\n", err)
+			fmt.Println("Using default server type list.")
+		}
+	} else {
+		fmt.Println("Tip: set HCLOUD_TOKEN to see live server types with current pricing.")
 	}
 
 	printWelcome()
@@ -44,6 +61,10 @@ func Init(ctx context.Context, outputPath string) error {
 
 	printInitSuccess(outputPath, cfg)
 
+	if expanded, convErr := expandSpecToConfig(cfg); convErr == nil {
+		printOverallCostHint(ctx, expanded, "init")
+	}
+
 	return nil
 }
 
@@ -53,8 +74,9 @@ func printWelcome() {
 	fmt.Println("k8zner - Kubernetes on Hetzner Cloud")
 	fmt.Println("====================================")
 	fmt.Println()
-	fmt.Println("This wizard creates a cluster configuration with sensible defaults.")
-	fmt.Println("Just answer 5 simple questions.")
+	fmt.Println("This wizard creates a simple cluster configuration file.")
+	fmt.Println("Just answer 6 simple questions.")
+	fmt.Println("Everything else is configured automatically with best practices.")
 	fmt.Println()
 }
 

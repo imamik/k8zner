@@ -240,10 +240,6 @@ func TestExpandSpec_Addons(t *testing.T) {
 		t.Errorf("TalosCCM version = %q, want %q", expanded.Addons.TalosCCM.Version, vm.TalosCCM)
 	}
 
-	// Ingress-nginx should be disabled (we use Traefik)
-	if expanded.Addons.IngressNginx.Enabled {
-		t.Error("IngressNginx should be disabled")
-	}
 }
 
 func TestExpandSpec_WithDomain(t *testing.T) {
@@ -406,28 +402,6 @@ func TestExpandSpec_ArgoCDNoIngressWithoutDomain(t *testing.T) {
 	}
 }
 
-func TestExpandSpec_Ingress_DevMode(t *testing.T) {
-	t.Parallel()
-	cfg := &Spec{
-		Name:   "dev-ingress",
-		Region: RegionFalkenstein,
-		Mode:   ModeDev,
-		Workers: WorkerSpec{
-			Count: 1,
-			Size:  SizeCX22,
-		},
-	}
-
-	expanded, err := ExpandSpec(cfg)
-	if err != nil {
-		t.Fatalf("ExpandSpec() error = %v", err)
-	}
-
-	if expanded.Ingress.Enabled {
-		t.Error("Ingress should be disabled (Traefik Service creates LB via CCM)")
-	}
-}
-
 func TestExpandSpec_Traefik_DevMode(t *testing.T) {
 	t.Parallel()
 	cfg := &Spec{
@@ -445,9 +419,6 @@ func TestExpandSpec_Traefik_DevMode(t *testing.T) {
 		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
-	if expanded.Addons.Traefik.HostNetwork != nil {
-		t.Error("Traefik.HostNetwork should be nil (not set)")
-	}
 	if expanded.Addons.Traefik.Kind != "Deployment" {
 		t.Errorf("Traefik.Kind = %q, want %q", expanded.Addons.Traefik.Kind, "Deployment")
 	}
@@ -470,33 +441,8 @@ func TestExpandSpec_Traefik_HAMode(t *testing.T) {
 		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
-	if expanded.Addons.Traefik.HostNetwork != nil {
-		t.Error("Traefik.HostNetwork should be nil (not set)")
-	}
 	if expanded.Addons.Traefik.Kind != "Deployment" {
 		t.Errorf("Traefik.Kind = %q, want %q", expanded.Addons.Traefik.Kind, "Deployment")
-	}
-}
-
-func TestExpandSpec_Ingress_HAMode(t *testing.T) {
-	t.Parallel()
-	cfg := &Spec{
-		Name:   "ha-ingress",
-		Region: RegionFalkenstein,
-		Mode:   ModeHA,
-		Workers: WorkerSpec{
-			Count: 3,
-			Size:  SizeCX32,
-		},
-	}
-
-	expanded, err := ExpandSpec(cfg)
-	if err != nil {
-		t.Fatalf("ExpandSpec() error = %v", err)
-	}
-
-	if expanded.Ingress.Enabled {
-		t.Error("Ingress should be disabled (Traefik Service creates LB via CCM)")
 	}
 }
 
