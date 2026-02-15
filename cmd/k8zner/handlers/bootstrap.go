@@ -7,11 +7,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+
 	"github.com/imamik/k8zner/internal/addons"
 	"github.com/imamik/k8zner/internal/config"
 	hcloudInternal "github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning"
 	"github.com/imamik/k8zner/internal/provisioning/destroy"
+	"github.com/imamik/k8zner/internal/util/naming"
 )
 
 // provisionImage ensures the Talos image snapshot exists.
@@ -201,12 +204,88 @@ func cleanupOnFailure(ctx context.Context, cfg *config.Config, infraClient hclou
 	return nil
 }
 
+// waitForLBHealth polls the Hetzner API until the kube-api load balancer has at least
+// one healthy target on port 6443. This bridges the gap between cluster bootstrap
+// (when the API is reachable via direct node IP) and operator installation (which
+// uses the LB endpoint in kubeconfig).
+func waitForLBHealth(ctx context.Context, infraClient hcloudInternal.InfrastructureManager, clusterName string) error {
+	lbName := naming.KubeAPILoadBalancer(clusterName)
+
+	const (
+		pollInterval = 5 * time.Second
+		timeout      = 5 * time.Minute
+		logInterval  = 30 * time.Second
+	)
+
+	deadline := time.Now().Add(timeout)
+	lastLog := time.Now()
+
+	log.Printf("Waiting for load balancer %s to have healthy targets on port %d...", lbName, config.KubeAPIPort)
+
+	for {
+		lb, err := infraClient.GetLoadBalancer(ctx, lbName)
+		if err == nil && lb != nil {
+			healthy := countHealthyTargets(lb, config.KubeAPIPort)
+			if healthy > 0 {
+				log.Printf("Load balancer %s has %d healthy target(s) on port %d", lbName, healthy, config.KubeAPIPort)
+				return nil
+			}
+		}
+
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timed out after %v waiting for load balancer %s to have healthy targets on port %d", timeout, lbName, config.KubeAPIPort)
+		}
+
+		if time.Since(lastLog) >= logInterval {
+			elapsed := time.Since(deadline.Add(-timeout)).Truncate(time.Second)
+			log.Printf("Waiting for LB health checks... (%s elapsed)", elapsed)
+			lastLog = time.Now()
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(pollInterval):
+		}
+	}
+}
+
+// countHealthyTargets returns the number of targets healthy on the given port.
+// For label_selector targets, it checks sub-targets (individual servers matched by the selector).
+func countHealthyTargets(lb *hcloud.LoadBalancer, port int) int {
+	var count int
+	for _, target := range lb.Targets {
+		if target.Type == hcloud.LoadBalancerTargetTypeLabelSelector {
+			// Label selector targets have sub-targets for each matched server
+			for _, sub := range target.Targets {
+				if isHealthyOnPort(sub.HealthStatus, port) {
+					count++
+				}
+			}
+		} else if isHealthyOnPort(target.HealthStatus, port) {
+			count++
+		}
+	}
+	return count
+}
+
+// isHealthyOnPort checks if any health status entry for the given port is healthy.
+func isHealthyOnPort(statuses []hcloud.LoadBalancerTargetHealthStatus, port int) bool {
+	for _, hs := range statuses {
+		if hs.ListenPort == port && hs.Status == hcloud.LoadBalancerTargetHealthStatusStatusHealthy {
+			return true
+		}
+	}
+	return false
+}
+
 // printApplySuccess outputs completion message and next steps.
 func printApplySuccess(cfg *config.Config, wait bool) {
 	fmt.Printf("\nBootstrap complete!\n")
 	fmt.Printf("Secrets saved to: %s\n", secretsFile)
 	fmt.Printf("Talos config saved to: %s\n", talosConfigPath)
 	fmt.Printf("Kubeconfig saved to: %s\n", kubeconfigPath)
+	fmt.Printf("Access data saved to: %s\n", accessDataPath)
 
 	if !wait {
 		fmt.Printf("\nThe operator is now provisioning:\n")

@@ -7,7 +7,9 @@ import (
 	"time"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -38,7 +40,11 @@ type nodeStatusUpdate struct {
 // updateNodePhase updates or adds a node's phase in the cluster status.
 // If the node doesn't exist in the status, it will be added.
 // This allows tracking nodes during provisioning before they become k8s nodes.
+// Safe for concurrent use from parallel provisioning goroutines.
 func (r *ClusterReconciler) updateNodePhase(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, role string, update nodeStatusUpdate) {
+	r.statusMu.Lock()
+	defer r.statusMu.Unlock()
+
 	logger := log.FromContext(ctx)
 	now := metav1.Now()
 
@@ -107,18 +113,50 @@ func (r *ClusterReconciler) updateNodePhaseAndPersist(ctx context.Context, clust
 	return r.persistClusterStatus(ctx, cluster)
 }
 
-// persistClusterStatus saves the cluster status to the Kubernetes API.
+// persistClusterStatus saves the cluster status to the Kubernetes API with conflict retry.
+// On conflict, it re-fetches the latest version and merges our status changes.
 func (r *ClusterReconciler) persistClusterStatus(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) error {
 	logger := log.FromContext(ctx)
-	if err := r.Status().Update(ctx, cluster); err != nil {
-		logger.Error(err, "failed to persist cluster status")
-		return fmt.Errorf("failed to persist cluster status: %w", err)
+
+	for i := 0; i < statusUpdateRetries; i++ {
+		err := r.Status().Update(ctx, cluster)
+		if err == nil {
+			return nil
+		}
+
+		if !apierrors.IsConflict(err) {
+			logger.Error(err, "failed to persist cluster status")
+			return fmt.Errorf("failed to persist cluster status: %w", err)
+		}
+
+		// On conflict, re-fetch the latest version and re-apply our status changes
+		logger.V(1).Info("persist status conflict, retrying", "attempt", i+1)
+
+		latest := &k8znerv1alpha1.K8znerCluster{}
+		if getErr := r.Get(ctx, client.ObjectKeyFromObject(cluster), latest); getErr != nil {
+			return fmt.Errorf("failed to get latest cluster for status retry: %w", getErr)
+		}
+
+		// Preserve our status changes on the latest version
+		savedAddons := latest.Status.Addons
+		latest.Status = cluster.Status
+		if latest.Status.Addons == nil && savedAddons != nil {
+			latest.Status.Addons = savedAddons
+		}
+		cluster.ObjectMeta = latest.ObjectMeta
+
+		time.Sleep(statusRetryInterval)
 	}
-	return nil
+
+	return fmt.Errorf("failed to persist cluster status after %d retries", statusUpdateRetries)
 }
 
 // removeNodeFromStatus removes a node from the cluster status.
+// Safe for concurrent use from parallel provisioning goroutines.
 func (r *ClusterReconciler) removeNodeFromStatus(cluster *k8znerv1alpha1.K8znerCluster, role string, nodeName string) {
+	r.statusMu.Lock()
+	defer r.statusMu.Unlock()
+
 	var nodes *[]k8znerv1alpha1.NodeStatus
 	if role == "control-plane" {
 		nodes = &cluster.Status.ControlPlanes.Nodes

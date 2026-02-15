@@ -9,6 +9,35 @@ import (
 	"github.com/imamik/k8zner/internal/config"
 )
 
+func TestBuildMetricsServerValues_ServiceMonitorWhenMonitoringEnabled(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		ControlPlane: config.ControlPlaneConfig{NodePools: []config.ControlPlaneNodePool{{Count: 1}}},
+		Workers:      []config.WorkerNodePool{{Count: 1}},
+		Addons: config.AddonsConfig{
+			KubePrometheusStack: config.KubePrometheusStackConfig{Enabled: true},
+		},
+	}
+
+	values := buildMetricsServerValues(cfg)
+	svcMon, ok := values["serviceMonitor"].(helm.Values)
+	assert.True(t, ok)
+	assert.Equal(t, true, svcMon["enabled"])
+}
+
+func TestBuildMetricsServerValues_NoServiceMonitorWhenMonitoringDisabled(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		ControlPlane: config.ControlPlaneConfig{NodePools: []config.ControlPlaneNodePool{{Count: 1}}},
+		Workers:      []config.WorkerNodePool{{Count: 1}},
+	}
+
+	values := buildMetricsServerValues(cfg)
+	assert.Nil(t, values["serviceMonitor"])
+}
+
 func TestBuildMetricsServerValues_Tolerations(t *testing.T) {
 	t.Parallel()
 	// When scheduling on control plane, should have 2 tolerations

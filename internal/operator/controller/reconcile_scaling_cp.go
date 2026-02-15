@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	"github.com/imamik/k8zner/internal/util/labels"
 	"github.com/imamik/k8zner/internal/util/naming"
 )
 
@@ -59,7 +60,7 @@ func (r *ClusterReconciler) handleCPScaleUp(ctx context.Context, cluster *k8zner
 			logger.Error(err, "failed to scale up control planes")
 		}
 	}
-	return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
+	return ctrl.Result{RequeueAfter: fastRequeueAfter}, nil
 }
 
 // replaceUnhealthyCPIfNeeded finds an unhealthy CP past the threshold and replaces it.
@@ -132,6 +133,8 @@ func findUnhealthyNode(nodes []k8znerv1alpha1.NodeStatus, threshold time.Duratio
 }
 
 // scaleUpControlPlanes creates new control plane nodes to reach the desired count.
+// Servers are created in parallel for speed, but Talos configs are applied sequentially
+// because etcd membership requires ordered joining.
 func (r *ClusterReconciler) scaleUpControlPlanes(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster, count int) error {
 	logger := log.FromContext(ctx)
 
@@ -141,34 +144,94 @@ func (r *ClusterReconciler) scaleUpControlPlanes(ctx context.Context, cluster *k
 	}
 	defer cleanup()
 
-	created := 0
+	serverType := normalizeServerSize(cluster.Spec.ControlPlanes.Size)
+	serverLabels := labels.NewLabelBuilder(cluster.Name).
+		WithRole("control-plane").
+		WithPool("control-plane").
+		WithManagedBy(labels.ManagedByOperator).
+		Build()
+
+	// Phase 1: Create all servers in parallel
+	type serverResult struct {
+		name   string
+		result *serverProvisionResult
+		err    error
+	}
+	resultCh := make(chan serverResult, count)
+
 	for i := 0; i < count; i++ {
-		err := r.provisionAndConfigureNode(ctx, cluster, nodeProvisionParams{
-			Name:          naming.ControlPlane(cluster.Name),
-			Role:          "control-plane",
-			Pool:          "control-plane",
-			ServerType:    normalizeServerSize(cluster.Spec.ControlPlanes.Size),
-			SnapshotID:    prereqs.SnapshotID,
-			SSHKeyName:    prereqs.SSHKeyName,
-			NetworkID:     prereqs.ClusterState.NetworkID,
-			MetricsReason: "scale-up",
-			Configure: func(serverName string, result *serverProvisionResult) error {
-				return r.configureCPNode(ctx, cluster, prereqs.ClusterState, prereqs.TC, result)
-			},
-		})
-		if err != nil {
-			logger.Error(err, "failed to provision control plane")
-			// configureCPNode returns a fatal error for etcd-safety reasons
-			if created == 0 {
-				return err
-			}
-			return fmt.Errorf("only created %d of %d requested control planes: %w", created, count, err)
-		}
-		created++
+		name := naming.ControlPlane(cluster.Name)
+		go func() {
+			result, err := r.provisionServer(ctx, cluster, serverCreateOpts{
+				Name:       name,
+				SnapshotID: prereqs.SnapshotID,
+				ServerType: serverType,
+				Region:     cluster.Spec.Region,
+				SSHKeyName: prereqs.SSHKeyName,
+				Labels:     serverLabels,
+				NetworkID:  prereqs.ClusterState.NetworkID,
+				Role:       "control-plane",
+			})
+			resultCh <- serverResult{name: name, result: result, err: err}
+		}()
 	}
 
-	if created < count {
-		return fmt.Errorf("only created %d of %d requested control planes", created, count)
+	// Collect results
+	var servers []serverResult
+	for range count {
+		res := <-resultCh
+		if res.err != nil {
+			logger.Error(res.err, "failed to create CP server", "name", res.name)
+			r.Recorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonServerCreationError,
+				"Failed to create CP server %s: %v", res.name, res.err)
+		}
+		servers = append(servers, res)
+	}
+
+	// Persist status after all servers created
+	if err := r.persistClusterStatus(ctx, cluster); err != nil {
+		logger.Error(err, "failed to persist status after parallel server creation")
+	}
+
+	// Phase 2: Apply Talos configs sequentially (etcd requires ordered joining)
+	configured := 0
+	for _, srv := range servers {
+		if srv.err != nil {
+			continue
+		}
+
+		if err := r.updateNodePhaseAndPersist(ctx, cluster, "control-plane", nodeStatusUpdate{
+			Name:      srv.name,
+			ServerID:  srv.result.ServerID,
+			PublicIP:  srv.result.PublicIP,
+			PrivateIP: srv.result.PrivateIP,
+			Phase:     k8znerv1alpha1.NodePhaseWaitingForTalosAPI,
+			Reason:    fmt.Sprintf("Waiting for Talos API on %s:50000", srv.result.TalosIP),
+		}); err != nil {
+			logger.Error(err, "failed to persist node status", "name", srv.name)
+		}
+
+		if err := r.configureCPNode(ctx, cluster, prereqs.ClusterState, prereqs.TC, srv.result); err != nil {
+			logger.Error(err, "failed to configure CP", "name", srv.name)
+			// After Talos config applied, server must be preserved (etcd safety)
+			if configured == 0 {
+				return err
+			}
+			return fmt.Errorf("configured %d of %d CPs, failed on %s: %w", configured, count, srv.name, err)
+		}
+
+		if err := r.persistClusterStatus(ctx, cluster); err != nil {
+			logger.Error(err, "failed to persist cluster status", "name", srv.name)
+		}
+
+		r.Recorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonScalingUp,
+			"Successfully created control-plane %s", srv.name)
+		r.recordNodeReplacement(cluster.Name, "control-plane", "scale-up")
+		configured++
+	}
+
+	if configured < count {
+		return fmt.Errorf("only created %d of %d requested control planes", configured, count)
 	}
 
 	return nil

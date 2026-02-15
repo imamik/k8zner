@@ -14,6 +14,18 @@ import (
 	hcloudgo "github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
+const (
+	// Load balancer health check configuration for Kubernetes API
+	kubeAPIHealthCheckInterval = 3 * time.Second
+	kubeAPIHealthCheckTimeout  = 2 * time.Second
+	kubeAPIHealthCheckRetries  = 2
+
+	// Load balancer health check configuration for Talos API
+	talosAPIHealthCheckInterval = 5 * time.Second
+	talosAPIHealthCheckTimeout  = 3 * time.Second
+	talosAPIHealthCheckRetries  = 2
+)
+
 // ProvisionLoadBalancers provisions API and Ingress load balancers.
 func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 	ctx.Logger.Printf("[%s] Reconciling load balancers for %s...", phase, ctx.Config.ClusterName)
@@ -48,9 +60,9 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 			HealthCheck: &hcloudgo.LoadBalancerAddServiceOptsHealthCheck{
 				Protocol: hcloudgo.LoadBalancerServiceProtocolHTTP,
 				Port:     hcloudgo.Ptr(6443),
-				Interval: hcloudgo.Ptr(time.Second * 3), // Terraform default: 3
-				Timeout:  hcloudgo.Ptr(time.Second * 2), // Terraform default: 2
-				Retries:  hcloudgo.Ptr(2),               // Terraform default: 2
+				Interval: hcloudgo.Ptr(kubeAPIHealthCheckInterval),
+				Timeout:  hcloudgo.Ptr(kubeAPIHealthCheckTimeout),
+				Retries:  hcloudgo.Ptr(kubeAPIHealthCheckRetries),
 				HTTP: &hcloudgo.LoadBalancerAddServiceOptsHealthCheckHTTP{
 					Path:        hcloudgo.Ptr("/version"),
 					StatusCodes: []string{"401"},
@@ -73,9 +85,9 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 			HealthCheck: &hcloudgo.LoadBalancerAddServiceOptsHealthCheck{
 				Protocol: hcloudgo.LoadBalancerServiceProtocolTCP,
 				Port:     hcloudgo.Ptr(50000),
-				Interval: hcloudgo.Ptr(time.Second * 5),
-				Timeout:  hcloudgo.Ptr(time.Second * 3),
-				Retries:  hcloudgo.Ptr(2),
+				Interval: hcloudgo.Ptr(talosAPIHealthCheckInterval),
+				Timeout:  hcloudgo.Ptr(talosAPIHealthCheckTimeout),
+				Retries:  hcloudgo.Ptr(talosAPIHealthCheckRetries),
 			},
 		}
 		err = ctx.Infra.ConfigureService(ctx, apiLB, talosAPIService)
@@ -128,105 +140,5 @@ func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
 		}
 	}
 
-	// Ingress Load Balancer
-	if ctx.Config.Ingress.Enabled {
-		// Name: ${cluster_name}-ingress
-		lbName := naming.IngressLoadBalancer(ctx.Config.ClusterName)
-		ctx.Logger.Printf("[%s] Reconciling ingress load balancer %s...", phase, lbName)
-
-		ingressLBLabels := labels.NewLabelBuilder(ctx.Config.ClusterName).
-			WithRole("ingress").
-			WithTestIDIfSet(ctx.Config.TestID).
-			Build()
-
-		lbType := ctx.Config.Ingress.LoadBalancerType
-		if lbType == "" {
-			lbType = "lb11"
-		}
-		algorithm := hcloudgo.LoadBalancerAlgorithmTypeRoundRobin
-		if ctx.Config.Ingress.Algorithm == "least_connections" {
-			algorithm = hcloudgo.LoadBalancerAlgorithmTypeLeastConnections
-		}
-
-		ingressLB, err := ctx.Infra.EnsureLoadBalancer(ctx, lbName, ctx.Config.Location, lbType, algorithm, ingressLBLabels)
-		if err != nil {
-			return err
-		}
-
-		// HTTP (80) and HTTPS (443) services with proxy protocol
-		// Uses HostNetwork port mapping (80->80, 443->443) which is common for Talos/bare-metal
-		for _, port := range []int{80, 443} {
-			svc := newIngressService(port, ctx.Config.Ingress)
-			if err := ctx.Infra.ConfigureService(ctx, ingressLB, svc); err != nil {
-				return err
-			}
-		}
-
-		// Attach to Network
-		// Private IP: cidrhost(subnet, -4) from TF
-		lbSubnetCIDR, err := ctx.Config.GetSubnetForRole("load-balancer", 0)
-		if err != nil {
-			return err
-		}
-		privateIPStr, err := config.CIDRHost(lbSubnetCIDR, -4)
-		if err != nil {
-			return fmt.Errorf("failed to calculate Ingress LB private IP: %w", err)
-		}
-		privateIP := net.ParseIP(privateIPStr)
-
-		err = ctx.Infra.AttachToNetwork(ctx, ingressLB, ctx.State.Network, privateIP)
-		if err != nil {
-			return err
-		}
-
-		// Targets: Workers
-		// "cluster=<name>,role=worker"
-		// TF also includes CP if scheduling enabled, but let's stick to workers for now.
-		targetSelector := fmt.Sprintf("cluster=%s,role=worker", ctx.Config.ClusterName)
-		err = ctx.Infra.AddTarget(ctx, ingressLB, hcloudgo.LoadBalancerTargetTypeLabelSelector, targetSelector)
-		if err != nil {
-			return fmt.Errorf("failed to add target to Ingress LB: %w", err)
-		}
-
-		// Apply RDNS if configured
-		ipv4 := hcloud.LoadBalancerIPv4(ingressLB)
-		ipv6 := hcloud.LoadBalancerIPv6(ingressLB)
-
-		if err := p.applyLoadBalancerRDNS(ctx, ingressLB.ID, lbName, ipv4, ipv6, "ingress"); err != nil {
-			ctx.Logger.Printf("[%s] Warning: Failed to set RDNS for %s: %v", phase, lbName, err)
-		}
-	}
-
 	return nil
-}
-
-// newIngressService creates a load balancer service for the given port with health check defaults.
-func newIngressService(port int, cfg config.IngressConfig) hcloudgo.LoadBalancerAddServiceOpts {
-	// Apply defaults for health check values
-	interval := time.Second * time.Duration(cfg.HealthCheckInt)
-	if interval == 0 {
-		interval = time.Second * 15
-	}
-	timeout := time.Second * time.Duration(cfg.HealthCheckTimeout)
-	if timeout == 0 {
-		timeout = time.Second * 10
-	}
-	retries := cfg.HealthCheckRetry
-	if retries == 0 {
-		retries = 3
-	}
-
-	return hcloudgo.LoadBalancerAddServiceOpts{
-		Protocol:        hcloudgo.LoadBalancerServiceProtocolTCP,
-		ListenPort:      hcloudgo.Ptr(port),
-		DestinationPort: hcloudgo.Ptr(port),
-		Proxyprotocol:   hcloudgo.Ptr(true),
-		HealthCheck: &hcloudgo.LoadBalancerAddServiceOptsHealthCheck{
-			Protocol: hcloudgo.LoadBalancerServiceProtocolTCP,
-			Port:     hcloudgo.Ptr(port),
-			Interval: hcloudgo.Ptr(interval),
-			Timeout:  hcloudgo.Ptr(timeout),
-			Retries:  hcloudgo.Ptr(retries),
-		},
-	}
 }

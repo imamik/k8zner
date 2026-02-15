@@ -17,7 +17,14 @@ import (
 	"github.com/siderolabs/talos/pkg/machinery/client/config"
 )
 
-const phase = "cluster"
+const (
+	phase = "cluster"
+
+	// Bootstrap timing constants for config application
+	nodeRebootWaitInterval = 10 * time.Second
+	configRetryInterval    = 3 * time.Second
+	maxConfigApplyRetries  = 10
+)
 
 // getLBEndpoint returns the Load Balancer endpoint for Talos API communication.
 // In private-first mode, ALL external communication goes through the LB.
@@ -174,7 +181,7 @@ func (p *Provisioner) applyControlPlaneConfigsViaLB(ctx *provisioning.Context) e
 		// Wait for node to start rebooting before applying next config
 		if configNum < nodeCount {
 			ctx.Logger.Printf("[%s] Waiting for node to reboot before next config...", phase)
-			time.Sleep(10 * time.Second)
+			time.Sleep(nodeRebootWaitInterval)
 		}
 	}
 
@@ -192,9 +199,8 @@ func (p *Provisioner) applyOneConfigViaLB(ctx *provisioning.Context, lbEndpoint,
 
 	ctx.Logger.Printf("[%s] Applying config %d/%d (for %s) via LB...", phase, configNum, nodeCount, nodeName)
 
-	maxRetries := 10
 	var applyErr error
-	for retry := 0; retry < maxRetries; retry++ {
+	for retry := 0; retry < maxConfigApplyRetries; retry++ {
 		applyErr = p.applyMachineConfig(ctx, lbEndpoint, machineConfig)
 		if applyErr == nil {
 			ctx.Logger.Printf("[%s] Config %d/%d applied successfully", phase, configNum, nodeCount)
@@ -206,13 +212,13 @@ func (p *Provisioner) applyOneConfigViaLB(ctx *provisioning.Context, lbEndpoint,
 			strings.Contains(errStr, "handshake") ||
 			strings.Contains(errStr, "tls") ||
 			strings.Contains(errStr, "authentication") {
-			ctx.Logger.Printf("[%s] LB hit configured node, retrying (%d/%d)...", phase, retry+1, maxRetries)
-			time.Sleep(3 * time.Second)
+			ctx.Logger.Printf("[%s] LB hit configured node, retrying (%d/%d)...", phase, retry+1, maxConfigApplyRetries)
+			time.Sleep(configRetryInterval)
 			continue
 		}
 		break // Other errors fail immediately
 	}
-	return fmt.Errorf("failed to apply config for %s after %d retries: %w", nodeName, maxRetries, applyErr)
+	return fmt.Errorf("failed to apply config for %s after %d retries: %w", nodeName, maxConfigApplyRetries, applyErr)
 }
 
 // waitForControlPlaneReady waits for all control plane nodes to reboot and become ready.
@@ -315,8 +321,10 @@ func (p *Provisioner) createStateMarker(ctx *provisioning.Context) error {
 
 	markerName := fmt.Sprintf("%s-state", ctx.Config.ClusterName)
 	labels := map[string]string{
-		"cluster": ctx.Config.ClusterName,
-		"state":   "initialized",
+		"k8zner.io/cluster":    ctx.Config.ClusterName,
+		"k8zner.io/managed-by": "k8zner",
+		"cluster":              ctx.Config.ClusterName,
+		"state":                "initialized",
 	}
 
 	dummyCert, dummyKey, err := generateDummyCert()

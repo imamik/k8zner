@@ -718,7 +718,7 @@ func TestHandleCPScaleUp(t *testing.T) {
 		result, err := r.handleCPScaleUp(context.Background(), cluster, 1, 3)
 
 		assert.NoError(t, err)
-		assert.Equal(t, 30*time.Second, result.RequeueAfter)
+		assert.Equal(t, 10*time.Second, result.RequeueAfter)
 
 		// Verify event was recorded
 		select {

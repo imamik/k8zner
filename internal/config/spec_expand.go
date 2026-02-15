@@ -51,9 +51,6 @@ func ExpandSpec(cfg *Spec) (*Config, error) {
 		// Workers
 		Workers: expandWorkers(cfg),
 
-		// Ingress load balancer
-		Ingress: expandIngress(cfg),
-
 		// Talos configuration
 		Talos: expandTalos(cfg, vm),
 
@@ -121,14 +118,6 @@ func expandWorkers(cfg *Spec) []WorkerNodePool {
 	}
 }
 
-func expandIngress(cfg *Spec) IngressConfig {
-	// Ingress LB is not pre-provisioned; Traefik's LoadBalancer Service
-	// creates a Hetzner LB automatically via CCM annotations.
-	return IngressConfig{
-		Enabled: false,
-	}
-}
-
 func expandTalos(cfg *Spec, vm VersionMatrix) TalosConfig {
 	return TalosConfig{
 		Version: vm.Talos,
@@ -184,11 +173,6 @@ func expandAddons(cfg *Spec, vm VersionMatrix) AddonsConfig {
 
 		// Traefik ingress - always enabled (replaces ingress-nginx)
 		Traefik: DefaultTraefik(true),
-
-		// Ingress-nginx - disabled (we use Traefik)
-		IngressNginx: IngressNginxConfig{
-			Enabled: false,
-		},
 
 		// cert-manager - always enabled
 		CertManager: CertManagerConfig{

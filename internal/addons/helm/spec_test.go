@@ -46,13 +46,6 @@ func TestGetChartSpec_KnownCharts(t *testing.T) {
 			expectedVersion: "v1.19.2",
 		},
 		{
-			name:            "ingress-nginx",
-			chartName:       "ingress-nginx",
-			expectedRepo:    "https://kubernetes.github.io/ingress-nginx",
-			expectedChart:   "ingress-nginx",
-			expectedVersion: "4.11.3",
-		},
-		{
 			name:            "traefik",
 			chartName:       "traefik",
 			expectedRepo:    "https://traefik.github.io/charts",
@@ -65,20 +58,6 @@ func TestGetChartSpec_KnownCharts(t *testing.T) {
 			expectedRepo:    "https://kubernetes-sigs.github.io/metrics-server",
 			expectedChart:   "metrics-server",
 			expectedVersion: "3.12.2",
-		},
-		{
-			name:            "cluster-autoscaler",
-			chartName:       "cluster-autoscaler",
-			expectedRepo:    "https://kubernetes.github.io/autoscaler",
-			expectedChart:   "cluster-autoscaler",
-			expectedVersion: "9.50.1",
-		},
-		{
-			name:            "longhorn",
-			chartName:       "longhorn",
-			expectedRepo:    "https://charts.longhorn.io",
-			expectedChart:   "longhorn",
-			expectedVersion: "1.10.1",
 		},
 		{
 			name:            "argo-cd",
@@ -179,11 +158,8 @@ func TestDefaultChartSpecs_ContainsAllExpectedCharts(t *testing.T) {
 		"hcloud-csi",
 		"cilium",
 		"cert-manager",
-		"ingress-nginx",
 		"traefik",
 		"metrics-server",
-		"cluster-autoscaler",
-		"longhorn",
 		"argo-cd",
 		"external-dns",
 	}
