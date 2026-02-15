@@ -29,9 +29,8 @@ const (
 	SuffixFirewall       = "fw"
 	SuffixKubeAPI        = "kube"    // Load balancer for kubectl/talosctl
 	SuffixIngress        = "ingress" // Load balancer for HTTP(S) ingress
-	SuffixSSHKey         = "key"
-	SuffixState          = "state"
-	SuffixPlacementGroup = "pg"
+	SuffixSSHKey = "key"
+	SuffixState  = "state"
 )
 
 // IDLength is the length of random IDs for servers

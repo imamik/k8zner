@@ -90,8 +90,7 @@ const (
 	EventReasonConfiguringComplete   = "ConfiguringComplete"
 	EventReasonConfiguringFailed     = "ConfiguringFailed"
 	EventReasonProvisioningComplete  = "ProvisioningComplete"
-	EventReasonCredentialsError      = "CredentialsError"
-	EventReasonAddonsTimeout         = "AddonsTimeout"
+	EventReasonCredentialsError = "CredentialsError"
 )
 
 // normalizeServerSize converts legacy server type names to current Hetzner names.

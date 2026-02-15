@@ -1031,3 +1031,60 @@ func TestInstallNextAddon_AddonTracking(t *testing.T) {
 		assert.NotNil(t, cluster.Status.Addons, "addons map should be initialized")
 	})
 }
+
+func TestReconcileAddonsPhase_EmptyHCloudToken(t *testing.T) {
+	t.Parallel()
+	scheme := setupTestScheme(t)
+
+	// Create a credentials secret with empty HCloudToken
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-creds",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"hcloud-token":  []byte(""), // empty token
+			"talos-secrets": []byte("some-secrets"),
+			"talos-config":  []byte("some-config"),
+		},
+	}
+
+	cluster := &k8znerv1alpha1.K8znerCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "default",
+		},
+		Spec: k8znerv1alpha1.K8znerClusterSpec{
+			Region: "nbg1",
+			CredentialsRef: corev1.LocalObjectReference{
+				Name: "test-creds",
+			},
+			ControlPlanes: k8znerv1alpha1.ControlPlaneSpec{Count: 1, Size: "cx22"},
+			Workers:       k8znerv1alpha1.WorkerSpec{Count: 0}, // no workers needed
+		},
+		Status: k8znerv1alpha1.K8znerClusterStatus{
+			Workers: k8znerv1alpha1.NodeGroupStatus{
+				Ready: 0,
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(cluster, secret).
+		WithStatusSubresource(cluster).
+		Build()
+	recorder := record.NewFakeRecorder(10)
+
+	mockHCloud := &MockHCloudClient{}
+	r := NewClusterReconciler(fakeClient, scheme, recorder,
+		WithHCloudClient(mockHCloud),
+		WithMetrics(false),
+	)
+
+	result, err := r.reconcileAddonsPhase(context.Background(), cluster)
+	assert.NoError(t, err) // errors are recorded as events
+	assert.Equal(t, defaultRequeueAfter, result.RequeueAfter)
+}
+
+// --- buildClusterSANs: all branches ---

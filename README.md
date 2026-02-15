@@ -310,7 +310,7 @@ backup: true                    # Requires HETZNER_S3_ACCESS_KEY/SECRET_KEY
 | `mode` | Yes | `dev` (1 CP, 1 LB) or `ha` (3 CP, 2 LBs) |
 | `workers.count` | Yes | Number of workers (1-5) |
 | `workers.size` | Yes | Server type (see table below) |
-| `control_plane.size` | No | Control plane server type (default: `cpx21`) |
+| `control_plane.size` | No | Control plane server type (default: `cx23`) |
 | `domain` | No | Cloudflare domain for DNS/TLS |
 | `monitoring` | No | Enable Prometheus/Grafana stack |
 | `backup` | No | Enable etcd backups to S3 |
@@ -438,6 +438,8 @@ DNS records are created automatically via external-dns.
 | `k8zner apply` | Create or update cluster (operator-managed) |
 | `k8zner destroy` | Tear down all resources |
 | `k8zner doctor` | Diagnose cluster configuration and status |
+| `k8zner secrets` | Retrieve cluster credentials (kubeconfig, ArgoCD, Grafana) |
+| `k8zner cost` | Calculate monthly cluster costs with Hetzner pricing |
 | `k8zner version` | Show version information |
 
 </details>

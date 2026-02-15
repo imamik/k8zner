@@ -10,9 +10,6 @@ coverage:
         target: 60%
         # Allow 5% drop from base
         threshold: 5%
-        # Make informational during initial integration (no base to compare)
-        # Remove this line after first merge to main
-        informational: true
 
     # Patch coverage settings (for new code in PRs)
     patch:
@@ -22,9 +19,6 @@ coverage:
         target: 50%
         # Allow some flexibility for hard-to-test code
         threshold: 10%
-        # Make informational during initial integration
-        # Remove this line after first merge to main
-        informational: true
 
 # Ignore certain paths from coverage
 ignore:

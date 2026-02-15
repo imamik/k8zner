@@ -43,7 +43,7 @@ Feature requests are welcome! Please:
 
 ### Prerequisites
 
-- Go 1.21 or later
+- Go 1.25 or later
 - golangci-lint
 - make
 
@@ -159,7 +159,7 @@ k8zner
 │   └── handlers/     # Command business logic
 ├── internal/
 │   ├── config/       # Configuration parsing and validation
-│   ├── orchestration/# Workflow coordination
+│   ├── operator/     # Kubernetes operator (controller, provisioning adapter)
 │   ├── provisioning/ # Infrastructure provisioning phases
 │   │   ├── infrastructure/  # Network, firewall, LB
 │   │   ├── compute/         # Servers
@@ -172,7 +172,7 @@ k8zner
 │   │   ├── talos/    # Talos configuration
 │   │   └── ssh/      # SSH execution
 │   └── util/         # Shared utilities
-└── tests/e2e/        # End-to-end tests
+└── tests/            # End-to-end and integration tests
 ```
 
 ### Key Patterns

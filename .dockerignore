@@ -1,0 +1,10 @@
+.git
+bin/
+jam/
+tests/
+docs/
+*.md
+kubeconfig
+talosconfig
+.env
+.claude/

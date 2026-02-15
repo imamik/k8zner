@@ -62,7 +62,7 @@ Choose between development and production modes:
 
 ### 4. Worker Count
 
-Enter the number of worker nodes (1-10):
+Enter the number of worker nodes (1-5):
 
 ```
 ? Worker count: 3
