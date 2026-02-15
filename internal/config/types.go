@@ -63,7 +63,6 @@ type Config struct {
 
 	// Addons Configuration
 	Addons AddonsConfig `mapstructure:"addons" yaml:"addons"`
-
 }
 
 // NetworkConfig defines the network-related configuration.

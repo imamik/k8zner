@@ -352,4 +352,3 @@ func TestEnsureServer_LabelsIncludeExtraAndTestID(t *testing.T) {
 	assert.Equal(t, "test", capturedOpts.Labels["env"])
 	assert.Equal(t, "e2e-abc123", capturedOpts.Labels["test-id"])
 }
-

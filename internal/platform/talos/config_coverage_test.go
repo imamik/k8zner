@@ -152,7 +152,6 @@ func TestGenerateWorkerConfig_InvalidTalosVersion(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to parse version contract")
 }
 
-
 func TestGenerateControlPlaneConfig_WithMachineOptions(t *testing.T) {
 	t.Parallel()
 
@@ -245,7 +244,6 @@ func TestGenerateWorkerConfig_WithOptions(t *testing.T) {
 	nodeLabels := machine["nodeLabels"].(map[string]interface{})
 	assert.Equal(t, "67890", nodeLabels["nodeid"])
 }
-
 
 func TestUpgradeKubernetes_ReturnsNil(t *testing.T) {
 	t.Parallel()

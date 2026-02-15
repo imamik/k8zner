@@ -121,4 +121,3 @@ func (lb *LabelBuilder) Build() map[string]string {
 func SelectorForCluster(clusterName string) string {
 	return KeyCluster + "=" + clusterName
 }
-

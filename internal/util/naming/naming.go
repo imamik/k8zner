@@ -25,7 +25,7 @@ const (
 
 // Infrastructure type suffixes.
 const (
-	suffixNetwork = "net"
+	suffixNetwork  = "net"
 	suffixFirewall = "fw"
 	suffixKubeAPI  = "kube"    // Load balancer for kubectl/talosctl
 	suffixIngress  = "ingress" // Load balancer for HTTP(S) ingress

@@ -162,7 +162,6 @@ func (g *Generator) GenerateWorkerConfig(hostname string, serverID int64) ([]byt
 	return applyConfigPatch(baseConfig, patch)
 }
 
-
 // generateBaseConfig generates the base Talos config without custom patches.
 // This is used as the foundation that patches are applied to.
 func (g *Generator) generateBaseConfig(machineType machine.Type, extraOpts ...generate.Option) ([]byte, error) {

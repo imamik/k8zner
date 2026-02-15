@@ -595,4 +595,3 @@ type OperatorConfig struct {
 	// Default: false
 	HostNetwork bool `mapstructure:"host_network" yaml:"host_network"`
 }
-

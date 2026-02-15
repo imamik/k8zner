@@ -367,4 +367,3 @@ func TestProvisionNetwork_WithWorkers(t *testing.T) {
 	// Should create: 1 CP subnet + 1 LB subnet + 2 worker subnets = 4 subnets
 	assert.Equal(t, 4, subnetCount)
 }
-

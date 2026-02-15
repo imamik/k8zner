@@ -24,7 +24,7 @@ type ServerSpec struct {
 	PlacementGroup   *int64
 	PrivateIP        string
 	EnablePublicIPv4 bool // Enable public IPv4 (default: true for backwards compatibility)
-	EnablePublicIPv6 bool   // Enable public IPv6 (default: true)
+	EnablePublicIPv6 bool // Enable public IPv6 (default: true)
 }
 
 // ServerInfo holds the result of server creation/lookup.

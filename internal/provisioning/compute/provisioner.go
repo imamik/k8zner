@@ -169,14 +169,14 @@ func (p *Provisioner) provisionAllServers(ctx *provisioning.Context) error {
 			Name: fmt.Sprintf("worker-pool-%s", pool.Name),
 			Func: func(_ context.Context) error {
 				poolResult, err := p.reconcileNodePool(ctx, NodePoolSpec{
-					Name:             pool.Name,
-					Count:            pool.Count,
-					ServerType:       pool.ServerType,
-					Location:         pool.Location,
-					Image:            pool.Image,
-					Role:             "worker",
-					ExtraLabels:      pool.Labels,
-					PoolIndex:        poolIndex,
+					Name:        pool.Name,
+					Count:       pool.Count,
+					ServerType:  pool.ServerType,
+					Location:    pool.Location,
+					Image:       pool.Image,
+					Role:        "worker",
+					ExtraLabels: pool.Labels,
+					PoolIndex:   poolIndex,
 				})
 				if err != nil {
 					return err

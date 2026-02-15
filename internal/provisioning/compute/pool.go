@@ -26,7 +26,7 @@ type NodePoolSpec struct {
 	PlacementGroupID *int64
 	PoolIndex        int
 	EnablePublicIPv4 bool // Enable public IPv4 (set from config.ShouldEnablePublicIPv4())
-	EnablePublicIPv6 bool   // Enable public IPv6 (set from config.ShouldEnablePublicIPv6())
+	EnablePublicIPv6 bool // Enable public IPv6 (set from config.ShouldEnablePublicIPv6())
 }
 
 // NodePoolResult holds the results of provisioning a node pool.

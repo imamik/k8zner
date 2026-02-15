@@ -89,7 +89,7 @@ const (
 	EventReasonConfiguringComplete   = "ConfiguringComplete"
 	EventReasonConfiguringFailed     = "ConfiguringFailed"
 	EventReasonProvisioningComplete  = "ProvisioningComplete"
-	EventReasonCredentialsError = "CredentialsError"
+	EventReasonCredentialsError      = "CredentialsError"
 )
 
 // ClusterReconciler reconciles a K8znerCluster object.

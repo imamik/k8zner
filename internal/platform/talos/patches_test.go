@@ -149,7 +149,6 @@ func TestBuildDiskEncryptionPatch(t *testing.T) {
 	}
 }
 
-
 func TestBuildKubeletPatch(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

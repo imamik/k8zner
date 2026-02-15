@@ -356,4 +356,3 @@ func TestSelectorForCluster(t *testing.T) {
 		t.Errorf("SelectorForCluster() = %q, want %q", selector, expected)
 	}
 }
-

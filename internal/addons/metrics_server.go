@@ -85,4 +85,3 @@ func buildMetricsServerPDB() helm.Values {
 		"maxUnavailable": 1,
 	}
 }
-

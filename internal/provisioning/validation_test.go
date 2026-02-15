@@ -74,7 +74,7 @@ func TestValidationPhase_NetworkCIDR(t *testing.T) {
 			}
 
 			ctx := &Context{
-				Config: cfg,
+				Config:   cfg,
 				Observer: NewConsoleObserver(),
 			}
 
@@ -193,7 +193,7 @@ func TestValidationPhase_Versions(t *testing.T) {
 			}
 
 			ctx := &Context{
-				Config: cfg,
+				Config:   cfg,
 				Observer: NewConsoleObserver(),
 			}
 
