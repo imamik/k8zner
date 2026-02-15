@@ -175,7 +175,7 @@ func TestGetCachePath_WithXDGEnv(t *testing.T) {
 
 func TestNewRenderer(t *testing.T) {
 	t.Parallel()
-	r := NewRenderer("my-chart", "my-namespace")
+	r := newRenderer("my-chart", "my-namespace")
 
 	require.NotNil(t, r)
 	assert.Equal(t, "my-chart", r.chartName)
@@ -184,7 +184,7 @@ func TestNewRenderer(t *testing.T) {
 
 func TestNewRenderer_EmptyValues(t *testing.T) {
 	t.Parallel()
-	r := NewRenderer("", "")
+	r := newRenderer("", "")
 
 	require.NotNil(t, r)
 	assert.Equal(t, "", r.chartName)
@@ -193,7 +193,7 @@ func TestNewRenderer_EmptyValues(t *testing.T) {
 
 func TestRenderChart_MinimalChart(t *testing.T) {
 	t.Parallel()
-	r := NewRenderer("test-chart", "test-namespace")
+	r := newRenderer("test-chart", "test-namespace")
 
 	ch := &chart.Chart{
 		Metadata: &chart.Metadata{
@@ -229,7 +229,7 @@ data:
 
 func TestRenderChart_WithChartDefaults(t *testing.T) {
 	t.Parallel()
-	r := NewRenderer("test-chart", "default")
+	r := newRenderer("test-chart", "default")
 
 	ch := &chart.Chart{
 		Metadata: &chart.Metadata{
@@ -263,7 +263,7 @@ imagePullPolicy: {{ .Values.imagePullPolicy }}
 
 func TestRenderChart_SkipsNotesFile(t *testing.T) {
 	t.Parallel()
-	r := NewRenderer("test-chart", "default")
+	r := newRenderer("test-chart", "default")
 
 	ch := &chart.Chart{
 		Metadata: &chart.Metadata{
@@ -296,7 +296,7 @@ metadata:
 
 func TestRenderChart_SkipsEmptyTemplates(t *testing.T) {
 	t.Parallel()
-	r := NewRenderer("test-chart", "default")
+	r := newRenderer("test-chart", "default")
 
 	ch := &chart.Chart{
 		Metadata: &chart.Metadata{
@@ -335,7 +335,7 @@ kind: Secret
 
 func TestRenderChart_MultipleDocuments(t *testing.T) {
 	t.Parallel()
-	r := NewRenderer("test-chart", "default")
+	r := newRenderer("test-chart", "default")
 
 	ch := &chart.Chart{
 		Metadata: &chart.Metadata{
@@ -497,7 +497,7 @@ metadata:
 
 func TestRenderChart_DeepMergesValues(t *testing.T) {
 	t.Parallel()
-	r := NewRenderer("test-chart", "default")
+	r := newRenderer("test-chart", "default")
 
 	ch := &chart.Chart{
 		Metadata: &chart.Metadata{

@@ -9,14 +9,13 @@ import (
 	"github.com/imamik/k8zner/internal/config"
 )
 
-// Default values matching Terraform
+// Default values for the addon
 const (
 	defaultGatewayAPIVersion        = "v1.4.1"
 	defaultGatewayAPIReleaseChannel = "standard"
 )
 
 // applyGatewayAPICRDs installs the Gateway API Custom Resource Definitions.
-// See: terraform/talos_config.tf lines 35-37
 func applyGatewayAPICRDs(ctx context.Context, client k8sclient.Client, cfg *config.Config) error {
 	gatewayConfig := cfg.Addons.GatewayAPICRDs
 

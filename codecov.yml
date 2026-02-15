@@ -25,8 +25,6 @@ ignore:
   # Main entry points with minimal logic
   - "cmd/k8zner/main.go"
   - "cmd/cleanup/main.go"
-  # Test utilities
-  - "internal/testing/**/*"
 
 # Comment configuration
 comment:

@@ -15,4 +15,9 @@
 //   - reconcile_addons.go: CNI and addon phase handlers
 //   - reconcile_scaling_cp.go: Control plane scaling and replacement
 //   - reconcile_scaling_workers.go: Worker scaling and replacement
+//   - reconcile_health.go: Node health monitoring
+//   - reconcile_healing.go: Unhealthy node replacement
+//   - reconcile_infra_health.go: Infrastructure health checks (LB, network, firewall)
+//   - reconcile_addon_health.go: Addon deployment status monitoring
+//   - reconcile_connectivity.go: Cluster connectivity probes
 package controller

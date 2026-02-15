@@ -422,9 +422,9 @@ func TestBuildResourceValues(t *testing.T) {
 	})
 }
 
-func TestCreateMonitoringNamespace(t *testing.T) {
+func TestMonitoringNamespace(t *testing.T) {
 	t.Parallel()
-	ns := createMonitoringNamespace()
+	ns := helm.NamespaceManifest("monitoring", map[string]string{"name": "monitoring"})
 
 	assert.Contains(t, ns, "apiVersion: v1")
 	assert.Contains(t, ns, "kind: Namespace")

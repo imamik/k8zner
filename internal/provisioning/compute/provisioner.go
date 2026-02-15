@@ -13,7 +13,6 @@ import (
 	"github.com/imamik/k8zner/internal/util/keygen"
 	"github.com/imamik/k8zner/internal/util/labels"
 	"github.com/imamik/k8zner/internal/util/naming"
-	"github.com/imamik/k8zner/internal/util/rdns"
 )
 
 // Provisioner handles compute resource provisioning (servers, node pools).
@@ -36,7 +35,7 @@ func (p *Provisioner) Name() string {
 func (p *Provisioner) Provision(ctx *provisioning.Context) error {
 	// 0. Create ephemeral SSH key to avoid Hetzner password emails
 	sshKeyName := fmt.Sprintf("ephemeral-%s-compute-%d", ctx.Config.ClusterName, time.Now().Unix())
-	ctx.Logger.Printf("[%s] Creating ephemeral SSH key: %s", phase, sshKeyName)
+	ctx.Observer.Printf("[%s] Creating ephemeral SSH key: %s", phase, sshKeyName)
 
 	keyPair, err := keygen.GenerateRSAKeyPair(2048)
 	if err != nil {
@@ -55,9 +54,9 @@ func (p *Provisioner) Provision(ctx *provisioning.Context) error {
 
 	// Schedule cleanup of the ephemeral SSH key (always runs)
 	defer func() {
-		ctx.Logger.Printf("[%s] Cleaning up ephemeral SSH key: %s", phase, sshKeyName)
+		ctx.Observer.Printf("[%s] Cleaning up ephemeral SSH key: %s", phase, sshKeyName)
 		if err := ctx.Infra.DeleteSSHKey(ctx, sshKeyName); err != nil {
-			ctx.Logger.Printf("[%s] Warning: failed to delete ephemeral SSH key %s: %v", phase, sshKeyName, err)
+			ctx.Observer.Printf("[%s] Warning: failed to delete ephemeral SSH key %s: %v", phase, sshKeyName, err)
 		}
 	}()
 
@@ -84,7 +83,7 @@ func (p *Provisioner) Provision(ctx *provisioning.Context) error {
 // prepareControlPlaneEndpoint sets up the Talos endpoint from the Load Balancer.
 // This must run before server creation so Talos configs have the right endpoint.
 func (p *Provisioner) prepareControlPlaneEndpoint(ctx *provisioning.Context) error {
-	ctx.Logger.Printf("[%s] Preparing control plane endpoint...", phase)
+	ctx.Observer.Printf("[%s] Preparing control plane endpoint...", phase)
 
 	var sans []string
 
@@ -97,7 +96,7 @@ func (p *Provisioner) prepareControlPlaneEndpoint(ctx *provisioning.Context) err
 		if lbIP := hcloud.LoadBalancerIPv4(lb); lbIP != "" {
 			sans = append(sans, lbIP)
 			endpoint := fmt.Sprintf("https://%s:%d", lbIP, config.KubeAPIPort)
-			ctx.Logger.Printf("[%s] Setting Talos endpoint to: %s", phase, endpoint)
+			ctx.Observer.Printf("[%s] Setting Talos endpoint to: %s", phase, endpoint)
 			ctx.Talos.SetEndpoint(endpoint)
 		}
 
@@ -134,10 +133,6 @@ func (p *Provisioner) provisionAllServers(ctx *provisioning.Context) error {
 					return fmt.Errorf("failed to ensure placement group for pool %s: %w", pool.Name, err)
 				}
 
-				// Resolve RDNS templates
-				rdnsIPv4 := rdns.ResolveTemplate(pool.RDNSIPv4, ctx.Config.RDNS.ClusterRDNSIPv4, ctx.Config.RDNS.ClusterRDNS)
-				rdnsIPv6 := rdns.ResolveTemplate(pool.RDNSIPv6, ctx.Config.RDNS.ClusterRDNSIPv6, ctx.Config.RDNS.ClusterRDNS)
-
 				poolResult, err := p.reconcileNodePool(ctx, NodePoolSpec{
 					Name:             pool.Name,
 					Count:            pool.Count,
@@ -146,11 +141,8 @@ func (p *Provisioner) provisionAllServers(ctx *provisioning.Context) error {
 					Image:            pool.Image,
 					Role:             "control-plane",
 					ExtraLabels:      pool.Labels,
-					UserData:         "",
 					PlacementGroupID: &pg.ID,
 					PoolIndex:        poolIndex,
-					RDNSIPv4:         rdnsIPv4,
-					RDNSIPv6:         rdnsIPv6,
 				})
 				if err != nil {
 					return err
@@ -176,9 +168,6 @@ func (p *Provisioner) provisionAllServers(ctx *provisioning.Context) error {
 		tasks = append(tasks, async.Task{
 			Name: fmt.Sprintf("worker-pool-%s", pool.Name),
 			Func: func(_ context.Context) error {
-				rdnsIPv4 := rdns.ResolveTemplate(pool.RDNSIPv4, ctx.Config.RDNS.ClusterRDNSIPv4, ctx.Config.RDNS.ClusterRDNS)
-				rdnsIPv6 := rdns.ResolveTemplate(pool.RDNSIPv6, ctx.Config.RDNS.ClusterRDNSIPv6, ctx.Config.RDNS.ClusterRDNS)
-
 				poolResult, err := p.reconcileNodePool(ctx, NodePoolSpec{
 					Name:             pool.Name,
 					Count:            pool.Count,
@@ -187,11 +176,7 @@ func (p *Provisioner) provisionAllServers(ctx *provisioning.Context) error {
 					Image:            pool.Image,
 					Role:             "worker",
 					ExtraLabels:      pool.Labels,
-					UserData:         "",
-					PlacementGroupID: nil,
 					PoolIndex:        poolIndex,
-					RDNSIPv4:         rdnsIPv4,
-					RDNSIPv6:         rdnsIPv6,
 				})
 				if err != nil {
 					return err
@@ -223,12 +208,12 @@ func (p *Provisioner) provisionAllServers(ctx *provisioning.Context) error {
 		totalWorkers += pool.Count
 	}
 
-	ctx.Logger.Printf("[%s] Creating %d control plane + %d worker servers in parallel...", phase, totalCPs, totalWorkers)
+	ctx.Observer.Printf("[%s] Creating %d control plane + %d worker servers in parallel...", phase, totalCPs, totalWorkers)
 
 	if err := async.RunParallel(ctx, tasks, true); err != nil {
 		return fmt.Errorf("failed to provision servers: %w", err)
 	}
 
-	ctx.Logger.Printf("[%s] Successfully created all %d servers", phase, totalCPs+totalWorkers)
+	ctx.Observer.Printf("[%s] Successfully created all %d servers", phase, totalCPs+totalWorkers)
 	return nil
 }

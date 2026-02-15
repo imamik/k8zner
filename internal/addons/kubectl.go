@@ -7,8 +7,26 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/imamik/k8zner/internal/addons/helm"
 	"github.com/imamik/k8zner/internal/addons/k8sclient"
 )
+
+// baselinePodSecurityLabels are the standard pod security labels for namespaces
+// that need baseline pod security standards.
+var baselinePodSecurityLabels = map[string]string{
+	"pod-security.kubernetes.io/enforce": "baseline",
+	"pod-security.kubernetes.io/audit":   "baseline",
+	"pod-security.kubernetes.io/warn":    "baseline",
+}
+
+// ensureNamespace creates a Kubernetes namespace with the given labels using server-side apply.
+func ensureNamespace(ctx context.Context, client k8sclient.Client, name string, labels map[string]string) error {
+	yaml := helm.NamespaceManifest(name, labels)
+	if err := applyManifests(ctx, client, name+"-namespace", []byte(yaml)); err != nil {
+		return fmt.Errorf("failed to create %s namespace: %w", name, err)
+	}
+	return nil
+}
 
 // applyManifests applies Kubernetes manifests using the k8sclient.
 // It uses Server-Side Apply with the given field manager name.

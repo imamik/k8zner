@@ -152,25 +152,6 @@ func TestGenerateWorkerConfig_InvalidTalosVersion(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to parse version contract")
 }
 
-func TestGenerateAutoscalerConfig_InvalidTalosVersion(t *testing.T) {
-	t.Parallel()
-
-	sb, err := NewSecrets("v1.7.0")
-	require.NoError(t, err)
-
-	gen := &Generator{
-		clusterName:       "test-cluster",
-		kubernetesVersion: "1.30.0",
-		talosVersion:      "invalid-version",
-		endpoint:          "https://1.2.3.4:6443",
-		secretsBundle:     sb,
-		machineOpts:       &MachineConfigOptions{},
-	}
-
-	_, err = gen.GenerateAutoscalerConfig("pool1", nil, nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to parse version contract")
-}
 
 func TestGenerateControlPlaneConfig_WithMachineOptions(t *testing.T) {
 	t.Parallel()
@@ -187,8 +168,6 @@ func TestGenerateControlPlaneConfig_WithMachineOptions(t *testing.T) {
 		IPv6Enabled:                false,
 		PublicIPv4Enabled:          true,
 		PublicIPv6Enabled:          false,
-		Nameservers:                []string{"8.8.8.8", "1.1.1.1"},
-		TimeServers:                []string{"time.google.com"},
 		CoreDNSEnabled:             true,
 		ClusterDomain:              "cluster.local",
 		AllowSchedulingOnCP:        true,
@@ -199,9 +178,6 @@ func TestGenerateControlPlaneConfig_WithMachineOptions(t *testing.T) {
 		PodIPv4CIDR:                "10.244.0.0/16",
 		ServiceIPv4CIDR:            "10.96.0.0/12",
 		EtcdSubnet:                 "10.0.0.0/16",
-		APIServerExtraArgs:         map[string]string{"audit-log-path": "/var/log/audit.log"},
-		KubeletExtraArgs:           map[string]string{"max-pods": "200"},
-		KubeletExtraConfig:         map[string]any{"maxPods": 200},
 	}
 	gen.SetMachineConfigOptions(opts)
 
@@ -270,76 +246,6 @@ func TestGenerateWorkerConfig_WithOptions(t *testing.T) {
 	assert.Equal(t, "67890", nodeLabels["nodeid"])
 }
 
-func TestGenerateAutoscalerConfig_EmptyLabels(t *testing.T) {
-	t.Parallel()
-
-	sb, err := NewSecrets("v1.7.0")
-	require.NoError(t, err)
-
-	gen := NewGenerator("test-cluster", "v1.30.0", "v1.7.0", "https://1.2.3.4:6443", sb)
-
-	configBytes, err := gen.GenerateAutoscalerConfig("pool1", map[string]string{}, nil)
-	require.NoError(t, err)
-	assert.NotEmpty(t, configBytes)
-
-	var result map[string]interface{}
-	err = yaml.Unmarshal(configBytes, &result)
-	require.NoError(t, err)
-
-	machine := result["machine"].(map[string]interface{})
-	nodeLabels := machine["nodeLabels"].(map[string]interface{})
-	assert.Equal(t, "pool1", nodeLabels["nodepool"])
-}
-
-func TestGenerateAutoscalerConfig_InvalidTaintMissingKeyValue(t *testing.T) {
-	t.Parallel()
-
-	sb, err := NewSecrets("v1.7.0")
-	require.NoError(t, err)
-
-	gen := NewGenerator("test-cluster", "v1.30.0", "v1.7.0", "https://1.2.3.4:6443", sb)
-
-	// Taint with colon but no equals sign in key part
-	taints := []string{"noequals:NoSchedule"}
-	configBytes, err := gen.GenerateAutoscalerConfig("pool1", nil, taints)
-	require.NoError(t, err)
-	assert.NotEmpty(t, configBytes)
-
-	var result map[string]interface{}
-	err = yaml.Unmarshal(configBytes, &result)
-	require.NoError(t, err)
-
-	// "noequals:NoSchedule" should be skipped since kvParts doesn't have 2 parts
-	machine := result["machine"].(map[string]interface{})
-	_, hasNodeTaints := machine["nodeTaints"]
-	assert.False(t, hasNodeTaints, "nodeTaints should not be set when all taints are invalid")
-}
-
-func TestGenerateAutoscalerConfig_MultipleTaints(t *testing.T) {
-	t.Parallel()
-
-	sb, err := NewSecrets("v1.7.0")
-	require.NoError(t, err)
-
-	gen := NewGenerator("test-cluster", "v1.30.0", "v1.7.0", "https://1.2.3.4:6443", sb)
-
-	taints := []string{
-		"dedicated=gpu:NoSchedule",
-		"special=pool:NoExecute",
-	}
-	configBytes, err := gen.GenerateAutoscalerConfig("gpu-pool", nil, taints)
-	require.NoError(t, err)
-
-	var result map[string]interface{}
-	err = yaml.Unmarshal(configBytes, &result)
-	require.NoError(t, err)
-
-	machine := result["machine"].(map[string]interface{})
-	nodeTaints := machine["nodeTaints"].(map[string]interface{})
-	assert.Equal(t, 2, len(nodeTaints))
-	assert.Equal(t, "gpu:NoSchedule", nodeTaints["dedicated"])
-	assert.Equal(t, "pool:NoExecute", nodeTaints["special"])
-}
 
 func TestUpgradeKubernetes_ReturnsNil(t *testing.T) {
 	t.Parallel()

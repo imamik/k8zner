@@ -15,14 +15,12 @@
 // All provisioning phases receive this context for accessing shared resources.
 //
 // Phase: Interface for provisioning phases. Each phase has a Name() and Provision() method.
-// Phases are executed sequentially by the Pipeline.
-//
-// Pipeline: Orchestrates phase execution, handling logging, timing, and error propagation.
+// Phases are executed sequentially by RunPhases.
 //
 // State: Accumulates results from each phase (network, firewall, server IPs, kubeconfig).
 // Later phases can access results from earlier phases via the shared state.
 //
-// Observer: Structured observability interface for logging events, progress, and diagnostics.
+// Observer: Simple logging interface for progress and diagnostics.
 //
 // # Validation
 //

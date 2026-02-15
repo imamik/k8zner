@@ -28,7 +28,7 @@ type Spec struct {
 	Workers WorkerSpec `yaml:"workers"`
 
 	// ControlPlane defines optional control plane configuration.
-	// If not specified, defaults to cpx21 (3 shared vCPU, 4GB RAM).
+	// If not specified, defaults to cx23 (2 dedicated vCPU, 4GB RAM).
 	ControlPlane *ControlPlaneSpec `yaml:"control_plane,omitempty"`
 
 	// Domain enables automatic DNS and TLS via Cloudflare.
@@ -183,7 +183,7 @@ type WorkerSpec struct {
 // ControlPlaneSpec defines the optional control plane configuration.
 type ControlPlaneSpec struct {
 	// Size is the Hetzner server type for control plane nodes.
-	// Defaults to cpx21 (3 shared vCPU, 4GB RAM) if not specified.
+	// Defaults to cx23 (2 dedicated vCPU, 4GB RAM) if not specified.
 	Size ServerSize `yaml:"size,omitempty"`
 }
 
@@ -257,9 +257,9 @@ func (s ServerSize) IsValid() bool {
 }
 
 // Normalize returns the current Hetzner server type name.
-// Converts old names (cx22) to new names (cx23).
+// Converts old names (cx22) to new names (cx23) and lowercases the input.
 func (s ServerSize) Normalize() ServerSize {
-	switch s {
+	switch ServerSize(strings.ToLower(string(s))) {
 	case SizeCX22:
 		return SizeCX23
 	case SizeCX32:
@@ -269,7 +269,7 @@ func (s ServerSize) Normalize() ServerSize {
 	case SizeCX52:
 		return SizeCX53
 	default:
-		return s
+		return ServerSize(strings.ToLower(string(s)))
 	}
 }
 

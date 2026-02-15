@@ -93,13 +93,6 @@ func WithMaxDelay(d time.Duration) Option {
 	}
 }
 
-// WithMultiplier sets the backoff multiplier.
-func WithMultiplier(m float64) Option {
-	return func(c *Config) {
-		c.Multiplier = m
-	}
-}
-
 // FatalError wraps an error to mark it as fatal (non-retryable).
 type FatalError struct {
 	Err error

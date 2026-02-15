@@ -27,10 +27,6 @@ func (m *mockTalosGenerator) GenerateWorkerConfig(hostname string) ([]byte, erro
 	return []byte("mock-worker-config"), nil
 }
 
-func (m *mockTalosGenerator) GenerateAutoscalerConfig(poolName string, labels map[string]string, taints []string) ([]byte, error) {
-	return []byte("mock-autoscaler-config"), nil
-}
-
 func (m *mockTalosGenerator) GetClientConfig() ([]byte, error) {
 	return []byte("mock-client-config"), nil
 }

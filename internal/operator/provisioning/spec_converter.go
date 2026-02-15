@@ -12,6 +12,7 @@ import (
 	"github.com/imamik/k8zner/internal/config"
 	"github.com/imamik/k8zner/internal/platform/talos"
 	"github.com/imamik/k8zner/internal/provisioning"
+	"github.com/imamik/k8zner/internal/util/ptr"
 )
 
 // SpecToConfig converts a K8znerCluster spec to the internal config.Config format.
@@ -58,7 +59,7 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 				{
 					Name:       "control-plane",
 					Location:   spec.Region,
-					ServerType: normalizeServerSize(spec.ControlPlanes.Size),
+					ServerType: string(config.ServerSize(spec.ControlPlanes.Size).Normalize()),
 					Count:      spec.ControlPlanes.Count,
 				},
 			},
@@ -71,7 +72,7 @@ func SpecToConfig(k8sCluster *k8znerv1alpha1.K8znerCluster, creds *Credentials) 
 			{
 				Name:       "workers",
 				Location:   spec.Region,
-				ServerType: normalizeServerSize(spec.Workers.Size),
+				ServerType: string(config.ServerSize(spec.Workers.Size).Normalize()),
 				Count:      0, // Workers created by reconcileWorkers, not compute provisioner
 			},
 		},
@@ -162,16 +163,11 @@ func configureCloudflare(cfg *config.Config, spec *k8znerv1alpha1.K8znerClusterS
 	}
 }
 
-// normalizeServerSize converts legacy server type names to current Hetzner names.
-func normalizeServerSize(size string) string {
-	return string(config.ServerSize(strings.ToLower(size)).Normalize())
-}
-
 // expandFirewallFromSpec derives firewall config from the CRD spec.
 func expandFirewallFromSpec(spec *k8znerv1alpha1.K8znerClusterSpec) config.FirewallConfig {
 	return config.FirewallConfig{
-		UseCurrentIPv4: boolPtr(true),
-		UseCurrentIPv6: boolPtr(true),
+		UseCurrentIPv4: ptr.Bool(true),
+		UseCurrentIPv6: ptr.Bool(true),
 	}
 }
 
@@ -232,8 +228,6 @@ func expandExternalDNSFromSpec(spec *k8znerv1alpha1.K8znerClusterSpec) config.Ex
 
 	return dnsCfg
 }
-
-func boolPtr(b bool) *bool { return &b }
 
 func defaultString(value, defaultValue string) string {
 	if value == "" {

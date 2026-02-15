@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	"github.com/imamik/k8zner/internal/config"
 )
 
 func setupTestScheme(t *testing.T) *runtime.Scheme {
@@ -589,7 +590,7 @@ func TestNormalizeServerSize_Controller(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tt.expected, normalizeServerSize(tt.input))
+			assert.Equal(t, tt.expected, string(config.ServerSize(tt.input).Normalize()))
 		})
 	}
 }
@@ -1035,7 +1036,7 @@ done:
 
 // --- findTalosEndpoint: bootstrap with nil Bootstrap spec ---
 
-func TestReconcileLegacy_HealthCheckFailure(t *testing.T) {
+func TestReconcileRunningPhase_Legacy(t *testing.T) {
 	t.Parallel()
 	scheme := setupTestScheme(t)
 
@@ -1065,7 +1066,7 @@ func TestReconcileLegacy_HealthCheckFailure(t *testing.T) {
 		WithMetrics(false),
 	)
 
-	result, err := r.reconcileLegacy(context.Background(), cluster)
+	result, err := r.reconcileRunningPhase(context.Background(), cluster)
 	assert.NoError(t, err)
 	assert.Equal(t, defaultRequeueAfter, result.RequeueAfter)
 }
@@ -1091,7 +1092,7 @@ func TestNormalizeServerSize_AdditionalSizes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tt.expected, normalizeServerSize(tt.input))
+			assert.Equal(t, tt.expected, string(config.ServerSize(tt.input).Normalize()))
 		})
 	}
 }

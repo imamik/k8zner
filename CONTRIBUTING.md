@@ -118,7 +118,7 @@ make e2e
 - Use table-driven tests where appropriate
 - Test file names: `*_test.go`
 - Use `github.com/stretchr/testify` for assertions
-- Mock external dependencies (see `internal/testing/`)
+- Mock external dependencies using interfaces
 
 ## Commit Messages
 

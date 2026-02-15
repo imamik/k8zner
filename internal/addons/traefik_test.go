@@ -188,9 +188,9 @@ func TestTopologySpread(t *testing.T) {
 	}
 }
 
-func TestCreateTraefikNamespace(t *testing.T) {
+func TestTraefikNamespace(t *testing.T) {
 	t.Parallel()
-	ns := createTraefikNamespace()
+	ns := helm.NamespaceManifest("traefik", baselinePodSecurityLabels)
 
 	assert.Contains(t, ns, "apiVersion: v1")
 	assert.Contains(t, ns, "kind: Namespace")

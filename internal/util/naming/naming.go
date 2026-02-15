@@ -17,20 +17,18 @@ import (
 	"strings"
 )
 
-// Role abbreviations for server naming
+// Role abbreviations for server naming.
 const (
-	RoleControlPlane = "cp"
-	RoleWorker       = "w"
+	roleControlPlane = "cp"
+	roleWorker       = "w"
 )
 
-// Infrastructure type suffixes
+// Infrastructure type suffixes.
 const (
-	SuffixNetwork        = "net"
-	SuffixFirewall       = "fw"
-	SuffixKubeAPI        = "kube"    // Load balancer for kubectl/talosctl
-	SuffixIngress        = "ingress" // Load balancer for HTTP(S) ingress
-	SuffixSSHKey = "key"
-	SuffixState  = "state"
+	suffixNetwork = "net"
+	suffixFirewall = "fw"
+	suffixKubeAPI  = "kube"    // Load balancer for kubectl/talosctl
+	suffixIngress  = "ingress" // Load balancer for HTTP(S) ingress
 )
 
 // IDLength is the length of random IDs for servers
@@ -61,31 +59,25 @@ func GenerateID(length int) string {
 // Network returns the name for the cluster's private network.
 // Format: {cluster}-net
 func Network(cluster string) string {
-	return fmt.Sprintf("%s-%s", cluster, SuffixNetwork)
+	return fmt.Sprintf("%s-%s", cluster, suffixNetwork)
 }
 
 // KubeAPILoadBalancer returns the name for the Kubernetes API load balancer.
 // Format: {cluster}-kube (for kubectl and talosctl access)
 func KubeAPILoadBalancer(cluster string) string {
-	return fmt.Sprintf("%s-%s", cluster, SuffixKubeAPI)
+	return fmt.Sprintf("%s-%s", cluster, suffixKubeAPI)
 }
 
 // IngressLoadBalancer returns the name for the ingress load balancer.
 // Format: {cluster}-ingress (for HTTP/HTTPS worker traffic)
 func IngressLoadBalancer(cluster string) string {
-	return fmt.Sprintf("%s-%s", cluster, SuffixIngress)
+	return fmt.Sprintf("%s-%s", cluster, suffixIngress)
 }
 
 // Firewall returns the name for the cluster firewall.
 // Format: {cluster}-fw
 func Firewall(cluster string) string {
-	return fmt.Sprintf("%s-%s", cluster, SuffixFirewall)
-}
-
-// SSHKey returns the name for the cluster SSH key.
-// Format: {cluster}-key
-func SSHKey(cluster string) string {
-	return fmt.Sprintf("%s-%s", cluster, SuffixSSHKey)
+	return fmt.Sprintf("%s-%s", cluster, suffixFirewall)
 }
 
 // PlacementGroup returns the name for a placement group.
@@ -99,83 +91,64 @@ func PlacementGroup(cluster, role string) string {
 // Workers are distributed across multiple placement groups (10 servers per group).
 // Format: {cluster}-w-pg-{shardIndex}
 func WorkerPlacementGroupShard(cluster, poolName string, shardIndex int) string {
-	return fmt.Sprintf("%s-%s-pg-%d", cluster, RoleWorker, shardIndex)
+	return fmt.Sprintf("%s-%s-pg-%d", cluster, roleWorker, shardIndex)
 }
 
 // ControlPlane returns a name for a control plane server with a random ID.
 // Format: {cluster}-cp-{5char}
 func ControlPlane(cluster string) string {
-	return fmt.Sprintf("%s-%s-%s", cluster, RoleControlPlane, GenerateID(IDLength))
+	return fmt.Sprintf("%s-%s-%s", cluster, roleControlPlane, GenerateID(IDLength))
 }
 
 // ControlPlaneWithID returns a name for a control plane server with a specific ID.
 // Format: {cluster}-cp-{id}
 func ControlPlaneWithID(cluster, id string) string {
-	return fmt.Sprintf("%s-%s-%s", cluster, RoleControlPlane, id)
+	return fmt.Sprintf("%s-%s-%s", cluster, roleControlPlane, id)
 }
 
 // Worker returns a name for a worker server with a random ID.
 // Format: {cluster}-w-{5char}
 func Worker(cluster string) string {
-	return fmt.Sprintf("%s-%s-%s", cluster, RoleWorker, GenerateID(IDLength))
+	return fmt.Sprintf("%s-%s-%s", cluster, roleWorker, GenerateID(IDLength))
 }
 
 // WorkerWithID returns a name for a worker server with a specific ID.
 // Format: {cluster}-w-{id}
 func WorkerWithID(cluster, id string) string {
-	return fmt.Sprintf("%s-%s-%s", cluster, RoleWorker, id)
+	return fmt.Sprintf("%s-%s-%s", cluster, roleWorker, id)
 }
 
-// StateMarker returns the name for the cluster state marker.
-// Format: {cluster}-state
-func StateMarker(cluster string) string {
-	return fmt.Sprintf("%s-%s", cluster, SuffixState)
+// IsWorker checks if a server name indicates a worker node.
+func IsWorker(name string) bool {
+	_, role, _, ok := parseServerName(name)
+	return ok && role == roleWorker
 }
 
-// ParseServerName extracts cluster name, role, and ID from a server name.
-// Returns cluster, role (cp/w), id, and ok (true if parsed successfully).
-func ParseServerName(name string) (cluster, role, id string, ok bool) {
+// parseServerName extracts cluster name, role, and ID from a server name.
+func parseServerName(name string) (cluster, role, id string, ok bool) {
 	parts := strings.Split(name, "-")
 	if len(parts) < 3 {
 		return "", "", "", false
 	}
 
-	// Last part is the ID
 	id = parts[len(parts)-1]
-
-	// Second-to-last part is the role
 	role = parts[len(parts)-2]
-
-	// Everything before is the cluster name
 	cluster = strings.Join(parts[:len(parts)-2], "-")
 
-	// Validate role
-	if role != RoleControlPlane && role != RoleWorker {
+	if role != roleControlPlane && role != roleWorker {
 		return "", "", "", false
 	}
 
 	return cluster, role, id, true
 }
 
-// IsControlPlane checks if a server name indicates a control plane node.
-func IsControlPlane(name string) bool {
-	_, role, _, ok := ParseServerName(name)
-	return ok && role == RoleControlPlane
-}
-
-// IsWorker checks if a server name indicates a worker node.
-func IsWorker(name string) bool {
-	_, role, _, ok := ParseServerName(name)
-	return ok && role == RoleWorker
-}
-
 // roleAbbrev converts a full role name to its abbreviation.
 func roleAbbrev(role string) string {
 	switch role {
 	case "control-plane", "controlplane", "cp":
-		return RoleControlPlane
+		return roleControlPlane
 	case "worker", "workers", "w":
-		return RoleWorker
+		return roleWorker
 	default:
 		// For unknown roles, take first letter or first two letters
 		if len(role) >= 2 {
@@ -185,11 +158,10 @@ func roleAbbrev(role string) string {
 	}
 }
 
-// E2E test cluster name prefixes
+// E2E test cluster name prefixes.
 const (
 	E2EFullStack = "e2e-fs"
 	E2EHA        = "e2e-ha"
-	E2EUpgrade   = "e2e-up"
 )
 
 // E2ECluster generates a short E2E test cluster name.

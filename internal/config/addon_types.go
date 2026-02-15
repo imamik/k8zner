@@ -36,7 +36,6 @@ type AddonsConfig struct {
 }
 
 // CCMConfig defines the Hetzner Cloud Controller Manager configuration.
-// See: terraform/variables.tf hcloud_ccm_* variables
 type CCMConfig struct {
 	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
 
@@ -49,12 +48,11 @@ type CCMConfig struct {
 
 	// NetworkRoutesEnabled enables or disables the CCM Route Controller.
 	// When enabled, CCM manages routes for pod networking.
-	// Default: true (matching Terraform)
+	// Default: true
 	NetworkRoutesEnabled *bool `mapstructure:"network_routes_enabled" yaml:"network_routes_enabled"`
 }
 
 // CCMLoadBalancerConfig defines the CCM Load Balancer controller configuration.
-// See: terraform/variables.tf hcloud_ccm_load_balancers_* variables
 type CCMLoadBalancerConfig struct {
 	// Enabled enables or disables the CCM Service Controller (load balancer management).
 	// Default: true
@@ -127,7 +125,6 @@ type CSIConfig struct {
 	StorageClasses       []StorageClass `mapstructure:"storage_classes" yaml:"storage_classes"`
 
 	// VolumeExtraLabels specifies additional labels to apply to Hetzner volumes.
-	// See: terraform/variables.tf hcloud_csi_volume_extra_labels
 	VolumeExtraLabels map[string]string `mapstructure:"volume_extra_labels" yaml:"volume_extra_labels"`
 }
 
@@ -140,12 +137,10 @@ type MetricsServerConfig struct {
 
 	// ScheduleOnControlPlane determines whether to schedule the Metrics Server on control plane nodes.
 	// If nil, defaults to true when there are no worker nodes.
-	// See: terraform/variables.tf metrics_server_schedule_on_control_plane
 	ScheduleOnControlPlane *bool `mapstructure:"schedule_on_control_plane" yaml:"schedule_on_control_plane"`
 
 	// Replicas specifies the number of replicas for the Metrics Server.
 	// If nil, auto-calculated: 2 for clusters with >1 schedulable nodes, 1 otherwise.
-	// See: terraform/variables.tf metrics_server_replicas
 	Replicas *int `mapstructure:"replicas" yaml:"replicas"`
 }
 
@@ -355,15 +350,13 @@ type TalosBackupConfig struct {
 	// S3HcloudURL is a convenience field for Hetzner Object Storage.
 	// Format: bucket.region.your-objectstorage.com or https://bucket.region.your-objectstorage.com
 	// When set, automatically extracts S3Bucket, S3Region, and S3Endpoint.
-	// See: terraform/variables.tf talos_backup_s3_hcloud_url
 	S3HcloudURL string `mapstructure:"s3_hcloud_url" yaml:"s3_hcloud_url"`
 }
 
 // GatewayAPICRDsConfig defines the Gateway API CRDs configuration.
-// See: terraform/variables.tf gateway_api_crds_* variables
 type GatewayAPICRDsConfig struct {
 	// Enabled enables the Gateway API CRDs deployment.
-	// Default: true (matching Terraform)
+	// Default: true
 	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
 
 	// Version specifies the Gateway API CRDs version.
@@ -376,10 +369,9 @@ type GatewayAPICRDsConfig struct {
 }
 
 // PrometheusOperatorCRDsConfig defines the Prometheus Operator CRDs configuration.
-// See: terraform/variables.tf prometheus_operator_crds_* variables
 type PrometheusOperatorCRDsConfig struct {
 	// Enabled enables the Prometheus Operator CRDs deployment.
-	// Default: true (matching Terraform)
+	// Default: true
 	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
 
 	// Version specifies the Prometheus Operator CRDs version.
@@ -530,7 +522,7 @@ type KubePrometheusResourceSpec struct {
 // This is separate from the Hetzner CCM - it's the Siderolabs Talos CCM.
 type TalosCCMConfig struct {
 	// Enabled enables the Talos CCM deployment.
-	// Default: true (matching Terraform)
+	// Default: true
 	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
 
 	// Version specifies the Talos CCM version.
@@ -604,10 +596,3 @@ type OperatorConfig struct {
 	HostNetwork bool `mapstructure:"host_network" yaml:"host_network"`
 }
 
-// RDNSConfig defines cluster-wide reverse DNS defaults.
-type RDNSConfig struct {
-	// Cluster-wide defaults (fallback for all resources)
-	ClusterRDNS     string `mapstructure:"cluster" yaml:"cluster"`
-	ClusterRDNSIPv4 string `mapstructure:"cluster_ipv4" yaml:"cluster_ipv4"`
-	ClusterRDNSIPv6 string `mapstructure:"cluster_ipv6" yaml:"cluster_ipv6"`
-}

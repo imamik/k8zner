@@ -183,7 +183,7 @@ func TestGetWorkerCount(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			cfg := &config.Config{Workers: tt.workers}
-			assert.Equal(t, tt.expected, getWorkerCount(cfg))
+			assert.Equal(t, tt.expected, cfg.WorkerCount())
 		})
 	}
 }
@@ -1829,9 +1829,9 @@ func TestBuildCCMEnvVars_NoNetworkRoutes(t *testing.T) {
 // Traefik namespace security labels
 // ============================================================================
 
-func TestCreateTraefikNamespace_SecurityLabels(t *testing.T) {
+func TestTraefikNamespace_SecurityLabels(t *testing.T) {
 	t.Parallel()
-	ns := createTraefikNamespace()
+	ns := helm.NamespaceManifest("traefik", baselinePodSecurityLabels)
 
 	assert.Contains(t, ns, "pod-security.kubernetes.io/enforce: baseline")
 	assert.Contains(t, ns, "pod-security.kubernetes.io/audit: baseline")

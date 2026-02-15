@@ -29,8 +29,8 @@ func TestValidationPhase_Provision_WithErrors(t *testing.T) {
 	}
 
 	ctx := &Context{
-		Config: cfg,
-		Logger: &DefaultLogger{},
+		Config:   cfg,
+		Observer: NewConsoleObserver(),
 	}
 
 	phase := NewValidationPhase()
@@ -72,8 +72,8 @@ func TestValidationPhase_Provision_WithWarningsOnly(t *testing.T) {
 	}
 
 	ctx := &Context{
-		Config: cfg,
-		Logger: &DefaultLogger{},
+		Config:   cfg,
+		Observer: NewConsoleObserver(),
 	}
 
 	phase := NewValidationPhase()
@@ -89,8 +89,8 @@ func TestRequiredFieldsValidator_AllFieldsMissing(t *testing.T) {
 	cfg := &config.Config{} // all required fields empty
 
 	ctx := &Context{
-		Config: cfg,
-		Logger: &DefaultLogger{},
+		Config:   cfg,
+		Observer: NewConsoleObserver(),
 	}
 
 	validator := &RequiredFieldsValidator{}
@@ -119,8 +119,8 @@ func TestRequiredFieldsValidator_MissingLocation(t *testing.T) {
 	}
 
 	ctx := &Context{
-		Config: cfg,
-		Logger: &DefaultLogger{},
+		Config:   cfg,
+		Observer: NewConsoleObserver(),
 	}
 
 	validator := &RequiredFieldsValidator{}
@@ -140,8 +140,8 @@ func TestRequiredFieldsValidator_MissingZone(t *testing.T) {
 	}
 
 	ctx := &Context{
-		Config: cfg,
-		Logger: &DefaultLogger{},
+		Config:   cfg,
+		Observer: NewConsoleObserver(),
 	}
 
 	validator := &RequiredFieldsValidator{}
@@ -164,8 +164,8 @@ func TestRequiredFieldsValidator_AllPresent(t *testing.T) {
 	}
 
 	ctx := &Context{
-		Config: cfg,
-		Logger: &DefaultLogger{},
+		Config:   cfg,
+		Observer: NewConsoleObserver(),
 	}
 
 	validator := &RequiredFieldsValidator{}
@@ -185,8 +185,8 @@ func TestNetworkValidator_IPv6CIDR(t *testing.T) {
 	}
 
 	ctx := &Context{
-		Config: cfg,
-		Logger: &DefaultLogger{},
+		Config:   cfg,
+		Observer: NewConsoleObserver(),
 	}
 
 	validator := &NetworkValidator{}
@@ -216,8 +216,8 @@ func TestServerTypeValidator_WorkerEmptyServerType(t *testing.T) {
 	}
 
 	ctx := &Context{
-		Config: cfg,
-		Logger: &DefaultLogger{},
+		Config:   cfg,
+		Observer: NewConsoleObserver(),
 	}
 
 	validator := &ServerTypeValidator{}
@@ -243,8 +243,8 @@ func TestServerTypeValidator_WorkerNegativeCount(t *testing.T) {
 	}
 
 	ctx := &Context{
-		Config: cfg,
-		Logger: &DefaultLogger{},
+		Config:   cfg,
+		Observer: NewConsoleObserver(),
 	}
 
 	validator := &ServerTypeValidator{}
@@ -272,8 +272,8 @@ func TestServerTypeValidator_ControlPlaneZeroCount(t *testing.T) {
 	}
 
 	ctx := &Context{
-		Config: cfg,
-		Logger: &DefaultLogger{},
+		Config:   cfg,
+		Observer: NewConsoleObserver(),
 	}
 
 	validator := &ServerTypeValidator{}
@@ -313,8 +313,8 @@ func TestServerTypeValidator_MultiplePoolsMixedErrors(t *testing.T) {
 	}
 
 	ctx := &Context{
-		Config: cfg,
-		Logger: &DefaultLogger{},
+		Config:   cfg,
+		Observer: NewConsoleObserver(),
 	}
 
 	validator := &ServerTypeValidator{}
@@ -342,8 +342,8 @@ func TestServerTypeValidator_AllValid(t *testing.T) {
 	}
 
 	ctx := &Context{
-		Config: cfg,
-		Logger: &DefaultLogger{},
+		Config:   cfg,
+		Observer: NewConsoleObserver(),
 	}
 
 	validator := &ServerTypeValidator{}
@@ -361,8 +361,8 @@ func TestSSHKeyValidator_KeysPresent(t *testing.T) {
 	}
 
 	ctx := &Context{
-		Config: cfg,
-		Logger: &DefaultLogger{},
+		Config:   cfg,
+		Observer: NewConsoleObserver(),
 	}
 
 	validator := &SSHKeyValidator{}
@@ -382,8 +382,8 @@ func TestNetworkValidator_LargeCIDR(t *testing.T) {
 	}
 
 	ctx := &Context{
-		Config: cfg,
-		Logger: &DefaultLogger{},
+		Config:   cfg,
+		Observer: NewConsoleObserver(),
 	}
 
 	validator := &NetworkValidator{}

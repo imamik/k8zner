@@ -17,7 +17,7 @@ const phase = "infrastructure"
 
 // ProvisionFirewall provisions the cluster firewall with rules.
 func (p *Provisioner) ProvisionFirewall(ctx *provisioning.Context) error {
-	ctx.Logger.Printf("[%s] Reconciling firewall %s...", phase, ctx.Config.ClusterName)
+	ctx.Observer.Printf("[%s] Reconciling firewall %s...", phase, ctx.Config.ClusterName)
 
 	publicIP := ctx.State.PublicIP
 	fw := &ctx.Config.Firewall
@@ -68,7 +68,7 @@ func (p *Provisioner) ProvisionFirewall(ctx *provisioning.Context) error {
 		return fmt.Errorf("failed to ensure firewall: %w", err)
 	}
 	ctx.State.Firewall = result
-	ctx.Logger.Printf("[%s] Firewall %s applied to servers with label selector: %s", phase, ctx.Config.ClusterName, applyToLabelSelector)
+	ctx.Observer.Printf("[%s] Firewall %s applied to servers with label selector: %s", phase, ctx.Config.ClusterName, applyToLabelSelector)
 	return nil
 }
 

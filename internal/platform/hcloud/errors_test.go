@@ -139,9 +139,9 @@ func TestIsNotFound(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := IsNotFound(tt.err)
+			result := isNotFound(tt.err)
 			if result != tt.expected {
-				t.Errorf("IsNotFound(%v) = %v, want %v", tt.err, result, tt.expected)
+				t.Errorf("isNotFound(%v) = %v, want %v", tt.err, result, tt.expected)
 			}
 		})
 	}

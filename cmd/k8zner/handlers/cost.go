@@ -260,19 +260,6 @@ func desiredResourcesFromConfig(cfg *config.Config) []desiredResource {
 		resources = append(resources, desiredResource{kind: "lb", typeName: lbType, count: 1, location: cfg.Location})
 	}
 
-	// Load Balancers: additional ingress pools (manually configured)
-	for _, pool := range cfg.IngressLoadBalancerPools {
-		cnt := pool.Count
-		if cnt <= 0 {
-			cnt = 1
-		}
-		loc := pool.Location
-		if loc == "" {
-			loc = cfg.Location
-		}
-		resources = append(resources, desiredResource{kind: "lb", typeName: pool.Type, count: cnt, location: loc})
-	}
-
 	return resources
 }
 

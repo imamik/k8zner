@@ -15,11 +15,10 @@ func applyMetricsServer(ctx context.Context, client k8sclient.Client, cfg *confi
 	return installHelmAddon(ctx, client, "metrics-server", "kube-system", cfg.Addons.MetricsServer.Helm, values)
 }
 
-// buildMetricsServerValues creates helm values matching terraform configuration.
-// See: terraform/metrics_server.tf
+// buildMetricsServerValues creates helm values for the addon.
 func buildMetricsServerValues(cfg *config.Config) helm.Values {
 	controlPlaneCount := getControlPlaneCount(cfg)
-	workerCount := getWorkerCount(cfg)
+	workerCount := cfg.WorkerCount()
 
 	// Calculate schedule_on_control_plane: use config value if set, otherwise auto-detect
 	// Auto-detection: schedule on control plane when no workers exist
@@ -87,11 +86,3 @@ func buildMetricsServerPDB() helm.Values {
 	}
 }
 
-// getWorkerCount returns the total number of worker nodes.
-func getWorkerCount(cfg *config.Config) int {
-	count := 0
-	for _, pool := range cfg.Workers {
-		count += pool.Count
-	}
-	return count
-}

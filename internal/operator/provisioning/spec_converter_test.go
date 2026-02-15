@@ -10,6 +10,7 @@ import (
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
 	"github.com/imamik/k8zner/internal/config"
+	"github.com/imamik/k8zner/internal/util/ptr"
 )
 
 func baseCreds() *Credentials {
@@ -328,7 +329,7 @@ func TestNormalizeServerSize(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tt.expected, normalizeServerSize(tt.input))
+			assert.Equal(t, tt.expected, string(config.ServerSize(tt.input).Normalize()))
 		})
 	}
 }
@@ -721,14 +722,14 @@ func TestDefaultString_WhitespaceNotEmpty(t *testing.T) {
 
 // --- boolPtr helper ---
 
-func TestBoolPtr(t *testing.T) {
+func TestPtrBool(t *testing.T) {
 	t.Parallel()
 
-	trueVal := boolPtr(true)
+	trueVal := ptr.Bool(true)
 	require.NotNil(t, trueVal)
 	assert.True(t, *trueVal)
 
-	falseVal := boolPtr(false)
+	falseVal := ptr.Bool(false)
 	require.NotNil(t, falseVal)
 	assert.False(t, *falseVal)
 }

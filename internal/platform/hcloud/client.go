@@ -100,13 +100,13 @@ type PlacementGroupManager interface {
 type CertificateManager interface {
 	EnsureCertificate(ctx context.Context, name, certificate, privateKey string, labels map[string]string) (*hcloud.Certificate, error)
 	GetCertificate(ctx context.Context, name string) (*hcloud.Certificate, error)
+	DeleteCertificate(ctx context.Context, name string) error
 }
 
 // RDNSManager defines the interface for managing reverse DNS.
 type RDNSManager interface {
 	SetServerRDNS(ctx context.Context, serverID int64, ipAddress, dnsPtr string) error
 	SetLoadBalancerRDNS(ctx context.Context, lbID int64, ipAddress, dnsPtr string) error
-	DeleteCertificate(ctx context.Context, name string) error
 }
 
 // InfrastructureManager combines all infrastructure interfaces.

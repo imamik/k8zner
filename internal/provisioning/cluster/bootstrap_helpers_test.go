@@ -28,7 +28,6 @@ func TestIsNodeInMaintenanceMode_PortNotReachable(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 
@@ -53,7 +52,6 @@ func TestIsNodeInMaintenanceMode_EmptyTalosConfig(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	// Empty TalosConfig means the function returns false
@@ -82,7 +80,6 @@ func TestConfigureNewNodes_WithCPAndWorkerNodesButNoMaintenance(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	// Nodes that won't be in maintenance mode (port 50000 not reachable)
@@ -105,7 +102,6 @@ func TestDetectMaintenanceModeNodes_NodesNotReachable(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 
@@ -137,7 +133,6 @@ func TestApplyWorkerConfigs_PortNotReachable(t *testing.T) {
 		State:    provisioning.NewState(),
 		Talos:    mockTalos,
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.WorkerIPs = map[string]string{"worker-1": "192.0.2.10"}
@@ -167,7 +162,6 @@ func TestApplyControlPlaneConfigs_DirectPath_PortUnreachable(t *testing.T) {
 		State:    provisioning.NewState(),
 		Talos:    mockTalos,
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "192.0.2.1"}
@@ -191,7 +185,6 @@ func TestWaitForControlPlaneReady_DirectPath_NodeNotReachable(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "192.0.2.1"}
@@ -221,7 +214,6 @@ func TestWaitForControlPlaneReady_PrivateFirst_NoLB(t *testing.T) {
 		State:    provisioning.NewState(),
 		Infra:    mockInfra,
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "10.0.0.1"}
@@ -243,7 +235,6 @@ func TestApplyControlPlaneConfigsViaLB_PortWaitTimeout(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.LoadBalancer = &hcloud.LoadBalancer{
@@ -279,7 +270,6 @@ func TestApplyOneConfigViaLB_GenerateConfigError(t *testing.T) {
 		State:    provisioning.NewState(),
 		Talos:    mockTalos,
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.ControlPlaneServerIDs = map[string]int64{"cp-1": 100}
@@ -308,7 +298,6 @@ func TestApplyOneConfigViaLB_ApplyFailsNonTLS(t *testing.T) {
 		State:    provisioning.NewState(),
 		Talos:    mockTalos,
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.ControlPlaneServerIDs = map[string]int64{"cp-1": 100}
@@ -330,7 +319,6 @@ func TestWaitForControlPlaneReadyViaLB_PortNotReachable(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster", ClusterAccess: "private"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "10.0.0.1"}
@@ -376,7 +364,6 @@ func TestWaitForControlPlaneReadyViaLB_NoLB(t *testing.T) {
 		State:    provisioning.NewState(),
 		Infra:    mockInfra,
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "10.0.0.1"}
@@ -398,7 +385,6 @@ func TestRetrieveKubeconfig_InvalidConfig(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 
@@ -419,7 +405,6 @@ func TestRetrieveKubeconfig_EmptyNodes(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 
@@ -442,7 +427,6 @@ func TestRetrieveKubeconfigFromEndpoint_InvalidConfig(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 
@@ -463,7 +447,6 @@ func TestWaitForNodeReady_InvalidConfig(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 
@@ -484,7 +467,6 @@ func TestRetrieveAndStoreKubeconfig_PrivateFirst_WithLB_InvalidConfig(t *testing
 		Config:   &config.Config{ClusterName: "test-cluster", ClusterAccess: "private"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.TalosConfig = []byte("bad-config")
@@ -513,7 +495,6 @@ func TestBootstrapEtcd_PrivateFirst_WithLB_InvalidConfig(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster", ClusterAccess: "private"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.TalosConfig = []byte("invalid-yaml-config")
@@ -563,7 +544,6 @@ func TestBootstrapCluster_FullFlow_ApplyWorkerConfigsFails(t *testing.T) {
 		Talos:    mockTalos,
 		Infra:    mockInfra,
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "10.0.0.1"}
@@ -586,7 +566,6 @@ func TestTryRetrieveExistingKubeconfig_ConfigureNewNodesWithUnreachableNodes(t *
 		Config:   &config.Config{ClusterName: "test-cluster"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	// Nodes are present but unreachable (not in maintenance mode)
@@ -631,7 +610,6 @@ func TestApplyMachineConfig_PortNotReachable(t *testing.T) {
 		Config:   &config.Config{ClusterName: "test-cluster"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 
@@ -665,7 +643,6 @@ func TestBootstrapCluster_AlreadyBootstrapped_PrivateFirst_NoLB(t *testing.T) {
 		State:    provisioning.NewState(),
 		Infra:    mockInfra,
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.TalosConfig = []byte("talos-config")
@@ -689,7 +666,6 @@ func TestApplyControlPlaneConfigs_PrivateFirst_WithLB_PortTimeout(t *testing.T) 
 		Config:   &config.Config{ClusterName: "test-cluster", ClusterAccess: "private"},
 		State:    provisioning.NewState(),
 		Observer: observer,
-		Logger:   observer,
 		Timeouts: config.TestTimeouts(),
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "10.0.0.1"}

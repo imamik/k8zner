@@ -22,7 +22,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
-	"github.com/imamik/k8zner/internal/config"
 	operatorprov "github.com/imamik/k8zner/internal/operator/provisioning"
 	"github.com/imamik/k8zner/internal/platform/hcloud"
 )
@@ -92,12 +91,6 @@ const (
 	EventReasonProvisioningComplete  = "ProvisioningComplete"
 	EventReasonCredentialsError = "CredentialsError"
 )
-
-// normalizeServerSize converts legacy server type names to current Hetzner names.
-// For example, cx22 → cx23 (Hetzner renamed types in 2024).
-func normalizeServerSize(size string) string {
-	return string(config.ServerSize(size).Normalize())
-}
 
 // ClusterReconciler reconciles a K8znerCluster object.
 type ClusterReconciler struct {
@@ -393,8 +386,8 @@ func (r *ClusterReconciler) reconcile(ctx context.Context, cluster *k8znerv1alph
 		return r.reconcileWithStateMachine(ctx, cluster)
 	}
 
-	// Legacy mode: health check + healing only (for clusters created before operator-centric architecture)
-	return r.reconcileLegacy(ctx, cluster)
+	// Legacy mode: same as running phase (health check + healing + non-fatal health probes)
+	return r.reconcileRunningPhase(ctx, cluster)
 }
 
 // reconcileWithStateMachine handles provisioning and ongoing management using a phase-based state machine.
@@ -505,32 +498,6 @@ func (r *ClusterReconciler) checkPhaseTimeout(ctx context.Context, cluster *k8zn
 		recordPhaseError(cluster, string(cluster.Status.ProvisioningPhase),
 			fmt.Sprintf("phase exceeds expected duration: %s > %s", elapsed.Round(time.Second), expected))
 	}
-}
-
-// reconcileLegacy handles health check and healing for legacy clusters.
-func (r *ClusterReconciler) reconcileLegacy(ctx context.Context, cluster *k8znerv1alpha1.K8znerCluster) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
-	// Phase 1: Health Check
-	logger.V(1).Info("running health check phase")
-	if err := r.reconcileHealthCheck(ctx, cluster); err != nil {
-		return ctrl.Result{}, fmt.Errorf("health check failed: %w", err)
-	}
-
-	// Phase 2: Control Plane Reconciliation
-	logger.V(1).Info("running control plane reconciliation")
-	if result, err := r.reconcileControlPlanes(ctx, cluster); err != nil || result.Requeue || result.RequeueAfter > 0 {
-		return result, err
-	}
-
-	// Phase 3: Worker Reconciliation
-	logger.V(1).Info("running worker reconciliation")
-	if result, err := r.reconcileWorkers(ctx, cluster); err != nil || result.Requeue || result.RequeueAfter > 0 {
-		return result, err
-	}
-
-	// Requeue for continuous monitoring
-	return ctrl.Result{RequeueAfter: defaultRequeueAfter}, nil
 }
 
 // drainNode evicts all pods from a node.

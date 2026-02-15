@@ -162,60 +162,6 @@ func (g *Generator) GenerateWorkerConfig(hostname string, serverID int64) ([]byt
 	return applyConfigPatch(baseConfig, patch)
 }
 
-// GenerateAutoscalerConfig generates the configuration for an autoscaler node pool.
-// The configuration includes node labels and taints for the pool.
-func (g *Generator) GenerateAutoscalerConfig(poolName string, labels map[string]string, taints []string) ([]byte, error) {
-	baseConfig, err := g.generateBaseConfig(machine.TypeWorker)
-	if err != nil {
-		return nil, err
-	}
-
-	// Build installer image URL
-	installerImage := g.getInstallerImageURL()
-
-	// Build worker patch - serverID is 0 for autoscaler nodes since they're dynamically created
-	patch := buildWorkerPatch("", 0, g.machineOpts, installerImage, nil)
-
-	// Add autoscaler-specific node labels and taints to the patch
-	machinePatch := patch["machine"].(map[string]any)
-
-	// Add node labels
-	nodeLabels := map[string]any{
-		"nodepool": poolName,
-	}
-	for k, v := range labels {
-		nodeLabels[k] = v
-	}
-	machinePatch["nodeLabels"] = nodeLabels
-
-	// Add node taints
-	if len(taints) > 0 {
-		nodeTaints := map[string]any{}
-		for _, taint := range taints {
-			// Parse taint format: "key=value:effect"
-			parts := strings.SplitN(taint, ":", 2)
-			if len(parts) != 2 {
-				continue
-			}
-			keyValue := parts[0]
-			effect := parts[1]
-
-			kvParts := strings.SplitN(keyValue, "=", 2)
-			if len(kvParts) != 2 {
-				continue
-			}
-			key := kvParts[0]
-			value := kvParts[1]
-
-			nodeTaints[key] = fmt.Sprintf("%s:%s", value, effect)
-		}
-		if len(nodeTaints) > 0 {
-			machinePatch["nodeTaints"] = nodeTaints
-		}
-	}
-
-	return applyConfigPatch(baseConfig, patch)
-}
 
 // generateBaseConfig generates the base Talos config without custom patches.
 // This is used as the foundation that patches are applied to.

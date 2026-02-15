@@ -719,7 +719,7 @@ func TestFindTalosEndpoint_NilBootstrapWithHealthyCPNodes(t *testing.T) {
 	assert.Equal(t, "9.9.9.9", endpoint)
 }
 
-// --- reconcileLegacy: health check failure ---
+// --- reconcileRunningPhase: health check ---
 
 func TestFindHealthyControlPlaneIP_HealthyWithEmptyIP(t *testing.T) {
 	t.Parallel()

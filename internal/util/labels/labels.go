@@ -22,16 +22,14 @@ const (
 	// KeyManagedBy identifies the management system
 	KeyManagedBy = "k8zner.io/managed-by"
 
-	// KeyServerID is a unique identifier for the server within the cluster
-	KeyServerID = "k8zner.io/server-id"
-
 	// Legacy keys (for backward compatibility during migration)
-	LegacyKeyCluster  = "cluster"
-	LegacyKeyRole     = "role"
-	LegacyKeyPool     = "pool"
-	LegacyKeyNodePool = "nodepool"
-	LegacyKeyState    = "state"
-	LegacyKeyTestID   = "test-id"
+	LegacyKeyCluster = "cluster"
+	LegacyKeyTestID  = "test-id"
+
+	// legacyKeyRole, legacyKeyPool, legacyKeyNodePool are set by builder methods for backward compat.
+	legacyKeyRole     = "role"
+	legacyKeyPool     = "pool"
+	legacyKeyNodePool = "nodepool"
 )
 
 // Role values
@@ -68,7 +66,7 @@ func NewLabelBuilder(clusterName string) *LabelBuilder {
 // Sets both new and legacy role labels for compatibility.
 func (lb *LabelBuilder) WithRole(role string) *LabelBuilder {
 	lb.labels[KeyRole] = role
-	lb.labels[LegacyKeyRole] = role // Keep legacy for backward compat
+	lb.labels[legacyKeyRole] = role // Keep legacy for backward compat
 	return lb
 }
 
@@ -76,31 +74,13 @@ func (lb *LabelBuilder) WithRole(role string) *LabelBuilder {
 // Sets both new and legacy pool labels for compatibility.
 func (lb *LabelBuilder) WithPool(pool string) *LabelBuilder {
 	lb.labels[KeyPool] = pool
-	lb.labels[LegacyKeyPool] = pool // Keep legacy for backward compat
-	return lb
-}
-
-// WithServerID adds a server ID label (the unique 5-char identifier).
-func (lb *LabelBuilder) WithServerID(id string) *LabelBuilder {
-	lb.labels[KeyServerID] = id
+	lb.labels[legacyKeyPool] = pool // Keep legacy for backward compat
 	return lb
 }
 
 // WithNodePool adds a nodepool label (used for worker placement groups).
 func (lb *LabelBuilder) WithNodePool(pool string) *LabelBuilder {
-	lb.labels[LegacyKeyNodePool] = pool
-	return lb
-}
-
-// WithState adds a state label (used for cluster state tracking).
-func (lb *LabelBuilder) WithState(state string) *LabelBuilder {
-	lb.labels[LegacyKeyState] = state
-	return lb
-}
-
-// WithTestID adds a test-id label (used for E2E test resource tracking).
-func (lb *LabelBuilder) WithTestID(testID string) *LabelBuilder {
-	lb.labels[LegacyKeyTestID] = testID
+	lb.labels[legacyKeyNodePool] = pool
 	return lb
 }
 
@@ -116,12 +96,6 @@ func (lb *LabelBuilder) WithTestIDIfSet(testID string) *LabelBuilder {
 // WithManagedBy sets who manages this resource.
 func (lb *LabelBuilder) WithManagedBy(manager string) *LabelBuilder {
 	lb.labels[KeyManagedBy] = manager
-	return lb
-}
-
-// WithCustom adds a custom key-value label.
-func (lb *LabelBuilder) WithCustom(key, value string) *LabelBuilder {
-	lb.labels[key] = value
 	return lb
 }
 
@@ -148,7 +122,3 @@ func SelectorForCluster(clusterName string) string {
 	return KeyCluster + "=" + clusterName
 }
 
-// SelectorForClusterRole returns a label selector for resources with a specific role.
-func SelectorForClusterRole(clusterName, role string) string {
-	return KeyCluster + "=" + clusterName + "," + KeyRole + "=" + role
-}

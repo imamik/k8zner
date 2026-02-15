@@ -141,29 +141,6 @@ func TestDesiredResourcesFromConfig(t *testing.T) {
 		}
 	})
 
-	t.Run("includes additional LB pools", func(t *testing.T) {
-		cfg := &config.Config{
-			ClusterName: "test",
-			Location:    "nbg1",
-			IngressLoadBalancerPools: []config.IngressLoadBalancerPool{
-				{Name: "extra", Type: "lb31", Count: 2, Location: "fsn1"},
-			},
-			Addons: config.AddonsConfig{
-				Traefik: config.DefaultTraefik(true),
-			},
-		}
-
-		resources := desiredResourcesFromConfig(cfg)
-
-		lbCount := 0
-		for _, r := range resources {
-			if r.kind == "lb" {
-				lbCount += r.count
-			}
-		}
-		assert.Equal(t, 4, lbCount, "1 kube API + 1 ingress + 2 extra pool")
-	})
-
 	t.Run("defaults pool location to cluster location", func(t *testing.T) {
 		cfg := &config.Config{
 			ClusterName: "test",
