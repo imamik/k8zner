@@ -213,7 +213,7 @@ func waitForLBHealth(ctx context.Context, infraClient hcloudInternal.Infrastruct
 
 	const (
 		pollInterval = 5 * time.Second
-		timeout      = 5 * time.Minute
+		timeout      = 10 * time.Minute
 		logInterval  = 30 * time.Second
 	)
 
