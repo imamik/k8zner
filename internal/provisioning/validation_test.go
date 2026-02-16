@@ -9,10 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidationPhase_RequiredFields(t *testing.T) {
+func TestValidate_RequiredFields(t *testing.T) {
 	t.Parallel()
-	// Missing cluster name
-
 	cfg := &config.Config{
 		Location: "nbg1",
 		Network: config.NetworkConfig{
@@ -26,15 +24,20 @@ func TestValidationPhase_RequiredFields(t *testing.T) {
 		Observer: NewConsoleObserver(),
 	}
 
-	validator := &RequiredFieldsValidator{}
-	errors := validator.Validate(ctx)
+	errors := validate(ctx)
 
-	assert.Len(t, errors, 1)
-	assert.Equal(t, "ClusterName", errors[0].Field)
-	assert.Equal(t, "error", errors[0].Severity)
+	// Should have exactly 1 error for missing ClusterName
+	var fieldErrors []ValidationError
+	for _, e := range errors {
+		if e.IsError() && e.Field == "ClusterName" {
+			fieldErrors = append(fieldErrors, e)
+		}
+	}
+	assert.Len(t, fieldErrors, 1)
+	assert.Equal(t, "error", fieldErrors[0].Severity)
 }
 
-func TestValidationPhase_NetworkCIDR(t *testing.T) {
+func TestValidate_NetworkCIDR(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name          string
@@ -68,9 +71,13 @@ func TestValidationPhase_NetworkCIDR(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			cfg := &config.Config{
+				ClusterName: "test",
+				Location:    "nbg1",
 				Network: config.NetworkConfig{
 					IPv4CIDR: tt.cidr,
+					Zone:     "eu-central",
 				},
+				SSHKeys: []string{"key"},
 			}
 
 			ctx := &Context{
@@ -78,24 +85,23 @@ func TestValidationPhase_NetworkCIDR(t *testing.T) {
 				Observer: NewConsoleObserver(),
 			}
 
-			validator := &NetworkValidator{}
-			errors := validator.Validate(ctx)
+			errors := validate(ctx)
 
 			if tt.expectError {
 				hasError := false
 				for _, e := range errors {
-					if e.IsError() {
+					if e.IsError() && e.Field == "Network.IPv4CIDR" {
 						hasError = true
 						break
 					}
 				}
-				assert.True(t, hasError, "expected an error")
+				assert.True(t, hasError, "expected a network CIDR error")
 			}
 
 			if tt.expectWarning {
 				hasWarning := false
 				for _, e := range errors {
-					if e.Severity == "warning" {
+					if e.Severity == "warning" && e.Field == "Network.IPv4CIDR" {
 						hasWarning = true
 						break
 					}
@@ -106,9 +112,15 @@ func TestValidationPhase_NetworkCIDR(t *testing.T) {
 	}
 }
 
-func TestValidationPhase_ServerTypes(t *testing.T) {
+func TestValidate_ServerTypes(t *testing.T) {
 	t.Parallel()
 	cfg := &config.Config{
+		ClusterName: "test",
+		Location:    "nbg1",
+		Network: config.NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+			Zone:     "eu-central",
+		},
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
 				{
@@ -118,6 +130,7 @@ func TestValidationPhase_ServerTypes(t *testing.T) {
 				},
 			},
 		},
+		SSHKeys: []string{"key"},
 	}
 
 	ctx := &Context{
@@ -125,17 +138,26 @@ func TestValidationPhase_ServerTypes(t *testing.T) {
 		Observer: NewConsoleObserver(),
 	}
 
-	validator := &ServerTypeValidator{}
-	errors := validator.Validate(ctx)
+	errors := validate(ctx)
 
-	assert.Len(t, errors, 1)
-	assert.Contains(t, errors[0].Field, "ServerType")
-	assert.Equal(t, "error", errors[0].Severity)
+	var serverTypeErrors []ValidationError
+	for _, e := range errors {
+		if e.IsError() && e.Field == "ControlPlane.NodePools[0].ServerType" {
+			serverTypeErrors = append(serverTypeErrors, e)
+		}
+	}
+	assert.Len(t, serverTypeErrors, 1)
 }
 
-func TestValidationPhase_SSHKeys(t *testing.T) {
+func TestValidate_SSHKeys(t *testing.T) {
 	t.Parallel()
 	cfg := &config.Config{
+		ClusterName: "test",
+		Location:    "nbg1",
+		Network: config.NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+			Zone:     "eu-central",
+		},
 		SSHKeys: []string{}, // No SSH keys
 	}
 
@@ -144,15 +166,18 @@ func TestValidationPhase_SSHKeys(t *testing.T) {
 		Observer: NewConsoleObserver(),
 	}
 
-	validator := &SSHKeyValidator{}
-	errors := validator.Validate(ctx)
+	errors := validate(ctx)
 
-	assert.Len(t, errors, 1)
-	assert.Equal(t, "SSHKeys", errors[0].Field)
-	assert.Equal(t, "warning", errors[0].Severity)
+	var sshWarnings []ValidationError
+	for _, e := range errors {
+		if e.Field == "SSHKeys" && e.Severity == "warning" {
+			sshWarnings = append(sshWarnings, e)
+		}
+	}
+	assert.Len(t, sshWarnings, 1)
 }
 
-func TestValidationPhase_Versions(t *testing.T) {
+func TestValidate_Versions(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name           string
@@ -184,6 +209,13 @@ func TestValidationPhase_Versions(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			cfg := &config.Config{
+				ClusterName: "test",
+				Location:    "nbg1",
+				Network: config.NetworkConfig{
+					IPv4CIDR: "10.0.0.0/16",
+					Zone:     "eu-central",
+				},
+				SSHKeys: []string{"key"},
 				Talos: config.TalosConfig{
 					Version: tt.talosVersion,
 				},
@@ -197,12 +229,11 @@ func TestValidationPhase_Versions(t *testing.T) {
 				Observer: NewConsoleObserver(),
 			}
 
-			validator := &VersionValidator{}
-			errors := validator.Validate(ctx)
+			errors := validate(ctx)
 
 			warnings := 0
 			for _, e := range errors {
-				if e.Severity == "warning" {
+				if e.Severity == "warning" && (e.Field == "Talos.Version" || e.Field == "Kubernetes.Version") {
 					warnings++
 				}
 			}

@@ -82,9 +82,9 @@ func TestValidationPhase_Provision_WithWarningsOnly(t *testing.T) {
 	require.NoError(t, err, "warnings-only should not cause an error")
 }
 
-// --- RequiredFieldsValidator: all fields missing ---
+// --- validate: all required fields missing ---
 
-func TestRequiredFieldsValidator_AllFieldsMissing(t *testing.T) {
+func TestValidate_AllFieldsMissing(t *testing.T) {
 	t.Parallel()
 	cfg := &config.Config{} // all required fields empty
 
@@ -93,29 +93,31 @@ func TestRequiredFieldsValidator_AllFieldsMissing(t *testing.T) {
 		Observer: NewConsoleObserver(),
 	}
 
-	validator := &RequiredFieldsValidator{}
-	errors := validator.Validate(ctx)
+	errors := validate(ctx)
 
-	require.Len(t, errors, 3, "should have 3 errors: ClusterName, Location, Network.Zone")
+	// Should have at least the 3 required-field errors
 	fieldNames := make(map[string]bool)
 	for _, e := range errors {
-		fieldNames[e.Field] = true
-		assert.Equal(t, "error", e.Severity)
+		if e.IsError() {
+			fieldNames[e.Field] = true
+		}
 	}
 	assert.True(t, fieldNames["ClusterName"])
 	assert.True(t, fieldNames["Location"])
 	assert.True(t, fieldNames["Network.Zone"])
 }
 
-// --- RequiredFieldsValidator: missing Location only ---
+// --- validate: missing Location only ---
 
-func TestRequiredFieldsValidator_MissingLocation(t *testing.T) {
+func TestValidate_MissingLocation(t *testing.T) {
 	t.Parallel()
 	cfg := &config.Config{
 		ClusterName: "test",
 		Network: config.NetworkConfig{
-			Zone: "eu-central",
+			IPv4CIDR: "10.0.0.0/16",
+			Zone:     "eu-central",
 		},
+		SSHKeys: []string{"key"},
 	}
 
 	ctx := &Context{
@@ -123,44 +125,28 @@ func TestRequiredFieldsValidator_MissingLocation(t *testing.T) {
 		Observer: NewConsoleObserver(),
 	}
 
-	validator := &RequiredFieldsValidator{}
-	errors := validator.Validate(ctx)
+	errors := validate(ctx)
 
-	require.Len(t, errors, 1)
-	assert.Equal(t, "Location", errors[0].Field)
+	var locationErrors []ValidationError
+	for _, e := range errors {
+		if e.IsError() && e.Field == "Location" {
+			locationErrors = append(locationErrors, e)
+		}
+	}
+	require.Len(t, locationErrors, 1)
 }
 
-// --- RequiredFieldsValidator: missing Zone only ---
+// --- validate: missing Zone only ---
 
-func TestRequiredFieldsValidator_MissingZone(t *testing.T) {
-	t.Parallel()
-	cfg := &config.Config{
-		ClusterName: "test",
-		Location:    "nbg1",
-	}
-
-	ctx := &Context{
-		Config:   cfg,
-		Observer: NewConsoleObserver(),
-	}
-
-	validator := &RequiredFieldsValidator{}
-	errors := validator.Validate(ctx)
-
-	require.Len(t, errors, 1)
-	assert.Equal(t, "Network.Zone", errors[0].Field)
-}
-
-// --- RequiredFieldsValidator: all fields present ---
-
-func TestRequiredFieldsValidator_AllPresent(t *testing.T) {
+func TestValidate_MissingZone(t *testing.T) {
 	t.Parallel()
 	cfg := &config.Config{
 		ClusterName: "test",
 		Location:    "nbg1",
 		Network: config.NetworkConfig{
-			Zone: "eu-central",
+			IPv4CIDR: "10.0.0.0/16",
 		},
+		SSHKeys: []string{"key"},
 	}
 
 	ctx := &Context{
@@ -168,20 +154,56 @@ func TestRequiredFieldsValidator_AllPresent(t *testing.T) {
 		Observer: NewConsoleObserver(),
 	}
 
-	validator := &RequiredFieldsValidator{}
-	errors := validator.Validate(ctx)
+	errors := validate(ctx)
 
-	assert.Empty(t, errors)
+	var zoneErrors []ValidationError
+	for _, e := range errors {
+		if e.IsError() && e.Field == "Network.Zone" {
+			zoneErrors = append(zoneErrors, e)
+		}
+	}
+	require.Len(t, zoneErrors, 1)
 }
 
-// --- NetworkValidator: IPv6 CIDR (bits != 32) ---
+// --- validate: all fields present ---
 
-func TestNetworkValidator_IPv6CIDR(t *testing.T) {
+func TestValidate_AllPresent(t *testing.T) {
 	t.Parallel()
 	cfg := &config.Config{
+		ClusterName: "test",
+		Location:    "nbg1",
+		Network: config.NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+			Zone:     "eu-central",
+		},
+		SSHKeys: []string{"key"},
+	}
+
+	ctx := &Context{
+		Config:   cfg,
+		Observer: NewConsoleObserver(),
+	}
+
+	errors := validate(ctx)
+
+	// Should have no errors (only fields present)
+	for _, e := range errors {
+		assert.False(t, e.IsError(), "unexpected error: %s", e.Error())
+	}
+}
+
+// --- validate: IPv6 CIDR (bits != 32) ---
+
+func TestValidate_IPv6CIDR(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{
+		ClusterName: "test",
+		Location:    "nbg1",
 		Network: config.NetworkConfig{
 			IPv4CIDR: "2001:db8::/32",
+			Zone:     "eu-central",
 		},
+		SSHKeys: []string{"key"},
 	}
 
 	ctx := &Context{
@@ -189,8 +211,7 @@ func TestNetworkValidator_IPv6CIDR(t *testing.T) {
 		Observer: NewConsoleObserver(),
 	}
 
-	validator := &NetworkValidator{}
-	errors := validator.Validate(ctx)
+	errors := validate(ctx)
 
 	hasIPv4OnlyError := false
 	for _, e := range errors {
@@ -201,11 +222,17 @@ func TestNetworkValidator_IPv6CIDR(t *testing.T) {
 	assert.True(t, hasIPv4OnlyError, "should report IPv6 CIDRs as unsupported")
 }
 
-// --- ServerTypeValidator: worker pool with empty server type ---
+// --- validate: worker pool with empty server type ---
 
-func TestServerTypeValidator_WorkerEmptyServerType(t *testing.T) {
+func TestValidate_WorkerEmptyServerType(t *testing.T) {
 	t.Parallel()
 	cfg := &config.Config{
+		ClusterName: "test",
+		Location:    "nbg1",
+		Network: config.NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+			Zone:     "eu-central",
+		},
 		Workers: []config.WorkerNodePool{
 			{
 				Name:       "workers",
@@ -213,6 +240,7 @@ func TestServerTypeValidator_WorkerEmptyServerType(t *testing.T) {
 				Count:      1,
 			},
 		},
+		SSHKeys: []string{"key"},
 	}
 
 	ctx := &Context{
@@ -220,19 +248,28 @@ func TestServerTypeValidator_WorkerEmptyServerType(t *testing.T) {
 		Observer: NewConsoleObserver(),
 	}
 
-	validator := &ServerTypeValidator{}
-	errors := validator.Validate(ctx)
+	errors := validate(ctx)
 
-	require.Len(t, errors, 1)
-	assert.Contains(t, errors[0].Field, "Workers[0].ServerType")
-	assert.Equal(t, "error", errors[0].Severity)
+	var workerErrors []ValidationError
+	for _, e := range errors {
+		if e.IsError() && e.Field == "Workers[0].ServerType" {
+			workerErrors = append(workerErrors, e)
+		}
+	}
+	require.Len(t, workerErrors, 1)
 }
 
-// --- ServerTypeValidator: worker pool with negative count ---
+// --- validate: worker pool with negative count ---
 
-func TestServerTypeValidator_WorkerNegativeCount(t *testing.T) {
+func TestValidate_WorkerNegativeCount(t *testing.T) {
 	t.Parallel()
 	cfg := &config.Config{
+		ClusterName: "test",
+		Location:    "nbg1",
+		Network: config.NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+			Zone:     "eu-central",
+		},
 		Workers: []config.WorkerNodePool{
 			{
 				Name:       "workers",
@@ -240,6 +277,7 @@ func TestServerTypeValidator_WorkerNegativeCount(t *testing.T) {
 				Count:      -1,
 			},
 		},
+		SSHKeys: []string{"key"},
 	}
 
 	ctx := &Context{
@@ -247,19 +285,29 @@ func TestServerTypeValidator_WorkerNegativeCount(t *testing.T) {
 		Observer: NewConsoleObserver(),
 	}
 
-	validator := &ServerTypeValidator{}
-	errors := validator.Validate(ctx)
+	errors := validate(ctx)
 
-	require.Len(t, errors, 1)
-	assert.Contains(t, errors[0].Field, "Workers[0].Count")
-	assert.Contains(t, errors[0].Message, "non-negative")
+	var countErrors []ValidationError
+	for _, e := range errors {
+		if e.IsError() && e.Field == "Workers[0].Count" {
+			countErrors = append(countErrors, e)
+		}
+	}
+	require.Len(t, countErrors, 1)
+	assert.Contains(t, countErrors[0].Message, "non-negative")
 }
 
-// --- ServerTypeValidator: control plane pool with count <= 0 ---
+// --- validate: control plane pool with count <= 0 ---
 
-func TestServerTypeValidator_ControlPlaneZeroCount(t *testing.T) {
+func TestValidate_ControlPlaneZeroCount(t *testing.T) {
 	t.Parallel()
 	cfg := &config.Config{
+		ClusterName: "test",
+		Location:    "nbg1",
+		Network: config.NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+			Zone:     "eu-central",
+		},
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
 				{
@@ -269,6 +317,7 @@ func TestServerTypeValidator_ControlPlaneZeroCount(t *testing.T) {
 				},
 			},
 		},
+		SSHKeys: []string{"key"},
 	}
 
 	ctx := &Context{
@@ -276,19 +325,29 @@ func TestServerTypeValidator_ControlPlaneZeroCount(t *testing.T) {
 		Observer: NewConsoleObserver(),
 	}
 
-	validator := &ServerTypeValidator{}
-	errors := validator.Validate(ctx)
+	errors := validate(ctx)
 
-	require.Len(t, errors, 1)
-	assert.Contains(t, errors[0].Field, "ControlPlane.NodePools[0].Count")
-	assert.Contains(t, errors[0].Message, "greater than 0")
+	var countErrors []ValidationError
+	for _, e := range errors {
+		if e.IsError() && e.Field == "ControlPlane.NodePools[0].Count" {
+			countErrors = append(countErrors, e)
+		}
+	}
+	require.Len(t, countErrors, 1)
+	assert.Contains(t, countErrors[0].Message, "greater than 0")
 }
 
-// --- ServerTypeValidator: multiple pools with mixed errors ---
+// --- validate: multiple pools with mixed errors ---
 
-func TestServerTypeValidator_MultiplePoolsMixedErrors(t *testing.T) {
+func TestValidate_MultiplePoolsMixedErrors(t *testing.T) {
 	t.Parallel()
 	cfg := &config.Config{
+		ClusterName: "test",
+		Location:    "nbg1",
+		Network: config.NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+			Zone:     "eu-central",
+		},
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
 				{
@@ -310,6 +369,7 @@ func TestServerTypeValidator_MultiplePoolsMixedErrors(t *testing.T) {
 				Count:      -1,
 			},
 		},
+		SSHKeys: []string{"key"},
 	}
 
 	ctx := &Context{
@@ -317,20 +377,37 @@ func TestServerTypeValidator_MultiplePoolsMixedErrors(t *testing.T) {
 		Observer: NewConsoleObserver(),
 	}
 
-	validator := &ServerTypeValidator{}
-	errors := validator.Validate(ctx)
+	errors := validate(ctx)
 
 	// cp1: empty server type + count 0 = 2 errors
 	// workers1: valid
 	// workers2: empty server type + negative count = 2 errors
-	require.Len(t, errors, 4)
+	var poolErrors int
+	for _, e := range errors {
+		if e.IsError() {
+			switch e.Field {
+			case "ControlPlane.NodePools[0].ServerType",
+				"ControlPlane.NodePools[0].Count",
+				"Workers[1].ServerType",
+				"Workers[1].Count":
+				poolErrors++
+			}
+		}
+	}
+	assert.Equal(t, 4, poolErrors)
 }
 
-// --- ServerTypeValidator: all valid pools ---
+// --- validate: all valid pools ---
 
-func TestServerTypeValidator_AllValid(t *testing.T) {
+func TestValidate_AllValidPools(t *testing.T) {
 	t.Parallel()
 	cfg := &config.Config{
+		ClusterName: "test",
+		Location:    "nbg1",
+		Network: config.NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+			Zone:     "eu-central",
+		},
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
 				{Name: "cp1", ServerType: "cx21", Count: 1},
@@ -339,6 +416,7 @@ func TestServerTypeValidator_AllValid(t *testing.T) {
 		Workers: []config.WorkerNodePool{
 			{Name: "workers", ServerType: "cx31", Count: 3},
 		},
+		SSHKeys: []string{"key"},
 	}
 
 	ctx := &Context{
@@ -346,17 +424,24 @@ func TestServerTypeValidator_AllValid(t *testing.T) {
 		Observer: NewConsoleObserver(),
 	}
 
-	validator := &ServerTypeValidator{}
-	errors := validator.Validate(ctx)
+	errors := validate(ctx)
 
-	assert.Empty(t, errors)
+	for _, e := range errors {
+		assert.False(t, e.IsError(), "unexpected error: %s", e.Error())
+	}
 }
 
-// --- SSHKeyValidator: keys present ---
+// --- validate: SSH keys present ---
 
-func TestSSHKeyValidator_KeysPresent(t *testing.T) {
+func TestValidate_SSHKeysPresent(t *testing.T) {
 	t.Parallel()
 	cfg := &config.Config{
+		ClusterName: "test",
+		Location:    "nbg1",
+		Network: config.NetworkConfig{
+			IPv4CIDR: "10.0.0.0/16",
+			Zone:     "eu-central",
+		},
 		SSHKeys: []string{"my-key"},
 	}
 
@@ -365,20 +450,25 @@ func TestSSHKeyValidator_KeysPresent(t *testing.T) {
 		Observer: NewConsoleObserver(),
 	}
 
-	validator := &SSHKeyValidator{}
-	errors := validator.Validate(ctx)
+	errors := validate(ctx)
 
-	assert.Empty(t, errors)
+	for _, e := range errors {
+		assert.NotEqual(t, "SSHKeys", e.Field, "SSH key warning should not appear when keys are present")
+	}
 }
 
-// --- NetworkValidator: valid /8 CIDR (larger than /16) ---
+// --- validate: valid /8 CIDR (larger than /16) ---
 
-func TestNetworkValidator_LargeCIDR(t *testing.T) {
+func TestValidate_LargeCIDR(t *testing.T) {
 	t.Parallel()
 	cfg := &config.Config{
+		ClusterName: "test",
+		Location:    "nbg1",
 		Network: config.NetworkConfig{
 			IPv4CIDR: "10.0.0.0/8",
+			Zone:     "eu-central",
 		},
+		SSHKeys: []string{"key"},
 	}
 
 	ctx := &Context{
@@ -386,8 +476,11 @@ func TestNetworkValidator_LargeCIDR(t *testing.T) {
 		Observer: NewConsoleObserver(),
 	}
 
-	validator := &NetworkValidator{}
-	errors := validator.Validate(ctx)
+	errors := validate(ctx)
 
-	assert.Empty(t, errors, "a /8 CIDR should have no errors or warnings")
+	for _, e := range errors {
+		if e.Field == "Network.IPv4CIDR" {
+			assert.Fail(t, "a /8 CIDR should have no errors or warnings for Network.IPv4CIDR")
+		}
+	}
 }

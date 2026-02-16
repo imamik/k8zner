@@ -100,8 +100,8 @@ func buildAddonsConfig(spec *k8znerv1alpha1.K8znerClusterSpec) config.AddonsConf
 		PrometheusOperatorCRDs: config.DefaultPrometheusOperatorCRDs(),
 		// Core addons
 		TalosCCM: config.TalosCCMConfig{
-			Enabled: true,      // Node lifecycle management
-			Version: "v1.11.0", // Pinned Talos CCM version
+			Enabled: true,
+			Version: config.DefaultVersionMatrix().TalosCCM,
 		},
 		Cilium: config.DefaultCilium(),
 		CCM:    config.DefaultCCM(),
@@ -128,16 +128,15 @@ func configureBackup(cfg *config.Config, spec *k8znerv1alpha1.K8znerClusterSpec,
 		return
 	}
 
-	cfg.Addons.TalosBackup = config.TalosBackupConfig{
-		Enabled:            true,
-		Schedule:           spec.Backup.Schedule,
-		S3AccessKey:        creds.BackupS3AccessKey,
-		S3SecretKey:        creds.BackupS3SecretKey,
-		S3Endpoint:         creds.BackupS3Endpoint,
-		S3Bucket:           creds.BackupS3Bucket,
-		S3Region:           creds.BackupS3Region,
-		EncryptionDisabled: true, // No age public key available via operator path
-	}
+	backup := config.DefaultTalosBackup()
+	backup.Enabled = true
+	backup.Schedule = spec.Backup.Schedule
+	backup.S3AccessKey = creds.BackupS3AccessKey
+	backup.S3SecretKey = creds.BackupS3SecretKey
+	backup.S3Endpoint = creds.BackupS3Endpoint
+	backup.S3Bucket = creds.BackupS3Bucket
+	backup.S3Region = creds.BackupS3Region
+	cfg.Addons.TalosBackup = backup
 }
 
 // configureCloudflare enables Cloudflare integration when ExternalDNS is active.
@@ -178,12 +177,12 @@ func expandArgoCDFromSpec(spec *k8znerv1alpha1.K8znerClusterSpec) config.ArgoCDC
 	}
 
 	if spec.Domain != "" && argoCfg.Enabled {
-		subdomain := "argo"
-		if spec.Addons != nil && spec.Addons.ArgoSubdomain != "" {
-			subdomain = spec.Addons.ArgoSubdomain
+		var customSub string
+		if spec.Addons != nil {
+			customSub = spec.Addons.ArgoSubdomain
 		}
 		argoCfg.IngressEnabled = true
-		argoCfg.IngressHost = subdomain + "." + spec.Domain
+		argoCfg.IngressHost = config.BuildIngressHost(spec.Domain, "argo", customSub)
 		argoCfg.IngressClassName = "traefik"
 		argoCfg.IngressTLS = true
 	}
@@ -201,13 +200,16 @@ func expandMonitoringFromSpec(spec *k8znerv1alpha1.K8znerClusterSpec) config.Kub
 		return promCfg
 	}
 
+	// Bug fix: Prometheus persistence was missing in operator path
+	promCfg.Prometheus.Persistence = config.DefaultPrometheusPersistence()
+
 	if spec.Domain != "" {
-		subdomain := "grafana"
-		if spec.Addons != nil && spec.Addons.GrafanaSubdomain != "" {
-			subdomain = spec.Addons.GrafanaSubdomain
+		var customSub string
+		if spec.Addons != nil {
+			customSub = spec.Addons.GrafanaSubdomain
 		}
 		promCfg.Grafana.IngressEnabled = true
-		promCfg.Grafana.IngressHost = subdomain + "." + spec.Domain
+		promCfg.Grafana.IngressHost = config.BuildIngressHost(spec.Domain, "grafana", customSub)
 		promCfg.Grafana.IngressClassName = "traefik"
 		promCfg.Grafana.IngressTLS = true
 	}
@@ -217,16 +219,7 @@ func expandMonitoringFromSpec(spec *k8znerv1alpha1.K8znerClusterSpec) config.Kub
 
 // expandExternalDNSFromSpec derives ExternalDNS config from the CRD spec.
 func expandExternalDNSFromSpec(spec *k8znerv1alpha1.K8znerClusterSpec) config.ExternalDNSConfig {
-	dnsCfg := config.ExternalDNSConfig{
-		Enabled: spec.Addons != nil && spec.Addons.ExternalDNS,
-	}
-
-	if dnsCfg.Enabled {
-		dnsCfg.Policy = "sync"
-		dnsCfg.Sources = []string{"ingress"}
-	}
-
-	return dnsCfg
+	return config.DefaultExternalDNS(spec.Addons != nil && spec.Addons.ExternalDNS)
 }
 
 func defaultString(value, defaultValue string) string {

@@ -23,27 +23,12 @@ func (ve ValidationError) IsError() bool {
 	return ve.Severity == "error"
 }
 
-// Validator defines the interface for configuration validators.
-type Validator interface {
-	Validate(ctx *Context) []ValidationError
-}
-
 // ValidationPhase implements the Phase interface for pre-flight validation.
-type ValidationPhase struct {
-	validators []Validator
-}
+type ValidationPhase struct{}
 
-// NewValidationPhase creates a new validation phase with standard validators.
+// NewValidationPhase creates a new validation phase.
 func NewValidationPhase() *ValidationPhase {
-	return &ValidationPhase{
-		validators: []Validator{
-			&RequiredFieldsValidator{},
-			&NetworkValidator{},
-			&ServerTypeValidator{},
-			&SSHKeyValidator{},
-			&VersionValidator{},
-		},
-	}
+	return &ValidationPhase{}
 }
 
 // Name implements the Phase interface.
@@ -55,11 +40,7 @@ func (vp *ValidationPhase) Name() string {
 func (vp *ValidationPhase) Provision(ctx *Context) error {
 	ctx.Observer.Printf("[Validation] Running pre-flight validation...")
 
-	var allErrors []ValidationError
-	for _, validator := range vp.validators {
-		errors := validator.Validate(ctx)
-		allErrors = append(allErrors, errors...)
-	}
+	allErrors := validate(ctx)
 
 	// Separate errors and warnings
 	var errors []ValidationError
@@ -95,16 +76,15 @@ func (vp *ValidationPhase) Provision(ctx *Context) error {
 	return nil
 }
 
-// RequiredFieldsValidator validates that required configuration fields are set.
-type RequiredFieldsValidator struct{}
-
-// Validate implements Validator interface for RequiredFieldsValidator.
-func (v *RequiredFieldsValidator) Validate(ctx *Context) []ValidationError {
-	var errors []ValidationError
+// validate runs all validation checks and returns any errors or warnings.
+func validate(ctx *Context) []ValidationError {
+	var errs []ValidationError
 	cfg := ctx.Config
 
+	// --- Required fields ---
+
 	if cfg.ClusterName == "" {
-		errors = append(errors, ValidationError{
+		errs = append(errs, ValidationError{
 			Field:    "ClusterName",
 			Message:  "cluster name is required",
 			Severity: "error",
@@ -112,7 +92,7 @@ func (v *RequiredFieldsValidator) Validate(ctx *Context) []ValidationError {
 	}
 
 	if cfg.Location == "" {
-		errors = append(errors, ValidationError{
+		errs = append(errs, ValidationError{
 			Field:    "Location",
 			Message:  "location is required (e.g., 'nbg1', 'fsn1')",
 			Severity: "error",
@@ -120,27 +100,17 @@ func (v *RequiredFieldsValidator) Validate(ctx *Context) []ValidationError {
 	}
 
 	if cfg.Network.Zone == "" {
-		errors = append(errors, ValidationError{
+		errs = append(errs, ValidationError{
 			Field:    "Network.Zone",
 			Message:  "network zone is required (e.g., 'eu-central')",
 			Severity: "error",
 		})
 	}
 
-	return errors
-}
+	// --- Network ---
 
-// NetworkValidator validates network configuration.
-type NetworkValidator struct{}
-
-// Validate implements Validator interface for NetworkValidator.
-func (v *NetworkValidator) Validate(ctx *Context) []ValidationError {
-	var errors []ValidationError
-	cfg := ctx.Config
-
-	// Validate IPv4 CIDR
 	if cfg.Network.IPv4CIDR == "" {
-		errors = append(errors, ValidationError{
+		errs = append(errs, ValidationError{
 			Field:    "Network.IPv4CIDR",
 			Message:  "network IPv4 CIDR is required",
 			Severity: "error",
@@ -148,23 +118,22 @@ func (v *NetworkValidator) Validate(ctx *Context) []ValidationError {
 	} else {
 		_, ipNet, err := net.ParseCIDR(cfg.Network.IPv4CIDR)
 		if err != nil {
-			errors = append(errors, ValidationError{
+			errs = append(errs, ValidationError{
 				Field:    "Network.IPv4CIDR",
 				Message:  fmt.Sprintf("invalid IPv4 CIDR: %v", err),
 				Severity: "error",
 			})
 		} else {
-			// Check if CIDR is large enough for subnets
 			ones, bits := ipNet.Mask.Size()
 			if ones > 16 {
-				errors = append(errors, ValidationError{
+				errs = append(errs, ValidationError{
 					Field:    "Network.IPv4CIDR",
 					Message:  fmt.Sprintf("CIDR prefix /%d is too small, recommended /16 or larger", ones),
 					Severity: "warning",
 				})
 			}
 			if bits != 32 {
-				errors = append(errors, ValidationError{
+				errs = append(errs, ValidationError{
 					Field:    "Network.IPv4CIDR",
 					Message:  "only IPv4 CIDRs are supported",
 					Severity: "error",
@@ -173,28 +142,18 @@ func (v *NetworkValidator) Validate(ctx *Context) []ValidationError {
 		}
 	}
 
-	return errors
-}
+	// --- Server types ---
 
-// ServerTypeValidator validates server type configurations.
-type ServerTypeValidator struct{}
-
-// Validate implements Validator interface for ServerTypeValidator.
-func (v *ServerTypeValidator) Validate(ctx *Context) []ValidationError {
-	var errors []ValidationError
-	cfg := ctx.Config
-
-	// Validate control plane server types
 	for i, pool := range cfg.ControlPlane.NodePools {
 		if pool.ServerType == "" {
-			errors = append(errors, ValidationError{
+			errs = append(errs, ValidationError{
 				Field:    fmt.Sprintf("ControlPlane.NodePools[%d].ServerType", i),
 				Message:  "server type is required",
 				Severity: "error",
 			})
 		}
 		if pool.Count <= 0 {
-			errors = append(errors, ValidationError{
+			errs = append(errs, ValidationError{
 				Field:    fmt.Sprintf("ControlPlane.NodePools[%d].Count", i),
 				Message:  "count must be greater than 0",
 				Severity: "error",
@@ -202,17 +161,16 @@ func (v *ServerTypeValidator) Validate(ctx *Context) []ValidationError {
 		}
 	}
 
-	// Validate worker server types
 	for i, pool := range cfg.Workers {
 		if pool.ServerType == "" {
-			errors = append(errors, ValidationError{
+			errs = append(errs, ValidationError{
 				Field:    fmt.Sprintf("Workers[%d].ServerType", i),
 				Message:  "server type is required",
 				Severity: "error",
 			})
 		}
 		if pool.Count < 0 {
-			errors = append(errors, ValidationError{
+			errs = append(errs, ValidationError{
 				Field:    fmt.Sprintf("Workers[%d].Count", i),
 				Message:  "count must be non-negative",
 				Severity: "error",
@@ -220,53 +178,33 @@ func (v *ServerTypeValidator) Validate(ctx *Context) []ValidationError {
 		}
 	}
 
-	return errors
-}
-
-// SSHKeyValidator validates SSH key configuration.
-type SSHKeyValidator struct{}
-
-// Validate implements Validator interface for SSHKeyValidator.
-func (v *SSHKeyValidator) Validate(ctx *Context) []ValidationError {
-	var errors []ValidationError
-	cfg := ctx.Config
+	// --- SSH keys ---
 
 	if len(cfg.SSHKeys) == 0 {
-		errors = append(errors, ValidationError{
+		errs = append(errs, ValidationError{
 			Field:    "SSHKeys",
 			Message:  "at least one SSH key is recommended for server access",
 			Severity: "warning",
 		})
 	}
 
-	return errors
-}
+	// --- Version formats ---
 
-// VersionValidator validates Talos and Kubernetes version formats.
-type VersionValidator struct{}
-
-// Validate implements Validator interface for VersionValidator.
-func (v *VersionValidator) Validate(ctx *Context) []ValidationError {
-	var errors []ValidationError
-	cfg := ctx.Config
-
-	// Validate Talos version format
 	if cfg.Talos.Version != "" && !strings.HasPrefix(cfg.Talos.Version, "v") {
-		errors = append(errors, ValidationError{
+		errs = append(errs, ValidationError{
 			Field:    "Talos.Version",
 			Message:  "version should start with 'v' (e.g., 'v1.8.3')",
 			Severity: "warning",
 		})
 	}
 
-	// Validate Kubernetes version format
 	if cfg.Kubernetes.Version != "" && !strings.HasPrefix(cfg.Kubernetes.Version, "v") {
-		errors = append(errors, ValidationError{
+		errs = append(errs, ValidationError{
 			Field:    "Kubernetes.Version",
 			Message:  "version should start with 'v' (e.g., 'v1.31.0')",
 			Severity: "warning",
 		})
 	}
 
-	return errors
+	return errs
 }
