@@ -23,7 +23,6 @@ jobs:
           go-version-file: go.mod
 
       - name: Extract release notes from CHANGELOG
-        id: changelog
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           # Extract the section between this version's header and the next version header
@@ -32,6 +31,11 @@ jobs:
             /^\[.+\]:/ { if (found) exit }
             found { print }
           ' CHANGELOG.md > /tmp/release-notes.md
+          # Fail if release notes are empty (missing CHANGELOG entry for this version)
+          if [ ! -s /tmp/release-notes.md ]; then
+            echo "::error::No CHANGELOG entry found for version $VERSION"
+            exit 1
+          fi
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
