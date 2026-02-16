@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// These tests exercise the createClient → GetNodeVersion/GetSchematicID/etc. code paths
+// These tests exercise the createClient → GetNodeVersion/UpgradeNode/etc. code paths
 // with valid Talos configs but unreachable endpoints, to cover error handling logic.
 
 func newTestGenerator(t *testing.T) *Generator {
@@ -134,4 +134,3 @@ func TestCreateClient_InvalidClientConfig(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to create Talos client")
 }
-
