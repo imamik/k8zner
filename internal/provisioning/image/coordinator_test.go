@@ -192,7 +192,6 @@ func TestNewProvisioner(t *testing.T) {
 	t.Parallel()
 	p := NewProvisioner()
 	assert.NotNil(t, p)
-	assert.Equal(t, "image", p.Name())
 }
 
 func TestEnsureAllImages_NoTalosPoolsNeeded(t *testing.T) {

@@ -14,12 +14,7 @@ func NewProvisioner() *Provisioner {
 	return &Provisioner{}
 }
 
-// Name implements the provisioning.Phase interface.
-func (p *Provisioner) Name() string {
-	return "infrastructure"
-}
-
-// Provision implements the provisioning.Phase interface.
+// Provision creates network, firewall, and load balancer resources.
 func (p *Provisioner) Provision(ctx *provisioning.Context) error {
 	// 1. Network
 	if err := p.ProvisionNetwork(ctx); err != nil {

@@ -24,12 +24,6 @@ func TestNewProvisioner(t *testing.T) {
 	require.NotNil(t, p)
 }
 
-func TestProvisioner_Name(t *testing.T) {
-	t.Parallel()
-	p := NewProvisioner()
-	assert.Equal(t, "cluster", p.Name())
-}
-
 func TestGenerateDummyCert(t *testing.T) {
 	t.Parallel()
 	cert, key, err := generateDummyCert()

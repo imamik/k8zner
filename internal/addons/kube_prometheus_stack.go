@@ -254,48 +254,7 @@ func buildAlertmanagerValues(cfg *config.Config) helm.Values {
 		},
 	}
 
-	// Ingress configuration
-	if alertCfg.IngressEnabled && alertCfg.IngressHost != "" {
-		values["ingress"] = buildAlertmanagerIngress(cfg)
-	}
-
 	return values
-}
-
-// buildAlertmanagerIngress creates the ingress configuration for Alertmanager.
-func buildAlertmanagerIngress(cfg *config.Config) helm.Values {
-	alertCfg := cfg.Addons.KubePrometheusStack.Alertmanager
-
-	ingress := helm.Values{
-		"enabled": true,
-		"hosts": []string{
-			alertCfg.IngressHost,
-		},
-		"paths": []string{"/"},
-	}
-
-	// Set ingress class
-	ingressClass := alertCfg.IngressClassName
-	if ingressClass == "" {
-		ingressClass = "traefik"
-	}
-	ingress["ingressClassName"] = ingressClass
-
-	// Configure TLS if enabled
-	if alertCfg.IngressTLS {
-		ingress["tls"] = []helm.Values{
-			{
-				"hosts":      []string{alertCfg.IngressHost},
-				"secretName": "alertmanager-tls",
-			},
-		}
-
-		// Build annotations for TLS and DNS
-		annotations := helm.IngressAnnotations(cfg, alertCfg.IngressHost)
-		ingress["annotations"] = annotations
-	}
-
-	return ingress
 }
 
 // buildPrometheusOperatorValues creates the Prometheus Operator configuration.

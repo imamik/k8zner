@@ -16,11 +16,6 @@ func NewProvisioner() *Provisioner {
 	return &Provisioner{}
 }
 
-// Name returns the phase name.
-func (p *Provisioner) Name() string {
-	return "Destroy"
-}
-
 // Provision destroys the cluster and all associated resources.
 func (p *Provisioner) Provision(ctx *provisioning.Context) error {
 	ctx.Observer.Printf("[Destroy] Starting cluster destruction for: %s", ctx.Config.ClusterName)

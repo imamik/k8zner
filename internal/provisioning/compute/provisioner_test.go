@@ -89,12 +89,6 @@ func createTestContext(t *testing.T, mockInfra *hcloud_internal.MockClient, cfg 
 	return ctx
 }
 
-func TestProvisioner_Name(t *testing.T) {
-	t.Parallel()
-	p := NewProvisioner()
-	assert.Equal(t, "compute", p.Name())
-}
-
 func TestProvisioner_Provision_EmptyConfig(t *testing.T) {
 	t.Parallel()
 	mockInfra := &hcloud_internal.MockClient{}

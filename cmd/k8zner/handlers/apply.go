@@ -58,7 +58,7 @@ type InfrastructureInfo struct {
 	SSHKeyID              int64
 }
 
-// Provisioner interface for testing - matches provisioning.Phase.
+// Provisioner interface for testing.
 type Provisioner interface {
 	Provision(ctx *provisioning.Context) error
 }

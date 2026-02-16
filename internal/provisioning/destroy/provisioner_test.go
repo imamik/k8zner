@@ -12,12 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestProvisionerName(t *testing.T) {
-	t.Parallel()
-	p := NewProvisioner()
-	assert.Equal(t, "Destroy", p.Name())
-}
-
 func TestProvision(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

@@ -215,16 +215,3 @@ func TestWithHCloudClient(t *testing.T) {
 		t.Error("expected hcloud client to be initialized")
 	}
 }
-
-func TestHCloudClient(t *testing.T) {
-	// Test the HCloudClient accessor
-	client := NewRealClient("test-token")
-
-	hc := client.HCloudClient()
-	if hc == nil {
-		t.Error("expected HCloudClient to return non-nil client")
-	}
-	if hc != client.client {
-		t.Error("expected HCloudClient to return the internal client")
-	}
-}

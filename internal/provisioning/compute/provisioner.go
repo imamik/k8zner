@@ -23,13 +23,7 @@ func NewProvisioner() *Provisioner {
 	return &Provisioner{}
 }
 
-// Name implements the provisioning.Phase interface.
-func (p *Provisioner) Name() string {
-	return "compute"
-}
-
-// Provision implements the provisioning.Phase interface.
-// This method creates ALL servers (control plane + workers) in parallel
+// Provision creates ALL servers (control plane + workers) in parallel
 // for maximum provisioning speed.
 // Uses ephemeral SSH keys to avoid Hetzner password emails.
 func (p *Provisioner) Provision(ctx *provisioning.Context) error {

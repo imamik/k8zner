@@ -12,12 +12,7 @@ func NewProvisioner() *Provisioner {
 	return &Provisioner{}
 }
 
-// Name implements the provisioning.Phase interface.
-func (p *Provisioner) Name() string {
-	return "cluster"
-}
-
-// Provision implements the provisioning.Phase interface.
+// Provision bootstraps the cluster.
 func (p *Provisioner) Provision(ctx *provisioning.Context) error {
 	return p.BootstrapCluster(ctx)
 }
