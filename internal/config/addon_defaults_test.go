@@ -24,7 +24,6 @@ func TestDefaultTraefik(t *testing.T) {
 		t.Parallel()
 		tr := DefaultTraefik(true)
 		assert.True(t, tr.Enabled)
-		assert.Equal(t, "Deployment", tr.Kind)
 		assert.Equal(t, "Cluster", tr.ExternalTrafficPolicy)
 		assert.Equal(t, "traefik", tr.IngressClass)
 	})
@@ -33,7 +32,6 @@ func TestDefaultTraefik(t *testing.T) {
 		t.Parallel()
 		tr := DefaultTraefik(false)
 		assert.False(t, tr.Enabled)
-		assert.Equal(t, "Deployment", tr.Kind)
 	})
 }
 

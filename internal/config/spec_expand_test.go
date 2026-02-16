@@ -419,8 +419,8 @@ func TestExpandSpec_Traefik_DevMode(t *testing.T) {
 		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
-	if expanded.Addons.Traefik.Kind != "Deployment" {
-		t.Errorf("Traefik.Kind = %q, want %q", expanded.Addons.Traefik.Kind, "Deployment")
+	if !expanded.Addons.Traefik.Enabled {
+		t.Errorf("Traefik.Enabled = false, want true")
 	}
 }
 
@@ -441,8 +441,8 @@ func TestExpandSpec_Traefik_HAMode(t *testing.T) {
 		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
-	if expanded.Addons.Traefik.Kind != "Deployment" {
-		t.Errorf("Traefik.Kind = %q, want %q", expanded.Addons.Traefik.Kind, "Deployment")
+	if !expanded.Addons.Traefik.Enabled {
+		t.Errorf("Traefik.Enabled = false, want true")
 	}
 }
 

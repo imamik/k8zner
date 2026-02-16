@@ -193,18 +193,6 @@ spec:
               firewall:
                 description: Firewall configures the cluster firewall rules
                 properties:
-                  allowedAPIIPs:
-                    description: AllowedAPIIPs is a list of CIDR ranges allowed to
-                      access the Kubernetes API
-                    items:
-                      type: string
-                    type: array
-                  allowedSSHIPs:
-                    description: AllowedSSHIPs is a list of CIDR ranges allowed to
-                      SSH to nodes
-                    items:
-                      type: string
-                    type: array
                   enabled:
                     default: true
                     description: Enabled determines if a firewall should be created
@@ -312,16 +300,6 @@ spec:
                     description: Count is the desired number of worker nodes
                     maximum: 100
                     minimum: 1
-                    type: integer
-                  maxCount:
-                    default: 10
-                    description: MaxCount is the maximum number of workers (for safety)
-                    maximum: 100
-                    type: integer
-                  minCount:
-                    default: 1
-                    description: MinCount is the minimum number of workers (for safety)
-                    minimum: 0
                     type: integer
                   size:
                     default: cx23
@@ -519,10 +497,6 @@ spec:
                     items:
                       description: NodeStatus represents the status of a single node.
                       properties:
-                        etcdMemberID:
-                          description: EtcdMemberID is the etcd member ID (for control
-                            planes)
-                          type: string
                         healthy:
                           description: Healthy indicates if the node is healthy (deprecated,
                             use Phase)
@@ -659,9 +633,6 @@ spec:
                     description: SSHKeyID is the Hetzner SSH key ID used for nodes
                     format: int64
                     type: integer
-                  subnetID:
-                    description: SubnetID is the Hetzner subnet ID
-                    type: string
                 type: object
               lastErrors:
                 description: LastErrors is a ring buffer of recent errors (max 10).
@@ -754,10 +725,6 @@ spec:
                     items:
                       description: NodeStatus represents the status of a single node.
                       properties:
-                        etcdMemberID:
-                          description: EtcdMemberID is the etcd member ID (for control
-                            planes)
-                          type: string
                         healthy:
                           description: Healthy indicates if the node is healthy (deprecated,
                             use Phase)

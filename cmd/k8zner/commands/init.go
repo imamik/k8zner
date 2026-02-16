@@ -9,7 +9,7 @@ import (
 // Init returns the command for interactively creating a cluster configuration.
 //
 // This command guides users through creating a cluster configuration YAML file
-// using a simplified wizard with just 5 questions.
+// using a simplified wizard with just 6 questions.
 //
 // Flags:
 //

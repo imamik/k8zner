@@ -13,7 +13,6 @@
 //   - firewall.go: Firewall rule management
 //   - loadbalancer.go: Load balancer provisioning
 //   - placementgroup.go: Placement group management for server distribution
-//   - floatingip.go: Floating IP allocation
 //   - certificate.go: TLS certificate management
 //   - snapshot.go: Snapshot creation and management
 //   - sshkey.go: SSH key management

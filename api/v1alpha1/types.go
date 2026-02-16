@@ -111,14 +111,6 @@ type FirewallSpec struct {
 	// +kubebuilder:default=true
 	// +optional
 	Enabled bool `json:"enabled,omitempty"`
-
-	// AllowedSSHIPs is a list of CIDR ranges allowed to SSH to nodes
-	// +optional
-	AllowedSSHIPs []string `json:"allowedSSHIPs,omitempty"`
-
-	// AllowedAPIIPs is a list of CIDR ranges allowed to access the Kubernetes API
-	// +optional
-	AllowedAPIIPs []string `json:"allowedAPIIPs,omitempty"`
 }
 
 // KubernetesSpec specifies the Kubernetes version.
@@ -189,18 +181,6 @@ type WorkerSpec struct {
 	// CX types (dedicated vCPU) have consistent performance, CPX types (shared vCPU) have better availability
 	// +kubebuilder:default="cx23"
 	Size string `json:"size"`
-
-	// MinCount is the minimum number of workers (for safety)
-	// +kubebuilder:validation:Minimum=0
-	// +kubebuilder:default=1
-	// +optional
-	MinCount int `json:"minCount,omitempty"`
-
-	// MaxCount is the maximum number of workers (for safety)
-	// +kubebuilder:validation:Maximum=100
-	// +kubebuilder:default=10
-	// +optional
-	MaxCount int `json:"maxCount,omitempty"`
 }
 
 // BackupSpec configures automated etcd backups.
@@ -412,10 +392,6 @@ type InfrastructureStatus struct {
 	// +optional
 	NetworkID int64 `json:"networkID,omitempty"`
 
-	// SubnetID is the Hetzner subnet ID
-	// +optional
-	SubnetID string `json:"subnetID,omitempty"`
-
 	// FirewallID is the Hetzner firewall ID
 	// +optional
 	FirewallID int64 `json:"firewallID,omitempty"`
@@ -620,10 +596,6 @@ type NodeStatus struct {
 	// UnhealthySince is when the node became unhealthy
 	// +optional
 	UnhealthySince *metav1.Time `json:"unhealthySince,omitempty"`
-
-	// EtcdMemberID is the etcd member ID (for control planes)
-	// +optional
-	EtcdMemberID string `json:"etcdMemberID,omitempty"`
 
 	// LastHealthCheck is when health was last checked
 	// +optional

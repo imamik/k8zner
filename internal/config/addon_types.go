@@ -177,10 +177,6 @@ type TraefikConfig struct {
 	// Helm allows customizing the Helm chart repository, version, and values.
 	Helm HelmChartConfig `mapstructure:"helm" yaml:"helm"`
 
-	// Kind specifies the Kubernetes controller type: "Deployment" or "DaemonSet".
-	// Default: "Deployment"
-	Kind string `mapstructure:"kind" yaml:"kind"`
-
 	// Replicas specifies the number of controller replicas.
 	// If nil, auto-calculated: 2 for <3 workers, 3 for >=3 workers.
 	// Must be nil when Kind is "DaemonSet".
@@ -195,20 +191,6 @@ type TraefikConfig struct {
 	// Default: "traefik"
 	IngressClass string `mapstructure:"ingress_class" yaml:"ingress_class"`
 
-	// Dashboard configures the Traefik dashboard.
-	Dashboard TraefikDashboardConfig `mapstructure:"dashboard" yaml:"dashboard"`
-}
-
-// TraefikDashboardConfig defines the Traefik dashboard configuration.
-type TraefikDashboardConfig struct {
-	// Enabled enables the Traefik dashboard.
-	// Default: false
-	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
-
-	// IngressRoute creates an IngressRoute to expose the dashboard.
-	// Only applicable when Enabled is true.
-	// Default: false
-	IngressRoute bool `mapstructure:"ingress_route" yaml:"ingress_route"`
 }
 
 // ArgoCDConfig defines the ArgoCD GitOps configuration.

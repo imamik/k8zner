@@ -10,7 +10,7 @@ import (
 //
 // The destroy command removes all cluster resources from Hetzner Cloud.
 // It deletes resources in dependency order: servers, load balancers,
-// floating IPs, firewalls, networks, placement groups, and certificates.
+// firewalls, networks, placement groups, and SSH keys.
 func Destroy() *cobra.Command {
 	var configPath string
 

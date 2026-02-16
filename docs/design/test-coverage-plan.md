@@ -6,12 +6,10 @@ This document now serves as a **living hardening backlog** focused on the remain
 
 ---
 
-## Phase 1: Operator Spec Converter (HIGH — config round-trip safety)
+## Phase 1: Operator Spec Converter (COMPLETE)
 
 **Package:** `internal/operator/provisioning/`
-**Status:** `spec_converter.go` now has dedicated unit coverage (`spec_converter_test.go`). Remaining work is depth/edge-case expansion, not baseline coverage.
-
-This was previously the single most impactful gap. Baseline coverage is now in place; focus should shift to regression-proofing edge cases and fuzz/property checks.
+**Status:** Complete. `spec_converter.go` has dedicated unit coverage (`spec_converter_test.go`) with all baseline and edge-case tests in place.
 
 ### Coverage expansion targets (`spec_converter_test.go`)
 
@@ -39,12 +37,10 @@ This was previously the single most impactful gap. Baseline coverage is now in p
 
 ---
 
-## Phase 2: HCloud Generic Operations (HIGH — foundation for all resource tests)
+## Phase 2: HCloud Generic Operations (COMPLETE)
 
 **Package:** `internal/platform/hcloud/`
-**Status:** `operations.go` now has dedicated tests (`operations_test.go`) for generic delete/ensure behavior. Focus here is now resilience scenarios and richer failure-mode assertions.
-
-Every resource operation delegates to these generics; with baseline tests in place, this area is now about strengthening confidence with additional concurrency/retry edge cases.
+**Status:** Complete. `operations.go` has dedicated tests (`operations_test.go`) for generic delete/ensure behavior.
 
 ### Coverage expansion targets (`operations_test.go`)
 

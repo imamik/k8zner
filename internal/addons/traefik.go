@@ -39,14 +39,8 @@ func buildTraefikValues(cfg *config.Config) helm.Values {
 		replicas = 3
 	}
 
-	// Determine kind (default: Deployment)
-	kind := traefikCfg.Kind
-	if kind == "" {
-		kind = "Deployment"
-	}
-
-	// Build the deployment configuration
-	deployment := buildTraefikDeployment(replicas, kind)
+	// Build the deployment configuration (always Deployment + LoadBalancer)
+	deployment := buildTraefikDeployment(replicas)
 
 	// External traffic policy - default to "Cluster" for reliability.
 	// "Local" preserves client IP but introduces health check node port complexity
@@ -71,7 +65,7 @@ func buildTraefikValues(cfg *config.Config) helm.Values {
 	values := helm.Values{
 		"deployment":   deployment,
 		"ingressClass": buildTraefikIngressClass(ingressClassName),
-		"ingressRoute": buildTraefikIngressRoute(),
+		"ingressRoute": helm.Values{"dashboard": helm.Values{"enabled": false}},
 		"providers":    buildTraefikProviders(),
 		"ports":        buildTraefikPorts(),
 		"service":      buildTraefikService(cfg.ClusterName, externalTrafficPolicy, location),
@@ -90,10 +84,10 @@ func buildTraefikValues(cfg *config.Config) helm.Values {
 }
 
 // buildTraefikDeployment creates the deployment configuration.
-func buildTraefikDeployment(replicas int, kind string) helm.Values {
+func buildTraefikDeployment(replicas int) helm.Values {
 	return helm.Values{
 		"enabled":  true,
-		"kind":     kind,
+		"kind":     "Deployment",
 		"replicas": replicas,
 		"podDisruptionBudget": helm.Values{
 			"enabled":        true,
@@ -108,16 +102,6 @@ func buildTraefikIngressClass(name string) helm.Values {
 		"enabled":        true,
 		"isDefaultClass": true,
 		"name":           name,
-	}
-}
-
-// buildTraefikIngressRoute creates the IngressRoute configuration for the dashboard.
-// Disabled because we use standard Kubernetes Ingress, not Traefik's CRD-based IngressRoute.
-func buildTraefikIngressRoute() helm.Values {
-	return helm.Values{
-		"dashboard": helm.Values{
-			"enabled": false,
-		},
 	}
 }
 
