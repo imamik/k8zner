@@ -101,7 +101,6 @@ jobs:
             ./cmd/... \
             ./internal/addons/... \
             ./internal/config/... \
-            ./internal/operator/addons/... \
             ./internal/operator/provisioning/... \
             ./internal/util/... \
             ./internal/platform/... \
