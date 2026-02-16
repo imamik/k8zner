@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-02-16
+
+### 🔄 Changed
+
+- **Observer interface simplified** to Printf-only — removed Event struct, EventType, and Log* helpers (#151)
+- **Pipeline struct replaced** with `RunPhases` function — less abstraction for a single call site (#151)
+- **DeepMerge unexported** to `deepMerge` — only used within the `helm` package (#151)
+- **Namespace creation deduplicated** — extracted `ensureNamespace` helper and `baselinePodSecurityLabels` constant, deleted 5 per-addon `createXNamespace` functions (#151)
+- **213 tests redistributed** from catch-all coverage files to per-source test files (#151)
+- **~3,500 net lines removed** — dead code, unused abstractions, no-op rDNS modules, and duplicate normalize helpers (#151)
+
+### 🐛 Fixed
+
+- **LB health check timeout** increased from 5 to 10 minutes — prevents premature timeouts on slower Hetzner LB provisioning (#151)
+- **Multi-arch Dockerfile** now uses `TARGETARCH` instead of hardcoded `amd64` (#151)
+- **GitHub release notes** now sourced from `CHANGELOG.md` instead of GoReleaser's auto-generated commit list
+
 ## [0.9.0] - 2026-02-15
 
 ### ✨ Added
@@ -300,6 +317,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Secrets stored locally in `./secrets/` directory
 - No credentials stored in cluster state
 
+[0.9.1]: https://github.com/imamik/k8zner/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/imamik/k8zner/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/imamik/k8zner/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/imamik/k8zner/compare/v0.6.0...v0.7.0
