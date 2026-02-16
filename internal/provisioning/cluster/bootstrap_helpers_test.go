@@ -21,7 +21,6 @@ import (
 func TestIsNodeInMaintenanceMode_PortNotReachable(t *testing.T) {
 	t.Parallel()
 
-
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
 		Context:  context.Background(),
@@ -38,7 +37,6 @@ func TestIsNodeInMaintenanceMode_PortNotReachable(t *testing.T) {
 
 func TestIsNodeInMaintenanceMode_EmptyTalosConfig(t *testing.T) {
 	t.Parallel()
-
 
 	// Start a listener on a dynamic port to simulate port 50000 being reachable
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -73,7 +71,6 @@ func TestIsNodeInMaintenanceMode_EmptyTalosConfig(t *testing.T) {
 func TestConfigureNewNodes_WithCPAndWorkerNodesButNoMaintenance(t *testing.T) {
 	t.Parallel()
 
-
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
 		Context:  context.Background(),
@@ -94,7 +91,6 @@ func TestConfigureNewNodes_WithCPAndWorkerNodesButNoMaintenance(t *testing.T) {
 
 func TestDetectMaintenanceModeNodes_NodesNotReachable(t *testing.T) {
 	t.Parallel()
-
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -118,7 +114,6 @@ func TestDetectMaintenanceModeNodes_NodesNotReachable(t *testing.T) {
 
 func TestApplyWorkerConfigs_PortNotReachable(t *testing.T) {
 	t.Parallel()
-
 
 	mockTalos := &mockTalosConfigProducer{
 		generateWorkerConfigFn: func(hostname string, serverID int64) ([]byte, error) {
@@ -147,7 +142,6 @@ func TestApplyWorkerConfigs_PortNotReachable(t *testing.T) {
 
 func TestApplyControlPlaneConfigs_DirectPath_PortUnreachable(t *testing.T) {
 	t.Parallel()
-
 
 	mockTalos := &mockTalosConfigProducer{
 		generateControlPlaneConfigFn: func(san []string, hostname string, serverID int64) ([]byte, error) {
@@ -178,7 +172,6 @@ func TestApplyControlPlaneConfigs_DirectPath_PortUnreachable(t *testing.T) {
 func TestWaitForControlPlaneReady_DirectPath_NodeNotReachable(t *testing.T) {
 	t.Parallel()
 
-
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
 		Context:  context.Background(),
@@ -199,7 +192,6 @@ func TestWaitForControlPlaneReady_DirectPath_NodeNotReachable(t *testing.T) {
 
 func TestWaitForControlPlaneReady_PrivateFirst_NoLB(t *testing.T) {
 	t.Parallel()
-
 
 	mockInfra := &hcloud_internal.MockClient{
 		GetLoadBalancerFunc: func(_ context.Context, _ string) (*hcloud.LoadBalancer, error) {
@@ -228,7 +220,6 @@ func TestWaitForControlPlaneReady_PrivateFirst_NoLB(t *testing.T) {
 func TestApplyControlPlaneConfigsViaLB_PortWaitTimeout(t *testing.T) {
 	t.Parallel()
 
-
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
 		Context:  context.Background(),
@@ -255,7 +246,6 @@ func TestApplyControlPlaneConfigsViaLB_PortWaitTimeout(t *testing.T) {
 
 func TestApplyOneConfigViaLB_GenerateConfigError(t *testing.T) {
 	t.Parallel()
-
 
 	mockTalos := &mockTalosConfigProducer{
 		generateControlPlaneConfigFn: func(_ []string, hostname string, _ int64) ([]byte, error) {
@@ -284,7 +274,6 @@ func TestApplyOneConfigViaLB_GenerateConfigError(t *testing.T) {
 func TestApplyOneConfigViaLB_ApplyFailsNonTLS(t *testing.T) {
 	t.Parallel()
 
-
 	mockTalos := &mockTalosConfigProducer{
 		generateControlPlaneConfigFn: func(_ []string, _ string, _ int64) ([]byte, error) {
 			return []byte("mock-config"), nil
@@ -311,7 +300,6 @@ func TestApplyOneConfigViaLB_ApplyFailsNonTLS(t *testing.T) {
 
 func TestWaitForControlPlaneReadyViaLB_PortNotReachable(t *testing.T) {
 	t.Parallel()
-
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -350,7 +338,6 @@ func TestWaitForControlPlaneReadyViaLB_PortNotReachable(t *testing.T) {
 func TestWaitForControlPlaneReadyViaLB_NoLB(t *testing.T) {
 	t.Parallel()
 
-
 	mockInfra := &hcloud_internal.MockClient{
 		GetLoadBalancerFunc: func(_ context.Context, _ string) (*hcloud.LoadBalancer, error) {
 			return nil, nil
@@ -378,7 +365,6 @@ func TestWaitForControlPlaneReadyViaLB_NoLB(t *testing.T) {
 func TestRetrieveKubeconfig_InvalidConfig(t *testing.T) {
 	t.Parallel()
 
-
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
 		Context:  context.Background(),
@@ -397,7 +383,6 @@ func TestRetrieveKubeconfig_InvalidConfig(t *testing.T) {
 
 func TestRetrieveKubeconfig_EmptyNodes(t *testing.T) {
 	t.Parallel()
-
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -420,7 +405,6 @@ func TestRetrieveKubeconfig_EmptyNodes(t *testing.T) {
 func TestRetrieveKubeconfigFromEndpoint_InvalidConfig(t *testing.T) {
 	t.Parallel()
 
-
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
 		Context:  context.Background(),
@@ -440,7 +424,6 @@ func TestRetrieveKubeconfigFromEndpoint_InvalidConfig(t *testing.T) {
 func TestWaitForNodeReady_InvalidConfig(t *testing.T) {
 	t.Parallel()
 
-
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
 		Context:  context.Background(),
@@ -459,7 +442,6 @@ func TestWaitForNodeReady_InvalidConfig(t *testing.T) {
 
 func TestRetrieveAndStoreKubeconfig_PrivateFirst_WithLB_InvalidConfig(t *testing.T) {
 	t.Parallel()
-
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -488,7 +470,6 @@ func TestRetrieveAndStoreKubeconfig_PrivateFirst_WithLB_InvalidConfig(t *testing
 func TestBootstrapEtcd_PrivateFirst_WithLB_InvalidConfig(t *testing.T) {
 	t.Parallel()
 
-
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
 		Context:  context.Background(),
@@ -515,7 +496,6 @@ func TestBootstrapEtcd_PrivateFirst_WithLB_InvalidConfig(t *testing.T) {
 
 func TestBootstrapCluster_FullFlow_ApplyWorkerConfigsFails(t *testing.T) {
 	t.Parallel()
-
 
 	// This test exercises the full bootstrap flow up to ApplyWorkerConfigs.
 	// Since applyControlPlaneConfigs requires port 50000, and we can't easily
@@ -558,7 +538,6 @@ func TestBootstrapCluster_FullFlow_ApplyWorkerConfigsFails(t *testing.T) {
 
 func TestTryRetrieveExistingKubeconfig_ConfigureNewNodesWithUnreachableNodes(t *testing.T) {
 	t.Parallel()
-
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -603,7 +582,6 @@ func TestGenerateDummyCert_CertValidity(t *testing.T) {
 func TestApplyMachineConfig_PortNotReachable(t *testing.T) {
 	t.Parallel()
 
-
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
 		Context:  context.Background(),
@@ -622,7 +600,6 @@ func TestApplyMachineConfig_PortNotReachable(t *testing.T) {
 
 func TestBootstrapCluster_AlreadyBootstrapped_PrivateFirst_NoLB(t *testing.T) {
 	t.Parallel()
-
 
 	mockInfra := &hcloud_internal.MockClient{
 		GetCertificateFunc: func(_ context.Context, name string) (*hcloud.Certificate, error) {
@@ -658,7 +635,6 @@ func TestBootstrapCluster_AlreadyBootstrapped_PrivateFirst_NoLB(t *testing.T) {
 
 func TestApplyControlPlaneConfigs_PrivateFirst_WithLB_PortTimeout(t *testing.T) {
 	t.Parallel()
-
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{

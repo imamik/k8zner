@@ -18,7 +18,6 @@ import (
 func TestConfigureAndWaitForNewCPs_Empty(t *testing.T) {
 	t.Parallel()
 
-
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
 		Context:  context.Background(),
@@ -35,7 +34,6 @@ func TestConfigureAndWaitForNewCPs_Empty(t *testing.T) {
 func TestConfigureAndWaitForNewWorkers_Empty(t *testing.T) {
 	t.Parallel()
 
-
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
 		Context:  context.Background(),
@@ -51,7 +49,6 @@ func TestConfigureAndWaitForNewWorkers_Empty(t *testing.T) {
 
 func TestConfigureAndWaitForNewCPs_GenerateConfigError(t *testing.T) {
 	t.Parallel()
-
 
 	mockTalos := &mockTalosConfigProducer{
 		generateControlPlaneConfigFn: func(_ []string, hostname string, _ int64) ([]byte, error) {
@@ -78,7 +75,6 @@ func TestConfigureAndWaitForNewCPs_GenerateConfigError(t *testing.T) {
 
 func TestConfigureAndWaitForNewWorkers_GenerateConfigError(t *testing.T) {
 	t.Parallel()
-
 
 	mockTalos := &mockTalosConfigProducer{
 		generateWorkerConfigFn: func(hostname string, _ int64) ([]byte, error) {
@@ -108,7 +104,6 @@ func TestConfigureAndWaitForNewWorkers_GenerateConfigError(t *testing.T) {
 func TestConfigureNewNodes_NoMaintenanceNodes(t *testing.T) {
 	t.Parallel()
 
-
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
 		Context:  context.Background(),
@@ -130,7 +125,6 @@ func TestConfigureNewNodes_NoMaintenanceNodes(t *testing.T) {
 func TestDetectMaintenanceModeNodes_EmptyNodeList(t *testing.T) {
 	t.Parallel()
 
-
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
 		Context:  context.Background(),
@@ -148,7 +142,6 @@ func TestDetectMaintenanceModeNodes_EmptyNodeList(t *testing.T) {
 
 func TestBootstrapCluster_ApplyControlPlaneConfigsError(t *testing.T) {
 	t.Parallel()
-
 
 	mockTalos := &mockTalosConfigProducer{
 		getClientConfigFunc: func() ([]byte, error) {
@@ -182,7 +175,6 @@ func TestBootstrapCluster_ApplyControlPlaneConfigsError(t *testing.T) {
 func TestApplyControlPlaneConfigs_PrivateFirstViaLB_NoLB(t *testing.T) {
 	t.Parallel()
 
-
 	mockInfra := &hcloud_internal.MockClient{}
 
 	observer := provisioning.NewConsoleObserver()
@@ -204,7 +196,6 @@ func TestApplyControlPlaneConfigs_PrivateFirstViaLB_NoLB(t *testing.T) {
 func TestWaitForControlPlaneReady_DirectPath_Empty(t *testing.T) {
 	t.Parallel()
 
-
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
 		Context:  context.Background(),
@@ -222,7 +213,6 @@ func TestWaitForControlPlaneReady_DirectPath_Empty(t *testing.T) {
 
 func TestRetrieveAndStoreKubeconfig_DirectPath_InvalidConfig(t *testing.T) {
 	t.Parallel()
-
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -242,7 +232,6 @@ func TestRetrieveAndStoreKubeconfig_DirectPath_InvalidConfig(t *testing.T) {
 
 func TestBootstrapEtcd_DirectPath_InvalidConfig(t *testing.T) {
 	t.Parallel()
-
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
