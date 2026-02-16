@@ -189,7 +189,7 @@ type ImageBuilderArchConfig struct {
 	ServerType string `mapstructure:"server_type" yaml:"server_type"`
 
 	// ServerLocation specifies the Hetzner location for the build server.
-	// Defaults: AMD64="ash", ARM64="nbg1"
+	// Defaults to the control plane location.
 	ServerLocation string `mapstructure:"server_location" yaml:"server_location"`
 }
 

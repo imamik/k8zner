@@ -1,5 +1,5 @@
 .PHONY: fmt lint test test-coverage test-unit test-integration test-kind build install check e2e e2e-fast e2e-snapshot-only clean help \
-       setup-hooks scan-secrets setup-envtest setup-kind sync-crds check-crds
+       setup-hooks scan-secrets setup-envtest setup-kind sync-crds check-crds sync-operator-chart check-operator-chart
 
 # Default target
 .DEFAULT_GOAL := help
@@ -112,6 +112,25 @@ check-crds:
 		(echo "ERROR: operator-chart/crds/ CRD out of sync. Run 'make sync-crds'" && exit 1)
 	@echo "CRDs in sync."
 
+# Sync operator chart from deploy/helm/ (source of truth) to internal/addons/operator-chart/
+sync-operator-chart:
+	@echo "Syncing operator chart from deploy/helm/k8zner-operator/ ..."
+	@for f in Chart.yaml values.yaml; do \
+		cp deploy/helm/k8zner-operator/$$f internal/addons/operator-chart/$$f; \
+	done
+	@cp deploy/helm/k8zner-operator/templates/* internal/addons/operator-chart/templates/
+	@echo "Operator chart synced."
+
+# Check that operator chart copies are in sync (for CI)
+check-operator-chart:
+	@diff -rq deploy/helm/k8zner-operator/Chart.yaml internal/addons/operator-chart/Chart.yaml || \
+		(echo "ERROR: operator-chart/Chart.yaml out of sync. Run 'make sync-operator-chart'" && exit 1)
+	@diff -rq deploy/helm/k8zner-operator/values.yaml internal/addons/operator-chart/values.yaml || \
+		(echo "ERROR: operator-chart/values.yaml out of sync. Run 'make sync-operator-chart'" && exit 1)
+	@diff -rq deploy/helm/k8zner-operator/templates/ internal/addons/operator-chart/templates/ || \
+		(echo "ERROR: operator-chart/templates/ out of sync. Run 'make sync-operator-chart'" && exit 1)
+	@echo "Operator chart in sync."
+
 clean:
 	rm -rf bin/ coverage.out coverage.html
 
@@ -185,6 +204,12 @@ help:
 	@echo "  make setup-envtest  Download envtest binaries"
 	@echo "  make setup-kind     Install kind"
 	@echo "  make setup-hooks    Install pre-commit secret detection"
+	@echo ""
+	@echo "Sync:"
+	@echo "  make sync-crds             Sync CRDs from config/crd/bases/"
+	@echo "  make check-crds            Verify CRD copies are in sync"
+	@echo "  make sync-operator-chart   Sync operator chart from deploy/helm/"
+	@echo "  make check-operator-chart  Verify operator chart copies are in sync"
 	@echo ""
 	@echo "Security:"
 	@echo "  make scan-secrets   Scan git history for leaked secrets"

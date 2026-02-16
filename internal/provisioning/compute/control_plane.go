@@ -16,8 +16,8 @@ const phase = "compute"
 
 // ProvisionControlPlane provisions control plane servers.
 // Note: When called from Provision(), the endpoint is already set up via prepareControlPlaneEndpoint().
-// This method is kept for backward compatibility and direct invocation in tests.
-func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
+// This function is kept for backward compatibility and direct invocation in tests.
+func ProvisionControlPlane(ctx *provisioning.Context) error {
 	ctx.Observer.Printf("[%s] Reconciling control plane...", phase)
 
 	// Setup endpoint if not already done (for backward compatibility when called directly)
@@ -56,7 +56,7 @@ func (p *Provisioner) ProvisionControlPlane(ctx *provisioning.Context) error {
 			return fmt.Errorf("failed to ensure placement group for pool %s: %w", pool.Name, err)
 		}
 
-		poolResult, err := p.reconcileNodePool(ctx, NodePoolSpec{
+		poolResult, err := reconcileNodePool(ctx, NodePoolSpec{
 			Name:             pool.Name,
 			Count:            pool.Count,
 			ServerType:       pool.ServerType,

@@ -23,15 +23,6 @@ type UpgradeOptions struct {
 	Force bool
 }
 
-// Phase defines the interface for a provisioning phase.
-type Phase interface {
-	// Name returns the human-readable name of this phase.
-	Name() string
-
-	// Provision executes the provisioning logic for this phase.
-	Provision(ctx *Context) error
-}
-
 // TalosConfigProducer defines the interface for generating Talos configurations.
 // Implemented by internal/platform/talos.Generator.
 type TalosConfigProducer interface {

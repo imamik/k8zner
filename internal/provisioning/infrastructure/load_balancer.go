@@ -26,7 +26,7 @@ const (
 )
 
 // ProvisionLoadBalancers provisions API and Ingress load balancers.
-func (p *Provisioner) ProvisionLoadBalancers(ctx *provisioning.Context) error {
+func ProvisionLoadBalancers(ctx *provisioning.Context) error {
 	ctx.Observer.Printf("[%s] Reconciling load balancers for %s...", phase, ctx.Config.ClusterName)
 	// API Load Balancer
 	// Sum up control plane nodes

@@ -26,9 +26,8 @@ func TestEnsureImage_ExistingSnapshot(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	imageID, err := p.ensureImage(ctx, "cx21", "nbg1")
+	imageID, err := ensureImage(ctx, "cx21", "nbg1")
 
 	require.NoError(t, err)
 	assert.Equal(t, "456", imageID)
@@ -52,9 +51,8 @@ func TestEnsureImage_ARMArchitecture(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	imageID, err := p.ensureImage(ctx, "cax11", "nbg1") // cax = ARM
+	imageID, err := ensureImage(ctx, "cax11", "nbg1") // cax = ARM
 
 	require.NoError(t, err)
 	assert.Equal(t, "789", imageID)
@@ -73,9 +71,8 @@ func TestEnsureImage_SnapshotNotFound(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	_, err := p.ensureImage(ctx, "cx21", "nbg1")
+	_, err := ensureImage(ctx, "cx21", "nbg1")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "talos snapshot not found")
@@ -97,9 +94,8 @@ func TestEnsureImage_DefaultVersions(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	_, err := p.ensureImage(ctx, "cx21", "nbg1")
+	_, err := ensureImage(ctx, "cx21", "nbg1")
 
 	require.NoError(t, err)
 	assert.Equal(t, "v1.8.3", capturedLabels["talos-version"])
@@ -116,9 +112,8 @@ func TestEnsureImage_GetSnapshotError(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	_, err := p.ensureImage(ctx, "cx21", "nbg1")
+	_, err := ensureImage(ctx, "cx21", "nbg1")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to check for existing snapshot")

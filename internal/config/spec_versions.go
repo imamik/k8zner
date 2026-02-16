@@ -61,9 +61,7 @@ func DefaultVersionMatrix() VersionMatrix {
 		HCloudCSI: "2.12.0",
 		TalosCCM:  "v1.11.0",
 
-		// Backup
-		// NOTE: Using dev build as latest stable (v0.1.0-beta.2) lacks required features.
-		// TODO: Update to stable release when v0.1.0 or later is released.
+		// Backup — using pre-release build (stable v0.1.0 not yet released).
 		// Track: https://github.com/siderolabs/talos-backup/releases
 		TalosBackup: "v0.1.0-beta.3-3-g38dad7c",
 	}

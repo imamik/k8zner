@@ -27,12 +27,6 @@ func createTestContext(t *testing.T, mockInfra *hcloud_internal.MockClient, cfg 
 	return ctx
 }
 
-func TestProvisioner_Name(t *testing.T) {
-	t.Parallel()
-	p := NewProvisioner()
-	assert.Equal(t, "infrastructure", p.Name())
-}
-
 func TestProvisionNetwork_Success(t *testing.T) {
 	t.Parallel()
 	mockInfra := &hcloud_internal.MockClient{}
@@ -67,9 +61,7 @@ func TestProvisionNetwork_Success(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err = p.ProvisionNetwork(ctx)
+	err = ProvisionNetwork(ctx)
 	assert.NoError(t, err)
 	assert.NotNil(t, ctx.State.Network)
 }
@@ -99,9 +91,7 @@ func TestProvisionFirewall_Success(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err := p.ProvisionFirewall(ctx)
+	err := ProvisionFirewall(ctx)
 	assert.NoError(t, err)
 }
 
@@ -148,29 +138,8 @@ func TestProvisionLoadBalancers_Success(t *testing.T) {
 		return nil
 	}
 
-	p := NewProvisioner()
-
-	err = p.ProvisionLoadBalancers(ctx)
+	err = ProvisionLoadBalancers(ctx)
 	assert.NoError(t, err)
-}
-
-func TestGetNetwork(t *testing.T) {
-	t.Parallel()
-	mockInfra := &hcloud_internal.MockClient{}
-	cfg := &config.Config{
-		ClusterName: "test-cluster",
-	}
-
-	ctx := createTestContext(t, mockInfra, cfg)
-
-	_, ipNet, _ := net.ParseCIDR("10.0.0.0/16")
-	expectedNetwork := &hcloud.Network{ID: 1, IPRange: ipNet}
-	ctx.State.Network = expectedNetwork
-
-	p := NewProvisioner()
-	network := p.GetNetwork(ctx)
-
-	assert.Equal(t, expectedNetwork, network)
 }
 
 func TestParseProtocol(t *testing.T) {
@@ -360,9 +329,7 @@ func TestProvisionNetwork_WithWorkers(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err = p.ProvisionNetwork(ctx)
+	err = ProvisionNetwork(ctx)
 	assert.NoError(t, err)
 	// Should create: 1 CP subnet + 1 LB subnet + 2 worker subnets = 4 subnets
 	assert.Equal(t, 4, subnetCount)

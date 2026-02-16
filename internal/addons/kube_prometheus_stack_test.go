@@ -267,84 +267,8 @@ func TestBuildPrometheusIngress(t *testing.T) {
 	})
 }
 
-func TestBuildAlertmanagerIngress(t *testing.T) {
-	t.Parallel()
-	t.Run("with TLS enabled", func(t *testing.T) {
-		t.Parallel()
-		cfg := &config.Config{
-			Addons: config.AddonsConfig{
-				KubePrometheusStack: config.KubePrometheusStackConfig{
-					Alertmanager: config.KubePrometheusAlertmanagerConfig{
-						IngressEnabled:   true,
-						IngressHost:      "alertmanager.example.com",
-						IngressClassName: "nginx",
-						IngressTLS:       true,
-					},
-				},
-				CertManager: config.CertManagerConfig{
-					Cloudflare: config.CertManagerCloudflareConfig{
-						Enabled:    true,
-						Production: false, // Staging
-					},
-				},
-				Cloudflare: config.CloudflareConfig{
-					Enabled: true,
-				},
-				ExternalDNS: config.ExternalDNSConfig{
-					Enabled: true,
-				},
-			},
-		}
-
-		ingress := buildAlertmanagerIngress(cfg)
-
-		assert.True(t, ingress["enabled"].(bool))
-		assert.Equal(t, "nginx", ingress["ingressClassName"])
-
-		hosts := ingress["hosts"].([]string)
-		require.Len(t, hosts, 1)
-		assert.Equal(t, "alertmanager.example.com", hosts[0])
-
-		tls := ingress["tls"].([]helm.Values)
-		require.Len(t, tls, 1)
-		assert.Equal(t, "alertmanager-tls", tls[0]["secretName"])
-
-		annotations := ingress["annotations"].(helm.Values)
-		assert.Equal(t, "letsencrypt-cloudflare-staging", annotations["cert-manager.io/cluster-issuer"])
-	})
-}
-
 func TestBuildAlertmanagerValues(t *testing.T) {
 	t.Parallel()
-	t.Run("with ingress enabled", func(t *testing.T) {
-		t.Parallel()
-		enabled := true
-		cfg := &config.Config{
-			Addons: config.AddonsConfig{
-				KubePrometheusStack: config.KubePrometheusStackConfig{
-					Alertmanager: config.KubePrometheusAlertmanagerConfig{
-						Enabled:        &enabled,
-						IngressEnabled: true,
-						IngressHost:    "alertmanager.example.com",
-						IngressTLS:     true,
-					},
-				},
-				CertManager: config.CertManagerConfig{
-					Cloudflare: config.CertManagerCloudflareConfig{
-						Enabled:    true,
-						Production: true,
-					},
-				},
-			},
-		}
-
-		values := buildAlertmanagerValues(cfg)
-
-		assert.True(t, values["enabled"].(bool))
-		ingress := values["ingress"].(helm.Values)
-		assert.True(t, ingress["enabled"].(bool))
-	})
-
 	t.Run("disabled by default pointer", func(t *testing.T) {
 		t.Parallel()
 		disabled := false

@@ -16,13 +16,11 @@ func TestDestroy(t *testing.T) {
 	origLoad := loadV2ConfigFile
 	origExpand := expandV2Config
 	origInfra := newInfraClient
-	origDestroy := newDestroyProvisioner
 	origCtx := newProvisioningContext
 	defer func() {
 		loadV2ConfigFile = origLoad
 		expandV2Config = origExpand
 		newInfraClient = origInfra
-		newDestroyProvisioner = origDestroy
 		newProvisioningContext = origCtx
 	}()
 
@@ -33,15 +31,14 @@ func TestDestroy(t *testing.T) {
 		return &config.Config{ClusterName: "test"}, nil
 	}
 	newInfraClient = func(_ string) hcloud.InfrastructureManager { return &hcloud.MockClient{} }
-	newDestroyProvisioner = func() Provisioner { return &destroyMock{} }
 	newProvisioningContext = func(_ context.Context, _ *config.Config, _ hcloud.InfrastructureManager, _ provisioning.TalosConfigProducer) *provisioning.Context {
-		return &provisioning.Context{}
+		return &provisioning.Context{
+			Config:   &config.Config{ClusterName: "test"},
+			Infra:    &hcloud.MockClient{},
+			Observer: &provisioning.ConsoleObserver{},
+		}
 	}
 
 	err := Destroy(context.Background(), "k8zner.yaml")
 	require.NoError(t, err)
 }
-
-type destroyMock struct{}
-
-func (m *destroyMock) Provision(_ *provisioning.Context) error { return nil }

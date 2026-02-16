@@ -43,22 +43,12 @@ type Credentials struct {
 // PhaseAdapter wraps existing CLI provisioners for operator use.
 type PhaseAdapter struct {
 	client client.Client
-
-	// Provisioners (created on demand)
-	infraProvisioner   *infrastructure.Provisioner
-	imageProvisioner   *image.Provisioner
-	computeProvisioner *compute.Provisioner
-	clusterProvisioner *cluster.Provisioner
 }
 
 // NewPhaseAdapter creates a new provisioning adapter.
 func NewPhaseAdapter(c client.Client) *PhaseAdapter {
 	return &PhaseAdapter{
-		client:             c,
-		infraProvisioner:   infrastructure.NewProvisioner(),
-		imageProvisioner:   image.NewProvisioner(),
-		computeProvisioner: compute.NewProvisioner(),
-		clusterProvisioner: cluster.NewProvisioner(),
+		client: c,
 	}
 }
 
@@ -184,7 +174,7 @@ func (a *PhaseAdapter) ReconcileInfrastructure(pCtx *provisioning.Context, k8sCl
 	logger := log.FromContext(pCtx.Context)
 	logger.Info("reconciling infrastructure")
 
-	if err := a.infraProvisioner.Provision(pCtx); err != nil {
+	if err := infrastructure.Provision(pCtx); err != nil {
 		return fmt.Errorf("infrastructure provisioning failed: %w", err)
 	}
 
@@ -207,7 +197,7 @@ func (a *PhaseAdapter) ReconcileImage(pCtx *provisioning.Context, k8sCluster *k8
 	logger := log.FromContext(pCtx.Context)
 	logger.Info("reconciling image")
 
-	if err := a.imageProvisioner.Provision(pCtx); err != nil {
+	if err := image.EnsureAllImages(pCtx); err != nil {
 		return fmt.Errorf("image provisioning failed: %w", err)
 	}
 
@@ -241,7 +231,7 @@ func (a *PhaseAdapter) ReconcileCompute(pCtx *provisioning.Context, k8sCluster *
 		populateBootstrapState(pCtx, k8sCluster, logger)
 	}
 
-	if err := a.computeProvisioner.Provision(pCtx); err != nil {
+	if err := compute.Provision(pCtx); err != nil {
 		return fmt.Errorf("compute provisioning failed: %w", err)
 	}
 
@@ -300,7 +290,7 @@ func (a *PhaseAdapter) ReconcileBootstrap(pCtx *provisioning.Context, k8sCluster
 	// Populate state from CRD status (filled during Compute phase)
 	populateStateFromCRD(pCtx, k8sCluster, logger)
 
-	if err := a.clusterProvisioner.Provision(pCtx); err != nil {
+	if err := cluster.BootstrapCluster(pCtx); err != nil {
 		return fmt.Errorf("cluster bootstrap failed: %w", err)
 	}
 

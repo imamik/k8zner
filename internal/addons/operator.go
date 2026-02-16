@@ -14,6 +14,9 @@ import (
 	"github.com/imamik/k8zner/internal/config"
 )
 
+// operator-chart/ is synced from deploy/helm/k8zner-operator/ (source of truth).
+// Run 'make sync-operator-chart' after modifying deploy/helm/k8zner-operator/.
+//
 //go:embed operator-chart/* operator-chart/templates/* operator-chart/crds/*
 var operatorChartFS embed.FS
 

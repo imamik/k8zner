@@ -248,8 +248,6 @@ func TestGetKeys(t *testing.T) {
 
 func TestEnsureImageForArch(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
-
 	t.Run("skips build when snapshot exists", func(t *testing.T) {
 		t.Parallel()
 		mockClient := &hcloud.MockClient{
@@ -259,7 +257,7 @@ func TestEnsureImageForArch(t *testing.T) {
 		}
 		ctx := createTestContext(t, mockClient, &config.Config{})
 
-		err := p.ensureImageForArch(ctx, "amd64", "v1.8.0", "v1.30.0", "", "nbg1")
+		err := ensureImageForArch(ctx, "amd64", "v1.8.0", "v1.30.0", "", "nbg1")
 		assert.NoError(t, err)
 	})
 
@@ -272,7 +270,7 @@ func TestEnsureImageForArch(t *testing.T) {
 		}
 		ctx := createTestContext(t, mockClient, &config.Config{})
 
-		err := p.ensureImageForArch(ctx, "amd64", "v1.8.0", "v1.30.0", "", "nbg1")
+		err := ensureImageForArch(ctx, "amd64", "v1.8.0", "v1.30.0", "", "nbg1")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to check for existing snapshot")
 	})

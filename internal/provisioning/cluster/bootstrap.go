@@ -29,7 +29,7 @@ const (
 // getLBEndpoint returns the Load Balancer endpoint for Talos API communication.
 // In private-first mode, ALL external communication goes through the LB.
 // Returns empty string if LB is not available.
-func (p *Provisioner) getLBEndpoint(ctx *provisioning.Context) string {
+func getLBEndpoint(ctx *provisioning.Context) string {
 	// Check state first
 	if ctx.State.LoadBalancer != nil {
 		if lbIP := hcloud.LoadBalancerIPv4(ctx.State.LoadBalancer); lbIP != "" {
@@ -49,43 +49,43 @@ func (p *Provisioner) getLBEndpoint(ctx *provisioning.Context) string {
 
 // BootstrapCluster performs the bootstrap process for a new cluster.
 // The main function orchestrates the steps - each helper does ONE thing.
-func (p *Provisioner) BootstrapCluster(ctx *provisioning.Context) error {
-	if err := p.ensureTalosConfigInState(ctx); err != nil {
+func BootstrapCluster(ctx *provisioning.Context) error {
+	if err := ensureTalosConfigInState(ctx); err != nil {
 		return err
 	}
 
 	// Already bootstrapped? Just retrieve kubeconfig
-	if p.isAlreadyBootstrapped(ctx) {
-		return p.tryRetrieveExistingKubeconfig(ctx)
+	if isAlreadyBootstrapped(ctx) {
+		return tryRetrieveExistingKubeconfig(ctx)
 	}
 
 	// Bootstrap sequence
 	ctx.Observer.Printf("[%s] Bootstrapping cluster %s with %d control plane nodes...",
 		phase, ctx.Config.ClusterName, len(ctx.State.ControlPlaneIPs))
 
-	if err := p.applyControlPlaneConfigs(ctx); err != nil {
+	if err := applyControlPlaneConfigs(ctx); err != nil {
 		return err
 	}
-	if err := p.waitForControlPlaneReady(ctx); err != nil {
+	if err := waitForControlPlaneReady(ctx); err != nil {
 		return err
 	}
-	if err := p.bootstrapEtcd(ctx); err != nil {
+	if err := bootstrapEtcd(ctx); err != nil {
 		return err
 	}
-	if err := p.createStateMarker(ctx); err != nil {
+	if err := createStateMarker(ctx); err != nil {
 		return err
 	}
 
 	// Apply worker configs after control plane is ready and etcd is bootstrapped
-	if err := p.ApplyWorkerConfigs(ctx); err != nil {
+	if err := ApplyWorkerConfigs(ctx); err != nil {
 		return err
 	}
 
-	return p.retrieveAndStoreKubeconfig(ctx)
+	return retrieveAndStoreKubeconfig(ctx)
 }
 
 // ensureTalosConfigInState ensures the Talos client config is stored in state.
-func (p *Provisioner) ensureTalosConfigInState(ctx *provisioning.Context) error {
+func ensureTalosConfigInState(ctx *provisioning.Context) error {
 	if len(ctx.State.TalosConfig) > 0 {
 		return nil
 	}
@@ -98,7 +98,7 @@ func (p *Provisioner) ensureTalosConfigInState(ctx *provisioning.Context) error 
 }
 
 // isAlreadyBootstrapped checks if the cluster state marker exists.
-func (p *Provisioner) isAlreadyBootstrapped(ctx *provisioning.Context) bool {
+func isAlreadyBootstrapped(ctx *provisioning.Context) bool {
 	markerName := fmt.Sprintf("%s-state", ctx.Config.ClusterName)
 	cert, err := ctx.Infra.GetCertificate(ctx, markerName)
 	if err != nil {
@@ -114,12 +114,12 @@ func (p *Provisioner) isAlreadyBootstrapped(ctx *provisioning.Context) bool {
 
 // tryRetrieveExistingKubeconfig attempts to retrieve kubeconfig from an existing cluster.
 // It also handles scaling by configuring any new nodes that are still in maintenance mode.
-func (p *Provisioner) tryRetrieveExistingKubeconfig(ctx *provisioning.Context) error {
-	if err := p.configureNewNodes(ctx); err != nil {
+func tryRetrieveExistingKubeconfig(ctx *provisioning.Context) error {
+	if err := configureNewNodes(ctx); err != nil {
 		return fmt.Errorf("failed to configure new nodes during scale: %w", err)
 	}
 
-	kubeconfig, err := p.retrieveKubeconfig(ctx, ctx.State.ControlPlaneIPs, ctx.State.TalosConfig, ctx.Observer)
+	kubeconfig, err := retrieveKubeconfig(ctx, ctx.State.ControlPlaneIPs, ctx.State.TalosConfig, ctx.Observer)
 	if err != nil {
 		ctx.Observer.Printf("[%s] Note: Could not retrieve kubeconfig from existing cluster: %v", phase, err)
 		return nil
@@ -130,12 +130,12 @@ func (p *Provisioner) tryRetrieveExistingKubeconfig(ctx *provisioning.Context) e
 
 // applyControlPlaneConfigs applies machine configs to all control plane nodes.
 // In private-first mode, configs are applied sequentially via the Load Balancer.
-func (p *Provisioner) applyControlPlaneConfigs(ctx *provisioning.Context) error {
+func applyControlPlaneConfigs(ctx *provisioning.Context) error {
 	ctx.Observer.Printf("[%s] Applying machine configurations to control plane nodes...", phase)
 
 	if ctx.Config.IsPrivateFirst() {
 		ctx.Observer.Printf("[%s] Private-first mode: applying configs via Load Balancer", phase)
-		return p.applyControlPlaneConfigsViaLB(ctx)
+		return applyControlPlaneConfigsViaLB(ctx)
 	}
 
 	for nodeName, nodeIP := range ctx.State.ControlPlaneIPs {
@@ -145,7 +145,7 @@ func (p *Provisioner) applyControlPlaneConfigs(ctx *provisioning.Context) error 
 			return fmt.Errorf("failed to generate machine config for node %s: %w", nodeName, err)
 		}
 		ctx.Observer.Printf("[%s] Applying config to node %s (%s)...", phase, nodeName, nodeIP)
-		if err := p.applyMachineConfig(ctx, nodeIP, machineConfig); err != nil {
+		if err := applyMachineConfig(ctx, nodeIP, machineConfig); err != nil {
 			return fmt.Errorf("failed to apply config to node %s: %w", nodeName, err)
 		}
 	}
@@ -155,8 +155,8 @@ func (p *Provisioner) applyControlPlaneConfigs(ctx *provisioning.Context) error 
 // applyControlPlaneConfigsViaLB applies machine configs via the Load Balancer.
 // Each configured node reboots and exits maintenance mode, so the LB routes
 // subsequent requests to remaining maintenance-mode nodes.
-func (p *Provisioner) applyControlPlaneConfigsViaLB(ctx *provisioning.Context) error {
-	lbEndpoint := p.getLBEndpoint(ctx)
+func applyControlPlaneConfigsViaLB(ctx *provisioning.Context) error {
+	lbEndpoint := getLBEndpoint(ctx)
 	if lbEndpoint == "" {
 		return fmt.Errorf("private-first mode requires Load Balancer but none available")
 	}
@@ -174,7 +174,7 @@ func (p *Provisioner) applyControlPlaneConfigsViaLB(ctx *provisioning.Context) e
 	configNum := 0
 	for nodeName := range ctx.State.ControlPlaneIPs {
 		configNum++
-		if err := p.applyOneConfigViaLB(ctx, lbEndpoint, nodeName, configNum, nodeCount); err != nil {
+		if err := applyOneConfigViaLB(ctx, lbEndpoint, nodeName, configNum, nodeCount); err != nil {
 			return err
 		}
 
@@ -190,7 +190,7 @@ func (p *Provisioner) applyControlPlaneConfigsViaLB(ctx *provisioning.Context) e
 }
 
 // applyOneConfigViaLB applies a single control plane config via the LB with retry logic.
-func (p *Provisioner) applyOneConfigViaLB(ctx *provisioning.Context, lbEndpoint, nodeName string, configNum, nodeCount int) error {
+func applyOneConfigViaLB(ctx *provisioning.Context, lbEndpoint, nodeName string, configNum, nodeCount int) error {
 	serverID := ctx.State.ControlPlaneServerIDs[nodeName]
 	machineConfig, err := ctx.Talos.GenerateControlPlaneConfig(ctx.State.SANs, nodeName, serverID)
 	if err != nil {
@@ -201,7 +201,7 @@ func (p *Provisioner) applyOneConfigViaLB(ctx *provisioning.Context, lbEndpoint,
 
 	var applyErr error
 	for retry := 0; retry < maxConfigApplyRetries; retry++ {
-		applyErr = p.applyMachineConfig(ctx, lbEndpoint, machineConfig)
+		applyErr = applyMachineConfig(ctx, lbEndpoint, machineConfig)
 		if applyErr == nil {
 			ctx.Observer.Printf("[%s] Config %d/%d applied successfully", phase, configNum, nodeCount)
 			return nil
@@ -222,16 +222,16 @@ func (p *Provisioner) applyOneConfigViaLB(ctx *provisioning.Context, lbEndpoint,
 }
 
 // waitForControlPlaneReady waits for all control plane nodes to reboot and become ready.
-func (p *Provisioner) waitForControlPlaneReady(ctx *provisioning.Context) error {
+func waitForControlPlaneReady(ctx *provisioning.Context) error {
 	ctx.Observer.Printf("[%s] Waiting for nodes to reboot and become ready...", phase)
 
 	if ctx.Config.IsPrivateFirst() {
-		return p.waitForControlPlaneReadyViaLB(ctx)
+		return waitForControlPlaneReadyViaLB(ctx)
 	}
 
 	for nodeName, nodeIP := range ctx.State.ControlPlaneIPs {
 		ctx.Observer.Printf("[%s] Waiting for node %s (%s) to be ready...", phase, nodeName, nodeIP)
-		if err := p.waitForNodeReady(ctx, nodeIP, ctx.State.TalosConfig, ctx.Observer); err != nil {
+		if err := waitForNodeReady(ctx, nodeIP, ctx.State.TalosConfig, ctx.Observer); err != nil {
 			return fmt.Errorf("node %s failed to become ready: %w", nodeName, err)
 		}
 		ctx.Observer.Printf("[%s] Node %s is ready", phase, nodeName)
@@ -240,8 +240,8 @@ func (p *Provisioner) waitForControlPlaneReady(ctx *provisioning.Context) error 
 }
 
 // waitForControlPlaneReadyViaLB waits for control plane nodes via the Load Balancer.
-func (p *Provisioner) waitForControlPlaneReadyViaLB(ctx *provisioning.Context) error {
-	lbEndpoint := p.getLBEndpoint(ctx)
+func waitForControlPlaneReadyViaLB(ctx *provisioning.Context) error {
+	lbEndpoint := getLBEndpoint(ctx)
 	if lbEndpoint == "" {
 		return fmt.Errorf("private-first mode requires Load Balancer but none available")
 	}
@@ -287,15 +287,15 @@ func (p *Provisioner) waitForControlPlaneReadyViaLB(ctx *provisioning.Context) e
 }
 
 // bootstrapEtcd initializes etcd on a control plane node.
-func (p *Provisioner) bootstrapEtcd(ctx *provisioning.Context) error {
+func bootstrapEtcd(ctx *provisioning.Context) error {
 	var endpoint string
 	if ctx.Config.IsPrivateFirst() {
-		endpoint = p.getLBEndpoint(ctx)
+		endpoint = getLBEndpoint(ctx)
 		if endpoint == "" {
 			return fmt.Errorf("private-first mode requires Load Balancer but none available")
 		}
 	} else {
-		endpoint = p.getFirstControlPlaneIP(ctx)
+		endpoint = getFirstControlPlaneIP(ctx)
 	}
 
 	cfg, err := config.FromString(string(ctx.State.TalosConfig))
@@ -316,7 +316,7 @@ func (p *Provisioner) bootstrapEtcd(ctx *provisioning.Context) error {
 }
 
 // createStateMarker creates a certificate marker indicating the cluster is initialized.
-func (p *Provisioner) createStateMarker(ctx *provisioning.Context) error {
+func createStateMarker(ctx *provisioning.Context) error {
 	ctx.Observer.Printf("[%s] Creating state marker...", phase)
 
 	markerName := fmt.Sprintf("%s-state", ctx.Config.ClusterName)
@@ -341,20 +341,20 @@ func (p *Provisioner) createStateMarker(ctx *provisioning.Context) error {
 }
 
 // retrieveAndStoreKubeconfig retrieves the kubeconfig and stores it in state.
-func (p *Provisioner) retrieveAndStoreKubeconfig(ctx *provisioning.Context) error {
+func retrieveAndStoreKubeconfig(ctx *provisioning.Context) error {
 	ctx.Observer.Printf("[%s] Retrieving kubeconfig...", phase)
 
 	var endpoint string
 	if ctx.Config.IsPrivateFirst() {
-		endpoint = p.getLBEndpoint(ctx)
+		endpoint = getLBEndpoint(ctx)
 		if endpoint == "" {
 			return fmt.Errorf("private-first mode requires Load Balancer but none available")
 		}
 	} else {
-		endpoint = p.getFirstControlPlaneIP(ctx)
+		endpoint = getFirstControlPlaneIP(ctx)
 	}
 
-	kubeconfig, err := p.retrieveKubeconfigFromEndpoint(ctx, endpoint, ctx.State.TalosConfig, ctx.Observer)
+	kubeconfig, err := retrieveKubeconfigFromEndpoint(ctx, endpoint, ctx.State.TalosConfig, ctx.Observer)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve kubeconfig: %w", err)
 	}
@@ -363,7 +363,7 @@ func (p *Provisioner) retrieveAndStoreKubeconfig(ctx *provisioning.Context) erro
 }
 
 // getFirstControlPlaneIP returns the IP of any control plane node (used for bootstrap).
-func (p *Provisioner) getFirstControlPlaneIP(ctx *provisioning.Context) string {
+func getFirstControlPlaneIP(ctx *provisioning.Context) string {
 	for _, ip := range ctx.State.ControlPlaneIPs {
 		return ip
 	}
@@ -371,7 +371,7 @@ func (p *Provisioner) getFirstControlPlaneIP(ctx *provisioning.Context) string {
 }
 
 // ApplyWorkerConfigs applies Talos machine configurations to worker nodes.
-func (p *Provisioner) ApplyWorkerConfigs(ctx *provisioning.Context) error {
+func ApplyWorkerConfigs(ctx *provisioning.Context) error {
 	workerNodes := ctx.State.WorkerIPs
 	if len(workerNodes) == 0 {
 		ctx.Observer.Printf("[%s] No worker nodes to configure", phase)
@@ -387,7 +387,7 @@ func (p *Provisioner) ApplyWorkerConfigs(ctx *provisioning.Context) error {
 			return fmt.Errorf("failed to generate worker config for %s: %w", nodeName, err)
 		}
 		ctx.Observer.Printf("[%s] Applying config to worker node %s (%s)...", phase, nodeName, nodeIP)
-		if err := p.applyMachineConfig(ctx, nodeIP, nodeConfig); err != nil {
+		if err := applyMachineConfig(ctx, nodeIP, nodeConfig); err != nil {
 			return fmt.Errorf("failed to apply config to worker node %s: %w", nodeName, err)
 		}
 	}
@@ -395,7 +395,7 @@ func (p *Provisioner) ApplyWorkerConfigs(ctx *provisioning.Context) error {
 	ctx.Observer.Printf("[%s] Waiting for worker nodes to reboot and become ready...", phase)
 	for nodeName, nodeIP := range workerNodes {
 		ctx.Observer.Printf("[%s] Waiting for worker node %s (%s) to be ready...", phase, nodeName, nodeIP)
-		if err := p.waitForNodeReady(ctx, nodeIP, ctx.State.TalosConfig, ctx.Observer); err != nil {
+		if err := waitForNodeReady(ctx, nodeIP, ctx.State.TalosConfig, ctx.Observer); err != nil {
 			return fmt.Errorf("worker node %s failed to become ready: %w", nodeName, err)
 		}
 		ctx.Observer.Printf("[%s] Worker node %s is ready", phase, nodeName)

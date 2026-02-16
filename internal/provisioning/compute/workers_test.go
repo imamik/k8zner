@@ -21,9 +21,8 @@ func TestProvisionWorkers_EmptyPools(t *testing.T) {
 	cfg.Workers = nil
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	err := p.ProvisionWorkers(ctx)
+	err := ProvisionWorkers(ctx)
 	require.NoError(t, err)
 	assert.Empty(t, ctx.State.WorkerIPs)
 }
@@ -55,9 +54,8 @@ func TestProvisionWorkers_MultiplePools(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	err := p.ProvisionWorkers(ctx)
+	err := ProvisionWorkers(ctx)
 	require.NoError(t, err)
 
 	// Both pools should have provisioned
@@ -90,9 +88,8 @@ func TestProvisionWorkers_ErrorPropagation(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	err := p.ProvisionWorkers(ctx)
+	err := ProvisionWorkers(ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to provision worker pools")
 }

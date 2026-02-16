@@ -1,6 +1,6 @@
 # Interactive Configuration Wizard
 
-The `k8zner init` command provides a simple interactive wizard for creating cluster configurations. It guides you through 5-6 questions to set up an opinionated, production-ready cluster.
+The `k8zner init` command provides a simple interactive wizard for creating cluster configurations. It guides you through 6 questions to set up an opinionated, production-ready cluster.
 
 ## Basic Usage
 

@@ -34,9 +34,7 @@ func TestProvisionFirewall_WithKubeAPIAndTalosRules(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err := p.ProvisionFirewall(ctx)
+	err := ProvisionFirewall(ctx)
 	require.NoError(t, err)
 
 	// Should have 2 rules: KubeAPI (6443) and TalosAPI (50000)
@@ -76,9 +74,7 @@ func TestProvisionFirewall_WithExtraRules(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err := p.ProvisionFirewall(ctx)
+	err := ProvisionFirewall(ctx)
 	require.NoError(t, err)
 
 	// No KubeAPI/Talos sources, but 2 extra rules
@@ -117,9 +113,7 @@ func TestProvisionFirewall_WithAllRuleTypes(t *testing.T) {
 
 	ctx := createTestContext(t, mockInfra, cfg)
 	ctx.State.PublicIP = "1.2.3.4"
-	p := NewProvisioner()
-
-	err := p.ProvisionFirewall(ctx)
+	err := ProvisionFirewall(ctx)
 	require.NoError(t, err)
 
 	// KubeAPI + TalosAPI + 1 extra rule = 3 rules
@@ -147,9 +141,7 @@ func TestProvisionFirewall_APISourceFallback(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err := p.ProvisionFirewall(ctx)
+	err := ProvisionFirewall(ctx)
 	require.NoError(t, err)
 
 	// Both KubeAPI and TalosAPI rules using APISource fallback
@@ -188,9 +180,7 @@ func TestProvisionNetwork_LBSubnetCalcError(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err := p.ProvisionNetwork(ctx)
+	err := ProvisionNetwork(ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "load-balancer subnet")
 }
@@ -218,9 +208,7 @@ func TestProvisionNetwork_CPSubnetCalcError(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err := p.ProvisionNetwork(ctx)
+	err := ProvisionNetwork(ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "control-plane subnet")
 }
@@ -252,9 +240,7 @@ func TestProvisionNetwork_LBSubnetCalcError_GetSubnetForRole(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err := p.ProvisionNetwork(ctx)
+	err := ProvisionNetwork(ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "load-balancer subnet")
 }
@@ -289,9 +275,7 @@ func TestProvisionNetwork_WorkerSubnetCalcError(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err := p.ProvisionNetwork(ctx)
+	err := ProvisionNetwork(ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "worker subnet")
 }
@@ -322,8 +306,7 @@ func TestProvisionLoadBalancers_APILBSubnetError(t *testing.T) {
 		return nil
 	}
 
-	p := NewProvisioner()
-	err := p.ProvisionLoadBalancers(ctx)
+	err := ProvisionLoadBalancers(ctx)
 
 	require.Error(t, err)
 }
@@ -355,8 +338,7 @@ func TestProvisionLoadBalancers_FullSuccessWithRefresh(t *testing.T) {
 		return refreshedLB, nil
 	}
 
-	p := NewProvisioner()
-	err := p.ProvisionLoadBalancers(ctx)
+	err := ProvisionLoadBalancers(ctx)
 
 	require.NoError(t, err)
 	assert.Equal(t, refreshedLB, ctx.State.LoadBalancer)

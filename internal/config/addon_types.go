@@ -454,18 +454,6 @@ type KubePrometheusAlertmanagerConfig struct {
 	// Enabled enables Alertmanager deployment.
 	// Default: true
 	Enabled *bool `mapstructure:"enabled" yaml:"enabled"`
-
-	// IngressEnabled enables Ingress for Alertmanager.
-	IngressEnabled bool `mapstructure:"ingress_enabled" yaml:"ingress_enabled"`
-
-	// IngressHost is the hostname for the Alertmanager Ingress.
-	IngressHost string `mapstructure:"ingress_host" yaml:"ingress_host"`
-
-	// IngressClassName specifies the IngressClass to use.
-	IngressClassName string `mapstructure:"ingress_class_name" yaml:"ingress_class_name"`
-
-	// IngressTLS enables TLS for the Ingress.
-	IngressTLS bool `mapstructure:"ingress_tls" yaml:"ingress_tls"`
 }
 
 // KubePrometheusPersistenceConfig defines storage persistence settings.
@@ -570,8 +558,7 @@ type OperatorConfig struct {
 	Version string `mapstructure:"version" yaml:"version"`
 
 	// HostNetwork enables hostNetwork mode for the operator pod.
-	// This is required when deploying the operator before CNI (Cilium) is installed.
-	// When true, the operator uses the host's network namespace directly.
-	// Default: false
+	// Auto-enabled during CLI bootstrap (before CNI is installed).
+	// Not needed for normal operation — the operator runs after CNI is ready.
 	HostNetwork bool `mapstructure:"host_network" yaml:"host_network"`
 }

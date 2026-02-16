@@ -510,8 +510,7 @@ internal/
 │   ├── compute/          # Servers, node pools
 │   ├── image/            # Talos image building
 │   ├── cluster/          # K8s bootstrap
-│   ├── destroy/          # Resource teardown
-│   └── upgrade/          # Node upgrade provisioning
+│   └── destroy/          # Resource teardown
 ├── addons/               # K8s addon installation (shared by CLI + operator)
 │   ├── helm/             # Chart rendering and value building
 │   └── k8sclient/        # Kubernetes API operations
