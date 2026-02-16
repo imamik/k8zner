@@ -447,16 +447,6 @@ func (c *Spec) S3Endpoint() string {
 	return "https://" + string(c.Region) + ".your-objectstorage.com"
 }
 
-// TotalWorkerVCPU returns the total vCPU across all workers.
-func (c *Spec) TotalWorkerVCPU() int {
-	return c.Workers.Count * c.Workers.Size.Specs().VCPU
-}
-
-// TotalWorkerRAMGB returns the total RAM in GB across all workers.
-func (c *Spec) TotalWorkerRAMGB() int {
-	return c.Workers.Count * c.Workers.Size.Specs().RAMGB
-}
-
 // ControlPlaneSize returns the server size for control planes.
 // Returns the configured size or defaults to CX23 (2 dedicated vCPU, 4GB RAM).
 func (c *Spec) ControlPlaneSize() ServerSize {

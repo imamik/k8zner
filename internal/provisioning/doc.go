@@ -7,7 +7,6 @@
 //   - image/ — Talos image building and snapshot management
 //   - cluster/ — Bootstrap and Talos configuration application
 //   - destroy/ — Resource cleanup and teardown
-//   - upgrade/ — Node upgrade provisioning
 //
 // # Core Types
 //

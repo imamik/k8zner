@@ -45,18 +45,6 @@ func TestGetNodeVersion_ConnectionError(t *testing.T) {
 	// Either way it should propagate through createClient or Version call
 }
 
-func TestGetSchematicID_ConnectionError(t *testing.T) {
-	t.Parallel()
-
-	gen := newTestGenerator(t)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	_, err := gen.GetSchematicID(ctx, "127.0.0.1:50001")
-	require.Error(t, err)
-}
-
 func TestUpgradeNode_ConnectionError(t *testing.T) {
 	t.Parallel()
 
@@ -138,10 +126,6 @@ func TestCreateClient_InvalidClientConfig(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to create Talos client")
 
-	_, err = gen.GetSchematicID(ctx, "127.0.0.1:50001")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to create Talos client")
-
 	err = gen.UpgradeNode(ctx, "127.0.0.1:50001", "image:v1", provisioning.UpgradeOptions{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to create Talos client")
@@ -151,74 +135,3 @@ func TestCreateClient_InvalidClientConfig(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to create Talos client")
 }
 
-func TestGetSchematicID_ParsesImageRef(t *testing.T) {
-	t.Parallel()
-
-	// Test the image reference parsing logic that's in GetSchematicID
-	// We can't call the real method without a Talos server, but we can
-	// test the string parsing logic directly
-
-	tests := []struct {
-		name     string
-		imageRef string
-		expected string
-	}{
-		{
-			name:     "factory URL with schematic",
-			imageRef: "factory.talos.dev/installer/abc123:v1.9.0",
-			expected: "abc123",
-		},
-		{
-			name:     "official image (no schematic)",
-			imageRef: "v1.9.0",
-			expected: "",
-		},
-		{
-			name:     "two-part path",
-			imageRef: "ghcr.io/siderolabs",
-			expected: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			// Simulate the parsing logic from GetSchematicID
-			parts := splitBySlash(tt.imageRef)
-			var schematicID string
-			if len(parts) >= 3 {
-				schematicPart := parts[2]
-				schematicID = splitByColon(schematicPart)[0]
-			}
-			assert.Equal(t, tt.expected, schematicID)
-		})
-	}
-}
-
-// Helper to split by slash (mimicking strings.Split behavior in GetSchematicID)
-func splitBySlash(s string) []string {
-	var result []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '/' {
-			result = append(result, s[start:i])
-			start = i + 1
-		}
-	}
-	result = append(result, s[start:])
-	return result
-}
-
-// Helper to split by colon
-func splitByColon(s string) []string {
-	var result []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == ':' {
-			result = append(result, s[start:i])
-			start = i + 1
-		}
-	}
-	result = append(result, s[start:])
-	return result
-}
