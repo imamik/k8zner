@@ -410,4 +410,3 @@ func gatherConnectivityDiagnostics(t *testing.T, controlPlaneIPs []string) {
 
 	t.Log("=== END CONNECTIVITY DIAGNOSTICS ===")
 }
-
