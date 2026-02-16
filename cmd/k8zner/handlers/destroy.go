@@ -16,6 +16,7 @@ import (
 
 	"github.com/imamik/k8zner/internal/config"
 	"github.com/imamik/k8zner/internal/platform/cloudflare"
+	"github.com/imamik/k8zner/internal/provisioning/destroy"
 )
 
 const (
@@ -41,9 +42,7 @@ func Destroy(ctx context.Context, configPath string) error {
 
 	pCtx := newProvisioningContext(ctx, cfg, infraClient, nil)
 
-	destroyer := newDestroyProvisioner()
-
-	if err := destroyer.Provision(pCtx); err != nil {
+	if err := destroy.Destroy(pCtx); err != nil {
 		return fmt.Errorf("destroy failed: %w", err)
 	}
 

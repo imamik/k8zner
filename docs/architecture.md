@@ -143,8 +143,7 @@ internal/
 │   ├── compute/          # Servers, node pools
 │   ├── image/            # Talos image building
 │   ├── cluster/          # Bootstrap and Talos config
-│   ├── destroy/          # Resource cleanup and teardown
-│   └── upgrade/          # Node upgrade provisioning
+│   └── destroy/          # Resource cleanup and teardown
 │
 ├── addons/               # Kubernetes addon management (shared by CLI and operator)
 │   ├── helm/             # Helm chart rendering and value building

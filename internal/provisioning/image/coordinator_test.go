@@ -175,12 +175,11 @@ func TestGetImageBuilderConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			p := &Provisioner{}
 			ctx := &provisioning.Context{
 				Config: tt.cfg,
 			}
 
-			serverType, location := p.getImageBuilderConfig(ctx, tt.arch)
+			serverType, location := getImageBuilderConfig(ctx, tt.arch)
 
 			assert.Equal(t, tt.expectedServerType, serverType, "server type mismatch")
 			assert.Equal(t, tt.expectedLocation, location, "location mismatch")
@@ -188,15 +187,8 @@ func TestGetImageBuilderConfig(t *testing.T) {
 	}
 }
 
-func TestNewProvisioner(t *testing.T) {
-	t.Parallel()
-	p := NewProvisioner()
-	assert.NotNil(t, p)
-}
-
 func TestEnsureAllImages_NoTalosPoolsNeeded(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
 
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{
@@ -212,14 +204,12 @@ func TestEnsureAllImages_NoTalosPoolsNeeded(t *testing.T) {
 	mockClient := &hcloud.MockClient{}
 	ctx := createTestContext(t, mockClient, cfg)
 
-	err := p.EnsureAllImages(ctx)
+	err := EnsureAllImages(ctx)
 	assert.NoError(t, err)
 }
 
 func TestEnsureAllImages_EmptyPools(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
-
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{NodePools: nil},
 		Workers:      nil,
@@ -228,14 +218,12 @@ func TestEnsureAllImages_EmptyPools(t *testing.T) {
 	mockClient := &hcloud.MockClient{}
 	ctx := createTestContext(t, mockClient, cfg)
 
-	err := p.EnsureAllImages(ctx)
+	err := EnsureAllImages(ctx)
 	assert.NoError(t, err)
 }
 
 func TestEnsureAllImages_SnapshotExists(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
-
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
@@ -253,14 +241,12 @@ func TestEnsureAllImages_SnapshotExists(t *testing.T) {
 	}
 	ctx := createTestContext(t, mockClient, cfg)
 
-	err := p.EnsureAllImages(ctx)
+	err := EnsureAllImages(ctx)
 	assert.NoError(t, err)
 }
 
 func TestEnsureAllImages_SnapshotCheckError(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
-
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
@@ -278,15 +264,13 @@ func TestEnsureAllImages_SnapshotCheckError(t *testing.T) {
 	}
 	ctx := createTestContext(t, mockClient, cfg)
 
-	err := p.EnsureAllImages(ctx)
+	err := EnsureAllImages(ctx)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to check for existing snapshot")
 }
 
 func TestEnsureAllImages_DefaultVersions(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
-
 	// Config with empty versions - should use defaults
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{
@@ -307,7 +291,7 @@ func TestEnsureAllImages_DefaultVersions(t *testing.T) {
 	}
 	ctx := createTestContext(t, mockClient, cfg)
 
-	err := p.EnsureAllImages(ctx)
+	err := EnsureAllImages(ctx)
 	assert.NoError(t, err)
 	assert.Equal(t, "v1.8.3", capturedLabels["talos-version"])
 	assert.Equal(t, "v1.31.0", capturedLabels["k8s-version"])
@@ -315,8 +299,6 @@ func TestEnsureAllImages_DefaultVersions(t *testing.T) {
 
 func TestEnsureAllImages_TalosImageFilter(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
-
 	// Mix of Talos and custom image pools
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{
@@ -342,7 +324,7 @@ func TestEnsureAllImages_TalosImageFilter(t *testing.T) {
 	}
 	ctx := createTestContext(t, mockClient, cfg)
 
-	err := p.EnsureAllImages(ctx)
+	err := EnsureAllImages(ctx)
 	assert.NoError(t, err)
 	// Only amd64 pools (cx22, cx32) need images, but cx32 is custom.
 	// cx22 appears in both CP and worker with talos/empty.
@@ -356,8 +338,6 @@ func TestProvision(t *testing.T) {
 
 	t.Run("no pools needed - success", func(t *testing.T) {
 		t.Parallel()
-		p := NewProvisioner()
-
 		cfg := &config.Config{
 			ControlPlane: config.ControlPlaneConfig{NodePools: nil},
 			Workers:      nil,
@@ -365,14 +345,12 @@ func TestProvision(t *testing.T) {
 		mockClient := &hcloud.MockClient{}
 		ctx := createTestContext(t, mockClient, cfg)
 
-		err := p.Provision(ctx)
+		err := EnsureAllImages(ctx)
 		assert.NoError(t, err)
 	})
 
 	t.Run("snapshot exists - success", func(t *testing.T) {
 		t.Parallel()
-		p := NewProvisioner()
-
 		cfg := &config.Config{
 			ControlPlane: config.ControlPlaneConfig{
 				NodePools: []config.ControlPlaneNodePool{
@@ -390,14 +368,12 @@ func TestProvision(t *testing.T) {
 		}
 		ctx := createTestContext(t, mockClient, cfg)
 
-		err := p.Provision(ctx)
+		err := EnsureAllImages(ctx)
 		assert.NoError(t, err)
 	})
 
 	t.Run("snapshot check error - returns error", func(t *testing.T) {
 		t.Parallel()
-		p := NewProvisioner()
-
 		cfg := &config.Config{
 			ControlPlane: config.ControlPlaneConfig{
 				NodePools: []config.ControlPlaneNodePool{
@@ -415,7 +391,7 @@ func TestProvision(t *testing.T) {
 		}
 		ctx := createTestContext(t, mockClient, cfg)
 
-		err := p.Provision(ctx)
+		err := EnsureAllImages(ctx)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to check for existing snapshot")
 	})
@@ -424,12 +400,10 @@ func TestProvision(t *testing.T) {
 // TestCreateImageBuilder verifies that createImageBuilder creates a Builder with the context's Infra.
 func TestCreateImageBuilder(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
-
 	mockClient := &hcloud.MockClient{}
 	ctx := createTestContext(t, mockClient, &config.Config{})
 
-	builder := p.createImageBuilder(ctx)
+	builder := createImageBuilder(ctx)
 	assert.NotNil(t, builder)
 	assert.Equal(t, mockClient, builder.infra)
 }
@@ -437,8 +411,6 @@ func TestCreateImageBuilder(t *testing.T) {
 // TestEnsureImageForArch_BuildPath tests the path where no snapshot exists and build is triggered.
 func TestEnsureImageForArch_BuildPath(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
-
 	t.Run("build triggered when no snapshot exists - build fails with CreateSSHKey error", func(t *testing.T) {
 		t.Parallel()
 		mockClient := &hcloud.MockClient{
@@ -451,7 +423,7 @@ func TestEnsureImageForArch_BuildPath(t *testing.T) {
 		}
 		ctx := createTestContext(t, mockClient, &config.Config{})
 
-		err := p.ensureImageForArch(ctx, "amd64", "v1.8.0", "v1.30.0", "", "nbg1")
+		err := ensureImageForArch(ctx, "amd64", "v1.8.0", "v1.30.0", "", "nbg1")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to build image")
 	})
@@ -471,7 +443,7 @@ func TestEnsureImageForArch_BuildPath(t *testing.T) {
 		}
 		ctx := createTestContext(t, mockClient, &config.Config{})
 
-		err := p.ensureImageForArch(ctx, "amd64", "v1.8.0", "v1.30.0", "cpx22", "nbg1")
+		err := ensureImageForArch(ctx, "amd64", "v1.8.0", "v1.30.0", "cpx22", "nbg1")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to build image")
 	})
@@ -487,7 +459,7 @@ func TestEnsureImageForArch_BuildPath(t *testing.T) {
 		}
 		ctx := createTestContext(t, mockClient, &config.Config{})
 
-		err := p.ensureImageForArch(ctx, "arm64", "v1.9.0", "v1.32.0", "", "fsn1")
+		err := ensureImageForArch(ctx, "arm64", "v1.9.0", "v1.32.0", "", "fsn1")
 		assert.NoError(t, err)
 		assert.Equal(t, "talos", capturedLabels["os"])
 		assert.Equal(t, "v1.9.0", capturedLabels["talos-version"])
@@ -499,8 +471,6 @@ func TestEnsureImageForArch_BuildPath(t *testing.T) {
 // TestEnsureAllImages_BuildError verifies that EnsureAllImages returns an error when build fails.
 func TestEnsureAllImages_BuildError(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
-
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
@@ -521,15 +491,13 @@ func TestEnsureAllImages_BuildError(t *testing.T) {
 	}
 	ctx := createTestContext(t, mockClient, cfg)
 
-	err := p.EnsureAllImages(ctx)
+	err := EnsureAllImages(ctx)
 	assert.Error(t, err)
 }
 
 // TestEnsureAllImages_MultipleArchitectures verifies that multiple architectures are built in parallel.
 func TestEnsureAllImages_MultipleArchitectures(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
-
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
@@ -552,7 +520,7 @@ func TestEnsureAllImages_MultipleArchitectures(t *testing.T) {
 	}
 	ctx := createTestContext(t, mockClient, cfg)
 
-	err := p.EnsureAllImages(ctx)
+	err := EnsureAllImages(ctx)
 	assert.NoError(t, err)
 	assert.True(t, architecturesSeen["amd64"], "should check amd64 snapshot")
 	assert.True(t, architecturesSeen["arm64"], "should check arm64 snapshot")
@@ -561,8 +529,6 @@ func TestEnsureAllImages_MultipleArchitectures(t *testing.T) {
 // TestEnsureAllImages_WorkerOnlyPools verifies image building when only workers need Talos images.
 func TestEnsureAllImages_WorkerOnlyPools(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
-
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
@@ -586,7 +552,7 @@ func TestEnsureAllImages_WorkerOnlyPools(t *testing.T) {
 	}
 	ctx := createTestContext(t, mockClient, cfg)
 
-	err := p.EnsureAllImages(ctx)
+	err := EnsureAllImages(ctx)
 	assert.NoError(t, err)
 	assert.True(t, snapshotChecked, "should have checked for amd64 snapshot from worker pool")
 }
@@ -631,8 +597,6 @@ func TestImageBuilderConfigDefaults(t *testing.T) {
 // properly wrapped with "failed to build image" context.
 func TestEnsureImageForArch_BuildErrorWrapping(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
-
 	t.Run("wraps GetServerIP error", func(t *testing.T) {
 		t.Parallel()
 		mockClient := &hcloud.MockClient{
@@ -651,7 +615,7 @@ func TestEnsureImageForArch_BuildErrorWrapping(t *testing.T) {
 		}
 		ctx := createTestContext(t, mockClient, &config.Config{})
 
-		err := p.ensureImageForArch(ctx, "amd64", "v1.8.0", "v1.30.0", "", "nbg1")
+		err := ensureImageForArch(ctx, "amd64", "v1.8.0", "v1.30.0", "", "nbg1")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to build image")
 		assert.Contains(t, err.Error(), "failed to get server IP")
@@ -678,7 +642,7 @@ func TestEnsureImageForArch_BuildErrorWrapping(t *testing.T) {
 		}
 		ctx := createTestContext(t, mockClient, &config.Config{})
 
-		err := p.ensureImageForArch(ctx, "arm64", "v1.8.0", "v1.30.0", "cax11", "nbg1")
+		err := ensureImageForArch(ctx, "arm64", "v1.8.0", "v1.30.0", "cax11", "nbg1")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to build image")
 		assert.Contains(t, err.Error(), "failed to enable rescue")
@@ -708,7 +672,7 @@ func TestEnsureImageForArch_BuildErrorWrapping(t *testing.T) {
 		}
 		ctx := createTestContext(t, mockClient, &config.Config{})
 
-		err := p.ensureImageForArch(ctx, "amd64", "v1.8.0", "v1.30.0", "", "nbg1")
+		err := ensureImageForArch(ctx, "amd64", "v1.8.0", "v1.30.0", "", "nbg1")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to build image")
 		assert.Contains(t, err.Error(), "failed to reset server")
@@ -719,8 +683,6 @@ func TestEnsureImageForArch_BuildErrorWrapping(t *testing.T) {
 // version and architecture parameters are correctly used in snapshot labels.
 func TestEnsureImageForArch_VersionsAndArchPassedCorrectly(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
-
 	tests := []struct {
 		name         string
 		arch         string
@@ -744,7 +706,7 @@ func TestEnsureImageForArch_VersionsAndArchPassedCorrectly(t *testing.T) {
 			}
 			ctx := createTestContext(t, mockClient, &config.Config{})
 
-			err := p.ensureImageForArch(ctx, tt.arch, tt.talosVersion, tt.k8sVersion, "", "nbg1")
+			err := ensureImageForArch(ctx, tt.arch, tt.talosVersion, tt.k8sVersion, "", "nbg1")
 			assert.NoError(t, err)
 			assert.Equal(t, tt.arch, capturedLabels["arch"])
 			assert.Equal(t, tt.talosVersion, capturedLabels["talos-version"])
@@ -758,8 +720,6 @@ func TestEnsureImageForArch_VersionsAndArchPassedCorrectly(t *testing.T) {
 // types across pools are deduplicated into a single architecture check.
 func TestEnsureAllImages_DuplicateServerTypes(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
-
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
@@ -785,7 +745,7 @@ func TestEnsureAllImages_DuplicateServerTypes(t *testing.T) {
 	}
 	ctx := createTestContext(t, mockClient, cfg)
 
-	err := p.EnsureAllImages(ctx)
+	err := EnsureAllImages(ctx)
 	assert.NoError(t, err)
 	// All server types are amd64, so only one snapshot check should happen
 	assert.Equal(t, 1, snapshotCallCount, "should deduplicate to single amd64 check")
@@ -795,8 +755,6 @@ func TestEnsureAllImages_DuplicateServerTypes(t *testing.T) {
 // ARM64 worker pools exist.
 func TestEnsureAllImages_OnlyARM64Workers(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
-
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
@@ -820,7 +778,7 @@ func TestEnsureAllImages_OnlyARM64Workers(t *testing.T) {
 	}
 	ctx := createTestContext(t, mockClient, cfg)
 
-	err := p.EnsureAllImages(ctx)
+	err := EnsureAllImages(ctx)
 	assert.NoError(t, err)
 	assert.Equal(t, "arm64", capturedArch, "should only check for arm64 snapshot")
 }
@@ -829,8 +787,6 @@ func TestEnsureAllImages_OnlyARM64Workers(t *testing.T) {
 // only control plane pools needing Talos images.
 func TestEnsureAllImages_ControlPlaneOnlyPools(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
-
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
@@ -854,7 +810,7 @@ func TestEnsureAllImages_ControlPlaneOnlyPools(t *testing.T) {
 	}
 	ctx := createTestContext(t, mockClient, cfg)
 
-	err := p.EnsureAllImages(ctx)
+	err := EnsureAllImages(ctx)
 	assert.NoError(t, err)
 	assert.True(t, snapshotChecked, "should check for amd64 snapshot from CP pool")
 }
@@ -863,8 +819,6 @@ func TestEnsureAllImages_ControlPlaneOnlyPools(t *testing.T) {
 // are correctly read from config and passed to the snapshot label check.
 func TestEnsureAllImages_VersionsFromConfig(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
-
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
@@ -884,7 +838,7 @@ func TestEnsureAllImages_VersionsFromConfig(t *testing.T) {
 	}
 	ctx := createTestContext(t, mockClient, cfg)
 
-	err := p.EnsureAllImages(ctx)
+	err := EnsureAllImages(ctx)
 	assert.NoError(t, err)
 	assert.Equal(t, "v1.9.0", capturedLabels["talos-version"])
 	assert.Equal(t, "v1.32.0", capturedLabels["k8s-version"])
@@ -894,8 +848,6 @@ func TestEnsureAllImages_VersionsFromConfig(t *testing.T) {
 // failures through the full call chain.
 func TestProvision_BuildError(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
-
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
@@ -919,7 +871,7 @@ func TestProvision_BuildError(t *testing.T) {
 	}
 	ctx := createTestContext(t, mockClient, cfg)
 
-	err := p.Provision(ctx)
+	err := EnsureAllImages(ctx)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to build image")
 }
@@ -928,8 +880,6 @@ func TestProvision_BuildError(t *testing.T) {
 // architecture fails during build, the error is propagated.
 func TestEnsureAllImages_MixedArchitecturesBuildError(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
-
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
@@ -957,7 +907,7 @@ func TestEnsureAllImages_MixedArchitecturesBuildError(t *testing.T) {
 	}
 	ctx := createTestContext(t, mockClient, cfg)
 
-	err := p.EnsureAllImages(ctx)
+	err := EnsureAllImages(ctx)
 	assert.Error(t, err)
 }
 
@@ -965,14 +915,12 @@ func TestEnsureAllImages_MixedArchitecturesBuildError(t *testing.T) {
 // createImageBuilder always returns a non-nil Builder using ctx.Infra.
 func TestCreateImageBuilder_ReturnsBuilderWithInfra(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
-
 	t.Run("with mock client", func(t *testing.T) {
 		t.Parallel()
 		mockClient := &hcloud.MockClient{}
 		ctx := createTestContext(t, mockClient, &config.Config{})
 
-		builder := p.createImageBuilder(ctx)
+		builder := createImageBuilder(ctx)
 		assert.NotNil(t, builder)
 		assert.Equal(t, mockClient, builder.infra)
 	})
@@ -981,7 +929,7 @@ func TestCreateImageBuilder_ReturnsBuilderWithInfra(t *testing.T) {
 		t.Parallel()
 		ctx := createTestContext(t, nil, &config.Config{})
 
-		builder := p.createImageBuilder(ctx)
+		builder := createImageBuilder(ctx)
 		// createImageBuilder always returns non-nil, even with nil infra
 		assert.NotNil(t, builder)
 		assert.Nil(t, builder.infra)
@@ -992,8 +940,6 @@ func TestCreateImageBuilder_ReturnsBuilderWithInfra(t *testing.T) {
 // falls through the switch without setting any server type overrides.
 func TestGetImageBuilderConfig_UnknownArch(t *testing.T) {
 	t.Parallel()
-	p := &Provisioner{}
-
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
@@ -1017,7 +963,7 @@ func TestGetImageBuilderConfig_UnknownArch(t *testing.T) {
 	ctx := &provisioning.Context{Config: cfg}
 
 	// An unknown architecture should not match amd64 or arm64 config
-	serverType, location := p.getImageBuilderConfig(ctx, "riscv64")
+	serverType, location := getImageBuilderConfig(ctx, "riscv64")
 	assert.Equal(t, "", serverType, "unknown arch should not get a server type")
 	assert.Equal(t, "fsn1", location, "unknown arch should still get CP location")
 }
@@ -1026,8 +972,6 @@ func TestGetImageBuilderConfig_UnknownArch(t *testing.T) {
 // are included in image building.
 func TestEnsureAllImages_TalosImageKeyword(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
-
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
@@ -1047,7 +991,7 @@ func TestEnsureAllImages_TalosImageKeyword(t *testing.T) {
 	}
 	ctx := createTestContext(t, mockClient, cfg)
 
-	err := p.EnsureAllImages(ctx)
+	err := EnsureAllImages(ctx)
 	assert.NoError(t, err)
 	assert.True(t, snapshotChecked, "pools with Image='talos' should trigger snapshot check")
 }
@@ -1056,8 +1000,6 @@ func TestEnsureAllImages_TalosImageKeyword(t *testing.T) {
 // when all pools use custom images (non-empty, non-"talos").
 func TestEnsureAllImages_AllCustomImages(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
-
 	cfg := &config.Config{
 		ControlPlane: config.ControlPlaneConfig{
 			NodePools: []config.ControlPlaneNodePool{
@@ -1081,7 +1023,7 @@ func TestEnsureAllImages_AllCustomImages(t *testing.T) {
 	}
 	ctx := createTestContext(t, mockClient, cfg)
 
-	err := p.EnsureAllImages(ctx)
+	err := EnsureAllImages(ctx)
 	assert.NoError(t, err)
 	assert.False(t, snapshotChecked, "no snapshot check should happen when all pools use custom images")
 }

@@ -20,7 +20,7 @@ import (
 
 func TestIsNodeInMaintenanceMode_PortNotReachable(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -32,13 +32,13 @@ func TestIsNodeInMaintenanceMode_PortNotReachable(t *testing.T) {
 	}
 
 	// Use an IP that won't have port 50000 open
-	result := p.isNodeInMaintenanceMode(pCtx, "127.0.0.1")
+	result := isNodeInMaintenanceMode(pCtx, "127.0.0.1")
 	assert.False(t, result)
 }
 
 func TestIsNodeInMaintenanceMode_EmptyTalosConfig(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	// Start a listener on a dynamic port to simulate port 50000 being reachable
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -63,7 +63,7 @@ func TestIsNodeInMaintenanceMode_EmptyTalosConfig(t *testing.T) {
 	// Since we can't easily use port 50000, we test the port-not-reachable path
 	// which is already covered above. Instead, test the detectMaintenanceModeNodes
 	// integration with empty TalosConfig.
-	result := p.isNodeInMaintenanceMode(pCtx, fmt.Sprintf("127.0.0.1:%d", addr.Port))
+	result := isNodeInMaintenanceMode(pCtx, fmt.Sprintf("127.0.0.1:%d", addr.Port))
 	// Port check on 127.0.0.1:PORT:50000 will fail (invalid format), so false
 	assert.False(t, result)
 }
@@ -72,7 +72,7 @@ func TestIsNodeInMaintenanceMode_EmptyTalosConfig(t *testing.T) {
 
 func TestConfigureNewNodes_WithCPAndWorkerNodesButNoMaintenance(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -86,7 +86,7 @@ func TestConfigureNewNodes_WithCPAndWorkerNodesButNoMaintenance(t *testing.T) {
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "192.0.2.1"}
 	pCtx.State.WorkerIPs = map[string]string{"worker-1": "192.0.2.2"}
 
-	err := p.configureNewNodes(pCtx)
+	err := configureNewNodes(pCtx)
 	require.NoError(t, err)
 }
 
@@ -94,7 +94,7 @@ func TestConfigureNewNodes_WithCPAndWorkerNodesButNoMaintenance(t *testing.T) {
 
 func TestDetectMaintenanceModeNodes_NodesNotReachable(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -110,7 +110,7 @@ func TestDetectMaintenanceModeNodes_NodesNotReachable(t *testing.T) {
 		"node2": "192.0.2.2",
 	}
 
-	result := p.detectMaintenanceModeNodes(pCtx, nodeIPs, "control plane")
+	result := detectMaintenanceModeNodes(pCtx, nodeIPs, "control plane")
 	assert.Empty(t, result, "unreachable nodes should not be detected as maintenance mode")
 }
 
@@ -118,7 +118,7 @@ func TestDetectMaintenanceModeNodes_NodesNotReachable(t *testing.T) {
 
 func TestApplyWorkerConfigs_PortNotReachable(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	mockTalos := &mockTalosConfigProducer{
 		generateWorkerConfigFn: func(hostname string, serverID int64) ([]byte, error) {
@@ -138,7 +138,7 @@ func TestApplyWorkerConfigs_PortNotReachable(t *testing.T) {
 	pCtx.State.WorkerIPs = map[string]string{"worker-1": "192.0.2.10"}
 	pCtx.State.WorkerServerIDs = map[string]int64{"worker-1": 200}
 
-	err := p.ApplyWorkerConfigs(pCtx)
+	err := ApplyWorkerConfigs(pCtx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to apply config to worker node")
 }
@@ -147,7 +147,7 @@ func TestApplyWorkerConfigs_PortNotReachable(t *testing.T) {
 
 func TestApplyControlPlaneConfigs_DirectPath_PortUnreachable(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	mockTalos := &mockTalosConfigProducer{
 		generateControlPlaneConfigFn: func(san []string, hostname string, serverID int64) ([]byte, error) {
@@ -168,7 +168,7 @@ func TestApplyControlPlaneConfigs_DirectPath_PortUnreachable(t *testing.T) {
 	pCtx.State.ControlPlaneServerIDs = map[string]int64{"cp-1": 100}
 	pCtx.State.SANs = []string{"10.0.0.1"}
 
-	err := p.applyControlPlaneConfigs(pCtx)
+	err := applyControlPlaneConfigs(pCtx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to apply config to node")
 }
@@ -177,7 +177,7 @@ func TestApplyControlPlaneConfigs_DirectPath_PortUnreachable(t *testing.T) {
 
 func TestWaitForControlPlaneReady_DirectPath_NodeNotReachable(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -190,7 +190,7 @@ func TestWaitForControlPlaneReady_DirectPath_NodeNotReachable(t *testing.T) {
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "192.0.2.1"}
 	pCtx.State.TalosConfig = []byte("invalid-config")
 
-	err := p.waitForControlPlaneReady(pCtx)
+	err := waitForControlPlaneReady(pCtx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "node cp-1 failed to become ready")
 }
@@ -199,7 +199,7 @@ func TestWaitForControlPlaneReady_DirectPath_NodeNotReachable(t *testing.T) {
 
 func TestWaitForControlPlaneReady_PrivateFirst_NoLB(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	mockInfra := &hcloud_internal.MockClient{
 		GetLoadBalancerFunc: func(_ context.Context, _ string) (*hcloud.LoadBalancer, error) {
@@ -218,7 +218,7 @@ func TestWaitForControlPlaneReady_PrivateFirst_NoLB(t *testing.T) {
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "10.0.0.1"}
 
-	err := p.waitForControlPlaneReady(pCtx)
+	err := waitForControlPlaneReady(pCtx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "private-first mode requires Load Balancer")
 }
@@ -227,7 +227,7 @@ func TestWaitForControlPlaneReady_PrivateFirst_NoLB(t *testing.T) {
 
 func TestApplyControlPlaneConfigsViaLB_PortWaitTimeout(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -246,7 +246,7 @@ func TestApplyControlPlaneConfigsViaLB_PortWaitTimeout(t *testing.T) {
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "10.0.0.1"}
 
-	err := p.applyControlPlaneConfigsViaLB(pCtx)
+	err := applyControlPlaneConfigsViaLB(pCtx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "LB port 50000 not reachable")
 }
@@ -255,7 +255,7 @@ func TestApplyControlPlaneConfigsViaLB_PortWaitTimeout(t *testing.T) {
 
 func TestApplyOneConfigViaLB_GenerateConfigError(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	mockTalos := &mockTalosConfigProducer{
 		generateControlPlaneConfigFn: func(_ []string, hostname string, _ int64) ([]byte, error) {
@@ -274,7 +274,7 @@ func TestApplyOneConfigViaLB_GenerateConfigError(t *testing.T) {
 	}
 	pCtx.State.ControlPlaneServerIDs = map[string]int64{"cp-1": 100}
 
-	err := p.applyOneConfigViaLB(pCtx, "192.0.2.1", "cp-1", 1, 1)
+	err := applyOneConfigViaLB(pCtx, "192.0.2.1", "cp-1", 1, 1)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to generate config for cp-1")
 }
@@ -283,7 +283,7 @@ func TestApplyOneConfigViaLB_GenerateConfigError(t *testing.T) {
 
 func TestApplyOneConfigViaLB_ApplyFailsNonTLS(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	mockTalos := &mockTalosConfigProducer{
 		generateControlPlaneConfigFn: func(_ []string, _ string, _ int64) ([]byte, error) {
@@ -302,7 +302,7 @@ func TestApplyOneConfigViaLB_ApplyFailsNonTLS(t *testing.T) {
 	}
 	pCtx.State.ControlPlaneServerIDs = map[string]int64{"cp-1": 100}
 
-	err := p.applyOneConfigViaLB(pCtx, "192.0.2.1", "cp-1", 1, 1)
+	err := applyOneConfigViaLB(pCtx, "192.0.2.1", "cp-1", 1, 1)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to apply config for cp-1")
 }
@@ -311,7 +311,7 @@ func TestApplyOneConfigViaLB_ApplyFailsNonTLS(t *testing.T) {
 
 func TestWaitForControlPlaneReadyViaLB_PortNotReachable(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -335,7 +335,7 @@ func TestWaitForControlPlaneReadyViaLB_PortNotReachable(t *testing.T) {
 	// An invalid config will fail at config.FromString, but
 	// we want to test the port wait timeout.
 	// Using invalid config to test parse error path:
-	err := p.waitForControlPlaneReadyViaLB(pCtx)
+	err := waitForControlPlaneReadyViaLB(pCtx)
 	require.Error(t, err)
 	// Either parse error or port timeout
 	assert.True(t,
@@ -349,7 +349,7 @@ func TestWaitForControlPlaneReadyViaLB_PortNotReachable(t *testing.T) {
 
 func TestWaitForControlPlaneReadyViaLB_NoLB(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	mockInfra := &hcloud_internal.MockClient{
 		GetLoadBalancerFunc: func(_ context.Context, _ string) (*hcloud.LoadBalancer, error) {
@@ -368,7 +368,7 @@ func TestWaitForControlPlaneReadyViaLB_NoLB(t *testing.T) {
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "10.0.0.1"}
 
-	err := p.waitForControlPlaneReadyViaLB(pCtx)
+	err := waitForControlPlaneReadyViaLB(pCtx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "private-first mode requires Load Balancer")
 }
@@ -377,7 +377,7 @@ func TestWaitForControlPlaneReadyViaLB_NoLB(t *testing.T) {
 
 func TestRetrieveKubeconfig_InvalidConfig(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -390,14 +390,14 @@ func TestRetrieveKubeconfig_InvalidConfig(t *testing.T) {
 
 	cpNodes := map[string]string{"cp-1": "10.0.0.1"}
 
-	_, err := p.retrieveKubeconfig(pCtx, cpNodes, []byte("invalid-config"), observer)
+	_, err := retrieveKubeconfig(pCtx, cpNodes, []byte("invalid-config"), observer)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse client config")
 }
 
 func TestRetrieveKubeconfig_EmptyNodes(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -410,7 +410,7 @@ func TestRetrieveKubeconfig_EmptyNodes(t *testing.T) {
 
 	cpNodes := map[string]string{}
 
-	_, err := p.retrieveKubeconfig(pCtx, cpNodes, []byte("invalid-config"), observer)
+	_, err := retrieveKubeconfig(pCtx, cpNodes, []byte("invalid-config"), observer)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse client config")
 }
@@ -419,7 +419,7 @@ func TestRetrieveKubeconfig_EmptyNodes(t *testing.T) {
 
 func TestRetrieveKubeconfigFromEndpoint_InvalidConfig(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -430,7 +430,7 @@ func TestRetrieveKubeconfigFromEndpoint_InvalidConfig(t *testing.T) {
 		Timeouts: config.TestTimeouts(),
 	}
 
-	_, err := p.retrieveKubeconfigFromEndpoint(pCtx, "10.0.0.1", []byte("bad-config"), observer)
+	_, err := retrieveKubeconfigFromEndpoint(pCtx, "10.0.0.1", []byte("bad-config"), observer)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse client config")
 }
@@ -439,7 +439,7 @@ func TestRetrieveKubeconfigFromEndpoint_InvalidConfig(t *testing.T) {
 
 func TestWaitForNodeReady_InvalidConfig(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -450,7 +450,7 @@ func TestWaitForNodeReady_InvalidConfig(t *testing.T) {
 		Timeouts: config.TestTimeouts(),
 	}
 
-	err := p.waitForNodeReady(pCtx, "10.0.0.1", []byte("bad-config"), observer)
+	err := waitForNodeReady(pCtx, "10.0.0.1", []byte("bad-config"), observer)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse client config")
 }
@@ -459,7 +459,7 @@ func TestWaitForNodeReady_InvalidConfig(t *testing.T) {
 
 func TestRetrieveAndStoreKubeconfig_PrivateFirst_WithLB_InvalidConfig(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -478,7 +478,7 @@ func TestRetrieveAndStoreKubeconfig_PrivateFirst_WithLB_InvalidConfig(t *testing
 		},
 	}
 
-	err := p.retrieveAndStoreKubeconfig(pCtx)
+	err := retrieveAndStoreKubeconfig(pCtx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to retrieve kubeconfig")
 }
@@ -487,7 +487,7 @@ func TestRetrieveAndStoreKubeconfig_PrivateFirst_WithLB_InvalidConfig(t *testing
 
 func TestBootstrapEtcd_PrivateFirst_WithLB_InvalidConfig(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -506,7 +506,7 @@ func TestBootstrapEtcd_PrivateFirst_WithLB_InvalidConfig(t *testing.T) {
 		},
 	}
 
-	err := p.bootstrapEtcd(pCtx)
+	err := bootstrapEtcd(pCtx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse talos config")
 }
@@ -515,7 +515,7 @@ func TestBootstrapEtcd_PrivateFirst_WithLB_InvalidConfig(t *testing.T) {
 
 func TestBootstrapCluster_FullFlow_ApplyWorkerConfigsFails(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	// This test exercises the full bootstrap flow up to ApplyWorkerConfigs.
 	// Since applyControlPlaneConfigs requires port 50000, and we can't easily
@@ -549,7 +549,7 @@ func TestBootstrapCluster_FullFlow_ApplyWorkerConfigsFails(t *testing.T) {
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "10.0.0.1"}
 	pCtx.State.ControlPlaneServerIDs = map[string]int64{"cp-1": 100}
 
-	err := p.BootstrapCluster(pCtx)
+	err := BootstrapCluster(pCtx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to generate machine config")
 }
@@ -558,7 +558,7 @@ func TestBootstrapCluster_FullFlow_ApplyWorkerConfigsFails(t *testing.T) {
 
 func TestTryRetrieveExistingKubeconfig_ConfigureNewNodesWithUnreachableNodes(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -573,7 +573,7 @@ func TestTryRetrieveExistingKubeconfig_ConfigureNewNodesWithUnreachableNodes(t *
 	pCtx.State.WorkerIPs = map[string]string{"w-1": "192.0.2.2"}
 	pCtx.State.TalosConfig = []byte("bad-config")
 
-	err := p.tryRetrieveExistingKubeconfig(pCtx)
+	err := tryRetrieveExistingKubeconfig(pCtx)
 	// Should return nil even when kubeconfig retrieval fails
 	assert.NoError(t, err)
 	assert.Empty(t, pCtx.State.Kubeconfig)
@@ -602,7 +602,7 @@ func TestGenerateDummyCert_CertValidity(t *testing.T) {
 
 func TestApplyMachineConfig_PortNotReachable(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -613,7 +613,7 @@ func TestApplyMachineConfig_PortNotReachable(t *testing.T) {
 		Timeouts: config.TestTimeouts(),
 	}
 
-	err := p.applyMachineConfig(pCtx, "192.0.2.1", []byte("mock-config"))
+	err := applyMachineConfig(pCtx, "192.0.2.1", []byte("mock-config"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to wait for Talos API")
 }
@@ -622,7 +622,7 @@ func TestApplyMachineConfig_PortNotReachable(t *testing.T) {
 
 func TestBootstrapCluster_AlreadyBootstrapped_PrivateFirst_NoLB(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	mockInfra := &hcloud_internal.MockClient{
 		GetCertificateFunc: func(_ context.Context, name string) (*hcloud.Certificate, error) {
@@ -650,7 +650,7 @@ func TestBootstrapCluster_AlreadyBootstrapped_PrivateFirst_NoLB(t *testing.T) {
 
 	// Already bootstrapped, will try to retrieve kubeconfig and fail
 	// but tryRetrieveExistingKubeconfig swallows the error
-	err := p.BootstrapCluster(pCtx)
+	err := BootstrapCluster(pCtx)
 	assert.NoError(t, err)
 }
 
@@ -658,7 +658,7 @@ func TestBootstrapCluster_AlreadyBootstrapped_PrivateFirst_NoLB(t *testing.T) {
 
 func TestApplyControlPlaneConfigs_PrivateFirst_WithLB_PortTimeout(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -677,7 +677,7 @@ func TestApplyControlPlaneConfigs_PrivateFirst_WithLB_PortTimeout(t *testing.T) 
 		},
 	}
 
-	err := p.applyControlPlaneConfigs(pCtx)
+	err := applyControlPlaneConfigs(pCtx)
 	require.Error(t, err)
 	// Should go through the private-first path and hit LB port timeout
 	assert.Contains(t, err.Error(), "LB port 50000 not reachable")

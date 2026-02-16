@@ -34,7 +34,7 @@ type ServerInfo struct {
 }
 
 // ensureServer ensures a server exists and returns its IP and server ID.
-func (p *Provisioner) ensureServer(ctx *provisioning.Context, spec ServerSpec) (ServerInfo, error) {
+func ensureServer(ctx *provisioning.Context, spec ServerSpec) (ServerInfo, error) {
 	// Check if exists
 	serverIDStr, err := ctx.Infra.GetServerID(ctx, spec.Name)
 	if err != nil {
@@ -68,7 +68,7 @@ func (p *Provisioner) ensureServer(ctx *provisioning.Context, spec ServerSpec) (
 	// Image defaulting - if empty or "talos", ensure the versioned image exists
 	image := spec.Image
 	if image == "" || image == "talos" {
-		image, err = p.ensureImage(ctx, spec.Type, spec.Location)
+		image, err = ensureImage(ctx, spec.Type, spec.Location)
 		if err != nil {
 			return ServerInfo{}, fmt.Errorf("failed to ensure Talos image: %w", err)
 		}
@@ -144,7 +144,7 @@ func (p *Provisioner) ensureServer(ctx *provisioning.Context, spec ServerSpec) (
 
 // ensureImage ensures the required Talos image exists and returns its ID.
 // It checks for an existing snapshot and builds it if necessary.
-func (p *Provisioner) ensureImage(ctx *provisioning.Context, serverType, _ string) (string, error) {
+func ensureImage(ctx *provisioning.Context, serverType, _ string) (string, error) {
 	// Determine architecture from server type
 	arch := string(hcloud.DetectArchitecture(serverType))
 

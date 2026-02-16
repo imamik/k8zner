@@ -64,10 +64,9 @@ func TestReconcileNodePool_SingleControlPlane(t *testing.T) {
 	mockInfra.GetSnapshotByLabelsFunc = defaultSnapshotFunc
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
 	pgID := int64(1)
-	result, err := p.reconcileNodePool(ctx, NodePoolSpec{
+	result, err := reconcileNodePool(ctx, NodePoolSpec{
 		Name:             "control-plane",
 		Count:            1,
 		ServerType:       "cx21",
@@ -105,9 +104,8 @@ func TestReconcileNodePool_MultipleWorkers(t *testing.T) {
 	mockInfra.GetSnapshotByLabelsFunc = defaultSnapshotFunc
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	result, err := p.reconcileNodePool(ctx, NodePoolSpec{
+	result, err := reconcileNodePool(ctx, NodePoolSpec{
 		Name:       "pool-a",
 		Count:      3,
 		ServerType: "cx31",
@@ -148,10 +146,9 @@ func TestReconcileNodePool_ControlPlanePrivateIPCalculation(t *testing.T) {
 	mockInfra.GetSnapshotByLabelsFunc = defaultSnapshotFunc
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
 	pgID := int64(1)
-	_, err := p.reconcileNodePool(ctx, NodePoolSpec{
+	_, err := reconcileNodePool(ctx, NodePoolSpec{
 		Name:             "control-plane",
 		Count:            3,
 		ServerType:       "cx21",
@@ -198,9 +195,8 @@ func TestReconcileNodePool_WorkerPrivateIPCalculation(t *testing.T) {
 	mockInfra.GetSnapshotByLabelsFunc = defaultSnapshotFunc
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	_, err := p.reconcileNodePool(ctx, NodePoolSpec{
+	_, err := reconcileNodePool(ctx, NodePoolSpec{
 		Name:       "pool-a",
 		Count:      2,
 		ServerType: "cx31",
@@ -244,9 +240,8 @@ func TestReconcileNodePool_WorkerPlacementGroupSharding(t *testing.T) {
 	mockInfra.GetSnapshotByLabelsFunc = defaultSnapshotFunc
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	result, err := p.reconcileNodePool(ctx, NodePoolSpec{
+	result, err := reconcileNodePool(ctx, NodePoolSpec{
 		Name:       "pool-a",
 		Count:      12,
 		ServerType: "cx31",
@@ -287,9 +282,8 @@ func TestReconcileNodePool_WorkerPlacementGroupDisabled(t *testing.T) {
 	mockInfra.GetSnapshotByLabelsFunc = defaultSnapshotFunc
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	_, err := p.reconcileNodePool(ctx, NodePoolSpec{
+	_, err := reconcileNodePool(ctx, NodePoolSpec{
 		Name:       "pool-a",
 		Count:      2,
 		ServerType: "cx31",
@@ -324,10 +318,9 @@ func TestReconcileNodePool_CPPlacementGroupPassedThrough(t *testing.T) {
 	mockInfra.GetSnapshotByLabelsFunc = defaultSnapshotFunc
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
 	pgID := int64(42)
-	_, err := p.reconcileNodePool(ctx, NodePoolSpec{
+	_, err := reconcileNodePool(ctx, NodePoolSpec{
 		Name:             "control-plane",
 		Count:            2,
 		ServerType:       "cx21",
@@ -359,10 +352,9 @@ func TestReconcileNodePool_CreateServerError(t *testing.T) {
 	mockInfra.GetSnapshotByLabelsFunc = defaultSnapshotFunc
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
 	pgID := int64(1)
-	_, err := p.reconcileNodePool(ctx, NodePoolSpec{
+	_, err := reconcileNodePool(ctx, NodePoolSpec{
 		Name:             "control-plane",
 		Count:            1,
 		ServerType:       "cx21",
@@ -382,9 +374,8 @@ func TestReconcileNodePool_ZeroCount(t *testing.T) {
 	cfg := testConfigWithSubnets(t)
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	result, err := p.reconcileNodePool(ctx, NodePoolSpec{
+	result, err := reconcileNodePool(ctx, NodePoolSpec{
 		Name:      "empty-pool",
 		Count:     0,
 		Role:      "worker",
@@ -418,11 +409,10 @@ func TestReconcileNodePool_MultiPoolCPIndexing(t *testing.T) {
 	mockInfra.GetSnapshotByLabelsFunc = defaultSnapshotFunc
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
 	// Second CP pool (PoolIndex=1) with 2 nodes
 	pgID := int64(1)
-	_, err := p.reconcileNodePool(ctx, NodePoolSpec{
+	_, err := reconcileNodePool(ctx, NodePoolSpec{
 		Name:             "control-plane-2",
 		Count:            2,
 		ServerType:       "cx21",

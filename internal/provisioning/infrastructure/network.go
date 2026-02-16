@@ -10,7 +10,7 @@ import (
 )
 
 // ProvisionNetwork provisions the private network and subnets.
-func (p *Provisioner) ProvisionNetwork(ctx *provisioning.Context) error {
+func ProvisionNetwork(ctx *provisioning.Context) error {
 	ctx.Observer.Printf("[infrastructure] Creating network %s...", ctx.Config.ClusterName)
 
 	// Subnets are calculated during validation phase

@@ -15,18 +15,10 @@ import (
 	"github.com/imamik/k8zner/internal/util/naming"
 )
 
-// Provisioner handles compute resource provisioning (servers, node pools).
-type Provisioner struct{}
-
-// NewProvisioner creates a new compute provisioner.
-func NewProvisioner() *Provisioner {
-	return &Provisioner{}
-}
-
 // Provision creates ALL servers (control plane + workers) in parallel
 // for maximum provisioning speed.
 // Uses ephemeral SSH keys to avoid Hetzner password emails.
-func (p *Provisioner) Provision(ctx *provisioning.Context) error {
+func Provision(ctx *provisioning.Context) error {
 	// 0. Create ephemeral SSH key to avoid Hetzner password emails
 	sshKeyName := fmt.Sprintf("ephemeral-%s-compute-%d", ctx.Config.ClusterName, time.Now().Unix())
 	ctx.Observer.Printf("[%s] Creating ephemeral SSH key: %s", phase, sshKeyName)
@@ -62,12 +54,12 @@ func (p *Provisioner) Provision(ctx *provisioning.Context) error {
 	}()
 
 	// 1. Pre-compute: Setup LB endpoint and collect SANs
-	if err := p.prepareControlPlaneEndpoint(ctx); err != nil {
+	if err := prepareControlPlaneEndpoint(ctx); err != nil {
 		return err
 	}
 
 	// 2. Create ALL servers in parallel (CP + Workers together)
-	if err := p.provisionAllServers(ctx); err != nil {
+	if err := provisionAllServers(ctx); err != nil {
 		return err
 	}
 
@@ -76,7 +68,7 @@ func (p *Provisioner) Provision(ctx *provisioning.Context) error {
 
 // prepareControlPlaneEndpoint sets up the Talos endpoint from the Load Balancer.
 // This must run before server creation so Talos configs have the right endpoint.
-func (p *Provisioner) prepareControlPlaneEndpoint(ctx *provisioning.Context) error {
+func prepareControlPlaneEndpoint(ctx *provisioning.Context) error {
 	ctx.Observer.Printf("[%s] Preparing control plane endpoint...", phase)
 
 	var sans []string
@@ -105,7 +97,7 @@ func (p *Provisioner) prepareControlPlaneEndpoint(ctx *provisioning.Context) err
 
 // provisionAllServers creates all control plane and worker servers in parallel.
 // This significantly reduces total provisioning time by overlapping server creation.
-func (p *Provisioner) provisionAllServers(ctx *provisioning.Context) error {
+func provisionAllServers(ctx *provisioning.Context) error {
 	var tasks []async.Task
 	var mu sync.Mutex
 
@@ -127,7 +119,7 @@ func (p *Provisioner) provisionAllServers(ctx *provisioning.Context) error {
 					return fmt.Errorf("failed to ensure placement group for pool %s: %w", pool.Name, err)
 				}
 
-				poolResult, err := p.reconcileNodePool(ctx, NodePoolSpec{
+				poolResult, err := reconcileNodePool(ctx, NodePoolSpec{
 					Name:             pool.Name,
 					Count:            pool.Count,
 					ServerType:       pool.ServerType,
@@ -162,7 +154,7 @@ func (p *Provisioner) provisionAllServers(ctx *provisioning.Context) error {
 		tasks = append(tasks, async.Task{
 			Name: fmt.Sprintf("worker-pool-%s", pool.Name),
 			Func: func(_ context.Context) error {
-				poolResult, err := p.reconcileNodePool(ctx, NodePoolSpec{
+				poolResult, err := reconcileNodePool(ctx, NodePoolSpec{
 					Name:        pool.Name,
 					Count:       pool.Count,
 					ServerType:  pool.ServerType,

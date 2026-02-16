@@ -17,7 +17,7 @@ import (
 
 func TestConfigureAndWaitForNewCPs_Empty(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -28,13 +28,13 @@ func TestConfigureAndWaitForNewCPs_Empty(t *testing.T) {
 		Timeouts: config.TestTimeouts(),
 	}
 
-	err := p.configureAndWaitForNewCPs(pCtx, map[string]string{})
+	err := configureAndWaitForNewCPs(pCtx, map[string]string{})
 	require.NoError(t, err)
 }
 
 func TestConfigureAndWaitForNewWorkers_Empty(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -45,13 +45,13 @@ func TestConfigureAndWaitForNewWorkers_Empty(t *testing.T) {
 		Timeouts: config.TestTimeouts(),
 	}
 
-	err := p.configureAndWaitForNewWorkers(pCtx, map[string]string{})
+	err := configureAndWaitForNewWorkers(pCtx, map[string]string{})
 	require.NoError(t, err)
 }
 
 func TestConfigureAndWaitForNewCPs_GenerateConfigError(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	mockTalos := &mockTalosConfigProducer{
 		generateControlPlaneConfigFn: func(_ []string, hostname string, _ int64) ([]byte, error) {
@@ -71,14 +71,14 @@ func TestConfigureAndWaitForNewCPs_GenerateConfigError(t *testing.T) {
 	pCtx.State.ControlPlaneServerIDs = map[string]int64{"cp-new": 123}
 
 	newCPs := map[string]string{"cp-new": "10.0.0.5"}
-	err := p.configureAndWaitForNewCPs(pCtx, newCPs)
+	err := configureAndWaitForNewCPs(pCtx, newCPs)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to generate machine config for new CP node")
 }
 
 func TestConfigureAndWaitForNewWorkers_GenerateConfigError(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	mockTalos := &mockTalosConfigProducer{
 		generateWorkerConfigFn: func(hostname string, _ int64) ([]byte, error) {
@@ -98,7 +98,7 @@ func TestConfigureAndWaitForNewWorkers_GenerateConfigError(t *testing.T) {
 	pCtx.State.WorkerServerIDs = map[string]int64{"w-new": 456}
 
 	newWorkers := map[string]string{"w-new": "10.0.0.10"}
-	err := p.configureAndWaitForNewWorkers(pCtx, newWorkers)
+	err := configureAndWaitForNewWorkers(pCtx, newWorkers)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to generate worker config for new node")
 }
@@ -107,7 +107,7 @@ func TestConfigureAndWaitForNewWorkers_GenerateConfigError(t *testing.T) {
 
 func TestConfigureNewNodes_NoMaintenanceNodes(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -121,7 +121,7 @@ func TestConfigureNewNodes_NoMaintenanceNodes(t *testing.T) {
 	pCtx.State.ControlPlaneIPs = map[string]string{}
 	pCtx.State.WorkerIPs = map[string]string{}
 
-	err := p.configureNewNodes(pCtx)
+	err := configureNewNodes(pCtx)
 	require.NoError(t, err)
 }
 
@@ -129,7 +129,7 @@ func TestConfigureNewNodes_NoMaintenanceNodes(t *testing.T) {
 
 func TestDetectMaintenanceModeNodes_EmptyNodeList(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -140,7 +140,7 @@ func TestDetectMaintenanceModeNodes_EmptyNodeList(t *testing.T) {
 		Timeouts: config.TestTimeouts(),
 	}
 
-	result := p.detectMaintenanceModeNodes(pCtx, map[string]string{}, "control plane")
+	result := detectMaintenanceModeNodes(pCtx, map[string]string{}, "control plane")
 	assert.Empty(t, result)
 }
 
@@ -148,7 +148,7 @@ func TestDetectMaintenanceModeNodes_EmptyNodeList(t *testing.T) {
 
 func TestBootstrapCluster_ApplyControlPlaneConfigsError(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	mockTalos := &mockTalosConfigProducer{
 		getClientConfigFunc: func() ([]byte, error) {
@@ -174,14 +174,14 @@ func TestBootstrapCluster_ApplyControlPlaneConfigsError(t *testing.T) {
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "10.0.0.1"}
 	pCtx.State.ControlPlaneServerIDs = map[string]int64{"cp-1": 100}
 
-	err := p.BootstrapCluster(pCtx)
+	err := BootstrapCluster(pCtx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to generate machine config")
 }
 
 func TestApplyControlPlaneConfigs_PrivateFirstViaLB_NoLB(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	mockInfra := &hcloud_internal.MockClient{}
 
@@ -196,14 +196,14 @@ func TestApplyControlPlaneConfigs_PrivateFirstViaLB_NoLB(t *testing.T) {
 	}
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "10.0.0.1"}
 
-	err := p.applyControlPlaneConfigs(pCtx)
+	err := applyControlPlaneConfigs(pCtx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "private-first mode requires Load Balancer")
 }
 
 func TestWaitForControlPlaneReady_DirectPath_Empty(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -216,13 +216,13 @@ func TestWaitForControlPlaneReady_DirectPath_Empty(t *testing.T) {
 	// No CP nodes → should succeed immediately
 	pCtx.State.ControlPlaneIPs = map[string]string{}
 
-	err := p.waitForControlPlaneReady(pCtx)
+	err := waitForControlPlaneReady(pCtx)
 	require.NoError(t, err)
 }
 
 func TestRetrieveAndStoreKubeconfig_DirectPath_InvalidConfig(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -235,14 +235,14 @@ func TestRetrieveAndStoreKubeconfig_DirectPath_InvalidConfig(t *testing.T) {
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "10.0.0.1"}
 	pCtx.State.TalosConfig = []byte("bad-config")
 
-	err := p.retrieveAndStoreKubeconfig(pCtx)
+	err := retrieveAndStoreKubeconfig(pCtx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to retrieve kubeconfig")
 }
 
 func TestBootstrapEtcd_DirectPath_InvalidConfig(t *testing.T) {
 	t.Parallel()
-	p := NewProvisioner()
+
 
 	observer := provisioning.NewConsoleObserver()
 	pCtx := &provisioning.Context{
@@ -255,7 +255,7 @@ func TestBootstrapEtcd_DirectPath_InvalidConfig(t *testing.T) {
 	pCtx.State.ControlPlaneIPs = map[string]string{"cp-1": "10.0.0.1"}
 	pCtx.State.TalosConfig = []byte("invalid-yaml")
 
-	err := p.bootstrapEtcd(pCtx)
+	err := bootstrapEtcd(pCtx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse talos config")
 }

@@ -88,9 +88,8 @@ func TestProvision(t *testing.T) {
 			// Create provisioning context
 			pCtx := provisioning.NewContext(context.Background(), cfg, mockClient, nil)
 
-			// Create provisioner and run
-			provisioner := NewProvisioner()
-			err := provisioner.Provision(pCtx)
+			// Run destroy
+			err := Destroy(pCtx)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -121,9 +120,7 @@ func TestProvisionCallsCleanupWithCorrectLabels(t *testing.T) {
 	}
 
 	pCtx := provisioning.NewContext(context.Background(), cfg, mockClient, nil)
-	provisioner := NewProvisioner()
-
-	err := provisioner.Provision(pCtx)
+	err := Destroy(pCtx)
 	require.NoError(t, err)
 
 	// Verify the captured labels

@@ -33,9 +33,8 @@ func TestPrepareControlPlaneEndpoint_WithLB(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	err := p.prepareControlPlaneEndpoint(ctx)
+	err := prepareControlPlaneEndpoint(ctx)
 
 	require.NoError(t, err)
 	assert.Contains(t, ctx.State.SANs, "5.6.7.8")
@@ -53,9 +52,8 @@ func TestPrepareControlPlaneEndpoint_NoLB(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	err := p.prepareControlPlaneEndpoint(ctx)
+	err := prepareControlPlaneEndpoint(ctx)
 
 	require.NoError(t, err)
 	assert.Empty(t, ctx.State.SANs)
@@ -82,9 +80,8 @@ func TestPrepareControlPlaneEndpoint_LBWithMultiplePrivateNets(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	err := p.prepareControlPlaneEndpoint(ctx)
+	err := prepareControlPlaneEndpoint(ctx)
 
 	require.NoError(t, err)
 	assert.Len(t, ctx.State.SANs, 3) // 1 public + 2 private
@@ -103,9 +100,8 @@ func TestPrepareControlPlaneEndpoint_LBError(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	err := p.prepareControlPlaneEndpoint(ctx)
+	err := prepareControlPlaneEndpoint(ctx)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get load balancer")
@@ -129,9 +125,8 @@ func TestPrepareControlPlaneEndpoint_SetsEndpoint(t *testing.T) {
 
 	ctx := createTestContext(t, mockInfra, cfg)
 	mockTalos := ctx.Talos.(*mockTalosProducer)
-	p := NewProvisioner()
 
-	err := p.prepareControlPlaneEndpoint(ctx)
+	err := prepareControlPlaneEndpoint(ctx)
 
 	require.NoError(t, err)
 	assert.Equal(t, "https://5.6.7.8:6443", mockTalos.endpoint)
@@ -155,9 +150,8 @@ func TestPrepareControlPlaneEndpoint_LBWithNoPublicIP(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	err := p.prepareControlPlaneEndpoint(ctx)
+	err := prepareControlPlaneEndpoint(ctx)
 
 	require.NoError(t, err)
 	// Only private net IPs should be in SANs

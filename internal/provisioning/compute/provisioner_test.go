@@ -111,9 +111,8 @@ func TestProvisioner_Provision_EmptyConfig(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	err := p.Provision(ctx)
+	err := Provision(ctx)
 	assert.NoError(t, err)
 }
 
@@ -198,9 +197,8 @@ func TestProvisionControlPlane_SingleNode(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	err := p.ProvisionControlPlane(ctx)
+	err := ProvisionControlPlane(ctx)
 	assert.NoError(t, err)
 	assert.True(t, serverCreated, "server should have been created")
 	assert.NotEmpty(t, ctx.State.ControlPlaneIPs, "control plane IPs should be populated")
@@ -264,9 +262,8 @@ func TestProvisionWorkers_MultipleNodes(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	err := p.ProvisionWorkers(ctx)
+	err := ProvisionWorkers(ctx)
 	assert.NoError(t, err)
 	assert.Len(t, createdServers, 2, "two worker servers should have been created")
 }
@@ -362,9 +359,8 @@ func TestProvision_WithBothCPAndWorkers(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	err := p.Provision(ctx)
+	err := Provision(ctx)
 	assert.NoError(t, err)
 	assert.True(t, sshKeyCreated, "SSH key should have been created")
 	assert.True(t, sshKeyDeleted, "SSH key should have been deleted")
@@ -399,9 +395,8 @@ func TestProvision_CreateSSHKeyFailure(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	err := p.Provision(ctx)
+	err := Provision(ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to create ephemeral SSH key")
 }
@@ -438,9 +433,8 @@ func TestProvision_GetLoadBalancerFailure(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	err := p.Provision(ctx)
+	err := Provision(ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get load balancer")
 	// SSH key should still be cleaned up even on error
@@ -480,9 +474,8 @@ func TestProvision_EnsurePlacementGroupFailure(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	err := p.Provision(ctx)
+	err := Provision(ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to provision servers")
 }
@@ -515,11 +508,10 @@ func TestProvision_DeleteSSHKeyFailure(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
 	// Provision with empty config should succeed even if SSH key delete fails
 	// (delete failure is only logged)
-	err := p.Provision(ctx)
+	err := Provision(ctx)
 	assert.NoError(t, err)
 }
 
@@ -571,9 +563,8 @@ func TestProvisionControlPlane_ExistingServer(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	err := p.ProvisionControlPlane(ctx)
+	err := ProvisionControlPlane(ctx)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, ctx.State.ControlPlaneIPs)
 }
