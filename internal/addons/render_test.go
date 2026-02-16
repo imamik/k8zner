@@ -42,7 +42,6 @@ func TestHelmRender(t *testing.T) {
 				Addons: config.AddonsConfig{
 					Traefik: config.TraefikConfig{
 						Enabled:               true,
-						Kind:                  "Deployment",
 						ExternalTrafficPolicy: "Cluster",
 						IngressClass:          "traefik",
 					},

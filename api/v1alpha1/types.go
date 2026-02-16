@@ -111,14 +111,6 @@ type FirewallSpec struct {
 	// +kubebuilder:default=true
 	// +optional
 	Enabled bool `json:"enabled,omitempty"`
-
-	// AllowedSSHIPs is a list of CIDR ranges allowed to SSH to nodes
-	// +optional
-	AllowedSSHIPs []string `json:"allowedSSHIPs,omitempty"`
-
-	// AllowedAPIIPs is a list of CIDR ranges allowed to access the Kubernetes API
-	// +optional
-	AllowedAPIIPs []string `json:"allowedAPIIPs,omitempty"`
 }
 
 // KubernetesSpec specifies the Kubernetes version.
@@ -172,7 +164,7 @@ type ControlPlaneSpec struct {
 	// +kubebuilder:default=1
 	Count int `json:"count"`
 
-	// Size is the Hetzner server type (e.g., cx23, cx33, cpx21, cpx31)
+	// Size is the Hetzner server type (e.g., cx23, cx33, cpx22, cpx32)
 	// CX types (dedicated vCPU) have consistent performance, CPX types (shared vCPU) have better availability
 	// +kubebuilder:default="cx23"
 	Size string `json:"size"`
@@ -185,22 +177,10 @@ type WorkerSpec struct {
 	// +kubebuilder:validation:Maximum=100
 	Count int `json:"count"`
 
-	// Size is the Hetzner server type (e.g., cx23, cx33, cpx21, cpx31)
+	// Size is the Hetzner server type (e.g., cx23, cx33, cpx22, cpx32)
 	// CX types (dedicated vCPU) have consistent performance, CPX types (shared vCPU) have better availability
 	// +kubebuilder:default="cx23"
 	Size string `json:"size"`
-
-	// MinCount is the minimum number of workers (for safety)
-	// +kubebuilder:validation:Minimum=0
-	// +kubebuilder:default=1
-	// +optional
-	MinCount int `json:"minCount,omitempty"`
-
-	// MaxCount is the maximum number of workers (for safety)
-	// +kubebuilder:validation:Maximum=100
-	// +kubebuilder:default=10
-	// +optional
-	MaxCount int `json:"maxCount,omitempty"`
 }
 
 // BackupSpec configures automated etcd backups.
@@ -412,10 +392,6 @@ type InfrastructureStatus struct {
 	// +optional
 	NetworkID int64 `json:"networkID,omitempty"`
 
-	// SubnetID is the Hetzner subnet ID
-	// +optional
-	SubnetID string `json:"subnetID,omitempty"`
-
 	// FirewallID is the Hetzner firewall ID
 	// +optional
 	FirewallID int64 `json:"firewallID,omitempty"`
@@ -610,7 +586,7 @@ type NodeStatus struct {
 	// +optional
 	PhaseTransitionTime *metav1.Time `json:"phaseTransitionTime,omitempty"`
 
-	// Healthy indicates if the node is healthy (deprecated, use Phase)
+	// Healthy indicates if the node is healthy (derived from Phase == NodePhaseReady)
 	Healthy bool `json:"healthy"`
 
 	// UnhealthyReason explains why the node is unhealthy
@@ -620,10 +596,6 @@ type NodeStatus struct {
 	// UnhealthySince is when the node became unhealthy
 	// +optional
 	UnhealthySince *metav1.Time `json:"unhealthySince,omitempty"`
-
-	// EtcdMemberID is the etcd member ID (for control planes)
-	// +optional
-	EtcdMemberID string `json:"etcdMemberID,omitempty"`
 
 	// LastHealthCheck is when health was last checked
 	// +optional

@@ -5,9 +5,7 @@
 // a stateless, declarative approach to infrastructure management without
 // requiring Terraform or other IaC tools.
 //
-// The CLI provides two main commands:
-//   - apply: Provision and manage Kubernetes clusters
-//   - image: Build custom Talos Linux snapshots
+// Commands: init, apply, destroy, doctor, cost, secrets.
 //
 // For detailed usage information, run:
 //

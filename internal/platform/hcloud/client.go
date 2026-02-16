@@ -103,12 +103,6 @@ type CertificateManager interface {
 	DeleteCertificate(ctx context.Context, name string) error
 }
 
-// RDNSManager defines the interface for managing reverse DNS.
-type RDNSManager interface {
-	SetServerRDNS(ctx context.Context, serverID int64, ipAddress, dnsPtr string) error
-	SetLoadBalancerRDNS(ctx context.Context, lbID int64, ipAddress, dnsPtr string) error
-}
-
 // InfrastructureManager combines all infrastructure interfaces.
 type InfrastructureManager interface {
 	ServerProvisioner
@@ -119,6 +113,5 @@ type InfrastructureManager interface {
 	LoadBalancerManager
 	PlacementGroupManager
 	CertificateManager
-	RDNSManager
 	GetPublicIP(ctx context.Context) (string, error)
 }

@@ -3,7 +3,6 @@ package talos
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/imamik/k8zner/internal/provisioning"
@@ -34,43 +33,6 @@ func (g *Generator) GetNodeVersion(ctx context.Context, endpoint string) (string
 	}
 
 	return version.Messages[0].Version.Tag, nil
-}
-
-// GetSchematicID retrieves the current schematic ID from a node.
-func (g *Generator) GetSchematicID(ctx context.Context, endpoint string) (string, error) {
-	talosClient, err := g.createClient(ctx, endpoint)
-	if err != nil {
-		return "", fmt.Errorf("failed to create Talos client: %w", err)
-	}
-	defer func() { _ = talosClient.Close() }()
-
-	// Wrap context with target node - required for node-specific operations
-	nodeCtx := client.WithNode(ctx, endpoint)
-
-	version, err := talosClient.Version(nodeCtx)
-	if err != nil {
-		return "", fmt.Errorf("failed to get version: %w", err)
-	}
-
-	// Extract schematic from the first message
-	if len(version.Messages) == 0 {
-		return "", fmt.Errorf("no version information returned")
-	}
-
-	// Schematic is in the image reference, e.g.:
-	// "factory.talos.dev/installer/abc123:v1.9.0"
-	imageRef := version.Messages[0].Version.Tag
-	parts := strings.Split(imageRef, "/")
-	if len(parts) < 3 {
-		// No schematic (using official image)
-		return "", nil
-	}
-
-	// Extract schematic from "installer/abc123:v1.9.0"
-	schematicPart := parts[2]
-	schematicID := strings.Split(schematicPart, ":")[0]
-
-	return schematicID, nil
 }
 
 // UpgradeNode upgrades a single node to the specified image.

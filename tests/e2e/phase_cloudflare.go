@@ -130,14 +130,9 @@ func installCloudflareAddon(t *testing.T, state *E2EState, hcloudToken, cfAPITok
 // deployWhoamiWithIngress deploys a whoami service with Ingress for testing.
 // targetIP is the IP address that external-dns should use for DNS records (e.g., load balancer IP).
 func deployWhoamiWithIngress(t *testing.T, state *E2EState, hostname string, targetIP string) {
-	// Determine which ingress class to use
-	ingressClass := "nginx"
-	if state.AddonsInstalled["traefik"] {
-		ingressClass = "traefik"
-	}
+	ingressClass := "traefik"
 
-	// For ingress controllers that don't populate status.loadBalancer (like Traefik with hostPorts),
-	// we need to set the external-dns.alpha.kubernetes.io/target annotation explicitly.
+	// Set the external-dns target annotation explicitly for DNS record creation.
 	manifest := fmt.Sprintf(`
 apiVersion: apps/v1
 kind: Deployment

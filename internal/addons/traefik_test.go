@@ -197,51 +197,6 @@ func TestTraefikNamespace(t *testing.T) {
 	assert.Contains(t, ns, "name: traefik")
 }
 
-func TestBuildTraefikValuesKind(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name         string
-		kind         string
-		expectedKind string
-	}{
-		{
-			name:         "default is Deployment",
-			kind:         "",
-			expectedKind: "Deployment",
-		},
-		{
-			name:         "explicit Deployment",
-			kind:         "Deployment",
-			expectedKind: "Deployment",
-		},
-		{
-			name:         "DaemonSet",
-			kind:         "DaemonSet",
-			expectedKind: "DaemonSet",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			cfg := &config.Config{
-				ClusterName: "test-cluster",
-				Workers:     []config.WorkerNodePool{{Count: 2}},
-				Addons: config.AddonsConfig{
-					Traefik: config.TraefikConfig{
-						Enabled: true,
-						Kind:    tt.kind,
-					},
-				},
-			}
-
-			values := buildTraefikValues(cfg)
-			deployment := values["deployment"].(helm.Values)
-			assert.Equal(t, tt.expectedKind, deployment["kind"])
-		})
-	}
-}
-
 func TestBuildTraefikValuesReplicas(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -375,26 +330,6 @@ func TestBuildTraefikValuesIngressClass(t *testing.T) {
 			assert.Equal(t, tt.expectedClass, ingressClass["name"])
 		})
 	}
-}
-
-func TestBuildTraefikValuesIngressRoute(t *testing.T) {
-	t.Parallel()
-	// IngressRoute is always disabled - we use standard Kubernetes Ingress
-
-	cfg := &config.Config{
-		ClusterName: "test-cluster",
-		Workers:     []config.WorkerNodePool{{Count: 2}},
-		Addons: config.AddonsConfig{
-			Traefik: config.TraefikConfig{
-				Enabled: true,
-			},
-		},
-	}
-
-	values := buildTraefikValues(cfg)
-	ingressRoute := values["ingressRoute"].(helm.Values)
-	dashboard := ingressRoute["dashboard"].(helm.Values)
-	assert.Equal(t, false, dashboard["enabled"])
 }
 
 func TestBuildTraefikValuesAlwaysLoadBalancer(t *testing.T) {

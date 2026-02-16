@@ -84,13 +84,6 @@ func TestVersionMatrix_HelmChartVersions(t *testing.T) {
 	}
 }
 
-func TestDefaultControlPlaneServerType(t *testing.T) {
-	t.Parallel()
-	if DefaultControlPlaneServerType != "cx23" {
-		t.Errorf("DefaultControlPlaneServerType = %s, want cx23", DefaultControlPlaneServerType)
-	}
-}
-
 func TestLoadBalancerType(t *testing.T) {
 	t.Parallel()
 	if LoadBalancerType != "lb11" {

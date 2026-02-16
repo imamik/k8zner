@@ -421,26 +421,6 @@ func TestMockClient_DeleteCertificate_Default(t *testing.T) {
 	}
 }
 
-func TestMockClient_SetServerRDNS_Default(t *testing.T) {
-	m := &MockClient{}
-	ctx := context.Background()
-
-	err := m.SetServerRDNS(ctx, 123, "1.2.3.4", "example.com")
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestMockClient_SetLoadBalancerRDNS_Default(t *testing.T) {
-	m := &MockClient{}
-	ctx := context.Background()
-
-	err := m.SetLoadBalancerRDNS(ctx, 123, "1.2.3.4", "example.com")
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
 func TestMockClient_GetPublicIP_Default(t *testing.T) {
 	m := &MockClient{}
 	ctx := context.Background()
@@ -891,30 +871,6 @@ func TestMockClient_CustomFuncs(t *testing.T) {
 			},
 		}
 		err := m.DeleteCertificate(ctx, "cert")
-		if !errors.Is(err, customErr) {
-			t.Errorf("expected custom error, got %v", err)
-		}
-	})
-
-	t.Run("SetServerRDNS custom func", func(t *testing.T) {
-		m := &MockClient{
-			SetServerRDNSFunc: func(_ context.Context, _ int64, _, _ string) error {
-				return customErr
-			},
-		}
-		err := m.SetServerRDNS(ctx, 123, "1.2.3.4", "example.com")
-		if !errors.Is(err, customErr) {
-			t.Errorf("expected custom error, got %v", err)
-		}
-	})
-
-	t.Run("SetLoadBalancerRDNS custom func", func(t *testing.T) {
-		m := &MockClient{
-			SetLoadBalancerRDNSFunc: func(_ context.Context, _ int64, _, _ string) error {
-				return customErr
-			},
-		}
-		err := m.SetLoadBalancerRDNS(ctx, 123, "1.2.3.4", "example.com")
 		if !errors.Is(err, customErr) {
 			t.Errorf("expected custom error, got %v", err)
 		}
