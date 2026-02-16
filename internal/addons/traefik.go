@@ -18,7 +18,7 @@ func applyTraefik(ctx context.Context, client k8sclient.Client, cfg *config.Conf
 		return err
 	}
 
-	// Build values matching the ingress-nginx configuration style
+	// Build Traefik Helm chart values
 	values := buildTraefikValues(cfg)
 
 	return installHelmAddon(ctx, client, "traefik", "traefik", cfg.Addons.Traefik.Helm, values)

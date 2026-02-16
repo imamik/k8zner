@@ -60,7 +60,7 @@ func BenchmarkBuildTraefikValues_WithCustomValues(b *testing.B) {
 		Addons: config.AddonsConfig{
 			Traefik: config.TraefikConfig{
 				Enabled:               true,
-					ExternalTrafficPolicy: "Cluster",
+				ExternalTrafficPolicy: "Cluster",
 				IngressClass:          "traefik",
 				Helm: config.HelmChartConfig{
 					Values: map[string]any{

@@ -56,10 +56,6 @@ type MockClient struct {
 	GetCertificateFunc    func(ctx context.Context, name string) (*hcloud.Certificate, error)
 	DeleteCertificateFunc func(ctx context.Context, name string) error
 
-	// RDNS
-	SetServerRDNSFunc       func(ctx context.Context, serverID int64, ipAddress, dnsPtr string) error
-	SetLoadBalancerRDNSFunc func(ctx context.Context, lbID int64, ipAddress, dnsPtr string) error
-
 	// IP
 	GetPublicIPFunc func(ctx context.Context) (string, error)
 
@@ -338,22 +334,6 @@ func (m *MockClient) GetCertificate(ctx context.Context, name string) (*hcloud.C
 func (m *MockClient) DeleteCertificate(ctx context.Context, name string) error {
 	if m.DeleteCertificateFunc != nil {
 		return m.DeleteCertificateFunc(ctx, name)
-	}
-	return nil
-}
-
-// SetServerRDNS mocks setting server reverse DNS.
-func (m *MockClient) SetServerRDNS(ctx context.Context, serverID int64, ipAddress, dnsPtr string) error {
-	if m.SetServerRDNSFunc != nil {
-		return m.SetServerRDNSFunc(ctx, serverID, ipAddress, dnsPtr)
-	}
-	return nil
-}
-
-// SetLoadBalancerRDNS mocks setting load balancer reverse DNS.
-func (m *MockClient) SetLoadBalancerRDNS(ctx context.Context, lbID int64, ipAddress, dnsPtr string) error {
-	if m.SetLoadBalancerRDNSFunc != nil {
-		return m.SetLoadBalancerRDNSFunc(ctx, lbID, ipAddress, dnsPtr)
 	}
 	return nil
 }

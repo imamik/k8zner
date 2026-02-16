@@ -169,8 +169,8 @@ type CertManagerCloudflareConfig struct {
 }
 
 // TraefikConfig defines the Traefik Proxy ingress controller configuration.
-// Traefik is an alternative to ingress-nginx with built-in support for
-// modern protocols and automatic service discovery.
+// Traefik provides the cluster's ingress with automatic service discovery
+// and a LoadBalancer service managed by CCM.
 type TraefikConfig struct {
 	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
 
@@ -179,7 +179,6 @@ type TraefikConfig struct {
 
 	// Replicas specifies the number of controller replicas.
 	// If nil, auto-calculated: 2 for <3 workers, 3 for >=3 workers.
-	// Must be nil when Kind is "DaemonSet".
 	Replicas *int `mapstructure:"replicas" yaml:"replicas"`
 
 	// ExternalTrafficPolicy controls how external traffic is routed.
@@ -190,7 +189,6 @@ type TraefikConfig struct {
 	// IngressClass specifies the IngressClass name for Traefik.
 	// Default: "traefik"
 	IngressClass string `mapstructure:"ingress_class" yaml:"ingress_class"`
-
 }
 
 // ArgoCDConfig defines the ArgoCD GitOps configuration.
@@ -220,7 +218,7 @@ type ArgoCDConfig struct {
 	RepoServerReplicas *int `mapstructure:"repo_server_replicas" yaml:"repo_server_replicas"`
 
 	// IngressEnabled enables Ingress for the ArgoCD server.
-	// Requires an ingress controller (nginx or traefik) to be installed.
+	// Requires Traefik ingress controller to be installed.
 	IngressEnabled bool `mapstructure:"ingress_enabled" yaml:"ingress_enabled"`
 
 	// IngressHost is the hostname for the ArgoCD server Ingress.
@@ -228,7 +226,7 @@ type ArgoCDConfig struct {
 	IngressHost string `mapstructure:"ingress_host" yaml:"ingress_host"`
 
 	// IngressClassName specifies the IngressClass to use.
-	// Default: "nginx" or "traefik" depending on installed controller
+	// Default: "traefik"
 	IngressClassName string `mapstructure:"ingress_class_name" yaml:"ingress_class_name"`
 
 	// IngressTLS enables TLS for the Ingress.

@@ -27,7 +27,7 @@ Both paths share: `internal/addons/`, `internal/provisioning/`, `internal/platfo
     - **addons/k8sclient/**: Kubernetes API operations (apply manifests, manage secrets)
   - **config/**: Configuration management (YAML spec, defaults, validation)
   - **platform/**: External system integrations (hcloud, talos, ssh, s3)
-  - **util/**: Reusable utilities (async, keygen, labels, naming, rdns, retry)
+  - **util/**: Reusable utilities (async, keygen, labels, naming, ptr, retry)
 - One package = one responsibility
 
 ## 2. Function Design

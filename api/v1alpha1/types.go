@@ -586,7 +586,7 @@ type NodeStatus struct {
 	// +optional
 	PhaseTransitionTime *metav1.Time `json:"phaseTransitionTime,omitempty"`
 
-	// Healthy indicates if the node is healthy (deprecated, use Phase)
+	// Healthy indicates if the node is healthy (derived from Phase == NodePhaseReady)
 	Healthy bool `json:"healthy"`
 
 	// UnhealthyReason explains why the node is unhealthy
