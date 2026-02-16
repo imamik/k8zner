@@ -62,23 +62,20 @@ func buildKubePrometheusStackValues(cfg *config.Config) helm.Values {
 func buildPrometheusValues(cfg *config.Config) helm.Values {
 	promCfg := cfg.Addons.KubePrometheusStack.Prometheus
 
-	values := helm.Values{
-		"enabled": getBoolWithDefault(promCfg.Enabled, true),
-		"prometheusSpec": helm.Values{
-			// Retention period
-			"retention":   fmt.Sprintf("%dd", getIntWithDefault(promCfg.RetentionDays, 15)),
-			"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
-			"resources":   buildResourceValues(promCfg.Resources, "500m", "512Mi", "2", "2Gi"),
-			// Service monitor selector - scrape all ServiceMonitors
-			"serviceMonitorSelectorNilUsesHelmValues": false,
-			"podMonitorSelectorNilUsesHelmValues":     false,
-			"ruleSelectorNilUsesHelmValues":           false,
-		},
+	prometheusSpec := helm.Values{
+		// Retention period
+		"retention":   fmt.Sprintf("%dd", getIntWithDefault(promCfg.RetentionDays, 15)),
+		"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
+		"resources":   buildResourceValues(promCfg.Resources, "500m", "512Mi", "2", "2Gi"),
+		// Service monitor selector - scrape all ServiceMonitors
+		"serviceMonitorSelectorNilUsesHelmValues": false,
+		"podMonitorSelectorNilUsesHelmValues":     false,
+		"ruleSelectorNilUsesHelmValues":           false,
 	}
 
 	// Storage configuration
 	if promCfg.Persistence.Enabled {
-		values["prometheusSpec"].(helm.Values)["storageSpec"] = helm.Values{
+		prometheusSpec["storageSpec"] = helm.Values{
 			"volumeClaimTemplate": helm.Values{
 				"spec": helm.Values{
 					"accessModes": []string{"ReadWriteOnce"},
@@ -91,6 +88,15 @@ func buildPrometheusValues(cfg *config.Config) helm.Values {
 				},
 			},
 		}
+	} else {
+		// Explicitly disable persistence with empty storageSpec
+		// This ensures emptyDir is used (ephemeral storage)
+		prometheusSpec["storageSpec"] = helm.Values{}
+	}
+
+	values := helm.Values{
+		"enabled":        getBoolWithDefault(promCfg.Enabled, true),
+		"prometheusSpec": prometheusSpec,
 	}
 
 	// Ingress configuration
@@ -187,6 +193,11 @@ func buildGrafanaValues(cfg *config.Config) helm.Values {
 			"size":             getStringWithDefault(grafanaCfg.Persistence.Size, "10Gi"),
 			"storageClassName": grafanaCfg.Persistence.StorageClass,
 		}
+	} else {
+		// Explicitly disable persistence
+		values["persistence"] = helm.Values{
+			"enabled": false,
+		}
 	}
 
 	// Ingress configuration
@@ -237,21 +248,26 @@ func buildGrafanaIngress(cfg *config.Config) helm.Values {
 func buildAlertmanagerValues(cfg *config.Config) helm.Values {
 	alertCfg := cfg.Addons.KubePrometheusStack.Alertmanager
 
-	values := helm.Values{
-		"enabled": getBoolWithDefault(alertCfg.Enabled, true),
-		"alertmanagerSpec": helm.Values{
-			"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
-			// Resource defaults
-			"resources": helm.Values{
-				"requests": helm.Values{
-					"cpu":    "50m",
-					"memory": "64Mi",
-				},
-				"limits": helm.Values{
-					"memory": "128Mi",
-				},
+	alertmanagerSpec := helm.Values{
+		"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
+		// Resource defaults
+		"resources": helm.Values{
+			"requests": helm.Values{
+				"cpu":    "50m",
+				"memory": "64Mi",
+			},
+			"limits": helm.Values{
+				"memory": "128Mi",
 			},
 		},
+		// Explicitly disable persistence with empty storage
+		// This ensures emptyDir is used (ephemeral storage)
+		"storage": helm.Values{},
+	}
+
+	values := helm.Values{
+		"enabled":            getBoolWithDefault(alertCfg.Enabled, true),
+		"alertmanagerSpec":   alertmanagerSpec,
 	}
 
 	return values

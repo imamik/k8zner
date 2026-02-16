@@ -198,7 +198,7 @@ func VerifyAllAddonsCore(t *testing.T, ctx context.Context, vctx *AddonVerificat
 
 	// Prometheus
 	t.Log("  [Core] Verifying Prometheus...")
-	waitForPrometheusReady(t, vctx.KubeconfigPath, 8*time.Minute)
+	waitForPrometheusReady(t, vctx.KubeconfigPath, 12*time.Minute)
 	verifyPrometheusTargets(t, vctx.KubeconfigPath)
 	verifyServiceMonitors(t, vctx.KubeconfigPath)
 

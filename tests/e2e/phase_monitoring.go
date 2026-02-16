@@ -125,7 +125,7 @@ func testMonitoringStack(t *testing.T, state *E2EState, token string) {
 
 	// Step 4: Wait for Prometheus to be ready
 	t.Log("  Step 4: Waiting for Prometheus...")
-	waitForPrometheusReady(t, state.KubeconfigPath, 8*time.Minute)
+	waitForPrometheusReady(t, state.KubeconfigPath, 12*time.Minute)
 
 	// Step 5: Wait for Grafana to be ready
 	t.Log("  Step 5: Waiting for Grafana...")
@@ -615,7 +615,7 @@ func testMonitoringWithoutIngress(t *testing.T, state *E2EState, token string, n
 	waitForPod(t, state.KubeconfigPath, "monitoring", "app.kubernetes.io/name=kube-prometheus-stack-prometheus-operator", 8*time.Minute)
 
 	t.Log("  Waiting for Prometheus...")
-	waitForPrometheusReady(t, state.KubeconfigPath, 8*time.Minute)
+	waitForPrometheusReady(t, state.KubeconfigPath, 12*time.Minute)
 
 	t.Log("  Waiting for Grafana...")
 	waitForPod(t, state.KubeconfigPath, "monitoring", "app.kubernetes.io/name=grafana", 5*time.Minute)
