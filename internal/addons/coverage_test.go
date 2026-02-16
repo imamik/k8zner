@@ -338,9 +338,9 @@ func TestBuildTraefikValues_CustomHelmValues(t *testing.T) {
 
 func TestBuildTraefikDeployment(t *testing.T) {
 	t.Parallel()
-	deployment := buildTraefikDeployment(3, "DaemonSet")
+	deployment := buildTraefikDeployment(3)
 	assert.Equal(t, true, deployment["enabled"])
-	assert.Equal(t, "DaemonSet", deployment["kind"])
+	assert.Equal(t, "Deployment", deployment["kind"])
 	assert.Equal(t, 3, deployment["replicas"])
 
 	pdb := deployment["podDisruptionBudget"].(helm.Values)
@@ -354,13 +354,6 @@ func TestBuildTraefikIngressClass(t *testing.T) {
 	assert.Equal(t, true, ic["enabled"])
 	assert.Equal(t, true, ic["isDefaultClass"])
 	assert.Equal(t, "my-traefik", ic["name"])
-}
-
-func TestBuildTraefikIngressRoute(t *testing.T) {
-	t.Parallel()
-	ir := buildTraefikIngressRoute()
-	dashboard := ir["dashboard"].(helm.Values)
-	assert.Equal(t, false, dashboard["enabled"])
 }
 
 func TestBuildTraefikProviders(t *testing.T) {

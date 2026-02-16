@@ -57,8 +57,8 @@ func TestExpandSpec_ControlPlane_DevMode(t *testing.T) {
 	if cp.Count != 1 {
 		t.Errorf("ControlPlane count = %d, want 1", cp.Count)
 	}
-	if cp.ServerType != DefaultControlPlaneServerType {
-		t.Errorf("ControlPlane type = %q, want %q", cp.ServerType, DefaultControlPlaneServerType)
+	if cp.ServerType != "cx23" {
+		t.Errorf("ControlPlane type = %q, want %q", cp.ServerType, "cx23")
 	}
 	if cp.Location != "nbg1" {
 		t.Errorf("ControlPlane location = %q, want %q", cp.Location, "nbg1")
@@ -419,8 +419,8 @@ func TestExpandSpec_Traefik_DevMode(t *testing.T) {
 		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
-	if expanded.Addons.Traefik.Kind != "Deployment" {
-		t.Errorf("Traefik.Kind = %q, want %q", expanded.Addons.Traefik.Kind, "Deployment")
+	if !expanded.Addons.Traefik.Enabled {
+		t.Errorf("Traefik.Enabled = false, want true")
 	}
 }
 
@@ -441,8 +441,8 @@ func TestExpandSpec_Traefik_HAMode(t *testing.T) {
 		t.Fatalf("ExpandSpec() error = %v", err)
 	}
 
-	if expanded.Addons.Traefik.Kind != "Deployment" {
-		t.Errorf("Traefik.Kind = %q, want %q", expanded.Addons.Traefik.Kind, "Deployment")
+	if !expanded.Addons.Traefik.Enabled {
+		t.Errorf("Traefik.Enabled = false, want true")
 	}
 }
 

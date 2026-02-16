@@ -101,7 +101,6 @@ jobs:
             ./cmd/... \
             ./internal/addons/... \
             ./internal/config/... \
-            ./internal/operator/addons/... \
             ./internal/operator/provisioning/... \
             ./internal/util/... \
             ./internal/platform/... \
@@ -137,8 +136,7 @@ jobs:
       - name: Run integration tests
         run: |
           go test -v -coverprofile=coverage-integration.txt -covermode=atomic \
-            ./internal/provisioning/cluster/... \
-            ./internal/provisioning/upgrade/...
+            ./internal/provisioning/cluster/...
 
       - name: Upload integration coverage
         uses: actions/upload-artifact@v6

@@ -40,7 +40,7 @@ type Client interface {
 	HasReadyEndpoints(ctx context.Context, namespace, serviceName string) (bool, error)
 
 	// HasIngressClass checks if an IngressClass with the given name exists.
-	// This is useful for checking Traefik/nginx readiness before creating Ingress resources.
+	// This is useful for checking Traefik readiness before creating Ingress resources.
 	HasIngressClass(ctx context.Context, name string) (bool, error)
 }
 

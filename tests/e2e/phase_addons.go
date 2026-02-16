@@ -12,9 +12,7 @@ import (
 	"time"
 )
 
-// This file contains verification functions for addons that are used by the operator-centric tests.
-// The deprecated phaseAddons() and phaseAddonsAdvanced() functions have been removed.
-// Tests now use CreateClusterViaOperator() and verify addon status via the K8znerCluster CRD.
+// This file contains verification functions for addons used by operator-centric E2E tests.
 
 // mockTalosGenerator is a mock for E2E testing
 type mockTalosGenerator struct{}

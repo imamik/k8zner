@@ -170,7 +170,7 @@ func expandAddons(cfg *Spec, vm VersionMatrix) AddonsConfig {
 		// Cilium CNI - always enabled with kube-proxy replacement
 		Cilium: DefaultCilium(),
 
-		// Traefik ingress - always enabled (replaces ingress-nginx)
+		// Traefik ingress - always enabled
 		Traefik: DefaultTraefik(true),
 
 		// cert-manager - always enabled

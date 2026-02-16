@@ -20,7 +20,6 @@ func DefaultCilium() CiliumConfig {
 func DefaultTraefik(enabled bool) TraefikConfig {
 	return TraefikConfig{
 		Enabled:               enabled,
-		Kind:                  "Deployment",
 		ExternalTrafficPolicy: "Cluster",
 		IngressClass:          "traefik",
 	}

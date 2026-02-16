@@ -478,52 +478,6 @@ func TestSpec_HasDomain(t *testing.T) {
 	}
 }
 
-func TestSpec_TotalWorkerVCPU(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name    string
-		workers WorkerSpec
-		want    int
-	}{
-		{"3x cx32", WorkerSpec{Count: 3, Size: SizeCX32}, 12},
-		{"5x cx52", WorkerSpec{Count: 5, Size: SizeCX52}, 80},
-		{"1x cx22", WorkerSpec{Count: 1, Size: SizeCX22}, 2},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			c := Spec{Workers: tt.workers}
-			if got := c.TotalWorkerVCPU(); got != tt.want {
-				t.Errorf("Spec.TotalWorkerVCPU() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestSpec_TotalWorkerRAMGB(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name    string
-		workers WorkerSpec
-		want    int
-	}{
-		{"3x cx32", WorkerSpec{Count: 3, Size: SizeCX32}, 24},
-		{"5x cx52", WorkerSpec{Count: 5, Size: SizeCX52}, 160},
-		{"1x cx22", WorkerSpec{Count: 1, Size: SizeCX22}, 4},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			c := Spec{Workers: tt.workers}
-			if got := c.TotalWorkerRAMGB(); got != tt.want {
-				t.Errorf("Spec.TotalWorkerRAMGB() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestSpec_HasBackup(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

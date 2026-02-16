@@ -95,12 +95,12 @@ spec:
   # Control plane configuration
   controlPlanes:
     count: 3          # 1 for dev, 3 for HA
-    size: cx22
+    size: cx23
 
   # Worker configuration
   workers:
     count: 3
-    size: cx32
+    size: cx33
     minCount: 1       # Never scale below this
     maxCount: 10      # Never scale above this
 

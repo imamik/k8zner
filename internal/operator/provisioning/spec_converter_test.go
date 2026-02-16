@@ -804,7 +804,6 @@ func TestSpecToConfig_FullRoundTrip(t *testing.T) {
 
 	// Optional addons
 	assert.True(t, cfg.Addons.Traefik.Enabled)
-	assert.Equal(t, "Deployment", cfg.Addons.Traefik.Kind)
 	assert.True(t, cfg.Addons.CertManager.Enabled)
 	assert.True(t, cfg.Addons.MetricsServer.Enabled)
 

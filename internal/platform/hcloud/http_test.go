@@ -1336,40 +1336,6 @@ func TestRealClient_DeleteImage_WithHTTPMock(t *testing.T) {
 	})
 }
 
-func TestRealClient_SetServerRDNS_InvalidIP(t *testing.T) {
-	// Test that invalid IP addresses are rejected before making API calls
-	ts := newTestServer()
-	defer ts.close()
-
-	client := ts.realClient()
-	ctx := context.Background()
-
-	err := client.SetServerRDNS(ctx, 123, "invalid-ip", "server.example.com")
-	if err == nil {
-		t.Fatal("expected error for invalid IP address")
-	}
-	if err.Error() != "invalid IP address: invalid-ip" {
-		t.Errorf("unexpected error message: %v", err)
-	}
-}
-
-func TestRealClient_SetLoadBalancerRDNS_InvalidIP(t *testing.T) {
-	// Test that invalid IP addresses are rejected before making API calls
-	ts := newTestServer()
-	defer ts.close()
-
-	client := ts.realClient()
-	ctx := context.Background()
-
-	err := client.SetLoadBalancerRDNS(ctx, 301, "not-an-ip", "lb.example.com")
-	if err == nil {
-		t.Fatal("expected error for invalid IP address")
-	}
-	if err.Error() != "invalid IP address: not-an-ip" {
-		t.Errorf("unexpected error message: %v", err)
-	}
-}
-
 func TestRealClient_AttachToNetwork_WithHTTPMock(t *testing.T) {
 	t.Run("attaches LB to network", func(t *testing.T) {
 		ts := newTestServer()

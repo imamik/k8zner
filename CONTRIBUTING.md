@@ -177,7 +177,7 @@ k8zner
 
 ### Key Patterns
 
-- **Pipeline Pattern** — Provisioning uses sequential phases via `Pipeline`
+- **Phase Pattern** — Provisioning uses sequential phases via `RunPhases`
 - **Generic Operations** — `DeleteOperation[T]` and `EnsureOperation[T]` reduce boilerplate
 - **Interface-Based Design** — External dependencies use interfaces for testability
 

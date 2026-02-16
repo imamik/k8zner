@@ -18,7 +18,7 @@ type State struct {
 	Firewall     *hcloud.Firewall
 	LoadBalancer *hcloud.LoadBalancer // API load balancer (for control plane)
 	PublicIP     string               // Current execution environment's public IPv4
-	SSHKeyID     int64                // SSH key ID (for autoscaler addon)
+	SSHKeyID     int64                // SSH key ID (for operator server creation)
 
 	// Compute results (populated by compute provisioner)
 	ControlPlaneIPs       map[string]string // nodeName -> publicIP

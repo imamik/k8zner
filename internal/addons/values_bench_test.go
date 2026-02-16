@@ -39,7 +39,6 @@ func BenchmarkBuildTraefikValues_LargeCluster(b *testing.B) {
 		Addons: config.AddonsConfig{
 			Traefik: config.TraefikConfig{
 				Enabled:               true,
-				Kind:                  "Deployment",
 				ExternalTrafficPolicy: "Cluster",
 				IngressClass:          "traefik",
 			},
@@ -61,7 +60,6 @@ func BenchmarkBuildTraefikValues_WithCustomValues(b *testing.B) {
 		Addons: config.AddonsConfig{
 			Traefik: config.TraefikConfig{
 				Enabled:               true,
-				Kind:                  "Deployment",
 				ExternalTrafficPolicy: "Cluster",
 				IngressClass:          "traefik",
 				Helm: config.HelmChartConfig{
