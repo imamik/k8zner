@@ -62,9 +62,8 @@ func TestEnsureServer_CreatesNewServer(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	info, err := p.ensureServer(ctx, ServerSpec{
+	info, err := ensureServer(ctx, ServerSpec{
 		Name:     "test-cluster-cp-1",
 		Type:     "cx21",
 		Location: "nbg1",
@@ -102,9 +101,8 @@ func TestEnsureServer_ReturnsExistingServer(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	info, err := p.ensureServer(ctx, ServerSpec{
+	info, err := ensureServer(ctx, ServerSpec{
 		Name:     "test-cluster-cp-1",
 		Type:     "cx21",
 		Location: "nbg1",
@@ -139,9 +137,8 @@ func TestEnsureServer_DualStackDefaultsWhenNoneSet(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	_, err := p.ensureServer(ctx, ServerSpec{
+	_, err := ensureServer(ctx, ServerSpec{
 		Name:             "test-cluster-cp-1",
 		Type:             "cx21",
 		Location:         "nbg1",
@@ -178,10 +175,9 @@ func TestEnsureServer_RespectsExplicitIPConfig(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
 	// IPv4 only
-	_, err := p.ensureServer(ctx, ServerSpec{
+	_, err := ensureServer(ctx, ServerSpec{
 		Name:             "test-cluster-cp-1",
 		Type:             "cx21",
 		Location:         "nbg1",
@@ -214,9 +210,8 @@ func TestEnsureServer_CustomImage(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	_, err := p.ensureServer(ctx, ServerSpec{
+	_, err := ensureServer(ctx, ServerSpec{
 		Name:     "test-cluster-w-1",
 		Type:     "cx21",
 		Location: "nbg1",
@@ -245,9 +240,7 @@ func TestEnsureServer_NilNetworkState(t *testing.T) {
 	ctx := createTestContext(t, mockInfra, cfg)
 	ctx.State.Network = nil // No network
 
-	p := NewProvisioner()
-
-	_, err := p.ensureServer(ctx, ServerSpec{
+	_, err := ensureServer(ctx, ServerSpec{
 		Name:     "test-cluster-cp-1",
 		Type:     "cx21",
 		Location: "nbg1",
@@ -269,9 +262,8 @@ func TestEnsureServer_GetServerIDError(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	_, err := p.ensureServer(ctx, ServerSpec{
+	_, err := ensureServer(ctx, ServerSpec{
 		Name: "test-cluster-cp-1",
 		Type: "cx21",
 		Role: "control-plane",
@@ -298,9 +290,8 @@ func TestEnsureServer_CreateServerError(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	_, err := p.ensureServer(ctx, ServerSpec{
+	_, err := ensureServer(ctx, ServerSpec{
 		Name:     "test-cluster-cp-1",
 		Type:     "cx21",
 		Location: "nbg1",
@@ -334,9 +325,8 @@ func TestEnsureServer_LabelsIncludeExtraAndTestID(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
 
-	_, err := p.ensureServer(ctx, ServerSpec{
+	_, err := ensureServer(ctx, ServerSpec{
 		Name:        "test-cluster-w-1",
 		Type:        "cx21",
 		Location:    "nbg1",

@@ -14,7 +14,7 @@ const phase = "image"
 
 // EnsureAllImages pre-builds all required Talos images in parallel.
 // This is called early in reconciliation to avoid sequential image building during server creation.
-func (p *Provisioner) EnsureAllImages(ctx *provisioning.Context) error {
+func EnsureAllImages(ctx *provisioning.Context) error {
 	ctx.Observer.Printf("[%s] Pre-building all required Talos images...", phase)
 
 	// Collect all unique server types from control plane and worker pools
@@ -68,8 +68,8 @@ func (p *Provisioner) EnsureAllImages(ctx *provisioning.Context) error {
 			Name: fmt.Sprintf("image-%s", arch),
 			Func: func(_ context.Context) error {
 				// Get architecture-specific server type and location from config
-				serverType, location := p.getImageBuilderConfig(ctx, arch)
-				return p.ensureImageForArch(ctx, arch, talosVersion, k8sVersion, serverType, location)
+				serverType, location := getImageBuilderConfig(ctx, arch)
+				return ensureImageForArch(ctx, arch, talosVersion, k8sVersion, serverType, location)
 			},
 		}
 	}
@@ -93,7 +93,7 @@ func getKeys(m map[string]bool) []string {
 
 // getImageBuilderConfig returns the server type and location for building images of the given architecture.
 // Uses config values if set, otherwise returns defaults (architecture-appropriate server type, nbg1 location).
-func (p *Provisioner) getImageBuilderConfig(ctx *provisioning.Context, arch string) (serverType, location string) {
+func getImageBuilderConfig(ctx *provisioning.Context, arch string) (serverType, location string) {
 	// Get location from first control plane node as default
 	location = "nbg1"
 	if len(ctx.Config.ControlPlane.NodePools) > 0 && ctx.Config.ControlPlane.NodePools[0].Location != "" {
@@ -122,7 +122,7 @@ func (p *Provisioner) getImageBuilderConfig(ctx *provisioning.Context, arch stri
 }
 
 // ensureImageForArch ensures a Talos image exists for the given architecture.
-func (p *Provisioner) ensureImageForArch(ctx *provisioning.Context, arch, talosVersion, k8sVersion, serverType, location string) error {
+func ensureImageForArch(ctx *provisioning.Context, arch, talosVersion, k8sVersion, serverType, location string) error {
 	labels := map[string]string{
 		"os":            "talos",
 		"talos-version": talosVersion,
@@ -142,12 +142,12 @@ func (p *Provisioner) ensureImageForArch(ctx *provisioning.Context, arch, talosV
 	}
 
 	// Build image, trying smallest/default server type and cross-region fallback.
-	builder := p.createImageBuilder(ctx)
+	builder := createImageBuilder(ctx)
 	if builder == nil {
 		return fmt.Errorf("image builder not available")
 	}
 
-	snapshotID, buildLocation, err := p.buildImageWithFallback(ctx, builder, arch, talosVersion, k8sVersion, serverType, location, labels)
+	snapshotID, buildLocation, err := buildImageWithFallback(ctx, builder, arch, talosVersion, k8sVersion, serverType, location, labels)
 	if err != nil {
 		return fmt.Errorf("failed to build image: %w", err)
 	}
@@ -156,7 +156,7 @@ func (p *Provisioner) ensureImageForArch(ctx *provisioning.Context, arch, talosV
 	return nil
 }
 
-func (p *Provisioner) buildImageWithFallback(ctx *provisioning.Context, builder *Builder, arch, talosVersion, k8sVersion, serverType, preferredLocation string, labels map[string]string) (snapshotID, location string, err error) {
+func buildImageWithFallback(ctx *provisioning.Context, builder *Builder, arch, talosVersion, k8sVersion, serverType, preferredLocation string, labels map[string]string) (snapshotID, location string, err error) {
 	// Always prefer the smallest default build machine when not explicitly configured.
 	buildServerType := serverType
 	if buildServerType == "" {
@@ -202,7 +202,7 @@ func isRegionCapacityOrAvailabilityError(err error) bool {
 }
 
 // createImageBuilder creates an image builder instance.
-func (p *Provisioner) createImageBuilder(ctx *provisioning.Context) *Builder {
+func createImageBuilder(ctx *provisioning.Context) *Builder {
 	// Pass nil for communicator factory - the builder will use its internal
 	// SSH key generation and create its own SSH client with those keys
 	return NewBuilder(ctx.Infra)

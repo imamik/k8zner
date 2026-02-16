@@ -11,7 +11,7 @@ import (
 // K8znerClusterSpec defines the desired state of a K8zner-managed cluster.
 type K8znerClusterSpec struct {
 	// Region is the Hetzner Cloud region (e.g., fsn1, nbg1, hel1)
-	// +kubebuilder:validation:Enum=fsn1;nbg1;hel1;ash;hil
+	// +kubebuilder:validation:Enum=fsn1;nbg1;hel1
 	Region string `json:"region"`
 
 	// ControlPlanes defines the control plane configuration

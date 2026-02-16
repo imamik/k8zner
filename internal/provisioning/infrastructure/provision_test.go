@@ -82,9 +82,7 @@ func TestProvision_Success(t *testing.T) {
 	setupLBMock(mockInfra)
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err := p.Provision(ctx)
+	err := Provision(ctx)
 	require.NoError(t, err)
 	assert.NotNil(t, ctx.State.Network)
 }
@@ -99,9 +97,7 @@ func TestProvision_NetworkError(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err := p.Provision(ctx)
+	err := Provision(ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "network")
 }
@@ -117,9 +113,7 @@ func TestProvision_FirewallError(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err := p.Provision(ctx)
+	err := Provision(ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "firewall")
 }
@@ -136,9 +130,7 @@ func TestProvision_LoadBalancerError(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err := p.Provision(ctx)
+	err := Provision(ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "LB type unavailable")
 }
@@ -155,9 +147,7 @@ func TestProvisionNetwork_EnsureNetworkError(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err := p.ProvisionNetwork(ctx)
+	err := ProvisionNetwork(ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to ensure network")
 }
@@ -176,9 +166,7 @@ func TestProvisionNetwork_SubnetError(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err := p.ProvisionNetwork(ctx)
+	err := ProvisionNetwork(ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "subnet")
 }
@@ -202,9 +190,7 @@ func TestProvisionNetwork_PublicIPDetection(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err := p.ProvisionNetwork(ctx)
+	err := ProvisionNetwork(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "203.0.113.5", ctx.State.PublicIP)
 }
@@ -228,10 +214,8 @@ func TestProvisionNetwork_PublicIPDetectionError(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
 	// Public IP failure is non-fatal (warning only)
-	err := p.ProvisionNetwork(ctx)
+	err := ProvisionNetwork(ctx)
 	require.NoError(t, err)
 	assert.Empty(t, ctx.State.PublicIP, "should remain empty on error")
 }
@@ -259,9 +243,7 @@ func TestProvisionNetwork_WorkerSubnetError(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err := p.ProvisionNetwork(ctx)
+	err := ProvisionNetwork(ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "worker subnet")
 }
@@ -278,9 +260,7 @@ func TestProvisionFirewall_EnsureError(t *testing.T) {
 	}
 
 	ctx := createTestContext(t, mockInfra, cfg)
-	p := NewProvisioner()
-
-	err := p.ProvisionFirewall(ctx)
+	err := ProvisionFirewall(ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "firewall")
 }
@@ -297,8 +277,7 @@ func TestProvisionLoadBalancers_NoCPNodes(t *testing.T) {
 	ctx := createTestContext(t, mockInfra, cfg)
 	ctx.State.Network = &hcloud.Network{ID: 1, IPRange: ipNet}
 
-	p := NewProvisioner()
-	err := p.ProvisionLoadBalancers(ctx)
+	err := ProvisionLoadBalancers(ctx)
 
 	// Should succeed with no LBs needed
 	require.NoError(t, err)
@@ -326,8 +305,7 @@ func TestProvisionLoadBalancers_ServiceConfigError(t *testing.T) {
 		return fmt.Errorf("service config failed")
 	}
 
-	p := NewProvisioner()
-	err := p.ProvisionLoadBalancers(ctx)
+	err := ProvisionLoadBalancers(ctx)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "service")
@@ -358,8 +336,7 @@ func TestProvisionLoadBalancers_AttachNetworkError(t *testing.T) {
 		return fmt.Errorf("network attachment failed")
 	}
 
-	p := NewProvisioner()
-	err := p.ProvisionLoadBalancers(ctx)
+	err := ProvisionLoadBalancers(ctx)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "network")

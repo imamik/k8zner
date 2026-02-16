@@ -270,8 +270,6 @@ spec:
                 - fsn1
                 - nbg1
                 - hel1
-                - ash
-                - hil
                 type: string
               talos:
                 description: Talos specifies the Talos configuration

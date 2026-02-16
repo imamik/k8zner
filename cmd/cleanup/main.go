@@ -13,9 +13,6 @@
 //
 //	# Clean up with multiple labels
 //	cleanup -label cluster=my-cluster -label environment=test
-//
-//	# Dry run (list resources without deleting)
-//	cleanup -test-id e2e-seq-123456 -dry-run
 package main
 
 import (
@@ -46,7 +43,6 @@ func main() {
 	var (
 		testID      = flag.String("test-id", "", "Test ID label to clean up (e.g., e2e-seq-123456)")
 		clusterName = flag.String("cluster", "", "Cluster name to clean up")
-		dryRun      = flag.Bool("dry-run", false, "List resources without deleting them")
 		labels      labelFlags
 	)
 
@@ -90,15 +86,6 @@ func main() {
 	// Log what we're doing
 	log.Printf("Cleanup utility starting...")
 	log.Printf("Label selector: %v", labelSelector)
-	if *dryRun {
-		log.Printf("DRY RUN MODE: No resources will be deleted")
-	}
-
-	// In dry-run mode, we'd need to implement a list-only version
-	// For now, we'll just show what would be deleted
-	if *dryRun {
-		log.Fatal("Error: Dry-run mode not yet implemented. Remove -dry-run flag to proceed with cleanup.")
-	}
 
 	// Perform cleanup
 	if err := client.CleanupByLabel(ctx, labelSelector); err != nil {

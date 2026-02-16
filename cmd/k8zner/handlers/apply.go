@@ -25,11 +25,6 @@ import (
 	hcloudInternal "github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/platform/talos"
 	"github.com/imamik/k8zner/internal/provisioning"
-	clusterProv "github.com/imamik/k8zner/internal/provisioning/cluster"
-	"github.com/imamik/k8zner/internal/provisioning/compute"
-	"github.com/imamik/k8zner/internal/provisioning/destroy"
-	"github.com/imamik/k8zner/internal/provisioning/image"
-	"github.com/imamik/k8zner/internal/provisioning/infrastructure"
 	"github.com/imamik/k8zner/internal/ui/tui"
 )
 
@@ -56,11 +51,6 @@ type InfrastructureInfo struct {
 	LoadBalancerIP        string
 	LoadBalancerPrivateIP string
 	SSHKeyID              int64
-}
-
-// Provisioner interface for testing - matches provisioning.Phase.
-type Provisioner interface {
-	Provision(ctx *provisioning.Context) error
 }
 
 // Factory function variables - can be replaced in tests for dependency injection.
@@ -90,12 +80,6 @@ var (
 	// findV2ConfigFile finds the v2 config file (for testing injection).
 	findV2ConfigFile = config.FindConfigFile
 
-	// Factory functions for provisioners - can be replaced in tests.
-	newInfraProvisioner    = infrastructure.NewProvisioner
-	newImageProvisioner    = image.NewProvisioner
-	newComputeProvisioner  = compute.NewProvisioner
-	newClusterProvisioner  = clusterProv.NewProvisioner
-	newDestroyProvisioner  = func() Provisioner { return destroy.NewProvisioner() }
 	newProvisioningContext = provisioning.NewContext
 )
 

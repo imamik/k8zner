@@ -738,10 +738,6 @@ func TestNewPhaseAdapter(t *testing.T) {
 
 	require.NotNil(t, adapter)
 	assert.NotNil(t, adapter.client)
-	assert.NotNil(t, adapter.infraProvisioner)
-	assert.NotNil(t, adapter.imageProvisioner)
-	assert.NotNil(t, adapter.computeProvisioner)
-	assert.NotNil(t, adapter.clusterProvisioner)
 }
 
 func TestNewPhaseAdapter_NilClient(t *testing.T) {
@@ -750,10 +746,6 @@ func TestNewPhaseAdapter_NilClient(t *testing.T) {
 
 	require.NotNil(t, adapter)
 	assert.Nil(t, adapter.client)
-	assert.NotNil(t, adapter.infraProvisioner)
-	assert.NotNil(t, adapter.imageProvisioner)
-	assert.NotNil(t, adapter.computeProvisioner)
-	assert.NotNil(t, adapter.clusterProvisioner)
 }
 
 // --- AttachBootstrapNodeToInfrastructure tests ---

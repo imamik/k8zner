@@ -127,7 +127,7 @@ func TestBuildAddonsConfig_AlwaysEnabled(t *testing.T) {
 	assert.Equal(t, config.DefaultGatewayAPICRDs(), addons.GatewayAPICRDs, "GatewayAPICRDs uses shared default")
 	assert.Equal(t, config.DefaultPrometheusOperatorCRDs(), addons.PrometheusOperatorCRDs, "PrometheusOperatorCRDs uses shared default")
 	assert.True(t, addons.TalosCCM.Enabled, "TalosCCM always enabled")
-	assert.Equal(t, "v1.11.0", addons.TalosCCM.Version, "TalosCCM version pinned")
+	assert.Equal(t, config.DefaultVersionMatrix().TalosCCM, addons.TalosCCM.Version, "TalosCCM version from DefaultVersionMatrix")
 	assert.Equal(t, config.DefaultCilium(), addons.Cilium, "Cilium uses shared default")
 	assert.Equal(t, config.DefaultCCM(), addons.CCM, "CCM uses shared default")
 	assert.Equal(t, config.DefaultCSI(), addons.CSI, "CSI uses shared default (includes DefaultStorageClass)")
@@ -254,6 +254,8 @@ func TestConfigureBackup_EnabledWithCreds(t *testing.T) {
 	assert.Equal(t, "my-backups", cfg.Addons.TalosBackup.S3Bucket)
 	assert.Equal(t, "eu-central-1", cfg.Addons.TalosBackup.S3Region)
 	assert.True(t, cfg.Addons.TalosBackup.EncryptionDisabled, "no age key in operator path")
+	assert.Equal(t, "etcd-backups", cfg.Addons.TalosBackup.S3Prefix, "S3Prefix from DefaultTalosBackup")
+	assert.True(t, cfg.Addons.TalosBackup.EnableCompression, "EnableCompression from DefaultTalosBackup")
 }
 
 // --- Cloudflare configuration ---
@@ -453,6 +455,9 @@ func TestExpandMonitoringFromSpec(t *testing.T) {
 				assert.Equal(t, tt.expectHost, result.Grafana.IngressHost)
 				assert.Equal(t, "traefik", result.Grafana.IngressClassName)
 				assert.True(t, result.Grafana.IngressTLS)
+			}
+			if tt.expectEnabled {
+				assert.Equal(t, config.DefaultPrometheusPersistence(), result.Prometheus.Persistence, "Prometheus persistence from shared default")
 			}
 		})
 	}
@@ -830,6 +835,11 @@ func TestSpecToConfig_FullRoundTrip(t *testing.T) {
 	assert.True(t, cfg.Addons.TalosBackup.Enabled)
 	assert.Equal(t, "0 */6 * * *", cfg.Addons.TalosBackup.Schedule)
 	assert.True(t, cfg.Addons.TalosBackup.EncryptionDisabled)
+	assert.Equal(t, "etcd-backups", cfg.Addons.TalosBackup.S3Prefix, "S3Prefix from DefaultTalosBackup")
+	assert.True(t, cfg.Addons.TalosBackup.EnableCompression, "EnableCompression from DefaultTalosBackup")
+
+	// Prometheus persistence (bug fix)
+	assert.Equal(t, config.DefaultPrometheusPersistence(), cfg.Addons.KubePrometheusStack.Prometheus.Persistence, "Prometheus persistence from shared default")
 
 	// Network defaults applied
 	assert.Equal(t, "10.0.0.0/16", cfg.Network.IPv4CIDR)

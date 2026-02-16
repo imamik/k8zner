@@ -153,55 +153,6 @@ func TestBuildOperatorValues(t *testing.T) {
 		assert.Equal(t, "refactor-k8s-operator-v3", image["tag"])
 	})
 
-	t.Run("hostNetwork mode", func(t *testing.T) {
-		cfg := &config.Config{
-			HCloudToken: "test-token",
-			ControlPlane: config.ControlPlaneConfig{
-				NodePools: []config.ControlPlaneNodePool{
-					{Count: 3},
-				},
-			},
-			Addons: config.AddonsConfig{
-				Operator: config.OperatorConfig{
-					Enabled:     true,
-					Version:     "v1.0.0",
-					HostNetwork: true,
-				},
-			},
-		}
-
-		values := buildOperatorValues(cfg)
-
-		assert.Equal(t, true, values["hostNetwork"])
-		assert.Equal(t, "Default", values["dnsPolicy"])
-		// With hostNetwork=true and 3 CPs, replicas should be 2 (min of 2, 3)
-		assert.Equal(t, 2, values["replicaCount"])
-	})
-
-	t.Run("hostNetwork with 1 control plane caps replicas", func(t *testing.T) {
-		cfg := &config.Config{
-			HCloudToken: "test-token",
-			ControlPlane: config.ControlPlaneConfig{
-				NodePools: []config.ControlPlaneNodePool{
-					{Count: 1},
-				},
-			},
-			Addons: config.AddonsConfig{
-				Operator: config.OperatorConfig{
-					Enabled:     true,
-					Version:     "v1.0.0",
-					HostNetwork: true,
-				},
-			},
-		}
-
-		values := buildOperatorValues(cfg)
-
-		assert.Equal(t, true, values["hostNetwork"])
-		// With hostNetwork=true and 1 CP, replicas capped at 1
-		assert.Equal(t, 1, values["replicaCount"])
-	})
-
 	t.Run("monitoring enabled adds ServiceMonitor", func(t *testing.T) {
 		cfg := &config.Config{
 			HCloudToken: "test-token",

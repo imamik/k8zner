@@ -10,7 +10,7 @@ import (
 )
 
 // ProvisionWorkers provisions worker node pools.
-func (p *Provisioner) ProvisionWorkers(ctx *provisioning.Context) error {
+func ProvisionWorkers(ctx *provisioning.Context) error {
 	ctx.Observer.Printf("[%s] Reconciling worker pools...", phase)
 
 	// Parallelize worker pool provisioning
@@ -31,7 +31,7 @@ func (p *Provisioner) ProvisionWorkers(ctx *provisioning.Context) error {
 		tasks[i] = async.Task{
 			Name: fmt.Sprintf("worker-pool-%s", pool.Name),
 			Func: func(_ context.Context) error {
-				poolResult, err := p.reconcileNodePool(ctx, NodePoolSpec{
+				poolResult, err := reconcileNodePool(ctx, NodePoolSpec{
 					Name:             pool.Name,
 					Count:            pool.Count,
 					ServerType:       pool.ServerType,

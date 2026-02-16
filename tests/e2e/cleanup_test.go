@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -41,15 +42,14 @@ func cleanupE2ECluster(t *testing.T, state *E2EState) {
 	// Wait a moment for resources to be fully deleted
 	time.Sleep(5 * time.Second)
 
-	// Verify cleanup - count remaining resources
-	remaining, err := state.Client.CountResourcesByLabel(ctx, labelSelector)
-	if err != nil {
-		t.Logf("[Cleanup] Warning: Failed to count remaining resources: %v", err)
-	}
+	// Verify cleanup - count remaining resources using raw hcloud client
+	hc := newHCloudAPIClient()
+	labelString := buildLabelSelectorString(labelSelector)
+	remaining := countResources(ctx, hc, labelString)
 
 	// If resources remain, try a second cleanup pass
-	if remaining.Total() > 0 {
-		t.Logf("[Cleanup] Warning: Found %d remaining resources after first cleanup: %s", remaining.Total(), remaining.String())
+	if remaining > 0 {
+		t.Logf("[Cleanup] Warning: Found %d remaining resources after first cleanup", remaining)
 		t.Log("[Cleanup] Attempting second cleanup pass...")
 
 		// Wait longer before second pass - resources may still be in transition
@@ -61,10 +61,7 @@ func cleanupE2ECluster(t *testing.T, state *E2EState) {
 
 		// Wait and re-verify
 		time.Sleep(10 * time.Second)
-		remaining, err = state.Client.CountResourcesByLabel(ctx, labelSelector)
-		if err != nil {
-			t.Logf("[Cleanup] Warning: Failed to count remaining resources: %v", err)
-		}
+		remaining = countResources(ctx, hc, labelString)
 	}
 
 	// Cleanup snapshot separately if needed (it may not have labels in older runs)
@@ -93,32 +90,55 @@ func cleanupE2ECluster(t *testing.T, state *E2EState) {
 
 	// Final verification - FAIL the test if resources remain
 	// This is critical to prevent cost leakage from orphaned resources
-	if remaining.Total() > 0 {
-		t.Errorf("[Cleanup] CRITICAL: %d resources remain after cleanup: %s. These will incur costs!", remaining.Total(), remaining.String())
+	if remaining > 0 {
+		t.Errorf("[Cleanup] CRITICAL: %d resources remain after cleanup. These will incur costs!", remaining)
 		t.Log("[Cleanup] Remaining resources details:")
-		logRemainingResources(ctx, t, state.Client, labelSelector)
+		logRemainingResources(ctx, t, hc, labelString)
 	} else {
 		t.Log("[Cleanup] Cleanup verification passed - all resources deleted")
 	}
 }
 
-// logRemainingResources logs detailed information about remaining resources for debugging.
-func logRemainingResources(ctx context.Context, t *testing.T, client *realhcloud.RealClient, labels map[string]string) {
-	hc := client.HCloudClient()
-	labelString := buildLabelSelectorString(labels)
+// newHCloudAPIClient creates a raw hcloud client from the HCLOUD_TOKEN env var.
+func newHCloudAPIClient() *hcloud.Client {
+	return hcloud.NewClient(hcloud.WithToken(os.Getenv("HCLOUD_TOKEN")))
+}
 
-	// Log remaining servers
-	servers, _ := hc.Server.AllWithOpts(ctx, hcloud.ServerListOpts{
-		ListOpts: hcloud.ListOpts{LabelSelector: labelString},
-	})
+// countResources counts all resources matching the given label selector.
+func countResources(ctx context.Context, hc *hcloud.Client, labelString string) int {
+	opts := hcloud.ListOpts{LabelSelector: labelString}
+	total := 0
+
+	servers, _ := hc.Server.AllWithOpts(ctx, hcloud.ServerListOpts{ListOpts: opts})
+	total += len(servers)
+	volumes, _ := hc.Volume.AllWithOpts(ctx, hcloud.VolumeListOpts{ListOpts: opts})
+	total += len(volumes)
+	lbs, _ := hc.LoadBalancer.AllWithOpts(ctx, hcloud.LoadBalancerListOpts{ListOpts: opts})
+	total += len(lbs)
+	fws, _ := hc.Firewall.AllWithOpts(ctx, hcloud.FirewallListOpts{ListOpts: opts})
+	total += len(fws)
+	nets, _ := hc.Network.AllWithOpts(ctx, hcloud.NetworkListOpts{ListOpts: opts})
+	total += len(nets)
+	pgs, _ := hc.PlacementGroup.AllWithOpts(ctx, hcloud.PlacementGroupListOpts{ListOpts: opts})
+	total += len(pgs)
+	keys, _ := hc.SSHKey.AllWithOpts(ctx, hcloud.SSHKeyListOpts{ListOpts: opts})
+	total += len(keys)
+	certs, _ := hc.Certificate.AllWithOpts(ctx, hcloud.CertificateListOpts{ListOpts: opts})
+	total += len(certs)
+
+	return total
+}
+
+// logRemainingResources logs detailed information about remaining resources for debugging.
+func logRemainingResources(ctx context.Context, t *testing.T, hc *hcloud.Client, labelString string) {
+	opts := hcloud.ListOpts{LabelSelector: labelString}
+
+	servers, _ := hc.Server.AllWithOpts(ctx, hcloud.ServerListOpts{ListOpts: opts})
 	for _, s := range servers {
 		t.Logf("  - Server: %s (ID: %d, Status: %s)", s.Name, s.ID, s.Status)
 	}
 
-	// Log remaining volumes
-	volumes, _ := hc.Volume.AllWithOpts(ctx, hcloud.VolumeListOpts{
-		ListOpts: hcloud.ListOpts{LabelSelector: labelString},
-	})
+	volumes, _ := hc.Volume.AllWithOpts(ctx, hcloud.VolumeListOpts{ListOpts: opts})
 	for _, v := range volumes {
 		serverName := "detached"
 		if v.Server != nil {
@@ -127,50 +147,32 @@ func logRemainingResources(ctx context.Context, t *testing.T, client *realhcloud
 		t.Logf("  - Volume: %s (ID: %d, Size: %dGB, Server: %s)", v.Name, v.ID, v.Size, serverName)
 	}
 
-	// Log remaining load balancers
-	lbs, _ := hc.LoadBalancer.AllWithOpts(ctx, hcloud.LoadBalancerListOpts{
-		ListOpts: hcloud.ListOpts{LabelSelector: labelString},
-	})
+	lbs, _ := hc.LoadBalancer.AllWithOpts(ctx, hcloud.LoadBalancerListOpts{ListOpts: opts})
 	for _, lb := range lbs {
 		t.Logf("  - LoadBalancer: %s (ID: %d)", lb.Name, lb.ID)
 	}
 
-	// Log remaining SSH keys
-	keys, _ := hc.SSHKey.AllWithOpts(ctx, hcloud.SSHKeyListOpts{
-		ListOpts: hcloud.ListOpts{LabelSelector: labelString},
-	})
+	keys, _ := hc.SSHKey.AllWithOpts(ctx, hcloud.SSHKeyListOpts{ListOpts: opts})
 	for _, k := range keys {
 		t.Logf("  - SSHKey: %s (ID: %d)", k.Name, k.ID)
 	}
 
-	// Log remaining certificates
-	certs, _ := hc.Certificate.AllWithOpts(ctx, hcloud.CertificateListOpts{
-		ListOpts: hcloud.ListOpts{LabelSelector: labelString},
-	})
+	certs, _ := hc.Certificate.AllWithOpts(ctx, hcloud.CertificateListOpts{ListOpts: opts})
 	for _, c := range certs {
 		t.Logf("  - Certificate: %s (ID: %d)", c.Name, c.ID)
 	}
 
-	// Log remaining firewalls
-	fws, _ := hc.Firewall.AllWithOpts(ctx, hcloud.FirewallListOpts{
-		ListOpts: hcloud.ListOpts{LabelSelector: labelString},
-	})
+	fws, _ := hc.Firewall.AllWithOpts(ctx, hcloud.FirewallListOpts{ListOpts: opts})
 	for _, fw := range fws {
 		t.Logf("  - Firewall: %s (ID: %d)", fw.Name, fw.ID)
 	}
 
-	// Log remaining networks
-	networks, _ := hc.Network.AllWithOpts(ctx, hcloud.NetworkListOpts{
-		ListOpts: hcloud.ListOpts{LabelSelector: labelString},
-	})
-	for _, n := range networks {
+	nets, _ := hc.Network.AllWithOpts(ctx, hcloud.NetworkListOpts{ListOpts: opts})
+	for _, n := range nets {
 		t.Logf("  - Network: %s (ID: %d)", n.Name, n.ID)
 	}
 
-	// Log remaining placement groups
-	pgs, _ := hc.PlacementGroup.AllWithOpts(ctx, hcloud.PlacementGroupListOpts{
-		ListOpts: hcloud.ListOpts{LabelSelector: labelString},
-	})
+	pgs, _ := hc.PlacementGroup.AllWithOpts(ctx, hcloud.PlacementGroupListOpts{ListOpts: opts})
 	for _, pg := range pgs {
 		t.Logf("  - PlacementGroup: %s (ID: %d)", pg.Name, pg.ID)
 	}
@@ -181,12 +183,13 @@ func buildLabelSelectorString(labels map[string]string) string {
 	if len(labels) == 0 {
 		return ""
 	}
-	selector := ""
+	parts := make([]string, 0, len(labels))
 	for k, v := range labels {
-		if selector != "" {
-			selector += ","
-		}
-		selector += k + "=" + v
+		parts = append(parts, fmt.Sprintf("%s=%s", k, v))
+	}
+	selector := parts[0]
+	for _, p := range parts[1:] {
+		selector += "," + p
 	}
 	return selector
 }

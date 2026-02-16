@@ -215,12 +215,7 @@ func expandAddons(cfg *Spec, vm VersionMatrix) AddonsConfig {
 		},
 
 		// External DNS - enabled only when domain is set
-		ExternalDNS: ExternalDNSConfig{
-			Enabled:    hasDomain,
-			TXTOwnerID: cfg.Name,
-			Policy:     "sync",
-			Sources:    []string{"ingress"},
-		},
+		ExternalDNS: expandExternalDNS(cfg),
 
 		// Talos Backup - enabled only when backup is set
 		TalosBackup: expandTalosBackup(cfg),
@@ -232,18 +227,15 @@ func expandTalosBackup(cfg *Spec) TalosBackupConfig {
 		return TalosBackupConfig{Enabled: false}
 	}
 
-	return TalosBackupConfig{
-		Enabled:            true,
-		Schedule:           "0 * * * *", // Hourly
-		S3Bucket:           cfg.BackupBucketName(),
-		S3Region:           string(cfg.Region),
-		S3Endpoint:         cfg.S3Endpoint(),
-		S3AccessKey:        os.Getenv("HETZNER_S3_ACCESS_KEY"),
-		S3SecretKey:        os.Getenv("HETZNER_S3_SECRET_KEY"),
-		S3Prefix:           "etcd-backups",
-		EnableCompression:  true,
-		EncryptionDisabled: true, // Spec config: encryption disabled by default (private bucket provides security)
-	}
+	backup := DefaultTalosBackup()
+	backup.Enabled = true
+	backup.Schedule = "0 * * * *" // Hourly
+	backup.S3Bucket = cfg.BackupBucketName()
+	backup.S3Region = string(cfg.Region)
+	backup.S3Endpoint = cfg.S3Endpoint()
+	backup.S3AccessKey = os.Getenv("HETZNER_S3_ACCESS_KEY")
+	backup.S3SecretKey = os.Getenv("HETZNER_S3_SECRET_KEY")
+	return backup
 }
 
 func expandArgoCD(cfg *Spec) ArgoCDConfig {
@@ -263,6 +255,14 @@ func expandArgoCD(cfg *Spec) ArgoCDConfig {
 	return argoCfg
 }
 
+func expandExternalDNS(cfg *Spec) ExternalDNSConfig {
+	dns := DefaultExternalDNS(cfg.HasDomain())
+	if dns.Enabled {
+		dns.TXTOwnerID = cfg.Name
+	}
+	return dns
+}
+
 func expandKubePrometheusStack(cfg *Spec) KubePrometheusStackConfig {
 	if !cfg.HasMonitoring() {
 		return KubePrometheusStackConfig{Enabled: false}
@@ -272,10 +272,7 @@ func expandKubePrometheusStack(cfg *Spec) KubePrometheusStackConfig {
 		Enabled: true,
 		Grafana: KubePrometheusGrafanaConfig{},
 		Prometheus: KubePrometheusPrometheusConfig{
-			Persistence: KubePrometheusPersistenceConfig{
-				Enabled: true,
-				Size:    "50Gi",
-			},
+			Persistence: DefaultPrometheusPersistence(),
 		},
 		Alertmanager: KubePrometheusAlertmanagerConfig{},
 	}

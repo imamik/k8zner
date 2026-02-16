@@ -16,7 +16,7 @@ import (
 const phase = "infrastructure"
 
 // ProvisionFirewall provisions the cluster firewall with rules.
-func (p *Provisioner) ProvisionFirewall(ctx *provisioning.Context) error {
+func ProvisionFirewall(ctx *provisioning.Context) error {
 	ctx.Observer.Printf("[%s] Reconciling firewall %s...", phase, ctx.Config.ClusterName)
 
 	publicIP := ctx.State.PublicIP

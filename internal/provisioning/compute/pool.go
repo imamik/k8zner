@@ -37,7 +37,7 @@ type NodePoolResult struct {
 
 // reconcileNodePool provisions a pool of servers in parallel.
 // Returns both server IPs and server IDs for use in machine config generation.
-func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePoolSpec) (NodePoolResult, error) {
+func reconcileNodePool(ctx *provisioning.Context, spec NodePoolSpec) (NodePoolResult, error) {
 	// Pre-calculate all server configurations
 	type serverConfig struct {
 		name      string
@@ -47,7 +47,7 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 
 	// Discover existing servers for this pool to support idempotent re-runs.
 	// Random names (cp-{5char}, w-{5char}) require label-based discovery.
-	existingNames, err := p.getExistingServerNames(ctx, spec.Role, spec.Name)
+	existingNames, err := getExistingServerNames(ctx, spec.Role, spec.Name)
 	if err != nil {
 		return NodePoolResult{}, fmt.Errorf("failed to discover existing servers: %w", err)
 	}
@@ -153,7 +153,7 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 		tasks[i] = async.Task{
 			Name: fmt.Sprintf("server-%s", cfg.name),
 			Func: func(_ context.Context) error {
-				info, err := p.ensureServer(ctx, ServerSpec{
+				info, err := ensureServer(ctx, ServerSpec{
 					Name:             cfg.name,
 					Type:             spec.ServerType,
 					Location:         spec.Location,
@@ -189,7 +189,7 @@ func (p *Provisioner) reconcileNodePool(ctx *provisioning.Context, spec NodePool
 
 // getExistingServerNames returns names of servers already provisioned for this pool.
 // Used to maintain idempotency with random server names across re-runs.
-func (p *Provisioner) getExistingServerNames(ctx *provisioning.Context, role, pool string) ([]string, error) {
+func getExistingServerNames(ctx *provisioning.Context, role, pool string) ([]string, error) {
 	servers, err := ctx.Infra.GetServersByLabel(ctx, map[string]string{
 		labels.KeyCluster: ctx.Config.ClusterName,
 		labels.KeyRole:    role,

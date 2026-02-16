@@ -12,8 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imamik/k8zner/internal/util/keygen"
-
 	"github.com/siderolabs/talos/pkg/machinery/api/machine"
 	"github.com/siderolabs/talos/pkg/machinery/client"
 	"github.com/siderolabs/talos/pkg/machinery/client/config"
@@ -411,39 +409,4 @@ func gatherConnectivityDiagnostics(t *testing.T, controlPlaneIPs []string) {
 	}
 
 	t.Log("=== END CONNECTIVITY DIAGNOSTICS ===")
-}
-
-// runClusterDiagnostics runs comprehensive diagnostics on a cluster for debugging test failures.
-func runClusterDiagnostics(ctx context.Context, t *testing.T, state *E2EState) {
-	if len(state.ControlPlaneIPs) == 0 {
-		t.Log("No control plane IPs available for diagnostics")
-		return
-	}
-
-	diag := NewClusterDiagnostics(t, state.ControlPlaneIPs[0], state.LoadBalancerIP, state.TalosConfig)
-	diag.RunFullDiagnostics(ctx)
-}
-
-// setupSSHKeyForCluster creates an SSH key in Hetzner Cloud for the cluster.
-func setupSSHKeyForCluster(ctx context.Context, t *testing.T, state *E2EState) error {
-	keyName := fmt.Sprintf("%s-key-%d", state.ClusterName, time.Now().UnixNano())
-
-	keyPair, err := keygen.GenerateRSAKeyPair(2048)
-	if err != nil {
-		return fmt.Errorf("failed to generate key pair: %w", err)
-	}
-
-	labels := map[string]string{
-		"cluster": state.ClusterName,
-		"test-id": state.TestID,
-	}
-
-	_, err = state.Client.CreateSSHKey(ctx, keyName, string(keyPair.PublicKey), labels)
-	if err != nil {
-		return fmt.Errorf("failed to upload SSH key: %w", err)
-	}
-
-	state.SSHKeyName = keyName
-	state.SSHPrivateKey = keyPair.PrivateKey
-	return nil
 }

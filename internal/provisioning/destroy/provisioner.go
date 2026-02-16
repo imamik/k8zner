@@ -8,21 +8,8 @@ import (
 	"github.com/imamik/k8zner/internal/util/labels"
 )
 
-// Provisioner handles cluster destruction.
-type Provisioner struct{}
-
-// NewProvisioner creates a new destroy provisioner.
-func NewProvisioner() *Provisioner {
-	return &Provisioner{}
-}
-
-// Name returns the phase name.
-func (p *Provisioner) Name() string {
-	return "Destroy"
-}
-
-// Provision destroys the cluster and all associated resources.
-func (p *Provisioner) Provision(ctx *provisioning.Context) error {
+// Destroy destroys the cluster and all associated resources.
+func Destroy(ctx *provisioning.Context) error {
 	ctx.Observer.Printf("[Destroy] Starting cluster destruction for: %s", ctx.Config.ClusterName)
 
 	// Build label selector for cluster resources

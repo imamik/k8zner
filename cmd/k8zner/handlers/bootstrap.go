@@ -13,15 +13,18 @@ import (
 	"github.com/imamik/k8zner/internal/config"
 	hcloudInternal "github.com/imamik/k8zner/internal/platform/hcloud"
 	"github.com/imamik/k8zner/internal/provisioning"
+	clusterProv "github.com/imamik/k8zner/internal/provisioning/cluster"
+	"github.com/imamik/k8zner/internal/provisioning/compute"
 	"github.com/imamik/k8zner/internal/provisioning/destroy"
+	"github.com/imamik/k8zner/internal/provisioning/image"
+	"github.com/imamik/k8zner/internal/provisioning/infrastructure"
 	"github.com/imamik/k8zner/internal/util/naming"
 )
 
 // provisionImage ensures the Talos image snapshot exists.
 func provisionImage(pCtx *provisioning.Context) error {
 	log.Println("Phase 1/6: Ensuring Talos image snapshot...")
-	imgProvisioner := newImageProvisioner()
-	if err := imgProvisioner.Provision(pCtx); err != nil {
+	if err := image.EnsureAllImages(pCtx); err != nil {
 		return fmt.Errorf("image provisioning failed: %w", err)
 	}
 	return nil
@@ -30,8 +33,7 @@ func provisionImage(pCtx *provisioning.Context) error {
 // provisionInfrastructure creates network, firewall, LB, and placement group.
 func provisionInfrastructure(pCtx *provisioning.Context) error {
 	log.Println("Phase 2/6: Creating infrastructure (network, firewall, LB, placement group)...")
-	infraProvisioner := newInfraProvisioner()
-	if err := infraProvisioner.Provision(pCtx); err != nil {
+	if err := infrastructure.Provision(pCtx); err != nil {
 		return fmt.Errorf("infrastructure provisioning failed: %w", err)
 	}
 	return nil
@@ -48,8 +50,7 @@ func provisionFirstControlPlane(cfg *config.Config, pCtx *provisioning.Context) 
 		cfg.Workers[0].Count = 0
 	}
 
-	computeProvisioner := newComputeProvisioner()
-	if err := computeProvisioner.Provision(pCtx); err != nil {
+	if err := compute.Provision(pCtx); err != nil {
 		cfg.ControlPlane.NodePools[0].Count = originalCPCount
 		if len(cfg.Workers) > 0 {
 			cfg.Workers[0].Count = originalWorkerCount
@@ -68,8 +69,7 @@ func provisionFirstControlPlane(cfg *config.Config, pCtx *provisioning.Context) 
 // bootstrapCluster bootstraps Talos on the first control plane node.
 func bootstrapCluster(pCtx *provisioning.Context) error {
 	log.Println("Phase 4/6: Bootstrapping cluster...")
-	clstrProvisioner := newClusterProvisioner()
-	if err := clstrProvisioner.Provision(pCtx); err != nil {
+	if err := clusterProv.BootstrapCluster(pCtx); err != nil {
 		return fmt.Errorf("cluster bootstrap failed: %w", err)
 	}
 	return nil
@@ -195,8 +195,7 @@ func cleanupOnFailure(ctx context.Context, cfg *config.Config, infraClient hclou
 
 	pCtx := provisioning.NewContext(ctx, cfg, infraClient, nil)
 
-	destroyer := destroy.NewProvisioner()
-	if err := destroyer.Provision(pCtx); err != nil {
+	if err := destroy.Destroy(pCtx); err != nil {
 		return fmt.Errorf("cleanup failed: %w", err)
 	}
 
