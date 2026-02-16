@@ -42,9 +42,6 @@ checksum:
 snapshot:
   version_template: "{{ .Tag }}-next"
 
-changelog:
-  disable: true
-
 release:
   github:
     owner: imamik
