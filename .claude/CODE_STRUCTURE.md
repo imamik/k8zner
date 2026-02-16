@@ -111,10 +111,10 @@ Three representations must stay in sync:
 3. **CRD spec** (`api/v1alpha1/types.go`) — Kubernetes-native representation
 
 Flows:
-- **CLI**: YAML spec → `Expand()` → internal Config → provisioning/addons
+- **CLI**: YAML spec → `ExpandSpec()` → internal Config → provisioning/addons
 - **Operator**: CRD spec → `SpecToConfig()` → internal Config → provisioning/addons
 
-`SpecToConfig()` must replicate the same defaults that `Expand()` sets. When adding CRD fields, trace the full round-trip to avoid silent mismatches.
+`SpecToConfig()` must replicate the same defaults that `ExpandSpec()` sets. When adding CRD fields, trace the full round-trip to avoid silent mismatches.
 
 ### Shared Addon Installation
 

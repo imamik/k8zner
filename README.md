@@ -249,7 +249,7 @@ Cilium with WireGuard encryption is enabled by default for all pod-to-pod traffi
 
 Full documentation: **[docs/configuration.md](docs/configuration.md)** | Interactive setup: **[docs/wizard.md](docs/wizard.md)**
 
-k8zner uses a **simplified, opinionated configuration** — just 4-5 fields for a production-ready cluster:
+k8zner uses a **simplified, opinionated configuration** — just 5 fields for a production-ready cluster:
 
 ### Minimal Configuration
 
@@ -536,7 +536,7 @@ make test           # Run unit tests
 make test-coverage  # With coverage
 make lint           # Run linters
 make check          # All checks
-make test-e2e       # E2E tests (requires HCLOUD_TOKEN)
+make e2e            # E2E tests (requires HCLOUD_TOKEN)
 ```
 
 </details>

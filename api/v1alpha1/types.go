@@ -164,7 +164,7 @@ type ControlPlaneSpec struct {
 	// +kubebuilder:default=1
 	Count int `json:"count"`
 
-	// Size is the Hetzner server type (e.g., cx23, cx33, cpx21, cpx31)
+	// Size is the Hetzner server type (e.g., cx23, cx33, cpx22, cpx32)
 	// CX types (dedicated vCPU) have consistent performance, CPX types (shared vCPU) have better availability
 	// +kubebuilder:default="cx23"
 	Size string `json:"size"`
@@ -177,7 +177,7 @@ type WorkerSpec struct {
 	// +kubebuilder:validation:Maximum=100
 	Count int `json:"count"`
 
-	// Size is the Hetzner server type (e.g., cx23, cx33, cpx21, cpx31)
+	// Size is the Hetzner server type (e.g., cx23, cx33, cpx22, cpx32)
 	// CX types (dedicated vCPU) have consistent performance, CPX types (shared vCPU) have better availability
 	// +kubebuilder:default="cx23"
 	Size string `json:"size"`
