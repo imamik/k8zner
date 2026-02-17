@@ -465,8 +465,9 @@ func TestBuildGrafanaValues_NoPersistence(t *testing.T) {
 	}
 
 	values := buildGrafanaValues(cfg)
-	_, hasPersistence := values["persistence"]
-	assert.False(t, hasPersistence)
+	// When persistence is disabled, expect explicit {"enabled": false}
+	persistence := values["persistence"].(helm.Values)
+	assert.False(t, persistence["enabled"].(bool))
 }
 
 func TestBuildGrafanaValues_NoAdminPassword(t *testing.T) {
