@@ -78,17 +78,23 @@ func buildPrometheusValues(cfg *config.Config) helm.Values {
 
 	// Storage configuration
 	if promCfg.Persistence.Enabled {
+		pvcSpec := helm.Values{
+			"accessModes": []string{"ReadWriteOnce"},
+			"resources": helm.Values{
+				"requests": helm.Values{
+					"storage": getStringWithDefault(promCfg.Persistence.Size, "50Gi"),
+				},
+			},
+		}
+		// Only set storageClassName if explicitly configured.
+		// Omitting the field lets Kubernetes use the default StorageClass.
+		// Setting it to "" explicitly requests NO StorageClass (manual PV binding).
+		if promCfg.Persistence.StorageClass != "" {
+			pvcSpec["storageClassName"] = promCfg.Persistence.StorageClass
+		}
 		values["prometheusSpec"].(helm.Values)["storageSpec"] = helm.Values{
 			"volumeClaimTemplate": helm.Values{
-				"spec": helm.Values{
-					"accessModes": []string{"ReadWriteOnce"},
-					"resources": helm.Values{
-						"requests": helm.Values{
-							"storage": getStringWithDefault(promCfg.Persistence.Size, "50Gi"),
-						},
-					},
-					"storageClassName": promCfg.Persistence.StorageClass,
-				},
+				"spec": pvcSpec,
 			},
 		}
 	}
@@ -182,10 +188,21 @@ func buildGrafanaValues(cfg *config.Config) helm.Values {
 
 	// Persistence configuration
 	if grafanaCfg.Persistence.Enabled {
+		persistence := helm.Values{
+			"enabled": true,
+			"size":    getStringWithDefault(grafanaCfg.Persistence.Size, "10Gi"),
+		}
+		// Only set storageClassName if explicitly configured.
+		// Omitting the field lets Kubernetes use the default StorageClass.
+		// Setting it to "" explicitly requests NO StorageClass (manual PV binding).
+		if grafanaCfg.Persistence.StorageClass != "" {
+			persistence["storageClassName"] = grafanaCfg.Persistence.StorageClass
+		}
+		values["persistence"] = persistence
+	} else {
+		// Explicitly disable persistence
 		values["persistence"] = helm.Values{
-			"enabled":          true,
-			"size":             getStringWithDefault(grafanaCfg.Persistence.Size, "10Gi"),
-			"storageClassName": grafanaCfg.Persistence.StorageClass,
+			"enabled": false,
 		}
 	}
 
