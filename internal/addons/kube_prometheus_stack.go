@@ -73,7 +73,8 @@ func buildPrometheusValues(cfg *config.Config) helm.Values {
 		"ruleSelectorNilUsesHelmValues":           false,
 	}
 
-	// Storage configuration
+	// Storage configuration - only set storageSpec when persistence is enabled
+	// When omitted, Prometheus uses emptyDir (ephemeral storage)
 	if promCfg.Persistence.Enabled {
 		prometheusSpec["storageSpec"] = helm.Values{
 			"volumeClaimTemplate": helm.Values{
@@ -88,10 +89,6 @@ func buildPrometheusValues(cfg *config.Config) helm.Values {
 				},
 			},
 		}
-	} else {
-		// Explicitly disable persistence with empty storageSpec
-		// This ensures emptyDir is used (ephemeral storage)
-		prometheusSpec["storageSpec"] = helm.Values{}
 	}
 
 	values := helm.Values{
@@ -260,9 +257,7 @@ func buildAlertmanagerValues(cfg *config.Config) helm.Values {
 				"memory": "128Mi",
 			},
 		},
-		// Explicitly disable persistence with empty storage
-		// This ensures emptyDir is used (ephemeral storage)
-		"storage": helm.Values{},
+		// Note: storage is omitted - when not set, Alertmanager uses emptyDir (ephemeral)
 	}
 
 	values := helm.Values{
