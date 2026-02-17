@@ -195,10 +195,16 @@ func CreateTestConfig(t *testing.T, name string, mode Mode, opts ...ConfigOption
 	}
 
 	if options.monitoring {
-		content.WriteString("\nmonitoring: true\n")
-		// E2E tests should use ephemeral storage (no persistence)
-		// to avoid PVC binding timeouts and keep tests fast
-		content.WriteString("prometheus_persistence: false\n")
+		// E2E tests use ephemeral storage (no persistence) to avoid PVC binding timeouts
+		content.WriteString("\n# Monitoring with ephemeral storage (no persistence)\n")
+		content.WriteString("kube_prometheus_stack:\n")
+		content.WriteString("  enabled: true\n")
+		content.WriteString("  prometheus:\n")
+		content.WriteString("    persistence:\n")
+		content.WriteString("      enabled: false\n")
+		content.WriteString("  grafana:\n")
+		content.WriteString("    persistence:\n")
+		content.WriteString("      enabled: false\n")
 	}
 
 	if options.minimalAddons {
