@@ -65,7 +65,7 @@ func buildPrometheusValues(cfg *config.Config) helm.Values {
 	prometheusSpec := helm.Values{
 		// Retention period
 		"retention":   fmt.Sprintf("%dd", getIntWithDefault(promCfg.RetentionDays, 15)),
-		"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
+		"tolerations": helm.BootstrapTolerations(),
 		"resources":   buildResourceValues(promCfg.Resources, "500m", "512Mi", "2", "2Gi"),
 		// Service monitor selector - scrape all ServiceMonitors
 		"serviceMonitorSelectorNilUsesHelmValues": false,
@@ -160,7 +160,7 @@ func buildGrafanaValues(cfg *config.Config) helm.Values {
 		"testFramework": helm.Values{
 			"enabled": false,
 		},
-		"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
+		"tolerations": helm.BootstrapTolerations(),
 		"resources": helm.Values{
 			"requests": helm.Values{
 				"cpu":    "100m",
@@ -249,7 +249,7 @@ func buildAlertmanagerValues(cfg *config.Config) helm.Values {
 	alertCfg := cfg.Addons.KubePrometheusStack.Alertmanager
 
 	alertmanagerSpec := helm.Values{
-		"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
+		"tolerations": helm.BootstrapTolerations(),
 		// Resource defaults
 		"resources": helm.Values{
 			"requests": helm.Values{
@@ -276,7 +276,7 @@ func buildAlertmanagerValues(cfg *config.Config) helm.Values {
 // buildPrometheusOperatorValues creates the Prometheus Operator configuration.
 func buildPrometheusOperatorValues() helm.Values {
 	return helm.Values{
-		"tolerations": []helm.Values{helm.CCMUninitializedToleration()},
+		"tolerations": helm.BootstrapTolerations(),
 		"resources": helm.Values{
 			"requests": helm.Values{
 				"cpu":    "100m",
