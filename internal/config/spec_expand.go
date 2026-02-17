@@ -268,23 +268,11 @@ func expandKubePrometheusStack(cfg *Spec) KubePrometheusStackConfig {
 		return KubePrometheusStackConfig{Enabled: false}
 	}
 
-	// Dev clusters (mode=dev or single CP) default to ephemeral storage for simplicity
-	// HA clusters (mode=ha, multiple CPs) default to persistent storage for durability
-	persistenceEnabled := cfg.Mode == ModeHA
-	var persistence KubePrometheusPersistenceConfig
-	if persistenceEnabled {
-		persistence = DefaultPrometheusPersistence()
-	} else {
-		persistence = KubePrometheusPersistenceConfig{Enabled: false}
-	}
-
 	promCfg := KubePrometheusStackConfig{
 		Enabled: true,
-		Grafana: KubePrometheusGrafanaConfig{
-			Persistence: KubePrometheusPersistenceConfig{Enabled: false}, // Grafana also uses ephemeral in dev
-		},
+		Grafana: KubePrometheusGrafanaConfig{},
 		Prometheus: KubePrometheusPrometheusConfig{
-			Persistence: persistence,
+			Persistence: DefaultPrometheusPersistence(),
 		},
 		Alertmanager: KubePrometheusAlertmanagerConfig{},
 	}
