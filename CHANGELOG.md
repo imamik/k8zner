@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-02-17
+
+### 🐛 Fixed
+
+- **Prometheus/Grafana PVC binding** — omit `storageClassName` field when empty to allow Kubernetes default StorageClass selection (#159)
+  - Previously set empty string explicitly, which prevented dynamic provisioning with Hetzner CSI (WaitForFirstConsumer binding mode)
+  - PVCs now bind successfully on first pod creation without requiring manual intervention
+- **CHANGELOG.md sourcing** in release workflow — removed `changelog.disable: true` that silently blocked release notes from appearing on GitHub releases page
+
+### 🔄 Changed
+
+- **Shared addon defaults** — extracted common Helm values (tolerations, resources, ingress) to reusable helpers, reducing duplication across addon builders (#158)
+- **Provisioner ceremony removal** — simplified orchestration controller: removed observer abstraction, phases-as-struct pattern, and unused provisioner options (#158, #157)
+- **Documentation cleanup** — removed 3 phantom ADR files (missing from Git but referenced in docs), fixed broken internal links (#158)
+- **Dead code removal** — ~1,200 lines trimmed: unused rDNS module, duplicate normalize helpers, redundant config marshaling, orphaned test utilities (#157, #151)
+
 ## [0.9.1] - 2026-02-16
 
 ### 🔄 Changed
@@ -317,6 +333,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Secrets stored locally in `./secrets/` directory
 - No credentials stored in cluster state
 
+[0.9.2]: https://github.com/imamik/k8zner/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/imamik/k8zner/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/imamik/k8zner/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/imamik/k8zner/compare/v0.7.0...v0.8.0
