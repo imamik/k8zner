@@ -111,7 +111,7 @@ jobs:
             ./internal/provisioning/infrastructure/...
 
       - name: Upload unit coverage
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-unit
           path: coverage-unit.txt
@@ -139,7 +139,7 @@ jobs:
             ./internal/provisioning/cluster/...
 
       - name: Upload integration coverage
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-integration
           path: coverage-integration.txt
@@ -170,7 +170,7 @@ jobs:
           go test -v -race -coverprofile=coverage-envtest.txt -covermode=atomic -tags=integration ./internal/operator/controller/...
 
       - name: Upload envtest coverage
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-envtest
           path: coverage-envtest.txt
@@ -355,7 +355,7 @@ jobs:
         run: go build -v -o bin/k8zner-${{ matrix.os }}-${{ matrix.arch }} ./cmd/k8zner
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: k8zner-${{ matrix.os }}-${{ matrix.arch }}
           path: bin/k8zner-${{ matrix.os }}-${{ matrix.arch }}*
