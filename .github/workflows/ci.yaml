@@ -298,17 +298,17 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download unit coverage
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: coverage-unit
 
       - name: Download integration coverage
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: coverage-integration
 
       - name: Download envtest coverage
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: coverage-envtest
 
