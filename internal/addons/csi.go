@@ -72,7 +72,7 @@ func buildCSIValues(cfg *config.Config) helm.Values {
 			"name":                "hcloud-volumes-encrypted",
 			"defaultStorageClass": defaultStorageClass,
 			"reclaimPolicy":       "Delete",
-			"extraParameters": helm.Values{
+			"extraParameters": helm.Values{ //nolint:gosec // G101: CSI parameter keys, not credentials
 				"csi.storage.k8s.io/node-publish-secret-name":      "hcloud-csi-secret",
 				"csi.storage.k8s.io/node-publish-secret-namespace": "kube-system",
 			},
