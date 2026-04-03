@@ -301,11 +301,11 @@ func (r *ClusterReconciler) reconcileRunningPhase(ctx context.Context, cluster *
 	}
 
 	// Handle scaling first — health probes have network timeouts that slow the reconcile loop
-	if result, err := r.reconcileControlPlanes(ctx, cluster); err != nil || result.Requeue || result.RequeueAfter > 0 {
+	if result, err := r.reconcileControlPlanes(ctx, cluster); err != nil || result.RequeueAfter > 0 {
 		return result, err
 	}
 
-	if result, err := r.reconcileWorkers(ctx, cluster); err != nil || result.Requeue || result.RequeueAfter > 0 {
+	if result, err := r.reconcileWorkers(ctx, cluster); err != nil || result.RequeueAfter > 0 {
 		return result, err
 	}
 

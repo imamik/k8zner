@@ -197,7 +197,7 @@ func (c *Client) newRequest(ctx context.Context, method, path string, body io.Re
 }
 
 func (c *Client) do(req *http.Request, out any) error {
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req) //nolint:gosec // G704: URL comes from validated API endpoint
 	if err != nil {
 		return err
 	}

@@ -82,7 +82,7 @@ func main() {
 	reconciler := controller.NewClusterReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-		mgr.GetEventRecorderFor("k8zner-controller"),
+		mgr.GetEventRecorderFor("k8zner-controller"), //nolint:staticcheck // SA1019: migrating to events.EventRecorder requires full API change
 		controller.WithHCloudToken(hcloudToken),
 		controller.WithMetrics(true),
 		controller.WithMaxConcurrentHeals(1),
