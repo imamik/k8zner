@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-04-04
+
+### 🔄 Changed
+
+- **Go 1.25.7 → 1.26.1** — fixes 3 stdlib CVEs (GO-2026-4601, GO-2026-4602, GO-2026-4603)
+- **All Go dependencies bumped to latest** — grpc 1.80.0, aws-sdk-go-v2 1.41.5, k8s 0.35.3, controller-runtime 0.23.3, helm 3.20.1, hcloud-go 2.37.0, charmbracelet/huh 1.0.0, and 40+ transitive deps
+- **GitHub Actions bumped** — upload-artifact v7, download-artifact v8, setup-buildx v4, build-push v7, goreleaser v7, gh-release v2
+- **golangci-lint 2.8.0 → 2.11.4** — required for Go 1.26 compatibility
+- **Dockerfile.operator base image** bumped to Go 1.26
+
+### 🐛 Fixed
+
+- **`doctor --json` output** — cost hint was appended after JSON, breaking machine-parseable output
+- **Data race in controller scaling test** — `nodeReadyWaiterCalls` slice now protected by mutex
+- **Shared scheme race in parallel controller tests** — each subtest gets its own `runtime.Scheme` to avoid concurrent map access with controller-runtime v0.23.3
+- **Deprecated API usage** — removed `result.Requeue` checks (use `RequeueAfter` only), suppressed false-positive gosec G101 findings
+
 ## [0.9.2] - 2026-02-17
 
 ### 🐛 Fixed
