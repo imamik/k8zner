@@ -62,8 +62,8 @@ func renderCostSummary(clusterName string, summary *costSummary) string {
 	b.WriteString(costDimStyle.Render("  " + strings.Repeat("─", 35)))
 	b.WriteString("\n")
 
-	b.WriteString(fmt.Sprintf("    Current:   %s %7.2f /mo net\n", summary.Currency, summary.CurrentTotal.MonthlyNet))
-	b.WriteString(fmt.Sprintf("    Planned:   %s %7.2f /mo net\n", summary.Currency, summary.PlannedTotal.MonthlyNet))
+	fmt.Fprintf(&b, "    Current:   %s %7.2f /mo net\n", summary.Currency, summary.CurrentTotal.MonthlyNet)
+	fmt.Fprintf(&b, "    Planned:   %s %7.2f /mo net\n", summary.Currency, summary.PlannedTotal.MonthlyNet)
 
 	delta := summary.DiffTotal.MonthlyNet
 	deltaStr := formatDelta(delta, summary.Currency)

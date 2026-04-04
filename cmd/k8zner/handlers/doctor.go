@@ -118,7 +118,9 @@ func Doctor(ctx context.Context, configPath string, watch, jsonOutput bool) erro
 	if err := doctorShow(ctx, k8sClient, cfg.ClusterName, jsonOutput); err != nil {
 		return err
 	}
-	printOverallCostHint(ctx, cfg, "doctor")
+	if !jsonOutput {
+		printOverallCostHint(ctx, cfg, "doctor")
+	}
 	return nil
 }
 

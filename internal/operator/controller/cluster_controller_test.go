@@ -120,10 +120,10 @@ func TestNewClusterReconciler(t *testing.T) {
 
 func TestClusterReconciler_Reconcile(t *testing.T) {
 	t.Parallel()
-	scheme := setupTestScheme(t)
 
 	t.Run("cluster not found returns no error", func(t *testing.T) {
 		t.Parallel()
+		scheme := setupTestScheme(t)
 		client := fake.NewClientBuilder().WithScheme(scheme).Build()
 		recorder := record.NewFakeRecorder(10)
 
@@ -144,6 +144,7 @@ func TestClusterReconciler_Reconcile(t *testing.T) {
 
 	t.Run("paused cluster skips reconciliation", func(t *testing.T) {
 		t.Parallel()
+		scheme := setupTestScheme(t)
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
@@ -178,6 +179,7 @@ func TestClusterReconciler_Reconcile(t *testing.T) {
 
 	t.Run("reconciles healthy cluster", func(t *testing.T) {
 		t.Parallel()
+		scheme := setupTestScheme(t)
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
@@ -241,10 +243,10 @@ func TestClusterReconciler_Reconcile(t *testing.T) {
 
 func TestBuildClusterState(t *testing.T) {
 	t.Parallel()
-	scheme := setupTestScheme(t)
 
 	t.Run("builds state with SSH keys from annotations", func(t *testing.T) {
 		t.Parallel()
+		scheme := setupTestScheme(t)
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "my-cluster",
@@ -296,6 +298,7 @@ func TestBuildClusterState(t *testing.T) {
 
 	t.Run("uses default SSH key naming when no annotation", func(t *testing.T) {
 		t.Parallel()
+		scheme := setupTestScheme(t)
 		cluster := &k8znerv1alpha1.K8znerCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "my-cluster",
@@ -437,10 +440,10 @@ func TestNodeEventHandler(t *testing.T) {
 
 func TestGetPrivateIPFromServer(t *testing.T) {
 	t.Parallel()
-	scheme := setupTestScheme(t)
 
 	t.Run("returns error when GetServerByName fails", func(t *testing.T) {
 		t.Parallel()
+		scheme := setupTestScheme(t)
 		client := fake.NewClientBuilder().WithScheme(scheme).Build()
 		recorder := record.NewFakeRecorder(10)
 		mockHCloud := &MockHCloudClient{
@@ -459,6 +462,7 @@ func TestGetPrivateIPFromServer(t *testing.T) {
 
 	t.Run("returns error when server not found", func(t *testing.T) {
 		t.Parallel()
+		scheme := setupTestScheme(t)
 		client := fake.NewClientBuilder().WithScheme(scheme).Build()
 		recorder := record.NewFakeRecorder(10)
 		mockHCloud := &MockHCloudClient{
@@ -478,6 +482,7 @@ func TestGetPrivateIPFromServer(t *testing.T) {
 
 	t.Run("returns private IP from server", func(t *testing.T) {
 		t.Parallel()
+		scheme := setupTestScheme(t)
 		client := fake.NewClientBuilder().WithScheme(scheme).Build()
 		recorder := record.NewFakeRecorder(10)
 		mockHCloud := &MockHCloudClient{
@@ -503,6 +508,7 @@ func TestGetPrivateIPFromServer(t *testing.T) {
 
 	t.Run("returns empty string when no private networks", func(t *testing.T) {
 		t.Parallel()
+		scheme := setupTestScheme(t)
 		client := fake.NewClientBuilder().WithScheme(scheme).Build()
 		recorder := record.NewFakeRecorder(10)
 		mockHCloud := &MockHCloudClient{

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -471,7 +472,10 @@ func TestScaleUpWorkers(t *testing.T) {
 		mockTalos := &MockTalosClient{}
 		mockTalosGen := &MockTalosConfigGenerator{}
 
-		var nodeReadyWaiterCalls []string
+		var (
+			nodeReadyMu          sync.Mutex
+			nodeReadyWaiterCalls []string
+		)
 		r := NewClusterReconciler(client, scheme, recorder,
 			WithHCloudClient(mockHCloud),
 			WithTalosClient(mockTalos),
@@ -479,7 +483,9 @@ func TestScaleUpWorkers(t *testing.T) {
 			WithMaxConcurrentHeals(5),
 			WithMetrics(false),
 			WithNodeReadyWaiter(func(ctx context.Context, nodeName string, timeout time.Duration) error {
+				nodeReadyMu.Lock()
 				nodeReadyWaiterCalls = append(nodeReadyWaiterCalls, nodeName)
+				nodeReadyMu.Unlock()
 				return nil
 			}),
 		)

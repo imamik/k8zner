@@ -124,7 +124,7 @@ func generateTalosBackupCronJob(cfg *config.Config) string {
 		"restartPolicy": "OnFailure",
 		"volumes": []map[string]any{
 			{"emptyDir": map[string]any{}, "name": "tmp"},
-			{"name": "talos-secrets", "secret": map[string]any{"secretName": "talos-backup-secrets"}},
+			{"name": "talos-secrets", "secret": map[string]any{"secretName": "talos-backup-secrets"}}, //nolint:gosec // G101: secret name reference, not credentials
 		},
 		// Tolerations for control plane and uninitialized nodes.
 		// The uninitialized toleration is required because CCM may not have

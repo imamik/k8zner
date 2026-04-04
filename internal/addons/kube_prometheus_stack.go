@@ -236,7 +236,7 @@ func buildGrafanaIngress(cfg *config.Config) helm.Values {
 	// Configure TLS if enabled
 	if grafanaCfg.IngressTLS {
 		ingress["tls"] = []helm.Values{
-			{
+			{ //nolint:gosec // G101: K8s TLS secret name, not credentials
 				"hosts":      []string{grafanaCfg.IngressHost},
 				"secretName": "grafana-tls",
 			},
