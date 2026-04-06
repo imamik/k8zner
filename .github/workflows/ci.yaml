@@ -231,7 +231,7 @@ jobs:
         run: go install sigs.k8s.io/kind@latest
 
       - name: Install kubectl
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@v5
 
       - name: Run smoke tests (CRDs + Core)
         run: go test -v -tags=kind -timeout=10m -run "TestKindAddons/0[12]_" ./tests/kind/...
@@ -263,7 +263,7 @@ jobs:
         run: go install sigs.k8s.io/kind@latest
 
       - name: Install kubectl
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@v5
 
       - name: Run kind tests (addons + operator, skip heavy ArgoCD/Monitoring)
         run: go test -v -tags=kind -timeout=30m -run "TestKind(Addons/(0[123]_|06_)|Operator)" ./tests/kind/...
