@@ -228,6 +228,24 @@ func testArgoCD(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 	defer cancel()
 
+	t.Cleanup(func() {
+		if !t.Failed() {
+			return
+		}
+		fw.CollectNamespaceDiagnostics(t, "argocd")
+		for _, d := range []string{"argocd-server", "argocd-repo-server", "argocd-redis", "argocd-applicationset-controller", "argocd-notifications-controller"} {
+			fw.CollectDiagnostics(t, "argocd", "deployment", d)
+		}
+		for _, label := range []string{
+			"app.kubernetes.io/name=argocd-server",
+			"app.kubernetes.io/name=argocd-repo-server",
+			"app.kubernetes.io/name=argocd-redis",
+			"app.kubernetes.io/name=argocd-application-controller",
+		} {
+			fw.CollectPodLogs(t, "argocd", label, 100)
+		}
+	})
+
 	err := addons.Apply(ctx, &config.Config{
 		ClusterName: "kind-test",
 		Addons: config.AddonsConfig{
@@ -239,9 +257,12 @@ func testArgoCD(t *testing.T) {
 	}
 
 	fw.WaitForNamespace(t, "argocd", 30*time.Second)
-	fw.WaitForDeployment(t, "argocd", "argocd-server", 5*time.Minute)
+	// Wait for redis first — argocd-server's readiness depends on a working
+	// redis connection, so blocking on server while redis is still pulling
+	// images guarantees a timeout.
+	fw.WaitForDeployment(t, "argocd", "argocd-redis", 5*time.Minute)
 	fw.WaitForDeployment(t, "argocd", "argocd-repo-server", 5*time.Minute)
-	fw.WaitForDeployment(t, "argocd", "argocd-redis", 3*time.Minute)
+	fw.WaitForDeployment(t, "argocd", "argocd-server", 5*time.Minute)
 	fw.WaitForPod(t, "argocd", "app.kubernetes.io/name=argocd-application-controller", 5*time.Minute)
 
 	fw.AssertCRDsExist(t, []string{
