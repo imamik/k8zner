@@ -233,7 +233,7 @@ func testArgoCD(t *testing.T) {
 			return
 		}
 		fw.CollectNamespaceDiagnostics(t, "argocd")
-		for _, d := range []string{"argocd-server", "argocd-repo-server", "argocd-redis", "argocd-applicationset-controller", "argocd-notifications-controller"} {
+		for _, d := range []string{"argo-cd-argocd-server", "argo-cd-argocd-repo-server", "argo-cd-argocd-redis", "argo-cd-argocd-applicationset-controller", "argo-cd-argocd-notifications-controller"} {
 			fw.CollectDiagnostics(t, "argocd", "deployment", d)
 		}
 		for _, label := range []string{
@@ -256,13 +256,12 @@ func testArgoCD(t *testing.T) {
 		t.Fatalf("install: %v", err)
 	}
 
+	// Resource names are prefixed with the Helm release name ("argo-cd"),
+	// so e.g. the server Deployment is "argo-cd-argocd-server".
 	fw.WaitForNamespace(t, "argocd", 30*time.Second)
-	// Wait for redis first — argocd-server's readiness depends on a working
-	// redis connection, so blocking on server while redis is still pulling
-	// images guarantees a timeout.
-	fw.WaitForDeployment(t, "argocd", "argocd-redis", 5*time.Minute)
-	fw.WaitForDeployment(t, "argocd", "argocd-repo-server", 5*time.Minute)
-	fw.WaitForDeployment(t, "argocd", "argocd-server", 5*time.Minute)
+	fw.WaitForDeployment(t, "argocd", "argo-cd-argocd-redis", 5*time.Minute)
+	fw.WaitForDeployment(t, "argocd", "argo-cd-argocd-repo-server", 5*time.Minute)
+	fw.WaitForDeployment(t, "argocd", "argo-cd-argocd-server", 5*time.Minute)
 	fw.WaitForPod(t, "argocd", "app.kubernetes.io/name=argocd-application-controller", 5*time.Minute)
 
 	fw.AssertCRDsExist(t, []string{
