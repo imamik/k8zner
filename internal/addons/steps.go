@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/imamik/k8zner/internal/addons/k8sclient"
-	"github.com/imamik/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/addons/k8sclient"
+	"github.com/milankappen/k8zner/internal/config"
 )
 
 // Step names match the addon name constants in api/v1alpha1/types.go.

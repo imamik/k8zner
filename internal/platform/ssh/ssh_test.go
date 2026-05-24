@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imamik/k8zner/internal/util/keygen"
+	"github.com/milankappen/k8zner/internal/util/keygen"
 )
 
 // generateTestKey generates a test RSA key pair for use in tests.

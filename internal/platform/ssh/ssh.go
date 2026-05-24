@@ -16,7 +16,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"github.com/imamik/k8zner/internal/util/retry"
+	"github.com/milankappen/k8zner/internal/util/retry"
 )
 
 const (

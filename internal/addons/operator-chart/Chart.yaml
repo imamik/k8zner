@@ -10,9 +10,9 @@ keywords:
   - hetzner
   - talos
   - self-healing
-home: https://github.com/imamik/k8zner
+home: https://github.com/milankappen/k8zner
 sources:
-  - https://github.com/imamik/k8zner
+  - https://github.com/milankappen/k8zner
 maintainers:
-  - name: imamik
-    url: https://github.com/imamik
+  - name: milankappen
+    url: https://github.com/milankappen

@@ -27,7 +27,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: imamik/k8zner-operator
+  IMAGE_NAME: milankappen/k8zner-operator
 
 jobs:
   build:
@@ -55,7 +55,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/imamik/k8zner-operator
+          images: ghcr.io/milankappen/k8zner-operator
           tags: |
             type=ref,event=branch
             type=ref,event=pr

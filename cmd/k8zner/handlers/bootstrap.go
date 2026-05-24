@@ -9,16 +9,16 @@ import (
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 
-	"github.com/imamik/k8zner/internal/addons"
-	"github.com/imamik/k8zner/internal/config"
-	hcloudInternal "github.com/imamik/k8zner/internal/platform/hcloud"
-	"github.com/imamik/k8zner/internal/provisioning"
-	clusterProv "github.com/imamik/k8zner/internal/provisioning/cluster"
-	"github.com/imamik/k8zner/internal/provisioning/compute"
-	"github.com/imamik/k8zner/internal/provisioning/destroy"
-	"github.com/imamik/k8zner/internal/provisioning/image"
-	"github.com/imamik/k8zner/internal/provisioning/infrastructure"
-	"github.com/imamik/k8zner/internal/util/naming"
+	"github.com/milankappen/k8zner/internal/addons"
+	"github.com/milankappen/k8zner/internal/config"
+	hcloudInternal "github.com/milankappen/k8zner/internal/platform/hcloud"
+	"github.com/milankappen/k8zner/internal/provisioning"
+	clusterProv "github.com/milankappen/k8zner/internal/provisioning/cluster"
+	"github.com/milankappen/k8zner/internal/provisioning/compute"
+	"github.com/milankappen/k8zner/internal/provisioning/destroy"
+	"github.com/milankappen/k8zner/internal/provisioning/image"
+	"github.com/milankappen/k8zner/internal/provisioning/infrastructure"
+	"github.com/milankappen/k8zner/internal/util/naming"
 )
 
 // provisionImage ensures the Talos image snapshot exists.

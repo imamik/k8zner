@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/imamik/k8zner/internal/config"
-	hcloud_internal "github.com/imamik/k8zner/internal/platform/hcloud"
+	"github.com/milankappen/k8zner/internal/config"
+	hcloud_internal "github.com/milankappen/k8zner/internal/platform/hcloud"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/imamik/k8zner/cmd/k8zner/commands"
+	"github.com/milankappen/k8zner/cmd/k8zner/commands"
 )
 
 // Version information set by goreleaser at build time.

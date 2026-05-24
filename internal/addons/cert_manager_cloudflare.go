@@ -8,8 +8,8 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/imamik/k8zner/internal/addons/k8sclient"
-	"github.com/imamik/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/addons/k8sclient"
+	"github.com/milankappen/k8zner/internal/config"
 )
 
 // defaultStagingEmail is used for staging ClusterIssuer when no email is provided.

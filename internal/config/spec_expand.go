@@ -3,7 +3,7 @@ package config
 import (
 	"os"
 
-	"github.com/imamik/k8zner/internal/util/ptr"
+	"github.com/milankappen/k8zner/internal/util/ptr"
 )
 
 // ExpandSpec converts a simplified Spec to the full internal Config

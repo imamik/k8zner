@@ -10,7 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	k8znerv1alpha1 "github.com/milankappen/k8zner/api/v1alpha1"
 )
 
 // reconcileHealthCheck checks the health of all nodes and updates status.

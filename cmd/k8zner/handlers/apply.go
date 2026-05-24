@@ -20,12 +20,12 @@ import (
 
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
 
-	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
-	"github.com/imamik/k8zner/internal/config"
-	hcloudInternal "github.com/imamik/k8zner/internal/platform/hcloud"
-	"github.com/imamik/k8zner/internal/platform/talos"
-	"github.com/imamik/k8zner/internal/provisioning"
-	"github.com/imamik/k8zner/internal/ui/tui"
+	k8znerv1alpha1 "github.com/milankappen/k8zner/api/v1alpha1"
+	"github.com/milankappen/k8zner/internal/config"
+	hcloudInternal "github.com/milankappen/k8zner/internal/platform/hcloud"
+	"github.com/milankappen/k8zner/internal/platform/talos"
+	"github.com/milankappen/k8zner/internal/provisioning"
+	"github.com/milankappen/k8zner/internal/ui/tui"
 )
 
 const (

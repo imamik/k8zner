@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/imamik/k8zner/internal/addons/helm"
+	"github.com/milankappen/k8zner/internal/addons/helm"
 )
 
 // Note: Uses mockK8sClient from kubectl_test.go (same package)

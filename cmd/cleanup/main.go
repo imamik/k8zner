@@ -23,7 +23,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/imamik/k8zner/internal/platform/hcloud"
+	"github.com/milankappen/k8zner/internal/platform/hcloud"
 )
 
 type labelFlags []string

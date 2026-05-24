@@ -9,9 +9,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
-	"github.com/imamik/k8zner/internal/config"
-	opprovisioning "github.com/imamik/k8zner/internal/operator/provisioning"
+	k8znerv1alpha1 "github.com/milankappen/k8zner/api/v1alpha1"
+	"github.com/milankappen/k8zner/internal/config"
+	opprovisioning "github.com/milankappen/k8zner/internal/operator/provisioning"
 )
 
 // TestCrossPath_SharedDefaultsUsed verifies that both config paths use the

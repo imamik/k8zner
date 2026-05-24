@@ -15,8 +15,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
-	"github.com/imamik/k8zner/cmd/k8zner/handlers"
+	k8znerv1alpha1 "github.com/milankappen/k8zner/api/v1alpha1"
+	"github.com/milankappen/k8zner/cmd/k8zner/handlers"
 )
 
 // AddonVerificationContext holds parameters needed for addon verification.

@@ -9,9 +9,9 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/imamik/k8zner/internal/addons/helm"
-	"github.com/imamik/k8zner/internal/addons/k8sclient"
-	"github.com/imamik/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/addons/helm"
+	"github.com/milankappen/k8zner/internal/addons/k8sclient"
+	"github.com/milankappen/k8zner/internal/config"
 )
 
 // applyCilium installs the Cilium CNI network plugin.

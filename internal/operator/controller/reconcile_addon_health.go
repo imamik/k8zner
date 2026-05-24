@@ -11,7 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	k8znerv1alpha1 "github.com/milankappen/k8zner/api/v1alpha1"
 )
 
 // addonCheck defines how to check an addon's runtime health.

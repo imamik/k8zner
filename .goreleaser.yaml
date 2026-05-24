@@ -44,7 +44,7 @@ snapshot:
 
 release:
   github:
-    owner: imamik
+    owner: milankappen
     name: k8zner
   draft: false
   prerelease: auto
@@ -54,7 +54,7 @@ release:
 brews:
   - name: k8zner
     repository:
-      owner: imamik
+      owner: milankappen
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     commit_author:
@@ -62,7 +62,7 @@ brews:
       email: bot@goreleaser.com
     commit_msg_template: "chore: update {{ .ProjectName }} to {{ .Tag }}"
     directory: Formula
-    homepage: "https://github.com/imamik/k8zner"
+    homepage: "https://github.com/milankappen/k8zner"
     description: "Production-ready Kubernetes clusters on Hetzner Cloud using Talos Linux"
     license: "Apache-2.0"
     install: |

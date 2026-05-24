@@ -7,8 +7,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/imamik/k8zner/internal/addons/k8sclient"
-	"github.com/imamik/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/addons/k8sclient"
+	"github.com/milankappen/k8zner/internal/config"
 )
 
 const cloudflareSecretName = "cloudflare-api-token" //nolint:gosec // This is a secret name, not a credential

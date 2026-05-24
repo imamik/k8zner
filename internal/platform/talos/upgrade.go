@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/imamik/k8zner/internal/provisioning"
+	"github.com/milankappen/k8zner/internal/provisioning"
 
 	"github.com/siderolabs/talos/pkg/machinery/client"
 	"github.com/siderolabs/talos/pkg/machinery/client/config"

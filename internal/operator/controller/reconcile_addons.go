@@ -15,10 +15,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
-	"github.com/imamik/k8zner/internal/addons"
-	"github.com/imamik/k8zner/internal/config"
-	operatorprov "github.com/imamik/k8zner/internal/operator/provisioning"
+	k8znerv1alpha1 "github.com/milankappen/k8zner/api/v1alpha1"
+	"github.com/milankappen/k8zner/internal/addons"
+	"github.com/milankappen/k8zner/internal/config"
+	operatorprov "github.com/milankappen/k8zner/internal/operator/provisioning"
 )
 
 // reconcileCNIPhase installs Cilium CNI as the first addon.

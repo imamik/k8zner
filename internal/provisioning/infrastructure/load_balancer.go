@@ -5,10 +5,10 @@ import (
 	"net"
 	"time"
 
-	"github.com/imamik/k8zner/internal/config"
-	"github.com/imamik/k8zner/internal/provisioning"
-	"github.com/imamik/k8zner/internal/util/labels"
-	"github.com/imamik/k8zner/internal/util/naming"
+	"github.com/milankappen/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/provisioning"
+	"github.com/milankappen/k8zner/internal/util/labels"
+	"github.com/milankappen/k8zner/internal/util/naming"
 
 	hcloudgo "github.com/hetznercloud/hcloud-go/v2/hcloud"
 )

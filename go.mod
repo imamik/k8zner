@@ -1,4 +1,4 @@
-module github.com/imamik/k8zner
+module github.com/milankappen/k8zner
 
 go 1.26.1
 

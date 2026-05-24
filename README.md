@@ -1,9 +1,9 @@
 # k8zner
 
-[![CI](https://github.com/imamik/k8zner/actions/workflows/ci.yaml/badge.svg)](https://github.com/imamik/k8zner/actions/workflows/ci.yaml)
-[![codecov](https://codecov.io/gh/imamik/k8zner/branch/main/graph/badge.svg)](https://codecov.io/gh/imamik/k8zner)
-[![Go Report Card](https://goreportcard.com/badge/github.com/imamik/k8zner)](https://goreportcard.com/report/github.com/imamik/k8zner)
-[![Release](https://img.shields.io/github/v/release/imamik/k8zner)](https://github.com/imamik/k8zner/releases/latest)
+[![CI](https://github.com/milankappen/k8zner/actions/workflows/ci.yaml/badge.svg)](https://github.com/milankappen/k8zner/actions/workflows/ci.yaml)
+[![codecov](https://codecov.io/gh/milankappen/k8zner/branch/main/graph/badge.svg)](https://codecov.io/gh/milankappen/k8zner)
+[![Go Report Card](https://goreportcard.com/badge/github.com/milankappen/k8zner)](https://goreportcard.com/report/github.com/milankappen/k8zner)
+[![Release](https://img.shields.io/github/v/release/milankappen/k8zner)](https://github.com/milankappen/k8zner/releases/latest)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 **k8zner** (k8s + Hetzner) — Operator-driven Kubernetes on [Hetzner Cloud](https://www.hetzner.com/cloud), designed for practical reliability and fast onboarding.
@@ -26,7 +26,7 @@ Built on [Talos Linux](https://www.talos.dev/), the secure and immutable Kuberne
 
 ```bash
 # 1. Install
-brew install imamik/tap/k8zner   # or: go install github.com/imamik/k8zner/cmd/k8zner@latest
+brew install milankappen/tap/k8zner   # or: go install github.com/milankappen/k8zner/cmd/k8zner@latest
 
 # 2. Set your Hetzner Cloud API token
 export HCLOUD_TOKEN="your-token"

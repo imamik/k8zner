@@ -3,7 +3,7 @@ package commands
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/imamik/k8zner/cmd/k8zner/handlers"
+	"github.com/milankappen/k8zner/cmd/k8zner/handlers"
 )
 
 // Secrets returns the command for retrieving cluster secrets.

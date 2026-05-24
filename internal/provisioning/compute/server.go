@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/imamik/k8zner/internal/platform/hcloud"
-	"github.com/imamik/k8zner/internal/provisioning"
-	"github.com/imamik/k8zner/internal/util/labels"
-	"github.com/imamik/k8zner/internal/util/retry"
+	"github.com/milankappen/k8zner/internal/platform/hcloud"
+	"github.com/milankappen/k8zner/internal/provisioning"
+	"github.com/milankappen/k8zner/internal/util/labels"
+	"github.com/milankappen/k8zner/internal/util/retry"
 )
 
 // ServerSpec defines the configuration for creating a server.

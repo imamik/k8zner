@@ -6,9 +6,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/imamik/k8zner/internal/config"
-	hcloud_internal "github.com/imamik/k8zner/internal/platform/hcloud"
-	"github.com/imamik/k8zner/internal/util/naming"
+	"github.com/milankappen/k8zner/internal/config"
+	hcloud_internal "github.com/milankappen/k8zner/internal/platform/hcloud"
+	"github.com/milankappen/k8zner/internal/util/naming"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"

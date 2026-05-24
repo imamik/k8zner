@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imamik/k8zner/internal/addons"
-	"github.com/imamik/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/addons"
+	"github.com/milankappen/k8zner/internal/config"
 )
 
 // TestKindAddons orchestrates addon tests in dependency order.

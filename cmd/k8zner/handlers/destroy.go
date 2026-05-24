@@ -14,9 +14,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"github.com/imamik/k8zner/internal/config"
-	"github.com/imamik/k8zner/internal/platform/cloudflare"
-	"github.com/imamik/k8zner/internal/provisioning/destroy"
+	"github.com/milankappen/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/platform/cloudflare"
+	"github.com/milankappen/k8zner/internal/provisioning/destroy"
 )
 
 const (

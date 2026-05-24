@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	hcloudgo "github.com/hetznercloud/hcloud-go/v2/hcloud"
-	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	k8znerv1alpha1 "github.com/milankappen/k8zner/api/v1alpha1"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imamik/k8zner/internal/config"
-	hcloud_client "github.com/imamik/k8zner/internal/platform/hcloud"
-	"github.com/imamik/k8zner/internal/provisioning/image"
+	"github.com/milankappen/k8zner/internal/config"
+	hcloud_client "github.com/milankappen/k8zner/internal/platform/hcloud"
+	"github.com/milankappen/k8zner/internal/provisioning/image"
 )
 
 // Test result tracking for skip logic between tests

@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/imamik/k8zner/internal/addons/helm"
-	"github.com/imamik/k8zner/internal/addons/k8sclient"
-	"github.com/imamik/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/addons/helm"
+	"github.com/milankappen/k8zner/internal/addons/k8sclient"
+	"github.com/milankappen/k8zner/internal/config"
 )
 
 // operator-chart/ is synced from deploy/helm/k8zner-operator/ (source of truth).
@@ -164,7 +164,7 @@ func buildOperatorValues(cfg *config.Config) helm.Values {
 	values := helm.Values{
 		"replicaCount": replicaCount,
 		"image": helm.Values{
-			"repository": "ghcr.io/imamik/k8zner-operator",
+			"repository": "ghcr.io/milankappen/k8zner-operator",
 			"pullPolicy": "Always",
 			"tag":        version,
 		},
