@@ -242,7 +242,7 @@ func TestUpdateClusterSpecFromConfig_BackupDisabled(t *testing.T) {
 
 // Verify factory variables exist and can be saved/restored.
 func TestFactoryVariables(t *testing.T) {
-	t.Parallel()
+	// Serial: swaps package-global factory vars shared with other tests.
 	origInfra := newInfraClient
 	origSecrets := getOrGenerateSecrets
 	origTalos := newTalosGenerator

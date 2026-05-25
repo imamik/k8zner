@@ -46,10 +46,10 @@ func TestBuildAccessDataFromConfig(t *testing.T) {
 }
 
 func TestPersistAccessData(t *testing.T) {
-	t.Parallel()
+	// Serial: subtests swap the package-global writeFile, which races with
+	// other writeFile-swapping tests when run in parallel.
 
 	t.Run("writes file", func(t *testing.T) {
-		t.Parallel()
 		origWrite := writeFile
 		defer func() { writeFile = origWrite }()
 
@@ -81,7 +81,6 @@ func TestPersistAccessData(t *testing.T) {
 	})
 
 	t.Run("write error", func(t *testing.T) {
-		t.Parallel()
 		origWrite := writeFile
 		defer func() { writeFile = origWrite }()
 		writeFile = func(_ string, _ []byte, _ os.FileMode) error { return errors.New("disk full") }

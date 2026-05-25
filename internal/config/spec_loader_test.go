@@ -273,6 +273,12 @@ func TestSaveSpec_InvalidPath(t *testing.T) {
 
 func TestFindConfigFile(t *testing.T) {
 	tmpDir := t.TempDir()
+	// FindConfigFile uses os.Getwd, which resolves symlinks; on macOS the temp
+	// dir lives under /var -> /private/var, so resolve it here to match.
+	tmpDir, err := filepath.EvalSymlinks(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to resolve tmpDir: %v", err)
+	}
 	configPath := filepath.Join(tmpDir, "k8zner.yaml")
 	if err := os.WriteFile(configPath, []byte("name: test"), 0644); err != nil {
 		t.Fatalf("Failed to write config: %v", err)
@@ -351,6 +357,12 @@ workers:
 
 func TestFindConfigFile_InParentDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
+	// FindConfigFile uses os.Getwd, which resolves symlinks; on macOS the temp
+	// dir lives under /var -> /private/var, so resolve it here to match.
+	tmpDir, err := filepath.EvalSymlinks(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to resolve tmpDir: %v", err)
+	}
 	childDir := filepath.Join(tmpDir, "child")
 	if err := os.Mkdir(childDir, 0755); err != nil {
 		t.Fatalf("Failed to create child dir: %v", err)
