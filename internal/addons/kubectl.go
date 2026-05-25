@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/imamik/k8zner/internal/addons/helm"
-	"github.com/imamik/k8zner/internal/addons/k8sclient"
+	"github.com/milankappen/k8zner/internal/addons/helm"
+	"github.com/milankappen/k8zner/internal/addons/k8sclient"
 )
 
 // baselinePodSecurityLabels are the standard pod security labels for namespaces

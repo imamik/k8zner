@@ -3,7 +3,7 @@ package talos
 import (
 	"fmt"
 
-	"github.com/imamik/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/config"
 )
 
 // MachineConfigOptions holds all options needed to build Talos machine config patches.

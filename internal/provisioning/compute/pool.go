@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/imamik/k8zner/internal/config"
-	"github.com/imamik/k8zner/internal/provisioning"
-	"github.com/imamik/k8zner/internal/util/async"
-	"github.com/imamik/k8zner/internal/util/labels"
-	"github.com/imamik/k8zner/internal/util/naming"
+	"github.com/milankappen/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/provisioning"
+	"github.com/milankappen/k8zner/internal/util/async"
+	"github.com/milankappen/k8zner/internal/util/labels"
+	"github.com/milankappen/k8zner/internal/util/naming"
 )
 
 // NodePoolSpec defines the configuration for provisioning a pool of servers.

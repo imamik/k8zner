@@ -1,6 +1,6 @@
 package helm
 
-import "github.com/imamik/k8zner/internal/config"
+import "github.com/milankappen/k8zner/internal/config"
 
 // GetChartSpec returns the chart spec for the given addon name,
 // applying any overrides from the HelmChartConfig.

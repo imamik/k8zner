@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imamik/k8zner/internal/config"
-	"github.com/imamik/k8zner/internal/platform/hcloud"
-	"github.com/imamik/k8zner/internal/provisioning/image"
-	"github.com/imamik/k8zner/internal/util/keygen"
+	"github.com/milankappen/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/platform/hcloud"
+	"github.com/milankappen/k8zner/internal/provisioning/image"
+	"github.com/milankappen/k8zner/internal/util/keygen"
 )
 
 // Get versions from the default version matrix

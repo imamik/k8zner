@@ -21,9 +21,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
-	operatorprov "github.com/imamik/k8zner/internal/operator/provisioning"
-	"github.com/imamik/k8zner/internal/platform/hcloud"
+	k8znerv1alpha1 "github.com/milankappen/k8zner/api/v1alpha1"
+	operatorprov "github.com/milankappen/k8zner/internal/operator/provisioning"
+	"github.com/milankappen/k8zner/internal/platform/hcloud"
 )
 
 const (

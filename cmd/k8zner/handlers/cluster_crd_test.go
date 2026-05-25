@@ -9,10 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
-	"github.com/imamik/k8zner/internal/config"
-	"github.com/imamik/k8zner/internal/platform/hcloud"
-	"github.com/imamik/k8zner/internal/provisioning"
+	k8znerv1alpha1 "github.com/milankappen/k8zner/api/v1alpha1"
+	"github.com/milankappen/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/platform/hcloud"
+	"github.com/milankappen/k8zner/internal/provisioning"
 )
 
 func TestBuildK8znerCluster(t *testing.T) {

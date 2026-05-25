@@ -5,11 +5,11 @@ package compute
 import (
 	"fmt"
 
-	"github.com/imamik/k8zner/internal/config"
-	"github.com/imamik/k8zner/internal/platform/hcloud"
-	"github.com/imamik/k8zner/internal/provisioning"
-	"github.com/imamik/k8zner/internal/util/labels"
-	"github.com/imamik/k8zner/internal/util/naming"
+	"github.com/milankappen/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/platform/hcloud"
+	"github.com/milankappen/k8zner/internal/provisioning"
+	"github.com/milankappen/k8zner/internal/util/labels"
+	"github.com/milankappen/k8zner/internal/util/naming"
 )
 
 const phase = "compute"

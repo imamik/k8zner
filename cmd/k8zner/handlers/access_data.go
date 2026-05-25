@@ -10,7 +10,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/imamik/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/config"
 	"gopkg.in/yaml.v3"
 )
 

@@ -4,8 +4,8 @@ package destroy
 import (
 	"fmt"
 
-	"github.com/imamik/k8zner/internal/provisioning"
-	"github.com/imamik/k8zner/internal/util/labels"
+	"github.com/milankappen/k8zner/internal/provisioning"
+	"github.com/milankappen/k8zner/internal/util/labels"
 )
 
 // Destroy destroys the cluster and all associated resources.

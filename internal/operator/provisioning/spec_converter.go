@@ -8,11 +8,11 @@ import (
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
 	"gopkg.in/yaml.v3"
 
-	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
-	"github.com/imamik/k8zner/internal/config"
-	"github.com/imamik/k8zner/internal/platform/talos"
-	"github.com/imamik/k8zner/internal/provisioning"
-	"github.com/imamik/k8zner/internal/util/ptr"
+	k8znerv1alpha1 "github.com/milankappen/k8zner/api/v1alpha1"
+	"github.com/milankappen/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/platform/talos"
+	"github.com/milankappen/k8zner/internal/provisioning"
+	"github.com/milankappen/k8zner/internal/util/ptr"
 )
 
 // SpecToConfig converts a K8znerCluster spec to the internal config.Config format.

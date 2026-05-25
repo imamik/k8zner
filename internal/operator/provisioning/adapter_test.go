@@ -8,9 +8,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
-	"github.com/imamik/k8zner/internal/config"
-	"github.com/imamik/k8zner/internal/provisioning"
+	k8znerv1alpha1 "github.com/milankappen/k8zner/api/v1alpha1"
+	"github.com/milankappen/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/provisioning"
 )
 
 func newTestCluster(name, domain string, addons *k8znerv1alpha1.AddonSpec) *k8znerv1alpha1.K8znerCluster {

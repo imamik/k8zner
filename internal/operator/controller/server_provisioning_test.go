@@ -14,8 +14,8 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
-	"github.com/imamik/k8zner/internal/platform/hcloud"
+	k8znerv1alpha1 "github.com/milankappen/k8zner/api/v1alpha1"
+	"github.com/milankappen/k8zner/internal/platform/hcloud"
 	corev1 "k8s.io/api/core/v1"
 )
 

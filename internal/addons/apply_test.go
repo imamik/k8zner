@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/imamik/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/config"
 	"github.com/stretchr/testify/assert"
 )
 

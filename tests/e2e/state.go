@@ -3,7 +3,7 @@
 package e2e
 
 import (
-	"github.com/imamik/k8zner/internal/platform/hcloud"
+	"github.com/milankappen/k8zner/internal/platform/hcloud"
 )
 
 // SharedTestContext holds shared state across all E2E tests in a test run.

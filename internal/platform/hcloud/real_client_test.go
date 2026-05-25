@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imamik/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/config"
 )
 
 func TestNewRealClient_Defaults(t *testing.T) {

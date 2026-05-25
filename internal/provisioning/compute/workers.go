@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/imamik/k8zner/internal/provisioning"
-	"github.com/imamik/k8zner/internal/util/async"
+	"github.com/milankappen/k8zner/internal/provisioning"
+	"github.com/milankappen/k8zner/internal/util/async"
 )
 
 // ProvisionWorkers provisions worker node pools.

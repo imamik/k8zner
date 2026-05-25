@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
-	realhcloud "github.com/imamik/k8zner/internal/platform/hcloud"
+	realhcloud "github.com/milankappen/k8zner/internal/platform/hcloud"
 )
 
 // cleanupE2ECluster removes all resources created during the E2E test using label-based cleanup.

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/imamik/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/config"
 )
 
 func TestGenerateTalosBackupManifests(t *testing.T) {

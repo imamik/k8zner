@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/imamik/k8zner/internal/addons/helm"
-	"github.com/imamik/k8zner/internal/addons/k8sclient"
-	"github.com/imamik/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/addons/helm"
+	"github.com/milankappen/k8zner/internal/addons/k8sclient"
+	"github.com/milankappen/k8zner/internal/config"
 )
 
 // applyCCM installs the Hetzner Cloud Controller Manager.

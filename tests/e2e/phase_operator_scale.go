@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imamik/k8zner/internal/addons"
-	"github.com/imamik/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/addons"
+	"github.com/milankappen/k8zner/internal/config"
 )
 
 // phaseOperatorScale tests scaling the cluster via the K8znerCluster CRD.

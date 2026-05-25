@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	"github.com/imamik/k8zner/internal/addons/helm"
-	"github.com/imamik/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/addons/helm"
+	"github.com/milankappen/k8zner/internal/config"
 )
 
 // ============================================================================

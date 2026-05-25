@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
+	k8znerv1alpha1 "github.com/milankappen/k8zner/api/v1alpha1"
 	"github.com/siderolabs/talos/pkg/machinery/client"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"

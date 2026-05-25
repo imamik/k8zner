@@ -54,7 +54,7 @@ Optional (for E2E tests and manual debugging):
 ### Building
 
 ```bash
-git clone https://github.com/imamik/k8zner.git
+git clone https://github.com/milankappen/k8zner.git
 cd k8zner
 make build
 ```

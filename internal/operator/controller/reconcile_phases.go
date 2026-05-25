@@ -10,12 +10,12 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
-	"github.com/imamik/k8zner/internal/addons"
-	operatorprov "github.com/imamik/k8zner/internal/operator/provisioning"
-	"github.com/imamik/k8zner/internal/platform/hcloud"
-	"github.com/imamik/k8zner/internal/provisioning"
-	"github.com/imamik/k8zner/internal/util/naming"
+	k8znerv1alpha1 "github.com/milankappen/k8zner/api/v1alpha1"
+	"github.com/milankappen/k8zner/internal/addons"
+	operatorprov "github.com/milankappen/k8zner/internal/operator/provisioning"
+	"github.com/milankappen/k8zner/internal/platform/hcloud"
+	"github.com/milankappen/k8zner/internal/provisioning"
+	"github.com/milankappen/k8zner/internal/util/naming"
 )
 
 // recordPhaseTransition records a phase transition in the cluster's PhaseHistory.

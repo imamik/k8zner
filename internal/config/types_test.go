@@ -3,7 +3,7 @@ package config
 import (
 	"testing"
 
-	"github.com/imamik/k8zner/internal/util/ptr"
+	"github.com/milankappen/k8zner/internal/util/ptr"
 )
 
 func TestIsPrivateFirst(t *testing.T) {

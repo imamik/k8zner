@@ -3,7 +3,7 @@ package helm
 import (
 	"fmt"
 
-	"github.com/imamik/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/config"
 )
 
 // CCMUninitializedToleration returns a toleration for the CCM uninitialized taint.

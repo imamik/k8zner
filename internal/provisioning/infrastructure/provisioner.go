@@ -1,7 +1,7 @@
 package infrastructure
 
 import (
-	"github.com/imamik/k8zner/internal/provisioning"
+	"github.com/milankappen/k8zner/internal/provisioning"
 )
 
 // Provision creates network, firewall, and load balancer resources.

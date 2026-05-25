@@ -3,8 +3,8 @@ package infrastructure
 import (
 	"fmt"
 
-	"github.com/imamik/k8zner/internal/provisioning"
-	"github.com/imamik/k8zner/internal/util/labels"
+	"github.com/milankappen/k8zner/internal/provisioning"
+	"github.com/milankappen/k8zner/internal/util/labels"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )

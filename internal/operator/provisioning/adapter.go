@@ -14,15 +14,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
-	"github.com/imamik/k8zner/internal/config"
-	hcloudInternal "github.com/imamik/k8zner/internal/platform/hcloud"
-	"github.com/imamik/k8zner/internal/provisioning"
-	"github.com/imamik/k8zner/internal/provisioning/cluster"
-	"github.com/imamik/k8zner/internal/provisioning/compute"
-	"github.com/imamik/k8zner/internal/provisioning/image"
-	"github.com/imamik/k8zner/internal/provisioning/infrastructure"
-	"github.com/imamik/k8zner/internal/util/naming"
+	k8znerv1alpha1 "github.com/milankappen/k8zner/api/v1alpha1"
+	"github.com/milankappen/k8zner/internal/config"
+	hcloudInternal "github.com/milankappen/k8zner/internal/platform/hcloud"
+	"github.com/milankappen/k8zner/internal/provisioning"
+	"github.com/milankappen/k8zner/internal/provisioning/cluster"
+	"github.com/milankappen/k8zner/internal/provisioning/compute"
+	"github.com/milankappen/k8zner/internal/provisioning/image"
+	"github.com/milankappen/k8zner/internal/provisioning/infrastructure"
+	"github.com/milankappen/k8zner/internal/util/naming"
 )
 
 // Credentials holds the secrets needed for provisioning.

@@ -3,8 +3,8 @@ package addons
 import (
 	"testing"
 
-	"github.com/imamik/k8zner/internal/addons/helm"
-	"github.com/imamik/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/addons/helm"
+	"github.com/milankappen/k8zner/internal/config"
 )
 
 // Package-level vars to prevent compiler optimization of benchmark results.

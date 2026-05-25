@@ -8,9 +8,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/imamik/k8zner/internal/platform/hcloud"
-	"github.com/imamik/k8zner/internal/platform/ssh"
-	"github.com/imamik/k8zner/internal/util/keygen"
+	"github.com/milankappen/k8zner/internal/platform/hcloud"
+	"github.com/milankappen/k8zner/internal/platform/ssh"
+	"github.com/milankappen/k8zner/internal/util/keygen"
 )
 
 const (

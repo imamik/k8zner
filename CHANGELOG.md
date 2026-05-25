@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-05-25
+
+### 🔄 Changed
+
+- **Module path renamed** `github.com/imamik/k8zner` → `github.com/milankappen/k8zner` following the GitHub username change. Update imports and reinstall via `go install github.com/milankappen/k8zner/cmd/k8zner@latest`. Homebrew users: `brew untap imamik/tap && brew tap milankappen/tap`.
+- **All references repointed** to `milankappen` — badges, install commands, Helm chart metadata, `ghcr.io/milankappen/k8zner-operator` image path, GoReleaser config, release scripts, and CI image names.
+- **Dependencies bumped** — containerd 1.7.30 → 1.7.32, helm 3.20.1 → 3.20.2, k8s.io/* 0.35.3 → 0.35.4, golang.org/x/net → 0.55.0, golang.org/x/crypto → 0.52.0, aws-sdk-go-v2/s3 → 1.101.0, mattn/go-isatty → 0.0.22, plus transitive updates.
+- **GitHub Actions bumped** — codecov-action v5 → v6, setup-qemu-action v3 → v4, setup-kubectl v4 → v5, login-action v3 → v4, metadata-action v5 → v6.
+
+### 🔒 Security
+
+- **containerd runAsNonRoot bypass (high)** resolved via containerd 1.7.32.
+- **Helm chart extraction path collapse (medium)** resolved via helm 3.20.2.
+- `govulncheck` reports no known vulnerabilities.
+
+### 🐛 Fixed
+
+- **Flaky handler tests** — `TestPersistAccessData`, `TestWriteTalosFiles`, `TestWriteKubeconfig`, `TestInitializeTalosGenerator`, `TestFactoryVariables`, and `TestDestroy` swapped package-global factory vars while running in parallel, racing each other; these tests now run serially.
+- **`TestFindConfigFile` on macOS** — resolve symlinks on the temp dir so the `/var` → `/private/var` resolution from `os.Getwd` no longer fails the assertion.
+
 ## [0.9.3] - 2026-04-04
 
 ### 🔄 Changed
@@ -350,16 +370,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Secrets stored locally in `./secrets/` directory
 - No credentials stored in cluster state
 
-[0.9.2]: https://github.com/imamik/k8zner/compare/v0.9.1...v0.9.2
-[0.9.1]: https://github.com/imamik/k8zner/compare/v0.9.0...v0.9.1
-[0.9.0]: https://github.com/imamik/k8zner/compare/v0.8.0...v0.9.0
-[0.8.0]: https://github.com/imamik/k8zner/compare/v0.7.0...v0.8.0
-[0.7.0]: https://github.com/imamik/k8zner/compare/v0.6.0...v0.7.0
-[0.6.0]: https://github.com/imamik/k8zner/compare/v0.5.0...v0.6.0
-[0.5.0]: https://github.com/imamik/k8zner/compare/v0.4.0...v0.5.0
-[0.4.0]: https://github.com/imamik/k8zner/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/imamik/k8zner/compare/v0.2.1...v0.3.0
-[0.2.1]: https://github.com/imamik/k8zner/compare/v0.2.0...v0.2.1
-[0.2.0]: https://github.com/imamik/k8zner/compare/v0.1.1...v0.2.0
-[0.1.1]: https://github.com/imamik/k8zner/compare/v0.1.0...v0.1.1
-[0.1.0]: https://github.com/imamik/k8zner/releases/tag/v0.1.0
+[0.10.0]: https://github.com/milankappen/k8zner/compare/v0.9.3...v0.10.0
+[0.9.3]: https://github.com/milankappen/k8zner/compare/v0.9.2...v0.9.3
+[0.9.2]: https://github.com/milankappen/k8zner/compare/v0.9.1...v0.9.2
+[0.9.1]: https://github.com/milankappen/k8zner/compare/v0.9.0...v0.9.1
+[0.9.0]: https://github.com/milankappen/k8zner/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/milankappen/k8zner/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/milankappen/k8zner/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/milankappen/k8zner/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/milankappen/k8zner/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/milankappen/k8zner/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/milankappen/k8zner/compare/v0.2.1...v0.3.0
+[0.2.1]: https://github.com/milankappen/k8zner/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/milankappen/k8zner/compare/v0.1.1...v0.2.0
+[0.1.1]: https://github.com/milankappen/k8zner/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/milankappen/k8zner/releases/tag/v0.1.0

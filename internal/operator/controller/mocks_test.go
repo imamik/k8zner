@@ -6,7 +6,7 @@ import (
 
 	hcloudgo "github.com/hetznercloud/hcloud-go/v2/hcloud"
 
-	"github.com/imamik/k8zner/internal/platform/hcloud"
+	"github.com/milankappen/k8zner/internal/platform/hcloud"
 )
 
 // MockHCloudClient is a mock implementation of HCloudClient for testing.

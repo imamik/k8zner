@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/imamik/k8zner/internal/provisioning"
+	"github.com/milankappen/k8zner/internal/provisioning"
 )
 
 func TestNewOperatorObserver(t *testing.T) {

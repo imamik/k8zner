@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/imamik/k8zner/internal/addons/helm"
-	"github.com/imamik/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/addons/helm"
+	"github.com/milankappen/k8zner/internal/config"
 )
 
 func TestBuildOperatorValues(t *testing.T) {
@@ -40,7 +40,7 @@ func TestBuildOperatorValues(t *testing.T) {
 		// Image
 		image, ok := values["image"].(helm.Values)
 		require.True(t, ok)
-		assert.Equal(t, "ghcr.io/imamik/k8zner-operator", image["repository"])
+		assert.Equal(t, "ghcr.io/milankappen/k8zner-operator", image["repository"])
 		assert.Equal(t, "v1.0.0", image["tag"])
 		assert.Equal(t, "Always", image["pullPolicy"])
 

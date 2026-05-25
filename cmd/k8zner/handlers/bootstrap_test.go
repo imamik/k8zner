@@ -13,18 +13,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/imamik/k8zner/internal/config"
-	"github.com/imamik/k8zner/internal/platform/hcloud"
-	"github.com/imamik/k8zner/internal/provisioning"
+	"github.com/milankappen/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/platform/hcloud"
+	"github.com/milankappen/k8zner/internal/provisioning"
 )
 
 // --- writeTalosFiles tests ---
 
 func TestWriteTalosFiles(t *testing.T) {
-	t.Parallel()
+	// Serial: subtests swap the package-global writeFile, which races with
+	// other writeFile-swapping tests when run in parallel.
 
 	t.Run("success", func(t *testing.T) {
-		t.Parallel()
 		origWrite := writeFile
 		defer func() { writeFile = origWrite }()
 
@@ -44,7 +44,6 @@ func TestWriteTalosFiles(t *testing.T) {
 	})
 
 	t.Run("GetClientConfig error", func(t *testing.T) {
-		t.Parallel()
 		mock := &mockTalosProducer{clientConfigErr: errors.New("generation failed")}
 		err := writeTalosFiles(mock)
 		require.Error(t, err)
@@ -52,7 +51,6 @@ func TestWriteTalosFiles(t *testing.T) {
 	})
 
 	t.Run("writeFile error", func(t *testing.T) {
-		t.Parallel()
 		origWrite := writeFile
 		defer func() { writeFile = origWrite }()
 
@@ -70,10 +68,10 @@ func TestWriteTalosFiles(t *testing.T) {
 // --- writeKubeconfig tests ---
 
 func TestWriteKubeconfig(t *testing.T) {
-	t.Parallel()
+	// Serial: subtests swap the package-global writeFile, which races with
+	// other writeFile-swapping tests when run in parallel.
 
 	t.Run("success", func(t *testing.T) {
-		t.Parallel()
 		origWrite := writeFile
 		defer func() { writeFile = origWrite }()
 
@@ -92,7 +90,6 @@ func TestWriteKubeconfig(t *testing.T) {
 	})
 
 	t.Run("empty kubeconfig skips write", func(t *testing.T) {
-		t.Parallel()
 		err := writeKubeconfig(nil)
 		require.NoError(t, err)
 
@@ -101,7 +98,6 @@ func TestWriteKubeconfig(t *testing.T) {
 	})
 
 	t.Run("writeFile error", func(t *testing.T) {
-		t.Parallel()
 		origWrite := writeFile
 		defer func() { writeFile = origWrite }()
 
@@ -118,10 +114,10 @@ func TestWriteKubeconfig(t *testing.T) {
 // --- initializeTalosGenerator tests ---
 
 func TestInitializeTalosGenerator(t *testing.T) {
-	t.Parallel()
+	// Serial: subtests swap the package-global getOrGenerateSecrets and
+	// newTalosGenerator factory vars, which race with other tests in parallel.
 
 	t.Run("success", func(t *testing.T) {
-		t.Parallel()
 		origSecrets := getOrGenerateSecrets
 		origTalos := newTalosGenerator
 		defer func() {
@@ -152,7 +148,6 @@ func TestInitializeTalosGenerator(t *testing.T) {
 	})
 
 	t.Run("secrets error", func(t *testing.T) {
-		t.Parallel()
 		origSecrets := getOrGenerateSecrets
 		defer func() { getOrGenerateSecrets = origSecrets }()
 

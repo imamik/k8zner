@@ -10,11 +10,11 @@ import (
 	hcloudgo "github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
-	"github.com/imamik/k8zner/internal/platform/hcloud"
-	"github.com/imamik/k8zner/internal/util/keygen"
-	"github.com/imamik/k8zner/internal/util/labels"
-	"github.com/imamik/k8zner/internal/util/naming"
+	k8znerv1alpha1 "github.com/milankappen/k8zner/api/v1alpha1"
+	"github.com/milankappen/k8zner/internal/platform/hcloud"
+	"github.com/milankappen/k8zner/internal/util/keygen"
+	"github.com/milankappen/k8zner/internal/util/labels"
+	"github.com/milankappen/k8zner/internal/util/naming"
 )
 
 // talosClients holds the Talos API clients resolved from injected mocks or credentials.

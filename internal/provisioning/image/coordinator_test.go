@@ -9,9 +9,9 @@ import (
 
 	hcloudgo "github.com/hetznercloud/hcloud-go/v2/hcloud"
 
-	"github.com/imamik/k8zner/internal/config"
-	"github.com/imamik/k8zner/internal/platform/hcloud"
-	"github.com/imamik/k8zner/internal/provisioning"
+	"github.com/milankappen/k8zner/internal/config"
+	"github.com/milankappen/k8zner/internal/platform/hcloud"
+	"github.com/milankappen/k8zner/internal/provisioning"
 )
 
 func TestGetImageBuilderConfig(t *testing.T) {

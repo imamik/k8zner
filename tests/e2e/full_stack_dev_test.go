@@ -15,10 +15,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
-	"github.com/imamik/k8zner/cmd/k8zner/handlers"
-	"github.com/imamik/k8zner/internal/platform/s3"
-	"github.com/imamik/k8zner/internal/util/naming"
+	k8znerv1alpha1 "github.com/milankappen/k8zner/api/v1alpha1"
+	"github.com/milankappen/k8zner/cmd/k8zner/handlers"
+	"github.com/milankappen/k8zner/internal/platform/s3"
+	"github.com/milankappen/k8zner/internal/util/naming"
 )
 
 // TestE2EFullStackDev is Test 1: Full addon validation.

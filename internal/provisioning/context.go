@@ -3,8 +3,8 @@ package provisioning
 import (
 	"context"
 
-	"github.com/imamik/k8zner/internal/config"
-	hcloud_internal "github.com/imamik/k8zner/internal/platform/hcloud"
+	"github.com/milankappen/k8zner/internal/config"
+	hcloud_internal "github.com/milankappen/k8zner/internal/platform/hcloud"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )

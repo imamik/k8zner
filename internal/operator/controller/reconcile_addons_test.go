@@ -13,9 +13,9 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	k8znerv1alpha1 "github.com/imamik/k8zner/api/v1alpha1"
-	"github.com/imamik/k8zner/internal/config"
-	operatorprov "github.com/imamik/k8zner/internal/operator/provisioning"
+	k8znerv1alpha1 "github.com/milankappen/k8zner/api/v1alpha1"
+	"github.com/milankappen/k8zner/internal/config"
+	operatorprov "github.com/milankappen/k8zner/internal/operator/provisioning"
 )
 
 func TestAllPodsReady(t *testing.T) {
